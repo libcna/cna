@@ -85,6 +85,26 @@ started.
 
 ## 2. Target public/internal architecture
 
+> **Superseded in one respect by `plan_runtimerenderer.md` phase P11 (2026-08-15): the GL profile is
+> no longer a compile-time choice.** The architecture below is otherwise unchanged and its
+> invariants still hold — one implementation family serving several public identities, one shader
+> corpus adapted per profile, the Emscripten-only gate on the WebGL pair.
+>
+> What changed: `CNA_GL_PROFILE_*` was a compile definition, so the same translation units would
+> have had to be compiled twice for two profiles to coexist — an ODR violation, which is why
+> `cmake/RendererCombinations.cmake` used to reject that combination outright. The profile is now a
+> runtime value (`CNA::Internal::Renderers::EasyGL::GlProfile`, passed to `EasyGLRenderer`'s
+> constructor and published as the thread's active profile), so all five identities can be compiled
+> into one binary and chosen at runtime. That rejection rule is deleted.
+>
+> Verified on `OPENGLES3;OPENGLES2;OPENGL33;SOFTWARE;HEADLESS`: 6385 tests passed, and the profiles
+> create genuinely different contexts — `OPENGL33` reports "OpenGL 4.6 (Core Profile)" where the ES
+> profiles report an ES context, from the same binary.
+>
+> The one compile definition that remains is `kCompileTimeGlProfile`, which supplies a
+> single-renderer build's default so nothing else had to change.
+
+
 ```text
 Public CNA_GRAPHICS_BACKEND values:      OPENGLES | OPENGL33 | WEBGL1 | WEBGL2
                                                  \      |        |      /

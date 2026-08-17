@@ -2,6 +2,12 @@
 
 ## Purpose and status
 
+**PLAT-108 update (2026-08-13):** `Accelerometer`/`Gyroscope` no longer own a native backend.
+They consume `IPlatformSensors` through `Detail::PlatformSensorSubsystem<TSensor>`; native sensor
+sessions are implemented by the selected platform. The historical interface sketches below remain
+useful context for Compass/Motion, but their statements that the old sensor subsystem must remain
+unchanged are superseded by this update.
+
 **Updated 2026-07-05 (`plan_devices.md` Phases 6-8): the Android backend described
 below is now implemented, not just sketched.** `Detail::AndroidSensorBridge`
 (`include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp`),
@@ -32,9 +38,9 @@ Phase 9.
 ## Why this exists at all
 
 Today, `Accelerometer` and `Gyroscope` are backed by a real, working, cross-platform
-implementation (`Detail::SdlSensorSubsystem<TSensor>`, built on SDL3's
-`SDL_Sensor`/`SDL_AddEventWatch` API) — see `docs/devices-build.md` for what has
-actually been built and tested. **`Compass` and `Motion` are not.** Both are permanent,
+implementation (`Detail::PlatformSensorSubsystem<TSensor>` plus `IPlatformSensors`) — see
+`docs/devices-build.md` for what has actually been built and tested. At the time this document was
+originally written, **`Compass` and `Motion` were not.** Both were permanent,
 honest `SensorState::NotSupported` stubs: `getIsSupportedProperty()` hardcodes
 `return false;`, and `Start()` unconditionally throws `SensorFailedException`. This is
 deliberate — SDL3 has no compass/magnetometer or fused-orientation ("motion") API, only
@@ -82,7 +88,7 @@ namespace Microsoft::Devices::Sensors::Detail
 {
     // Common shape shared by every per-sensor backend interface below. Pull-model
     // (a reading is fetched on demand) rather than push, matching this project's
-    // existing Detail::SdlSensorSubsystem<TSensor> dispatch shape -- see "Why this
+    // existing Detail::PlatformSensorSubsystem<TSensor> dispatch shape -- see "Why this
     // shape and not more" at the end of this section.
     class IDeviceSensorBackend
     {
@@ -94,9 +100,7 @@ namespace Microsoft::Devices::Sensors::Detail
     };
 
     // Documentation only, for architectural symmetry: Accelerometer/Gyroscope
-    // already have a real, working SDL3 backend (Detail::SdlSensorSubsystem<TSensor>)
-    // and do NOT need one of these. No CNA code should ever instantiate this type --
-    // see "SDL backend scope, unchanged" below.
+    // already use the platform sensor contract and do NOT need one of these.
     class IAccelerometerBackend : public IDeviceSensorBackend
     {
     public:
@@ -131,23 +135,18 @@ namespace Microsoft::Devices::Sensors::Detail
 ```
 
 **Why this shape and not more:** mirrors the existing
-`Detail::SdlSensorSubsystem<TSensor>` pull-model (a reading is fetched, not pushed via a
-second callback mechanism) so a future implementation could plausibly reuse
-`SensorBase<T>`'s existing `setCurrentValueProperty()` dispatch path from inside
-`Start()`'s own polling/callback glue, rather than inventing a parallel event system.
+`Detail::PlatformSensorSubsystem<TSensor>` session/dispatch model so a future implementation can
+reuse `SensorBase<T>`'s current-value dispatch path rather than inventing a parallel event system.
 Deliberately not sketching constructor/DI wiring, error handling, or thread-safety
 details — those depend on decisions (polling vs. push, which thread delivers updates)
 that belong to the actual implementation task, not this sketch.
 
-### SDL backend scope, unchanged
+### Platform sensor scope (updated by PLAT-108)
 
-To be explicit, since this document could otherwise be misread as proposing a broader
-rewrite: **the SDL backend remains accelerometer, gyroscope, and vibration only.**
-`IAccelerometerBackend`/`IGyroscopeBackend` above exist purely for interface symmetry
-with `ICompassBackend`/`IMotionBackend` in this document — no task should actually
-create an SDL-backed implementation of them, retire `Detail::SdlSensorSubsystem`, or
-otherwise touch `Accelerometer`/`Gyroscope`'s working implementation as part of adding a
-Compass/Motion native backend.
+`IAccelerometerBackend`/`IGyroscopeBackend` above remain documentation-only. PLAT-108 retired the
+old concrete native subsystem and moved accelerometer, gyroscope and vibration behind
+`IPlatformSensors`/`IPlatformHaptics`; Compass/Motion keep their dedicated Android backends because
+their fused/magnetometer data is outside the current platform sensor vocabulary.
 
 ---
 
@@ -306,7 +305,7 @@ Android-only fixes:
 - **Lifecycle, both platforms:** listeners/updates must stop when the owning
   `Compass`/`Motion` instance is `Dispose()`d or destroyed, mirroring the discipline
   already established for `Accelerometer`/`Gyroscope` in
-  `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp` (instance-count
+  `include/Microsoft/Devices/Sensors/Detail/PlatformSensorSubsystem.hpp` (instance-count
   tracking, `ClaimDisposalOnce()`/`WaitForDisposalToComplete()`). A native backend
   implementation should reuse `SensorBase<T>`'s existing disposal machinery rather than
   invent a second one — this is a strong architectural constraint, not a suggestion,

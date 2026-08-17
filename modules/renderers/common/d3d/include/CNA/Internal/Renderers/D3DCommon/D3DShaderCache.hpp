@@ -45,10 +45,14 @@ namespace CNA::Internal::Renderers::D3DCommon
         /// port of EasyGLRenderer::EnsurePbrProgram(). Stride 48
         /// (VertexPositionNormalTangentTexture).
         Pbr3d,
+        /// GLTF-386: Pbr3d with the canonical stride-60 TEXCOORD_1 suffix.
+        Pbr3dDualUv,
         /// plan_cnj.md CNB-58 follow-up: SkinnedPbrEffect -- Pbr3d's own BRDF plus bone skinning,
         /// HLSL port of EasyGLRenderer::EnsurePbrSkinnedProgram(). Stride 68
         /// (VertexPositionNormalTangentTextureSkinned).
         PbrSkinned3d,
+        /// GLTF-386: PbrSkinned3d with the canonical stride-76 TEXCOORD_1 suffix.
+        PbrSkinned3dDualUv,
         /// plan_cnj.md CNB-67 follow-up: Skinned3d's own stride-56 sibling carrying a per-vertex
         /// Color attribute (SkinnedEffect::VertexColorEnabled), HLSL port of
         /// EasyGLRenderer::EnsureSkinnedProgram()'s vertex-color wiring.

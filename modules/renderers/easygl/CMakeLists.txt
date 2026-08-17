@@ -3,7 +3,14 @@
 # (plan_glbackends.md); the profile define CNA_GL_PROFILE_* is applied by
 # RendererSelection.cmake at identity-selection time.
 cna_add_renderer()
-target_link_libraries(${RENDERER_TARGET} PRIVATE easy-gl SDL3::SDL3)
+target_link_libraries(${RENDERER_TARGET} PRIVATE easy-gl)
+
+# plan_fx.md FX-062: compiled XNA effects go through MojoShader's own OpenGL adapter plus the
+# translation shared with every other compiled-effect backend. Opt-in, because MojoShader is a
+# fetched dependency this renderer does not otherwise need.
+if(CNA_EASYGL_COMPILED_EFFECTS)
+    target_link_libraries(${RENDERER_TARGET} PUBLIC cna_renderer_mojoshader_effect)
+endif()
 
 # Module-owned examples (module-examples campaign): the family's example/test
 # registration is module-local; its historical selection/platform conditions

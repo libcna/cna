@@ -7,7 +7,11 @@
 // the on-device smoke checks, since a headless CI container has no GL driver to create one on.
 #include <gtest/gtest.h>
 
-#if defined(CNA_RENDERER_MAGNUM)
+// plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
+// device-free policy coverage for its own renderer, so it is worth compiling and running
+// whenever that renderer is COMPILED IN -- in a multi-renderer build it need not be the
+// selected one. Only the default renderer's CNA_RENDERER_MAGNUM is defined project-wide.
+#if defined(CNA_RENDERER_MAGNUM) || defined(CNA_RENDERER_PRESENT_MAGNUM)
 #include "CNA/Internal/Renderers/Magnum/MagnumBuffers.hpp"
 #include "CNA/Internal/Renderers/Magnum/MagnumProgram.hpp"
 #include "CNA/Internal/Renderers/Magnum/MagnumStateMapping.hpp"
@@ -944,4 +948,4 @@ TEST(MagnumStockShaderTest, OnlyTheSkinnedFamilyDropsTheSeparateAmbientTerm)
                   .find("uAmbientColor"), std::string::npos);
 }
 
-#endif  // CNA_RENDERER_MAGNUM
+#endif  // CNA_RENDERER_MAGNUM / CNA_RENDERER_PRESENT_MAGNUM

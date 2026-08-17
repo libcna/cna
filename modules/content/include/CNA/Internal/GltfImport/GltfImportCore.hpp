@@ -3,6 +3,7 @@
 
 #include "cgltf.h"
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -10,7 +11,13 @@
 #include <unordered_map>
 #include <vector>
 
+#include "Microsoft/Xna/Framework/Graphics/AlphaModeEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GltfImportReportEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureTransformEXT.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
@@ -68,6 +75,39 @@ namespace CNA::Internal::GltfImport
         std::vector<int> oldToNew;
         /** @brief Maps a joint's glTF node pointer directly to its reordered index. */
         std::unordered_map<const cgltf_node*, int> nodeToNewIndex;
+        /**
+         * @brief Maps each stable `sceneNodeIndex` to this skin's `paletteIndex`, or -1 when that
+         * scene node is not a joint of this skin.
+         *
+         * plan_gltf.md `GLTF-252`. The vector has the same length as `SceneGraphOut::nodes` when
+         * the scene-aware `BuildSkeleton` overload is used. It is deliberately not `oldToNew`:
+         * `skin.joints[]` order is a third, file-local index space and the scene graph must never
+         * be reordered to make either one coincide with the GPU palette.
+         */
+        std::vector<int> sceneNodeIndexToPaletteIndex;
+        /**
+         * @brief Maps each `paletteIndex` back to its stable `sceneNodeIndex`, or -1 when the joint
+         * is outside the imported default scene.
+         *
+         * This is the inverse of @ref sceneNodeIndexToPaletteIndex for every joint reachable from
+         * the imported scene. Joints outside it still remain usable through @ref nodeToNewIndex;
+         * inventing a scene identity for a node the scene did not import would be misleading.
+         */
+        std::vector<int> paletteIndexToSceneNodeIndex;
+        /**
+         * @brief The `sceneNodeIndex` of the node `skin.skeleton` names, or -1 when it names none.
+         *
+         * plan_gltf.md `GLTF-249`. This is a **hint**, recorded so an application can locate and
+         * name the rig; it is deliberately **not** consulted anywhere in the transform arithmetic.
+         * §15.1.1 is explicit that truncating the ancestry walk at `skin.skeleton` reproduces D8
+         * in a new disguise, so the walk above stays driven by the scene graph alone and this
+         * field exists to be *reported*, never to bound anything.
+         *
+         * -1 also when the skin declares a `skeleton` node that is not in the default scene.
+         */
+        int declaredSkeletonRootNodeIndex = -1;
+        /** @brief The declared skeleton root's node name; empty when the skin declares none. */
+        std::string declaredSkeletonRootName;
     };
 
     /** @brief One animation keyframe: a bone-local translation/rotation/scale at a point in time. */
@@ -83,10 +123,40 @@ namespace CNA::Internal::GltfImport
         Microsoft::Xna::Framework::Vector3 scale{1.0f, 1.0f, 1.0f};
     };
 
+    /**
+     * @brief Which index space a clip's `TrackOut::boneIndex` values live in (§15.1.2).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. The two spaces are deliberately distinct and
+     * must never be silently interchanged: a joint's palette slot has nothing to do with its
+     * position in the scene, and a rigid node has no palette slot at all.
+     */
+    enum class ClipTargetSpace
+    {
+        /**
+         * @brief `paletteIndex` — a slot in one skin's GPU joint palette (`SkeletonResult::bones`).
+         *
+         * What `SkinningData`, `BlendIndices` and `uBones[]` index. Meaningful only relative to the
+         * skin the clip was extracted for.
+         */
+        JointPalette,
+        /**
+         * @brief `sceneNodeIndex` — a node's index in `SceneGraphOut::nodes`, and hence its
+         * `ModelBone` index, since both loaders mirror the scene graph one-for-one.
+         *
+         * What rigid (non-joint) node animation drives (`GLTF-293`).
+         */
+        SceneNode,
+    };
+
     /** @brief A sequence of keyframes driving one bone within an animation clip. */
     struct TrackOut
     {
-        /** @brief Index of the bone this track drives, into the owning `SkeletonResult::bones`. */
+        /**
+         * @brief Index of the bone this track drives, in the owning clip's `targetSpace`.
+         *
+         * A `JointPalette` clip indexes `SkeletonResult::bones`; a `SceneNode` clip indexes
+         * `SceneGraphOut::nodes` (equivalently `Model::Bones`).
+         */
         int boneIndex = -1;
         /** @brief Keyframes for this track, in ascending time order. */
         std::vector<KeyframeOut> keys;
@@ -101,6 +171,13 @@ namespace CNA::Internal::GltfImport
         double duration = 0.0;
         /** @brief Per-bone keyframe tracks. Bones with no track hold their bind pose. */
         std::vector<TrackOut> tracks;
+        /**
+         * @brief Which index space this clip's track bone indices are in.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. Defaults to `JointPalette`, which is what
+         * every clip was before `GLTF-293`, so an existing consumer keeps its meaning unchanged.
+         */
+        ClipTargetSpace targetSpace = ClipTargetSpace::JointPalette;
     };
 
     /** @brief A texture's raw encoded (PNG/JPEG) image bytes, plus its file extension. */
@@ -139,23 +216,265 @@ namespace CNA::Internal::GltfImport
         TriangleFan = 6,
     };
 
-    /** @brief One extracted mesh primitive's vertex/index bytes plus its effect-relevant flags. */
+    /**
+     * @brief The XNA sampler state one glTF `sampler` maps to (plan_gltf.md `GLTF-202`/`GLTF-203`).
+     *
+     * `cgltf_sampler` had **zero occurrences** in CNA before this: every imported texture was drawn
+     * with whatever `SamplerState` the device happened to have, which defaults to `LinearWrap`. For
+     * an asset authored `CLAMP_TO_EDGE` with UVs outside `[0,1]` — which `KHR_texture_transform`
+     * routinely produces — that is a large, visible error.
+     *
+     * One of these per texture slot, because glTF attaches a sampler to a *texture*, not to a
+     * material: a material may legitimately clamp its base colour and repeat its normal map.
+     */
+    struct SamplerOut
+    {
+        /** @brief The XNA filter the glTF min/mag pair maps to. */
+        Microsoft::Xna::Framework::Graphics::TextureFilter filter =
+            Microsoft::Xna::Framework::Graphics::TextureFilter::Linear;
+        /** @brief The U address mode, from `wrapS`. */
+        Microsoft::Xna::Framework::Graphics::TextureAddressMode addressU =
+            Microsoft::Xna::Framework::Graphics::TextureAddressMode::Wrap;
+        /** @brief The V address mode, from `wrapT`. */
+        Microsoft::Xna::Framework::Graphics::TextureAddressMode addressV =
+            Microsoft::Xna::Framework::Graphics::TextureAddressMode::Wrap;
+        /**
+         * @brief True when the file declared a sampler; false when these are glTF's own defaults.
+         *
+         * §3.8.4 makes an absent sampler mean "repeat, auto filter", which is exactly the default
+         * above — so the values are the same either way and this records *why*, which is what an
+         * import report needs to distinguish "the author chose repeat" from "the author said
+         * nothing".
+         */
+        bool declared = false;
+        /**
+         * @brief True when the glTF `minFilter` asked for no mipmapping at all (`NEAREST`/`LINEAR`).
+         *
+         * XNA's `TextureFilter` has no "base level only" value — that is a property of the texture
+         * having one mip level, not of the sampler — so the mip mode carried in @ref filter is
+         * arbitrary for these two and `MipPoint` is chosen as the least-blending option. This flag
+         * makes the approximation visible instead of implied (`GLTF-204`) and distinguishes it
+         * from `GLTF-206`'s explicitly requested-but-unavailable mip-chain report.
+         */
+        bool minFilterHasNoMipStage = false;
+        /**
+         * @brief True when an explicitly declared glTF `minFilter` requires a mip chain.
+         *
+         * PNG/JPEG images imported from glTF currently have one level. Keeping this bit separate
+         * from @ref filter lets `GLTF-206` report the affected map without guessing from an XNA
+         * enum (and without treating glTF's implementation-chosen default as an author request).
+         * The four `*_MIPMAP_*` values set it; `NEAREST`, `LINEAR` and undefined do not.
+         */
+        bool minFilterRequiresMipChain = false;
+    };
+
+    /**
+     * @brief The material texture slots CNA imports, and the index space `MaterialOut::samplers`
+     * uses.
+     *
+     * Deliberately an enum rather than bare indices: a sampler array indexed by an untyped `int`
+     * is exactly the kind of thing that silently acquires an off-by-one when a slot is added.
+     */
+    enum class TextureSlotEXT
+    {
+        /** @brief `pbrMetallicRoughness.baseColorTexture`. */
+        BaseColor = 0,
+        /** @brief `normalTexture`. */
+        Normal = 1,
+        /** @brief `pbrMetallicRoughness.metallicRoughnessTexture`. */
+        MetallicRoughness = 2,
+        /** @brief `emissiveTexture`. */
+        Emissive = 3,
+        /** @brief `occlusionTexture`. */
+        Occlusion = 4,
+        /** @brief `KHR_materials_specular.specularTexture`. */
+        Specular = 5,
+        /** @brief `KHR_materials_specular.specularColorTexture`. */
+        SpecularColor = 6,
+    };
+
+    /**
+     * @brief One decoded glTF material, independent of the effect class that will consume it.
+     *
+     * @note CNAEXT — internal import data, not new public API. plan_gltf.md `GLTF-236` used to
+     * scatter every §13.1 value across `MeshOut`; the runtime loader and the offline `.cnj` writer
+     * then selected their own subsets, which is how `normalTexture.scale`,
+     * `occlusionTexture.strength`, `baseColorFactor` and alpha were silently lost on the offline
+     * path. One carrier makes the contract explicit: both paths receive the same complete record,
+     * and effect selection (`MeshOut::usePbr`) remains a separate policy decision.
+     *
+     * A primitive that declares no material still owns this record with glTF's default
+     * metallic-roughness values. `sourceMaterialEXT` is null in that case; it is identity for
+     * effect de-duplication, never a signal that the other values are absent.
+     */
+    struct MaterialOut
+    {
+        /** @brief Source material identity, or nullptr for glTF's implicit default material. */
+        const cgltf_material* sourceMaterialEXT = nullptr;
+
+        /** @brief Decoded texture images for the core and supported extension slots, or nullptr. */
+        const cgltf_image* baseColorImage = nullptr;
+        const cgltf_image* normalImage = nullptr;
+        const cgltf_image* metallicRoughnessImage = nullptr;
+        const cgltf_image* occlusionImage = nullptr;
+        const cgltf_image* emissiveImage = nullptr;
+        const cgltf_image* specularImageEXT = nullptr;
+        const cgltf_image* specularColorImageEXT = nullptr;
+
+        /** @brief `normalTexture.scale` (glTF default 1). */
+        float normalScale = 1.0f;
+        /** @brief `occlusionTexture.strength` (glTF default 1). */
+        float occlusionStrength = 1.0f;
+        /** @brief One sampler per @ref TextureSlotEXT, including defaults for absent slots. */
+        std::array<SamplerOut, 7> samplers{};
+        /**
+         * @brief GPU texture-coordinate attribute (0 or 1) sampled by each texture slot.
+         *
+         * These are packed-stream indices, not necessarily the original glTF suffix. A primitive
+         * using authored sets 1 and 3 can carry them as GPU attributes 0 and 1 while
+         * @ref MeshOut::packedTexcoordSourceSetsEXT preserves that mapping. Absent maps use 0.
+         */
+        std::array<std::uint8_t, 7> textureCoordinateSetsEXT{};
+        /**
+         * @brief One shader-side UV transform per texture slot, in @ref TextureSlotEXT order.
+         *
+         * Values retain `KHR_texture_transform`'s authored offset/scale/rotation form. Identity is
+         * the default for an absent extension; unlike the former bake, maps sharing one vertex UV
+         * stream may therefore carry different transforms without changing vertex bytes.
+         */
+        std::array<Microsoft::Xna::Framework::Graphics::TextureTransformEXT, 7>
+            textureTransformsEXT{};
+
+        /** @brief `pbrMetallicRoughness.baseColorFactor` (glTF default white/opaque). */
+        Microsoft::Xna::Framework::Vector4 baseColorFactor{1.0f, 1.0f, 1.0f, 1.0f};
+        /** @brief `pbrMetallicRoughness.metallicFactor` (glTF default 1). */
+        float metallicFactor = 1.0f;
+        /** @brief `pbrMetallicRoughness.roughnessFactor` (glTF default 1). */
+        float roughnessFactor = 1.0f;
+        /** @brief `KHR_materials_ior.ior` (extension default 1.5). */
+        float iorEXT = 1.5f;
+        /** @brief `KHR_materials_specular.specularFactor` (extension default 1). */
+        float specularFactorEXT = 1.0f;
+        /** @brief `KHR_materials_specular.specularColorFactor` (linear RGB, default white). */
+        Microsoft::Xna::Framework::Vector3 specularColorFactorEXT{1.0f, 1.0f, 1.0f};
+        /** @brief `emissiveFactor` after any supported emissive-strength multiplier. */
+        Microsoft::Xna::Framework::Vector3 emissiveFactor;
+
+        /** @brief `alphaMode` (glTF default `OPAQUE`). */
+        Microsoft::Xna::Framework::Graphics::AlphaModeEXT alphaMode =
+            Microsoft::Xna::Framework::Graphics::AlphaModeEXT::Opaque;
+        /** @brief `alphaCutoff` (glTF default 0.5). */
+        float alphaCutoff = 0.5f;
+        /** @brief `doubleSided` (glTF default false). */
+        bool doubleSided = false;
+    };
+
+    /**
+     * @brief Maps a glTF sampler's four fields onto XNA sampler state (plan_gltf.md §14.2).
+     *
+     * Takes raw glTF enum values rather than a `cgltf_sampler` so the whole table is testable
+     * without a file. A zero value means "undefined", which §3.8.4 says to treat as the
+     * implementation's own choice; CNA reads it as glTF's stated default of repeat + linear.
+     *
+     * XNA turns out to cover glTF's filter space **exactly**: its nine `TextureFilter` values
+     * express all eight min×mag×mip combinations, so the four mixed cases need no approximation at
+     * all. The one real approximation is the mip stage of a non-mipmapped `minFilter` — see
+     * @ref SamplerOut::minFilterHasNoMipStage.
+     *
+     * @param magFilter glTF `magFilter` (9728 NEAREST, 9729 LINEAR, or 0 for undefined).
+     * @param minFilter glTF `minFilter` (9728, 9729, 9984…9987, or 0 for undefined).
+     * @param wrapS glTF `wrapS` (10497 REPEAT, 33071 CLAMP_TO_EDGE, 33648 MIRRORED_REPEAT, or 0).
+     * @param wrapT glTF `wrapT`, same values as @p wrapS.
+     * @return The mapped state. @ref SamplerOut::declared is left false; the caller sets it.
+     */
+    [[nodiscard]] SamplerOut MapGltfSamplerEXT(int magFilter, int minFilter, int wrapS, int wrapT);
+
+    /**
+     * @brief Recovers one KHR_draco_mesh_compression attribute's Draco unique ID.
+     *
+     * cgltf parses the extension's integer-valued `attributes` object through its ordinary
+     * attribute fixup and represents ID N as `&data->accessors[N]`. This helper deliberately owns
+     * that adapter boundary, verifies that the pointer really denotes a complete element of the
+     * current accessor array, and returns the recovered index. It is available even when CNA was
+     * built without libdraco so the cgltf representation contract remains unit-testable.
+     *
+     * @return The Draco unique ID, or -1 when the semantic/set is absent or the fixed-up pointer
+     *         does not belong to @p data's accessor array.
+     */
+    [[nodiscard]] int FindDracoUniqueIdEXT(const cgltf_primitive& primitive,
+                                            const cgltf_data* data,
+                                            cgltf_attribute_type type,
+                                            int index);
+
+    /**
+     * @brief One glTF camera as instanced by a scene node (plan_gltf.md `GLTF-317`).
+     *
+     * `cgltf_camera` had **zero occurrences** in CNA: a file's cameras were dropped entirely, so an
+     * asset that shipped its own framing had no way to express it and every viewer had to invent
+     * one. glTF §3.10 puts the projection on the camera and the placement on the node, so both are
+     * carried here rather than pre-combined -- an application animating the camera node needs them
+     * apart.
+     */
+    struct CameraOut
+    {
+        /** @brief The camera's name, or the node's when the camera is unnamed; may be empty. */
+        std::string name;
+        /** @brief The instancing node's `sceneNodeIndex` (§15.1.2), so it indexes `Model::Bones`. */
+        int sceneNodeIndex = -1;
+        /** @brief True for a perspective camera, false for an orthographic one. */
+        bool perspective = true;
+        /** @brief Perspective vertical field of view, in radians. */
+        float yfov = 0.0f;
+        /**
+         * @brief Perspective aspect ratio, or 0 when the file declares none.
+         *
+         * §3.10.3 says an undefined `aspectRatio` means "use the viewport's", which is a runtime
+         * value the importer cannot know -- so it is carried as 0 rather than guessed.
+         */
+        float aspectRatio = 0.0f;
+        /** @brief Orthographic half-width (`xmag`); the full width is twice this. */
+        float xmag = 0.0f;
+        /** @brief Orthographic half-height (`ymag`). */
+        float ymag = 0.0f;
+        /** @brief Near clip distance; required for both camera types. */
+        float znear = 0.0f;
+        /**
+         * @brief Far clip distance, or 0 when a perspective camera declares none.
+         *
+         * An absent `zfar` means an **infinite** projection (§3.10.3). XNA has no such overload,
+         * which is `GLTF-319`'s subject; 0 is the sentinel because a real `zfar` must be positive
+         * and greater than `znear`.
+         */
+        float zfar = 0.0f;
+        /** @brief The instancing node's world transform, already unit-scaled. */
+        Microsoft::Xna::Framework::Matrix worldTransform =
+            Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+    };
+
     struct MeshOut
     {
         /** @brief The mesh part's name (from the glTF mesh, or a generated placeholder). */
         std::string name;
         /**
-         * @brief The source primitive's declared topology (`mesh.primitive.mode`).
+         * @brief The topology `indexBytes` is actually in, after any import-time conversion.
          *
-         * Always `Triangles` on a `MeshOut` that `ExtractMesh` actually returned, because every
-         * other topology is currently rejected (see `IsPrimitiveTopologySupported`). It is carried
-         * anyway so the index list can never again be interpreted as a triangle list by default:
-         * the topology travels with the data it describes.
+         * Triangle strips/fans become `Triangles`; a line loop becomes `LineStrip`; point, line
+         * list and line strip modes stay themselves. Compare with @ref sourceTopology to see
+         * whether an exact import-time conversion happened.
          */
         PrimitiveTopology topology = PrimitiveTopology::Triangles;
+        /**
+         * @brief The topology the source primitive declared (`mesh.primitive.mode`), unconverted.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. Kept distinct from @ref topology so a
+         * conversion is visible rather than lossy: `sourceTopology != topology` means the index
+         * list was rewritten at import, which is what `GLTF-082` reports and what a consumer
+         * needs in order to map a drawn triangle back to the primitive the file authored.
+         */
+        PrimitiveTopology sourceTopology = PrimitiveTopology::Triangles;
         /** @brief Tightly-packed vertex bytes, `vertexBytes.size() / stride` vertices. */
         std::vector<std::uint8_t> vertexBytes;
-        /** @brief Byte stride of one vertex (16/20/24/32/48/52/56/68 — see CLAUDE.md's stride table). */
+        /** @brief Byte stride of one vertex (16/20/24/32/48/52/56/60/68/76). */
         int stride = 32;
         /** @brief Tightly-packed index bytes (16- or 32-bit, per `use32BitIndices`). */
         std::vector<std::uint8_t> indexBytes;
@@ -165,12 +484,255 @@ namespace CNA::Internal::GltfImport
         bool skinned = false;
         /** @brief True when this mesh has a per-vertex COLOR_0 attribute. */
         bool colored = false;
+        /** @brief True when the selected PBR layout carries two texture-coordinate attributes. */
+        bool hasSecondTexcoordEXT = false;
+        /**
+         * @brief Original glTF TEXCOORD suffix packed into GPU attributes 0 and 1.
+         *
+         * The second value is -1 when @ref hasSecondTexcoordEXT is false. Keeping the mapping
+         * explicit lets the importer retain arbitrary authored set numbers without pretending
+         * that GPU attribute 0 always came from `TEXCOORD_0`.
+         */
+        std::array<int, 2> packedTexcoordSourceSetsEXT{0, -1};
+        /**
+         * @brief `COLOR_1` and beyond, all of them ignored (plan_gltf.md `GLTF-091`).
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. XNA's vertex layouts carry exactly one
+         * colour channel, so a second is not a feature CNA can decline gracefully — it is data the
+         * file authored that nothing downstream can express. Counted so the loaders can say so:
+         * a mesh whose second colour set carries its actual tint imports looking like a mistake.
+         */
+        int extraColorSetsEXT = 0;
+        /**
+         * @brief Application-specific `_*` attributes the importer ignored (§3.7.2.1).
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. plan_gltf.md `GLTF-092`. The specification
+         * reserves the underscore prefix for custom semantics precisely so a reader may ignore
+         * them, and ignoring one is **not** an error. Naming them is still worth it: a file whose
+         * geometry depends on `_BATCHID` or `_FEATURE_ID` imports as ordinary geometry, and the
+         * only sign is this list.
+         */
+        std::vector<std::string> ignoredCustomAttributesEXT;
+        /**
+         * @brief The complete decoded material record (plan_gltf.md `GLTF-236`).
+         *
+         * Kept separate from the flags below that choose an effect/layout: the file's material is
+         * data, while `usePbr`/`useDualTexture` are CNA representation policy. Both the runtime
+         * loader and offline `.cnj` writer consume this same record.
+         */
+        MaterialOut material;
+        /**
+         * @brief Names the material model this primitive could not be imported with, or empty.
+         *
+         * plan_gltf.md `GLTF-241`. A primitive with `COLOR_0` **and** a metallic-roughness material
+         * cannot be imported as PBR: no CNA vertex layout carries a colour alongside a tangent, and
+         * no PBR shader reads a colour stream. It is imported through `BasicEffect` with its vertex
+         * colours intact, and the material's factors and maps are **not applied**.
+         *
+         * That is a downgrade, and the whole point of this field is that it is no longer a *silent*
+         * one: the loaders log it by name, and a test can assert it happened rather than inferring
+         * it from a stride. Empty for every primitive that was imported as the file asked.
+         */
+        std::string unsupportedMaterialModelEXT;
+        /**
+         * @brief True when the material declares `KHR_materials_unlit` (plan_gltf.md `GLTF-337`).
+         *
+         * The extension means "shade this surface with its base colour and nothing else" — no
+         * lighting term at all. XNA expresses exactly that as `LightingEnabled = false` on
+         * `BasicEffect`/`SkinnedEffect`, so this is one of the few extensions that maps rather than
+         * approximates.
+         *
+         * Carried as its own flag rather than inferred from `usePbr` being false, because the two
+         * mean different things: a vertex-coloured metallic-roughness primitive is also non-PBR
+         * (`GLTF-241`) and must still be **lit**. Turning lighting off for it would darken a
+         * surface the file asked to be shaded.
+         */
+        bool unlitEXT = false;
+        /**
+         * @brief True when the material declared `KHR_materials_pbrSpecularGlossiness` and was
+         * converted to metallic-roughness (plan_gltf.md `GLTF-349`).
+         *
+         * The extension is **archived** by Khronos but present in older assets, so refusing it
+         * outright would reject content that is otherwise perfectly importable. It is converted
+         * instead — `diffuseFactor` becomes the base colour, `metallic` becomes 0 and `roughness`
+         * becomes `1 − glossinessFactor` — which is the standard mapping and a genuine
+         * approximation: specular-glossiness can express a **coloured** specular reflection that
+         * metallic-roughness cannot without also making the surface metal, so `specularFactor` is
+         * dropped.
+         *
+         * A dielectric surface converts almost exactly; a coloured-specular one loses its tint.
+         * The flag exists so the loaders can say which happened rather than leaving an author to
+         * wonder why their brass went grey.
+         */
+        bool convertedFromSpecularGlossinessEXT = false;
+        /**
+         * @brief What the selected vertex stride cannot carry, or empty (plan_gltf.md `GLTF-100`).
+         *
+         * Taken from the `GLTF-099` decision table's own row rather than re-derived wherever a
+         * caller happens to care. Every downgrade CNA performs is one of these — a coloured
+         * primitive losing its normals, a dual-texture one losing its lighting entirely, a
+         * PBR material dropped for want of a colour-carrying PBR layout — and stating it per row
+         * is what makes the set of them enumerable instead of a property of which ternary branch
+         * was taken.
+         */
+        std::string unrepresentableForStrideEXT;
+        /**
+         * @brief The largest `specularFactor` channel dropped by that conversion, or 0.
+         *
+         * How much the approximation cost, in the one term it discards. Near 0 means the material
+         * was effectively dielectric and the conversion is close to exact; near 1 means a strongly
+         * coloured or metallic specular went missing.
+         */
+        float droppedSpecularStrengthEXT = 0.0f;
+        /**
+         * @brief True when the chosen vertex layout has no Normal slot and an authored NORMAL was
+         * therefore discarded.
+         *
+         * plan_gltf.md `GLTF-241`. Strides 24 and 20 carry no normal, so a primitive that lands on
+         * one loses its authored normals entirely and cannot be lit at all -- not merely lit
+         * without a PBR material. It is the same limitation one layer deeper, recorded here rather
+         * than left for a reader to deduce from a stride.
+         */
+        bool droppedNormalForStrideEXT = false;
+        /**
+         * @brief Number of trailing indices dropped because they did not complete a primitive.
+         *
+         * plan_gltf.md `GLTF-079`. §3.7.2.1 requires the index count to be a whole number of
+         * primitives for the declared `mode` — a multiple of 3 for `TRIANGLES`, of 2 for `LINES`,
+         * and at least 3 (respectively 2) for a strip, fan or loop. `cgltf_validate` does not
+         * check it, and neither reading the remainder as a further primitive (which runs off the
+         * end of the index run) nor dropping it silently is acceptable: the first is wrong, the
+         * second is undiagnosable. The incomplete tail is dropped and counted here, so the import
+         * is deterministic and the loaders can say what was discarded. Zero for a well-formed
+         * primitive.
+         */
+        std::size_t droppedIncompleteIndicesEXT = 0;
+        /**
+         * @brief True when the file authors `TANGENT` but the chosen vertex layout has no tangent
+         * slot, so it was discarded.
+         *
+         * plan_gltf.md `GLTF-086`. Only strides 48 and 68 carry a tangent, and those are exactly
+         * the PBR layouts — so an authored tangent basis on any other primitive is dropped. It
+         * cannot be *carried*: there is nowhere to put it. `GLTF-086`'s acceptance allows the other
+         * outcome, reported, and this is it. Worth reporting rather than shrugging at, because a
+         * file that went to the trouble of authoring tangents did so for a reason.
+         */
+        bool droppedTangentForStrideEXT = false;
+        /**
+         * @brief One entry per material map whose image CNA could not read, naming the map and why.
+         *
+         * plan_gltf.md `GLTF-200` / `GLTF-350`. A texture can carry its pixels in a format CNA has
+         * no decoder for — `KHR_texture_basisu` (KTX2/Basis) and `EXT_texture_webp` are the two the
+         * ecosystem actually ships. Both are designed so a file may *also* declare a plain PNG/JPEG
+         * `source` as a fallback, in which case CNA uses it and nothing is lost; both are also
+         * routinely authored with **no** fallback, and then the map simply has no image CNA can
+         * read.
+         *
+         * Until this field existed that map vanished without a word: the finder returned `nullptr`,
+         * every downstream check read "no texture on this slot", and the model drew untextured as
+         * though the author had never assigned one. Naming the map and the extension is the whole
+         * difference between an unsupported feature and a bug report.
+         *
+         * Each entry reads like `"base color: KHR_texture_basisu"`. Empty for every primitive whose
+         * maps were all readable.
+         *
+         * @note If the extension is listed in `extensionsRequired`, `ValidateGltfEXT` rejects the
+         * file outright and nothing reaches here — this covers exactly the `extensionsUsed` case,
+         * where the file claims it still loads without the extension.
+         */
+        std::vector<std::string> unsupportedTextureSourcesEXT;
+        /**
+         * @brief Sampled material maps whose declared minification filter needs missing mip levels.
+         *
+         * plan_gltf.md `GLTF-206`. `Texture2D::FromStream` decodes glTF's PNG/JPEG images as a
+         * single level. CNA deliberately does not synthesize a generic RGBA chain: colour maps
+         * need sRGB-aware filtering, normal maps need vector renormalisation, and packed PBR maps
+         * need linear per-channel filtering. Until role-aware generation exists, the GPU samples
+         * level zero for every LOD and this list makes the resulting minification-quality loss
+         * explicit. Only maps the selected effect actually samples are named.
+         */
+        std::vector<std::string> mipmappedSamplerMapsWithoutMipChainEXT;
+        /**
+         * @brief How many `JOINTS_n`/`WEIGHTS_n` sets beyond set 0 the primitive authored.
+         *
+         * plan_gltf.md `GLTF-095` / `GLTF-257`. glTF allows any number of influence sets, four
+         * joints each; XNA's `BlendIndices`/`BlendWeight` carry exactly four. Every set past the
+         * first is therefore dropped, and until this field existed it was dropped without a word —
+         * a mesh authored for eight influences imported as though the author had asked for four.
+         *
+         * Zero for the overwhelming majority of files, which author one set.
+         */
+        std::size_t extraInfluenceSetsEXT = 0;
+        /**
+         * @brief True when the primitive authored no `NORMAL` and CNA computed one (`GLTF-173`).
+         *
+         * §3.7.2.1 requires a reader to calculate flat normals for a primitive without `NORMAL`.
+         * CNA used to write a fabricated `(0,0,1)` for every vertex instead — a surface facing +Z
+         * regardless of where it actually points — so a model lit from any other direction was
+         * uniformly and silently wrong. This says the normals in `vertexBytes` are derived rather
+         * than authored, which is worth knowing when comparing against another renderer.
+         */
+        bool generatedNormalsEXT = false;
+        /**
+         * @brief How many generated normals are averaged rather than truly flat (`GLTF-173`).
+         *
+         * Flat shading gives a vertex one normal *per face*, so a vertex shared between faces of
+         * different orientation must be duplicated once per face. Duplication changes the vertex
+         * count and every per-vertex stream including morph deltas, and this extraction produces
+         * one vertex array — so such a vertex instead receives the area-weighted average of its
+         * faces' normals, and is counted here.
+         *
+         * Zero for the case that matters most: a faceted mesh whose author already split its edges
+         * gets exact flat normals, because no vertex is shared across differing faces.
+         */
+        std::size_t smoothedNormalVertexCountEXT = 0;
+        /**
+         * @brief The largest share of a single vertex's total influence that set truncation
+         * discarded, in [0,1].
+         *
+         * plan_gltf.md `GLTF-095`. The count alone does not say whether the truncation matters: a
+         * fifth influence weighted 0.002 is exporter noise, and one weighted 0.4 is a visibly
+         * different pose. This is the number that tells them apart, measured before `GLTF-256`'s
+         * renormalisation runs.
+         *
+         * Note what renormalisation then does: the retained four weights are rescaled to sum to 1,
+         * so a truncated vertex is influenced by *four* joints rather than eight — it is **not**
+         * dragged toward the origin by the missing weight. The degradation is a coarser skin, not a
+         * collapsed one.
+         */
+        float worstDroppedInfluenceEXT = 0.0f;
+        /**
+         * @brief How many vertices had their joint weights renormalised (plan_gltf.md `GLTF-256`).
+         *
+         * §3.7.3.3 requires a vertex's weights to sum to 1, but a file is not guaranteed to honour
+         * it. The failure is not cosmetic: the skin equation is a weighted sum of joint matrices,
+         * so weights summing to 0.75 apply 0.75 of the vertex's transform — which for a joint near
+         * the origin drags the vertex three-quarters of the way toward it. That is the audit's
+         * **H12**, an independent collapse mechanism.
+         *
+         * CNA renormalises rather than refusing, because a slightly-off sum is what quantised
+         * exporters routinely emit; this count is what keeps that from being silent. Vertices
+         * within 1e-4 of 1 are not counted — that is float error, not a malformed file.
+         */
+        std::size_t renormalisedWeightVertexCountEXT = 0;
+        /**
+         * @brief How many vertices had joint weights summing to zero, and were left alone.
+         *
+         * plan_gltf.md `GLTF-256`. An all-zero weight set means the vertex is unweighted, and
+         * `0/0` is not a normalisation — so these are counted and reported rather than "fixed" into
+         * an arbitrary joint.
+         */
+        std::size_t zeroWeightVertexCountEXT = 0;
+        /**
+         * @brief The largest `|sum - 1|` seen before renormalisation; 0 when nothing was off.
+         *
+         * plan_gltf.md `GLTF-256`. Carried because the *size* of the deviation is what separates a
+         * quantised exporter (a few 1e-3) from a genuinely broken file, and a count alone cannot
+         * say which one a caller is looking at.
+         */
+        float worstWeightSumDeviationEXT = 0.0f;
         /** @brief True when this mesh should be imported through DualTextureEffect (CNB-72/73). */
         bool useDualTexture = false;
-        /** @brief The material's base-color texture image, or nullptr if none. */
-        const cgltf_image* baseColorImage = nullptr;
-        /** @brief The material's occlusion texture image, or nullptr if none. */
-        const cgltf_image* occlusionImage = nullptr;
         /**
          * @brief Per-target, per-vertex position deltas: morphPositionDeltas[target][vertex],
          * already unit-scaled. Empty if the primitive has no morph targets.
@@ -183,6 +745,16 @@ namespace CNA::Internal::GltfImport
          */
         std::vector<std::vector<Microsoft::Xna::Framework::Vector3>> morphNormalDeltas;
         /**
+         * @brief Per-target, per-vertex tangent deltas, or an empty inner vector for a target with
+         * no TANGENT delta. Only meaningful for strides with a Tangent slot (48/68).
+         *
+         * plan_gltf.md `GLTF-279`. glTF morph TANGENT deltas are `VEC3`, not `VEC4`: the
+         * handedness `w` is a property of the UV winding and is **not** morphed, so it is carried
+         * on the base vertex and left alone by the blend. Storing these as `Vector3` is what makes
+         * that impossible to get wrong.
+         */
+        std::vector<std::vector<Microsoft::Xna::Framework::Vector3>> morphTangentDeltas;
+        /**
          * @brief True when this primitive is imported through PbrEffect (stride 48,
          * VertexPositionNormalTangentTexture, unskinned) or SkinnedPbrEffect (stride 68,
          * VertexPositionNormalTangentTextureSkinned, skinned) instead of BasicEffect/
@@ -191,30 +763,63 @@ namespace CNA::Internal::GltfImport
          * rule).
          */
         bool usePbr = false;
-        /** @brief The material's normal map image, or nullptr if none. */
-        const cgltf_image* normalImage = nullptr;
-        /** @brief The material's metallic-roughness map image, or nullptr if none. */
-        const cgltf_image* metallicRoughnessImage = nullptr;
-        /** @brief The material's emissive map image, or nullptr if none. */
-        const cgltf_image* emissiveImage = nullptr;
-        /** @brief The material's metallic factor [0,1] (glTF default 1.0). */
-        float metallicFactor = 1.0f;
-        /** @brief The material's roughness factor [0,1] (glTF default 1.0). */
-        float roughnessFactor = 1.0f;
-        /** @brief The material's emissive factor (glTF default black/zero). */
-        Microsoft::Xna::Framework::Vector3 emissiveFactor;
         /**
-         * @brief True when `usePbr` is true and at least one present PBR map (normal,
-         * metallic-roughness, emissive, or occlusion) references a different glTF TEXCOORD set
-         * than the one actually baked into this primitive's vertex buffer (always the base-color
-         * texture's own TEXCOORD set, or TEXCOORD_0 if there is no base-color texture) -- CNA's
-         * PbrEffect/SkinnedPbrEffect currently sample every map from a single shared UV channel,
-         * so a mismatched map will be sampled with the wrong UV data. `ExtractMesh`'s caller
-         * (`gltf_to_cnj.cpp`) surfaces this as a warning rather than silently mis-rendering it;
-         * true multi-UV-channel support is tracked as separate future work (plan_cnj.md Phase
-         * 14B), not implemented here.
+         * @brief The material's `KHR_materials_transmission` factor, or 0 (`GLTF-339`).
+         *
+         * Read for any material. 1 is fully transmissive — clear glass — and 0 is the default,
+         * meaning the extension is absent or explicitly neutral.
          */
-        bool pbrUv2Mismatch = false;
+        float transmissionFactorEXT = 0.0f;
+        /**
+         * @brief True when the transmission was approximated as alpha blending (`GLTF-339`).
+         *
+         * The approximation: `alpha = 1 - transmissionFactor`, multiplied into whatever alpha the
+         * material already asked for, with `alphaMode` forced to `Blend`. Set only when the factor
+         * is above 0, so a material that declares the extension neutrally is untouched.
+         *
+         * **Explicitly not physical**, and the ways it is wrong are worth naming rather than
+         * discovering: there is no refraction, so nothing behind the surface is displaced; the blur
+         * roughness would cause does not happen; alpha blending *darkens* what is behind a tinted
+         * surface where transmission would *tint* it; and specular reflection, which a transmissive
+         * surface keeps at full strength, fades out with the alpha. It is still far closer than the
+         * fully opaque result CNA produced before, and it is reported every time.
+         */
+        bool transmissionApproximatedEXT = false;
+        /**
+         * @brief True when the material also declares a transmission **texture** (`GLTF-339`).
+         *
+         * Only the scalar factor is approximated; a per-texel transmission map has nowhere to go in
+         * an `alphaMode`/`baseColorFactor` approximation, so a material that varies its
+         * transmission across the surface is flattened to one value. Reported separately because
+         * that is a materially worse approximation than the uniform case.
+         */
+        bool transmissionHasTextureEXT = false;
+        /**
+         * @brief The PBR maps whose TEXCOORD set does not fit the two carried channels, by name.
+         *
+         * plan_gltf.md `GLTF-181`/`GLTF-188`. GLTF-182/183 carry at most two distinct authored
+         * sets through `PbrEffect`/`SkinnedPbrEffect`. A material using a third distinct set still
+         * has no attribute/varying for it and falls back to packed channel 0. This lists exactly
+         * which maps were remapped, so the report names the remaining loss.
+         *
+         * `GLTF-188` narrowed it from a bare `bool` for two reasons. A single flag could not say
+         * *which* map to go and look at, which is the only actionable part of the warning; and it
+         * counted maps CNA never samples — an undecodable texture source (`GLTF-200`) is not
+         * rendered from the wrong UV set, it is not rendered at all, and warning about its UVs
+         * pointed at the wrong problem.
+         *
+         * Empty for any material whose sampled maps need at most two distinct authored sets.
+         */
+        std::vector<std::string> uvSetMismatchedMapsEXT;
+    };
+
+    /** @brief One KHR_materials_variants override decoded through the same path as the default. */
+    struct MaterialVariantOutEXT
+    {
+        /** @brief Index into `cgltf_data::variants`, and the public Model variant-name vector. */
+        std::size_t variantIndex = 0;
+        /** @brief The primitive re-extracted with this variant's mapped material. */
+        MeshOut mesh;
     };
 
     /**
@@ -291,6 +896,23 @@ namespace CNA::Internal::GltfImport
          * drops) is plan_gltf.md GLTF-245/GLTF-247/GLTF-260, not this type.
          */
         bool skinned = false;
+        /**
+         * @brief True when this placement's composed world transform mirrors the geometry.
+         *
+         * plan_gltf.md `GLTF-116`/`GLTF-117`. The determinant of the world 3×3 is negative, so
+         * §3.7.4 requires the triangle winding to be reversed for the primitive's front faces to
+         * stay front-facing. The property belongs to the **composed** transform, never to the
+         * instancing node's own scale: an odd number of mirroring ancestors mirrors, an even
+         * number does not.
+         *
+         * It is recorded per instance rather than applied to the index buffer, because vertex
+         * positions stay mesh-local (`GLTF-103` Option A) — one mesh may be instanced by both a
+         * mirrored and an unmirrored node, and those two draws share one index buffer. Reversing
+         * it at import would fix one placement by breaking the other. Applying it is a per-draw
+         * `RasterizerState::CullMode` decision, the same boundary `GLTF-231` drew for
+         * `doubleSided`.
+         */
+        bool mirroredEXT = false;
     };
 
     /** @brief A group of glTF mesh instances sharing the same skin (or no skin at all). */
@@ -301,6 +923,125 @@ namespace CNA::Internal::GltfImport
         /** @brief The mesh placements belonging to this group, in glTF node order. */
         std::vector<MeshInstanceOut> instances;
     };
+
+    /**
+     * @brief What one file's node graph turned into (plan_gltf.md `GLTF-145`).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. This internal, computation-oriented form feeds
+     * the public @c GltfImportReportEXT attached to @c Model; keeping it separate avoids coupling
+     * cgltf-specific traversal state to the stable graphics API.
+     *
+     * Every field answers a question that is otherwise only answerable by re-reading the file: how
+     * much of it arrived, how deep it was, and whether its meshes are shared.
+     */
+    struct NodeGraphReportEXT
+    {
+        /** @brief Nodes imported from the default scene, excluding the synthetic root. */
+        int nodeCount = 0;
+        /** @brief Mesh placements produced — one per (node, mesh) pair, so instancing counts twice. */
+        int meshInstanceCount = 0;
+        /** @brief Distinct glTF meshes referenced by those placements. */
+        int distinctMeshCount = 0;
+        /** @brief Meshes placed by more than one node, i.e. genuinely instanced. */
+        int sharedMeshCount = 0;
+        /** @brief Longest root-to-leaf chain, counting the synthetic root as depth 0. */
+        int maxDepth = 0;
+        /** @brief Nodes that instance a camera. */
+        int cameraNodeCount = 0;
+        /** @brief Nodes that instance a `KHR_lights_punctual` light. */
+        int lightNodeCount = 0;
+        /** @brief Nodes carrying `EXT_mesh_gpu_instancing`, whose extra instances are not imported. */
+        int gpuInstancedNodeCount = 0;
+    };
+
+    /**
+     * @brief What one skinned primitive's joint data turned into (plan_gltf.md `GLTF-273`).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API, internal for the same reason
+     * @ref NodeGraphReportEXT is.
+     *
+     * Every field is a place where a skin is imported **approximately**, and each is silent on its
+     * own: XNA carries four influences per vertex, so a fifth is dropped; weights that do not sum
+     * to 1 are renormalised; a joint index past the palette is refused only when it is actually
+     * weighted. A rig that lost a fifth influence weighted 0.002 is fine, one that lost a fifth
+     * weighted 0.4 is a visibly different pose, and nothing but the numbers tells them apart.
+     */
+    struct SkinReportEXT
+    {
+        /** @brief Joints in the imported palette. */
+        int jointCount = 0;
+        /** @brief Influence sets past the first, i.e. `JOINTS_1` and beyond, all of them dropped. */
+        int droppedInfluenceSets = 0;
+        /** @brief The largest single influence dropped, as a weight in [0,1]. */
+        float worstDroppedInfluence = 0.0f;
+        /** @brief Vertices whose weights were renormalised to sum to 1. */
+        std::size_t renormalisedVertexCount = 0;
+        /** @brief The largest `|sum - 1|` seen before renormalisation. */
+        float worstWeightSumDeviation = 0.0f;
+        /** @brief True when the skin declares a `skeleton` root that is inside the default scene. */
+        bool hasDeclaredSkeletonRoot = false;
+    };
+
+    /**
+     * @brief Summarises one skinned primitive's joint data against the skeleton it was built with.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param mesh The extracted primitive.
+     * @param skeleton The skeleton the primitive was extracted against, or nullptr when unskinned.
+     * @return The counts described by @ref SkinReportEXT.
+     */
+    SkinReportEXT BuildSkinReportEXT(const MeshOut& mesh, const SkeletonResult* skeleton);
+
+    /**
+     * @brief What one primitive's morph targets turned into (plan_gltf.md `GLTF-291`).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. This internal form feeds the public aggregate
+     * @c GltfImportReportEXT.
+     *
+     * A morph target may carry any subset of `POSITION`, `NORMAL` and `TANGENT` deltas (§3.7.2.2),
+     * and a target missing one is not an error — it simply does not move that stream. But a
+     * *normal-mapped* surface whose targets carry positions and no tangents deforms with a
+     * rest-pose tangent basis, which lights wrongly and looks like a material bug, so the counts
+     * are worth having rather than inferring from a silently unchanged buffer.
+     */
+    struct MorphReportEXT
+    {
+        /** @brief Morph targets the primitive declares. */
+        int targetCount = 0;
+        /** @brief Targets carrying no `POSITION` deltas. */
+        int targetsWithoutPositions = 0;
+        /** @brief Targets carrying no `NORMAL` deltas. */
+        int targetsWithoutNormals = 0;
+        /** @brief Targets carrying no `TANGENT` deltas. */
+        int targetsWithoutTangents = 0;
+        /** @brief True when the mesh's own default weights are not all zero, so the rest pose is morphed. */
+        bool hasNonZeroDefaultWeights = false;
+    };
+
+    /**
+     * @brief Summarises one extracted primitive's morph targets and its applied default weights.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param mesh The extracted primitive.
+     * @param defaultWeights The default weights the loader is about to apply.
+     * @return The counts described by @ref MorphReportEXT.
+     */
+    MorphReportEXT BuildMorphReportEXT(const MeshOut& mesh,
+                                       const std::vector<float>& defaultWeights);
+
+    /**
+     * @brief Summarises an already-built scene graph and its mesh placements.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param scene The graph `BuildSceneGraph` produced.
+     * @param groups The placements `CollectMeshGroups` produced from the same graph.
+     * @return The counts described by @ref NodeGraphReportEXT.
+     */
+    NodeGraphReportEXT BuildNodeGraphReportEXT(const SceneGraphOut& scene,
+                                               const std::vector<MeshGroup>& groups);
 
     /**
      * @brief A `KHR_lights_punctual` light, already approximated down to CNA's own
@@ -314,6 +1055,63 @@ namespace CNA::Internal::GltfImport
         Microsoft::Xna::Framework::Vector3 direction;
         /** @brief `color * intensity`, clamped to [0,1] per channel. */
         Microsoft::Xna::Framework::Vector3 diffuseColor;
+    };
+
+    /**
+     * @brief What `KHR_lights_punctual` import lost or approximated on one file (`GLTF-326`).
+     *
+     * XNA's stock effects light with **three directional lights** and nothing else. A glTF file may
+     * declare any number of lights, of three kinds, with ranges and cone angles — so importing one
+     * is a lossy operation by construction, and every entry here is a place that loss happens.
+     * None of it was previously visible: a scene lit by six point lights imported as three
+     * directionals aimed at the origin and said nothing at all.
+     *
+     * Every count is zero for a file already inside XNA's lighting model: at most three
+     * directional lights whose `color * intensity` is in gamut.
+     */
+    struct LightReportEXT
+    {
+        /** @brief Lights in the default scene beyond the three XNA can bind. */
+        std::size_t droppedLightCount = 0;
+        /** @brief Point lights approximated as directional lights aimed at the scene origin. */
+        std::size_t approximatedPointLightCount = 0;
+        /** @brief Spot lights approximated the same way, additionally losing their cone entirely. */
+        std::size_t approximatedSpotLightCount = 0;
+        /**
+         * @brief Lights whose `color * intensity` exceeded 1 on some channel and was clamped.
+         *
+         * glTF intensity is photometric and unbounded — lux for a directional light, candela for
+         * the other two — while `DirectionalLight::DiffuseColor` is a [0,1] colour. An intensity of
+         * 683 is an ordinary authored value and clamps to white, which is not a bug but is
+         * absolutely something an author comparing renders deserves to be told.
+         */
+        std::size_t clampedIntensityLightCount = 0;
+        /** @brief The largest pre-clamp channel value seen, or 0 when nothing was clamped. */
+        float worstPreClampChannelEXT = 0.0f;
+        /**
+         * @brief Lights declaring a finite `range`, which is ignored (`GLTF-327`).
+         *
+         * `range` is the distance past which a point or spot light contributes nothing. A
+         * directional light has no falloff at all, so the approximation lights the *whole* scene
+         * with a lamp the author scoped to one room — the error grows with distance, which is
+         * exactly where it is least likely to be noticed while authoring.
+         */
+        std::size_t ignoredRangeCount = 0;
+        /**
+         * @brief Spot lights whose cone angles are ignored (`GLTF-327`).
+         *
+         * Counted separately from @ref approximatedSpotLightCount, which records that the spot
+         * became directional at all. `innerConeAngle`/`outerConeAngle` are the shape of the pool
+         * of light, and losing them turns a focused beam into full-scene illumination.
+         */
+        std::size_t ignoredConeAngleCount = 0;
+        /** @brief True when any of the above is non-zero. */
+        [[nodiscard]] bool AnythingLost() const
+        {
+            return droppedLightCount > 0 || approximatedPointLightCount > 0 ||
+                   approximatedSpotLightCount > 0 || clampedIntensityLightCount > 0 ||
+                   ignoredRangeCount > 0 || ignoredConeAngleCount > 0;
+        }
     };
 
     /** @brief One keyframe of a morph-weight animation track: a full weight vector at a point in time. */
@@ -364,7 +1162,8 @@ namespace CNA::Internal::GltfImport
      *
      * @param skin The glTF skin to process.
      * @param unitScale Uniform scale applied to every bone's translation (see `ScaleTranslation`).
-     * @return The reordered skeleton, plus the old-to-new joint index remap.
+     * @return The reordered skeleton, plus its file-joint/palette mappings. Scene-index mappings
+     *         are empty or `-1` because this overload has no scene graph.
      */
     SkeletonResult BuildSkeleton(const cgltf_skin* skin, float unitScale);
 
@@ -389,11 +1188,110 @@ namespace CNA::Internal::GltfImport
      * @param meshNodeWorld World transform of the node instancing the skinned mesh, in XNA
      *        row-vector form. Pass the identity when no such node applies.
      * @param unitScale Uniform scale applied to every bone's translation (see `ScaleTranslation`).
-     * @return The reordered skeleton, plus the old-to-new joint index remap.
+     * @return The reordered skeleton, plus the file-joint, scene-node and palette mappings.
      */
     SkeletonResult BuildSkeleton(const cgltf_skin* skin, const SceneGraphOut& scene,
                                   const Microsoft::Xna::Framework::Matrix& meshNodeWorld,
                                   float unitScale);
+
+    /**
+     * @brief What one file's animations turned into (plan_gltf.md `GLTF-315`).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. This internal form feeds the public aggregate
+     * @c GltfImportReportEXT.
+     *
+     * Every field is a place where an animation arrives **incompletely**, and each is invisible in
+     * the result on its own. A channel whose target is outside the default scene, and a channel on
+     * a path CNA cannot drive, both leave a clip that plays — just not the motion that was
+     * authored. Resampling is the third: a bone whose translation and rotation are keyed at
+     * different times is baked onto the union of both, which is exact at the source keys and an
+     * approximation between them, and nothing in a `ClipOut` records that it happened.
+     */
+    struct AnimationReportEXT
+    {
+        /** @brief Animations the file declares. */
+        int animationCount = 0;
+        /** @brief Clips produced — never more than `animationCount`, and fewer when one drives nothing. */
+        int clipCount = 0;
+        /** @brief Animations that resolved to no track at all, so no clip was emitted for them. */
+        int emptyAnimationCount = 0;
+        /** @brief Channels across every animation, before any were skipped. */
+        int channelCount = 0;
+        /** @brief Channels skipped because their target node is not in the imported index space. */
+        int skippedOutOfSceneChannels = 0;
+        /** @brief Channels skipped because their `path` is one CNA cannot drive (e.g. `weights`). */
+        int skippedUnsupportedPathChannels = 0;
+        /** @brief Tracks produced across every clip. */
+        int trackCount = 0;
+        /**
+         * @brief Tracks whose keys outnumber the longest single source channel, i.e. genuinely
+         * resampled onto a union of disagreeing key times rather than passed through.
+         */
+        int resampledTrackCount = 0;
+        /** @brief Adjacent sampler input samples sharing a time, summed over every channel loaded. */
+        int duplicateInputTimeCount = 0;
+        /** @brief The longest clip's duration, in seconds. */
+        double longestClipDuration = 0.0;
+    };
+
+    /** @brief Copies scene summary counts and node-level losses into a public import report. */
+    void AppendGltfNodeGraphReportEXT(
+        Microsoft::Xna::Framework::Graphics::GltfImportReportEXT& destination,
+        const NodeGraphReportEXT& source);
+
+    /** @brief Makes advisory validation warnings reachable through the public import report. */
+    void AppendGltfValidationWarningsEXT(
+        Microsoft::Xna::Framework::Graphics::GltfImportReportEXT& destination,
+        const std::vector<std::string>& warnings);
+
+    /** @brief Appends losses caused by one mesh placement (for example mirrored winding). */
+    void AppendGltfInstanceReportEXT(
+        Microsoft::Xna::Framework::Graphics::GltfImportReportEXT& destination,
+        const MeshInstanceOut& instance, const std::string& subject);
+
+    /**
+     * @brief Appends every import outcome carried by one extracted primitive.
+     * @param countPrimitive False for a material-variant state of an already-counted primitive.
+     */
+    void AppendGltfMeshReportEXT(
+        Microsoft::Xna::Framework::Graphics::GltfImportReportEXT& destination,
+        const MeshOut& mesh, const std::string& subject, bool countPrimitive = true);
+
+    /** @brief Appends morph-target outcomes that require the resolved default weights. */
+    void AppendGltfMorphReportEXT(
+        Microsoft::Xna::Framework::Graphics::GltfImportReportEXT& destination,
+        const MorphReportEXT& source, const std::string& subject, bool normalMapped);
+
+    /** @brief Appends dropped and approximated punctual-light outcomes. */
+    void AppendGltfLightReportEXT(
+        Microsoft::Xna::Framework::Graphics::GltfImportReportEXT& destination,
+        const LightReportEXT& source, std::size_t importedLightCount);
+
+    /** @brief Appends skipped, empty and resampled animation outcomes. */
+    void AppendGltfAnimationReportEXT(
+        Microsoft::Xna::Framework::Graphics::GltfImportReportEXT& destination,
+        const AnimationReportEXT& source);
+
+    /**
+     * @brief Reports scene-node animation tracks that a skinned Model cannot retain in its Tag.
+     * @param destination The public report to append to.
+     * @param clipName The source animation/clip name.
+     * @param droppedTrackCount Scene-node tracks not already carried through a skin palette.
+     */
+    void AppendGltfRigidAnimationDropEXT(
+        Microsoft::Xna::Framework::Graphics::GltfImportReportEXT& destination,
+        const std::string& clipName, std::size_t droppedTrackCount);
+
+    /**
+     * @brief Counts scene-node tracks that are not already carried by any supplied skin palette.
+     * @param clip A clip whose track indices address @p scene.
+     * @param scene The scene-node index space used by the clip.
+     * @param skins Skin palettes retained by the Model being reported.
+     * @return Tracks whose target is invalid or absent from every supplied skin.
+     */
+    std::size_t CountGltfRigidAnimationDropsEXT(
+        const ClipOut& clip, const SceneGraphOut& scene,
+        const std::vector<const SkeletonResult*>& skins);
 
     /**
      * @brief Extracts every animation in a glTF file as a resampled, per-bone keyframe clip.
@@ -403,10 +1301,50 @@ namespace CNA::Internal::GltfImport
      * @param unitScale Uniform scale applied to translation channel values/tangents.
      * @param warnings Appended with a human-readable note for each skipped, unsupported channel
      *                 target (e.g. morph target weights).
+     * @param report Optional out-parameter, filled with the counts described by
+     *               @ref AnimationReportEXT. Ignored when nullptr.
      * @return One `ClipOut` per glTF animation.
+     * @throws std::runtime_error If a sampler's input times are not ascending (§3.11: they must be
+     *                            strictly increasing, and `FindBracket` assumes it).
      */
     std::vector<ClipOut> ExtractClips(const cgltf_data* data, const SkeletonResult& skel,
-                                       float unitScale, std::vector<std::string>& warnings);
+                                       float unitScale, std::vector<std::string>& warnings,
+                                       AnimationReportEXT* report = nullptr);
+
+    /**
+     * @brief Extracts every animation as a clip whose tracks target **scene nodes**, not joints.
+     *
+     * This is rigid (non-joint) node animation — a door, a turntable, a clock hand — which was
+     * silently dropped before `GLTF-293`: `ExtractClips` resolves every channel against a skin's
+     * joint set, so a channel targeting an ordinary mesh node matched nothing and was skipped
+     * without a warning, and the offline tool called it only for a skinned group in the first
+     * place.
+     *
+     * The returned clips carry `ClipTargetSpace::SceneNode`, so their `boneIndex` values index
+     * `SceneGraphOut::nodes` — which both loaders mirror one-for-one as `Model::Bones`. A channel
+     * whose target node is not in the default scene is skipped and reported: it drives nothing
+     * that was imported.
+     *
+     * Joints are deliberately **not** excluded. A node can be both a skin joint and an ordinary
+     * scene node, and which of the two clips should drive it is `GLTF-294`'s question, not this
+     * function's; silently dropping it here would repeat D6 in the other direction.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param data The parsed glTF file.
+     * @param scene The default scene's flattened node graph (from `BuildSceneGraph`).
+     * @param unitScale Uniform scale applied to translation channel values/tangents.
+     * @param warnings Appended with a human-readable note per skipped channel, naming why.
+     * @param report Optional out-parameter, filled with the counts described by
+     *               @ref AnimationReportEXT. Ignored when nullptr.
+     * @return One `ClipOut` per glTF animation that drives at least one imported scene node.
+     * @throws std::runtime_error If a sampler's input times are not ascending (§3.11: they must be
+     *                            strictly increasing, and `FindBracket` assumes it).
+     */
+    std::vector<ClipOut> ExtractSceneNodeClips(const cgltf_data* data, const SceneGraphOut& scene,
+                                                float unitScale,
+                                                std::vector<std::string>& warnings,
+                                                AnimationReportEXT* report = nullptr);
 
     /**
      * @brief Extracts a glTF image's raw encoded bytes, resolving whichever of the three glTF
@@ -504,11 +1442,15 @@ namespace CNA::Internal::GltfImport
     /**
      * @brief Whether CNA's import path can currently carry a topology through to a draw.
      *
-     * Only `Triangles` is supported today. The other six are read, classified and **rejected with
-     * a named error** rather than reinterpreted as a triangle list, which is what CNA did before:
-     * a strip's later triangles were lost and a point cloud became one arbitrary triangle, with no
-     * diagnostic at all. Converting strips and fans to triangle lists, and carrying the line and
-     * point topologies, is separate work (plan_gltf.md §10.1, `GLTF-072`).
+     * The three triangle-producing topologies are supported: `Triangles` passes through, and
+     * `TriangleStrip` / `TriangleFan` are **converted to a triangle list at import**
+     * (`ConvertToTriangleList`). That conversion is deliberately chosen over plumbing new
+     * topologies through every renderer — it is provable at L3 and L5, needs no renderer change,
+     * and cannot regress an existing renderer (plan_gltf.md §10.1).
+     *
+     * All seven core glTF modes import. Triangle strips/fans and line loops take the exact
+     * conversions documented by `GLTF-072`/`GLTF-076`; the remaining modes retain their source
+     * topology and use the topology-aware draw/count paths from `GLTF-073`/`GLTF-078`.
      *
      * @note CNAEXT — not part of the XNA 4.0 API.
      *
@@ -516,6 +1458,139 @@ namespace CNA::Internal::GltfImport
      * @return True when `ExtractMesh` will import a primitive of that topology.
      */
     bool IsPrimitiveTopologySupported(PrimitiveTopology topology);
+
+    /**
+     * @brief True for the three modes whose primitives are triangles (§3.7.2.1).
+     *
+     * `TRIANGLES`, `TRIANGLE_STRIP` and `TRIANGLE_FAN`; false for the points and the three line
+     * modes. This is the core-glTF conversion partition (`GLTF-072`); Draco's narrower, normative
+     * two-mode partition is @ref IsDracoTopologyAllowedEXT (`GLTF-080`, `GLTF-362`).
+     *
+     * @param topology The classified topology.
+     * @return True when the mode's primitives are triangles.
+     */
+    bool ProducesTriangles(PrimitiveTopology topology);
+
+    /**
+     * @brief Whether KHR_draco_mesh_compression permits this primitive mode.
+     *
+     * The extension's normative restriction is narrower than @ref ProducesTriangles: only
+     * TRIANGLES and TRIANGLE_STRIP are legal. TRIANGLE_FAN is a triangle topology in core glTF,
+     * but is not a legal Draco primitive mode.
+     */
+    [[nodiscard]] bool IsDracoTopologyAllowedEXT(PrimitiveTopology topology);
+
+    /**
+     * @brief Rewrites a strip's or fan's index list as an equivalent triangle list (§3.7.2.1).
+     *
+     * A `Triangles` list is returned unchanged, so this is safe to apply unconditionally to any
+     * supported topology. Winding is preserved exactly as the specification defines it: a strip's
+     * odd triangles emit `(i+1, i, i+2)` rather than `(i, i+1, i+2)`, so every resulting triangle
+     * faces the same way and back-face culling behaves as the author intended. A fan emits
+     * `(0, i, i+1)` around its first vertex.
+     *
+     * An index run too short to describe a single triangle yields an empty list rather than a
+     * partial one. A list already in `Triangles` is returned verbatim, trailing partial triple
+     * included — what a malformed index count becomes is `GLTF-079`'s decision, not this
+     * function's.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param indices The source index list, already resolved (a non-indexed primitive's implicit
+     * `[0, count)` counts as resolved).
+     * @param topology The topology `indices` is in.
+     * @return The equivalent triangle-list indices, three per triangle.
+     * @throws std::runtime_error if `topology` describes no triangles at all (a point or line
+     * topology), which has no triangle-list equivalent and must never be given one.
+     */
+    std::vector<std::uint32_t> ConvertToTriangleList(const std::vector<std::uint32_t>& indices,
+                                                     PrimitiveTopology topology);
+
+    /**
+     * @brief Normalizes a triangle topology after its index source has been decoded.
+     *
+     * A regular glTF strip/fan still carries its authored run and needs conversion. A decoded
+     * `draco::Mesh`, however, exposes an explicit three-indices-per-face list even when the source
+     * primitive declared TRIANGLE_STRIP; treating that list as another strip corrupts geometry.
+     */
+    std::vector<std::uint32_t> NormalizeTriangleIndicesEXT(
+        const std::vector<std::uint32_t>& indices,
+        PrimitiveTopology sourceTopology,
+        bool decodedDracoFaceList);
+
+    /**
+     * @brief How many primitives an index run of a given topology describes (§12.3, `GLTF-078`).
+     *
+     * `TriangleList` → `n / 3`, `LineList` → `n / 2`, `LineStrip` and `LineLoop` → `n - 1`,
+     * `Points` → `n`. `TriangleStrip` and `TriangleFan` are converted to a triangle list at import
+     * (`GLTF-072`), so asking for their count here means the caller is holding an unconverted run
+     * and is answered as the strip/fan formula `n - 2` rather than being silently divided by three.
+     *
+     * An index run too short to describe a single primitive yields `0`, never a negative count —
+     * `n - 1` and `n - 2` are the two formulas where that matters.
+     *
+     * This exists because all three loaders independently hardcoded `numIndices / 3`: right for a
+     * triangle list, silently wrong for everything else, and stated three times so the three could
+     * drift.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param topology The topology the index run is in.
+     * @param indexCount The number of indices in the run.
+     * @return The draw-call primitive count.
+     */
+    int PrimitiveCountForTopology(PrimitiveTopology topology, std::size_t indexCount);
+
+    /**
+     * @brief Parses a topology from its specification name, for reading a serialised `.cnj` part.
+     *
+     * The inverse of `PrimitiveTopologyName`. An unrecognised or empty name yields `Triangles`,
+     * which is what a `.cnj` written before `GLTF-073` means by omitting the field entirely — so an
+     * older asset keeps loading with exactly the topology it always had.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param name The specification name, e.g. "LINE_STRIP".
+     * @return The matching topology, or `Triangles` when the name is unknown.
+     */
+    PrimitiveTopology PrimitiveTopologyFromName(const std::string& name);
+
+    /**
+     * @brief glTF's own spelling of an alpha mode, e.g. "BLEND" (`GLTF-228`).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. The specification's names, so a `.cnj` field is
+     * readable against the glTF file it came from without a lookup table.
+     *
+     * @param mode The alpha mode to name.
+     * @return "OPAQUE", "MASK" or "BLEND".
+     */
+    const char* AlphaModeEXTName(Microsoft::Xna::Framework::Graphics::AlphaModeEXT mode);
+
+    /**
+     * @brief Parses an alpha mode from its glTF name; unknown or empty yields `Opaque`.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. `Opaque` is both glTF's default and what a `.cnj`
+     * written before `GLTF-228` means by omitting the field, so an older asset is unaffected.
+     *
+     * @param name The glTF spelling.
+     * @return The matching mode, or `Opaque`.
+     */
+    Microsoft::Xna::Framework::Graphics::AlphaModeEXT AlphaModeEXTFromName(const std::string& name);
+
+    /**
+     * @brief The XNA `PrimitiveType` a decoded glTF topology is drawn with.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. Three of the seven glTF modes have no XNA
+     * equivalent: `TriangleStrip` and `TriangleFan` never reach a draw because `GLTF-072` converts
+     * them to a triangle list at import, and `LineLoop` is converted to a line strip with its
+     * closing segment appended (`GLTF-076`). `Points` maps to CNA's own `PointListEXT`, which real
+     * XNA 4.0 removed — whether a renderer honours it is `GLTF-077`'s per-renderer question.
+     *
+     * @param topology The decoded topology.
+     * @return The primitive type to draw it with.
+     */
+    Microsoft::Xna::Framework::Graphics::PrimitiveType PrimitiveTypeForTopology(
+        PrimitiveTopology topology);
 
     /**
      * @brief Extracts one glTF mesh primitive's vertex/index bytes, selecting the vertex stride
@@ -535,6 +1610,24 @@ namespace CNA::Internal::GltfImport
      */
     MeshOut ExtractMesh(const cgltf_data* data, const cgltf_primitive& prim, const std::string& name,
                          const SkeletonResult* skel, float unitScale);
+
+    /**
+     * @brief Extracts every KHR_materials_variants material mapping on one primitive.
+     *
+     * Each override goes through @ref ExtractMesh with a shallow copy of the primitive whose
+     * `material` pointer is replaced. This is intentionally the complete extraction rather than a
+     * material-only shortcut: a variant can choose another UV set/texture transform or effect
+     * class, which changes the vertex bytes and stride as well as the Effect parameters.
+     *
+     * The source primitive itself is never modified, so its core `material` remains the freshly
+     * loaded/default state (`GLTF-341`).
+     *
+     * @throws std::runtime_error if a mapping references an out-of-range variant, has no material,
+     * or maps the same variant more than once on one primitive.
+     */
+    std::vector<MaterialVariantOutEXT> ExtractMaterialVariantsEXT(
+        const cgltf_data* data, const cgltf_primitive& prim, const std::string& name,
+        const SkeletonResult* skel, float unitScale);
 
     /**
      * @brief Flattens the file's default scene into a parent-before-child node list with composed
@@ -605,6 +1698,327 @@ namespace CNA::Internal::GltfImport
     std::vector<LightOut> ExtractPunctualLightsEXT(const cgltf_data* data);
 
     /**
+     * @brief `ExtractPunctualLightsEXT`, additionally reporting what it lost (`GLTF-326`).
+     *
+     * The extraction is identical — this overload exists so a caller can *see* the approximation
+     * rather than infer it. Prefer it on any path that can surface a diagnostic.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param data The parsed glTF file.
+     * @param report Filled with the dropped, approximated and clamped counts.
+     * @return At most three directional lights, in scene-node order.
+     */
+    std::vector<LightOut> ExtractPunctualLightsEXT(const cgltf_data* data, LightReportEXT& report);
+
+    /**
+     * @brief Every camera the default scene instances, in scene-node order (`GLTF-317`).
+     *
+     * A camera on a node outside the default scene is not imported, on the same rule that governs
+     * meshes: §3.5 makes the default scene the thing being rendered.
+     *
+     * @param data The parsed glTF file.
+     * @param scene The flattened scene graph, for node placement and index identity.
+     * @param unitScale Scale applied to the node world transform's translation, as elsewhere.
+     * @return One record per camera-bearing node, in scene-node order.
+     */
+    [[nodiscard]] std::vector<CameraOut> ExtractCamerasEXT(
+        const cgltf_data* data, const SceneGraphOut& scene, float unitScale);
+
+    /**
+     * @brief The attribute combination one primitive presents to the stride selector.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-099`). Exactly the four
+     * flags §2.3's table is indexed by, named so a row reads as a sentence rather than as a
+     * position in a nested ternary.
+     */
+    struct VertexLayoutRequestEXT
+    {
+        /** @brief The primitive has `JOINTS_0` and `WEIGHTS_0`, so it needs a GPU-skinned layout. */
+        bool skinned = false;
+        /** @brief The primitive has `COLOR_0`. */
+        bool colored = false;
+        /** @brief The material is metallic-roughness and CNA can shade it as PBR. */
+        bool usePbr = false;
+        /** @brief A non-PBR material carrying both a base-colour and an occlusion map. */
+        bool useDualTexture = false;
+        /** @brief The PBR vertex must carry a second authored texture-coordinate set. */
+        bool hasSecondTexcoord = false;
+    };
+
+    /**
+     * @brief One row of the vertex-stride decision table (plan_gltf.md §2.3, `GLTF-099`).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     */
+    struct VertexLayoutRuleEXT
+    {
+        /** @brief The combination this row matches. */
+        VertexLayoutRequestEXT request;
+        /** @brief The byte stride it selects. */
+        int stride = 32;
+        /**
+         * @brief What this row cannot carry, or empty when it carries everything asked for.
+         *
+         * plan_gltf.md `GLTF-100`. A row whose stride has no slot for something the primitive
+         * authored is a **downgrade**, and the point of naming it here is that the downgrade stops
+         * being a property of whichever ternary branch happened to be taken. Empty means the
+         * combination is represented exactly.
+         */
+        std::string unrepresentable;
+    };
+
+    /**
+     * @brief The whole stride decision table, in a stable order.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. §2.3's table as data rather than as a nested
+     * ternary chain: every renderer's `ApplyLayout` is an implicit restatement of it, and a rule
+     * spelled as an expression cannot be enumerated, tested row by row, or asked what it loses.
+     *
+     * @return Every row; the first whose `request` matches wins.
+     */
+    const std::vector<VertexLayoutRuleEXT>& VertexLayoutTableEXT();
+
+    /**
+     * @brief The row of @ref VertexLayoutTableEXT that a combination selects.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. Total over all sixteen combinations of the four
+     * booleans, so there is no combination without an answer.
+     *
+     * @param request The primitive's attribute combination.
+     * @return The matching row.
+     */
+    const VertexLayoutRuleEXT& SelectVertexLayoutEXT(const VertexLayoutRequestEXT& request);
+
+    /**
+     * @brief How completely CNA implements one glTF extension (plan_gltf.md `GLTF-334`, §19).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. The enumerators are ordered from most to least
+     * complete, so a comparison expresses "at least as good as".
+     */
+    enum class GltfExtensionSupportEXT
+    {
+        /** @brief Semantics implemented and covered by a corpus fixture. */
+        Implemented,
+        /** @brief Implemented for the cases that can be expressed, with the residue named and reported. */
+        ImplementedWithNamedLimit,
+        /**
+         * @brief Deliberately approximated: the result is documented as not physical, and reported.
+         *
+         * Distinct from @ref ImplementedWithNamedLimit, where the extension *is* implemented for
+         * the cases it covers. Here every case is an approximation.
+         */
+        Approximated,
+        /**
+         * @brief Read by the importer, but only so it cannot cause a wrong decision elsewhere.
+         *
+         * Noticing is not implementing: `KHR_materials_unlit` keeps a material off the
+         * metallic-roughness path, which prevents a mis-shading rather than delivering the
+         * extension.
+         */
+        ParsedButIgnored,
+        /** @brief Not handled at all; a file needing it does not get what it asked for. */
+        Unsupported,
+        /** @brief Deliberately out of scope, with a recorded reason — not merely "not yet". */
+        NotDesired,
+    };
+
+    /** @brief One extension's entry in the registry (plan_gltf.md `GLTF-334`). */
+    struct GltfExtensionRecordEXT
+    {
+        /** @brief The extension's glTF name, e.g. "KHR_texture_transform". */
+        std::string name;
+        /** @brief How completely CNA implements it. */
+        GltfExtensionSupportEXT support = GltfExtensionSupportEXT::Unsupported;
+        /**
+         * @brief Whether CNA **claims** it, i.e. accepts a file that lists it in `extensionsRequired`.
+         *
+         * Deliberately independent of @ref support, because the two answer different questions.
+         * `KHR_materials_transmission` is @ref Approximated and **not** claimed: a file that
+         * *requires* transmission is asking for refraction CNA cannot deliver, so it is refused
+         * rather than loaded with its glass drawn as tinted alpha (`GLTF-339`). Conversely
+         * `KHR_lights_punctual` is @ref Approximated and *is* claimed, because refusing every lit
+         * file would be worse than its explicit three-directional-light approximation. Collapsing
+         * the two axes into one would force one of those decisions to be wrong.
+         */
+        bool claimed = false;
+        /** @brief One line on what CNA does with it, and why the classification is what it is. */
+        std::string note;
+        /** @brief The plan row that owns it, e.g. "GLTF-337". */
+        std::string task;
+    };
+
+    /**
+     * @brief The extension registry: every extension CNA has classified, in a stable order.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. Single source of truth for plan_gltf.md §19's
+     * table and for @ref IsGltfExtensionSupportedEXT, which is a lookup here rather than a second
+     * hand-maintained list — the arrangement `GLTF-334` exists to create. Two lists would drift,
+     * and a drifted list means a file is refused or accepted for a reason nobody wrote down.
+     *
+     * `KHR_draco_mesh_compression`'s `claimed` depends on `CNA_DRACO_AVAILABLE`, so the registry is
+     * built rather than being a static table.
+     *
+     * @return Every classified extension, ordered by classification and then by name.
+     */
+    const std::vector<GltfExtensionRecordEXT>& GltfExtensionRegistryEXT();
+
+    /**
+     * @brief The registry entry for one extension name, or nullptr when it is unclassified.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param extension The extension's glTF name.
+     * @return The entry, or nullptr.
+     */
+    const GltfExtensionRecordEXT* FindGltfExtensionEXT(const std::string& extension);
+
+    /**
+     * @brief The specification's own spelling of a support classification, for reports and tables.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param support The classification.
+     * @return Its name as plan_gltf.md §19 spells it, e.g. "PARSED_BUT_IGNORED".
+     */
+    std::string GltfExtensionSupportNameEXT(GltfExtensionSupportEXT support);
+
+    /**
+     * @brief Whether CNA's importer implements the semantics of a glTF extension by name.
+     *
+     * "Implements" is stricter than "notices". `KHR_materials_unlit` and
+     * `KHR_materials_pbrSpecularGlossiness` are both *detected* — they exclude a material from the
+     * metallic-roughness path so it cannot be mis-shaded as PBR (`GLTF-215`) — but neither is
+     * **implemented**: an unlit material still goes through a lit effect, and the
+     * specular-glossiness parameters are dropped. A file that lists either in `extensionsRequired`
+     * is asking for something CNA cannot deliver, so this returns false for them.
+     *
+     * `KHR_draco_mesh_compression` is supported only in a build configured with libdraco; the
+     * answer therefore depends on `CNA_DRACO_AVAILABLE` rather than being a fixed list.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param extension The extension's glTF name, e.g. "KHR_texture_transform".
+     * @return True when the importer honours that extension's semantics.
+     */
+    bool IsGltfExtensionSupportedEXT(const std::string& extension);
+
+    /**
+     * @brief Container-level validation, run once per file before anything is decoded
+     * (`GLTF-021` … `GLTF-024`).
+     *
+     * Three separate checks, in the order a reader must apply them:
+     *
+     * 1. **`cgltf_validate()`** — every structural constraint whose violation would make decoding
+     *    unsafe: an accessor reaching past its `bufferView`, a `bufferView` past its buffer, a
+     *    sparse index out of the accessor's own range, attribute counts that disagree within a
+     *    primitive, an undefined component or primitive type. cgltf checks nothing outside that
+     *    class, which is why failure here is always a **hard rejection** (`GLTF-022`): there is no
+     *    "cosmetic" violation in its check set to warn about instead.
+     * 2. **`extensionsRequired`** — an entry CNA does not implement is a hard rejection naming the
+     *    extension (`GLTF-023`). Importing such a file "successfully" produces geometry the author
+     *    explicitly said would be wrong without that extension.
+     * 3. **`extensionsUsed`** — an entry CNA does not implement is *reported*, not rejected
+     *    (`GLTF-024`): by definition the file is expected to load without it.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. Call after `cgltf_load_buffers`, since the
+     * sparse index-bound check needs buffer data to run at all.
+     *
+     * @param data The parsed glTF file, with buffers already loaded.
+     * @param sourceName The file name or asset name, used in diagnostics.
+     * @param warnings Appended with one entry per ignored `extensionsUsed` extension.
+     * @throws std::runtime_error if validation fails, or a required extension is unsupported.
+     */
+    void ValidateGltfEXT(const cgltf_data* data, const std::string& sourceName,
+                         std::vector<std::string>& warnings);
+
+    /**
+     * @brief Resolves one external glTF URI against the asset's own directory, refusing anything
+     * that escapes it (`GLTF-032` / `GLTF-198`).
+     *
+     * A glTF file names its external buffers and images by relative URI, and the only sane reading
+     * of "relative" is *relative to the asset*. Nothing in the format stops an author -- or an
+     * attacker who can get a `.gltf` opened -- from writing `../../../../etc/passwd`, and joining
+     * that onto the asset directory resolves it happily. The refusal is deliberately not a warning:
+     * a file asking for something outside its own directory is not a file with a cosmetic problem.
+     *
+     * Four separate rejections, because they fail for four different reasons and a caller reading
+     * the message deserves to know which:
+     *
+     * 1. **A URI with a scheme** (`http:`, `file:`, …). CNA resolves relative file paths and
+     *    `data:` only; a network URI silently treated as a file name would look like a missing
+     *    file, which is a confusing way to say "unsupported".
+     * 2. **An absolute path**, which by definition ignores the asset directory entirely.
+     * 3. **A traversal that escapes**, checked lexically -- `a/../../b` escapes even though no
+     *    single component looks suspicious.
+     * 4. **A symlink that escapes**, checked again after resolving the existing prefix, because
+     *    lexical normalisation cannot see through a link.
+     *
+     * Containment is compared component by component, never as a string prefix: `/asset-evil` must
+     * not count as inside `/asset`.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param gltfDir The directory holding the `.gltf` file.
+     * @param uri The raw, still percent-encoded URI as authored in the file.
+     * @param what What the URI names, used in diagnostics, e.g. "buffer" or "image".
+     * @return The resolved path, guaranteed to be inside @p gltfDir.
+     * @throws std::runtime_error if the URI is unsupported, absolute, or escapes @p gltfDir.
+     */
+    /**
+     * @brief Cross-checks every accessor's decoded values against its own declared `min`/`max`
+     * (`GLTF-061`).
+     *
+     * §3.6.2 makes `min` and `max` **required** on a `POSITION` accessor and optional elsewhere, and
+     * they are the one piece of redundancy the format gives a reader: the author states the bounds,
+     * and a decoder that produces values outside them has decoded something other than what was
+     * written. Nothing in CNA read them, which is why `D4` — a sparse index accessor decoding to
+     * all zeros — could collapse a quad to a point with every layer reporting success.
+     *
+     * A **warning**, not a rejection, and the asymmetry is deliberate. A file whose declared bounds
+     * are merely stale is common and harmless; a decoder producing values outside them is a serious
+     * signal, but the values themselves may still be exactly what the file contains. Refusing would
+     * turn a diagnostic into a load failure for assets that render correctly today.
+     *
+     * Only `FLOAT` accessors are checked. An integer accessor's bounds are exact by construction,
+     * and a normalized one's declared bounds are in raw units while the decode produces unit-range
+     * values — comparing those would report every normalized accessor in every file.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param data The parsed glTF file, with buffers loaded.
+     * @param warnings Appended with one entry per accessor whose decoded values leave its bounds,
+     *                 naming the accessor, the component, and both numbers.
+     */
+    void CrossCheckAccessorBoundsEXT(const cgltf_data* data, std::vector<std::string>& warnings);
+
+    std::filesystem::path ResolveExternalUriEXT(const std::filesystem::path& gltfDir,
+                                                const std::string& uri, const char* what);
+
+    /**
+     * @brief Applies `ResolveExternalUriEXT` to every external URI a parsed file declares
+     * (`GLTF-032` / `GLTF-198`).
+     *
+     * Buffers are read by `cgltf_load_buffers` itself, which resolves them the same way CNA would
+     * and offers no hook to veto one, so containment has to be decided **before** that call --
+     * hence a sweep over the parsed-but-not-yet-loaded file rather than a check at each read site.
+     * Images are checked here too so a traversal is refused up front rather than at the moment a
+     * texture happens to be needed.
+     *
+     * `data:` URIs and absent URIs (a GLB's own `BIN` chunk, a bufferView-backed image) carry no
+     * path and are skipped.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. Call after `cgltf_parse_file` and **before**
+     * `cgltf_load_buffers`.
+     *
+     * @param data The parsed glTF file.
+     * @param gltfDir The directory holding the `.gltf` file.
+     * @throws std::runtime_error naming the offending URI if any of them escapes @p gltfDir.
+     */
+    void ValidateExternalUriContainmentEXT(const cgltf_data* data,
+                                           const std::filesystem::path& gltfDir);
+
+    /**
      * @brief Returns a mesh's default morph target weights (its own "weights" array), zero-filled
      * up to @p targetCount if the mesh's own array is shorter or absent.
      *
@@ -612,7 +2026,21 @@ namespace CNA::Internal::GltfImport
      * @param targetCount The primitive's own morph target count (MeshOut::morphPositionDeltas.size()).
      * @return The default weight vector, exactly @p targetCount entries long.
      */
-    std::vector<float> GetMeshDefaultWeights(const cgltf_mesh* mesh, std::size_t targetCount);
+    /**
+     * @brief The morph weights a mesh instance starts at (plan_gltf.md `GLTF-281`).
+     *
+     * §3.7.2.2 gives the instancing **node** the final say: `node.weights` *overrides*
+     * `mesh.weights` rather than merging with it, so a node declaring `[1,0]` for a mesh whose own
+     * weights are `[0,1]` starts at `[1,0]` and not at `[1,1]`. `node.weights` was read by nobody
+     * before this, so a mesh instanced by several nodes wore every node's expression at once.
+     *
+     * @param mesh The mesh whose targets are being weighted.
+     * @param targetCount Number of morph targets; the result always has this length.
+     * @param instancingNode The node instancing @p mesh, or nullptr when the caller has none.
+     * @return One weight per target, zero-filled beyond whichever array supplied them.
+     */
+    std::vector<float> GetMeshDefaultWeights(const cgltf_mesh* mesh, std::size_t targetCount,
+                                              const cgltf_node* instancingNode = nullptr);
 
     /**
      * @brief Extracts a mesh's morph-weight animation track, if one exists.

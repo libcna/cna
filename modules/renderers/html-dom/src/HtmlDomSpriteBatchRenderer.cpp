@@ -267,7 +267,7 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
             el.className = 'cna-sprite';
             // will-change keeps each sprite on its own compositor layer, so moving it never
             // repaints. pointer-events:none keeps the sprite layer out of hit testing entirely --
-            // input belongs to SDL's canvas, which is still the element receiving events.
+            // input belongs to the platform canvas, which is still the element receiving events.
             el.style.cssText = 'position:absolute;left:0;top:0;transform-origin:0 0;' +
                                'background-repeat:no-repeat;will-change:transform;pointer-events:none;';
             el.__cnaState = { w: -1, h: -1, url: null, bp: null, rep: null, ir: null,
@@ -353,7 +353,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         // HtmlDomTextureRenderer descend from ITextureRenderer along two separate branches), and this
         // renderer's "native handle" is a JS-side integer with no shared accessor on ITextureRenderer
         // to expose it -- so a contained dynamic_cast against the two known concrete types is the
-        // safe equivalent here, the same conclusion CANVAS and SDL_RENDERER reached.
+        // safe equivalent here, the same conclusion CANVAS and the native 2D renderer reached.
         int TextureIdOf(const ITextureRenderer& texture)
         {
             if (const auto* t = dynamic_cast<const HtmlDomTextureRenderer*>(&texture)) return t->GetCanvasId();

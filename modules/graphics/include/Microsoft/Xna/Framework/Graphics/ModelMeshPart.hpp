@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <array>
+
 #include "CNA/CNAHelper.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "System/Object.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -42,9 +46,82 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Gets the number of primitives to render.
+         *
+         * Primitives of **this part's own topology**, not triangles: a `LineList` part of `n`
+         * indices has `n / 2` primitives, a `LineStrip` has `n - 1`, and a `PointListEXT` has `n`
+         * (plan_gltf.md §12.3, `GLTF-078`). For the `TriangleList` default the value is `n / 3`, as
+         * it has always been, so a caller that only ever handles triangle lists is unaffected —
+         * but `primitiveCount * 3 == indexCount` is **not** a safe assumption in general.
+         *
          * @return The primitive count.
          */
         [[nodiscard]] int getPrimitiveCountProperty() const;
+
+        /**
+         * @brief Gets the topology this part's index buffer describes.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. Real XNA carries the topology as an argument
+         * to `GraphicsDevice::DrawIndexedPrimitives`, so every XNA `ModelMeshPart` is implicitly a
+         * triangle list. glTF's own primitive modes need somewhere to survive between the importer
+         * and the draw (plan_gltf.md §10.1, `GLTF-073`), and this is that place. Defaults to
+         * `TriangleList`, which is what every part built by any other path already is.
+         *
+         * @return The topology to draw this part with.
+         */
+        CNAEXT [[nodiscard]] PrimitiveType getPrimitiveTypeEXTProperty() const;
+
+        /**
+         * @brief Sets the topology this part's index buffer describes.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. Setting this does not reinterpret the index
+         * buffer; it states what the buffer already contains.
+         *
+         * @param value The topology to draw this part with.
+         */
+        CNAEXT void setPrimitiveTypeEXTProperty(PrimitiveType value);
+
+        /**
+         * @brief Per-texture-slot sampler state imported from the source asset.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-202`/`GLTF-207`). XNA has
+         * no per-part sampler concept: `SamplerState` is device state the application sets before a
+         * draw, and a part that came from a file carrying `CLAMP_TO_EDGE` had nowhere to say so —
+         * every imported texture was drawn with whatever the device happened to have, which
+         * defaults to `LinearWrap`. For an asset with UVs outside `[0,1]` that is a large, visible
+         * error rather than a subtle one.
+         *
+         * A property rather than a `Tag` payload, which is what `GLTF-207` originally sketched:
+         * `ModelMeshPart::Tag` already carries `MorphTargetDataEXT`, so a morphing part with
+         * clamped textures could not have expressed both.
+         *
+         * Indexed by texture slot in the same order the importer uses (base colour, normal,
+         * metallic-roughness, emissive, occlusion). Every entry is `LinearWrap` for a part built by
+         * any other content path, so this changes nothing for existing content.
+         *
+         * @return The part's sampler states, one per texture slot.
+         */
+        CNAEXT [[nodiscard]] const std::array<SamplerState, 5>& getSamplerStatesEXTProperty() const;
+
+        /**
+         * @brief Sets one texture slot's sampler state.
+         *
+         * @param slot The texture slot index, in the importer's own order; out of range is ignored.
+         * @param value The sampler state to apply when this part's texture is bound to that slot.
+         */
+        CNAEXT void setSamplerStateEXTProperty(int slot, const SamplerState& value);
+
+        /**
+         * @brief Samplers for `KHR_materials_specular` strength then colour maps.
+         *
+         * Kept separate from the established five-entry core PBR array so adding the extension
+         * does not change that public property's ABI or slot meanings. Both entries default to
+         * `LinearWrap`.
+         */
+        CNAEXT [[nodiscard]] const std::array<SamplerState, 2>&
+        getSpecularSamplerStatesEXTProperty() const;
+
+        /** @brief Sets extension sampler slot 0 (strength) or 1 (colour); others are ignored. */
+        CNAEXT void setSpecularSamplerStateEXTProperty(int slot, const SamplerState& value);
 
         /**
          * @brief Gets the location in the index array at which to start reading vertices.
@@ -143,6 +220,9 @@ namespace Microsoft::Xna::Framework::Graphics
     private:
         int numVertices_    = 0;
         int primitiveCount_ = 0;
+        PrimitiveType primitiveType_ = PrimitiveType::TriangleList;
+        std::array<SamplerState, 5> samplerStates_{};
+        std::array<SamplerState, 2> specularSamplerStatesEXT_{};
         int startIndex_     = 0;
         int vertexOffset_   = 0;
         Effect* effect_     = nullptr;

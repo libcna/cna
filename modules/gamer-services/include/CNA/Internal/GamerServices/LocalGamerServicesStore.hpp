@@ -41,7 +41,7 @@ namespace CNA::Internal::GamerServices
      * @brief Returns the local root directory this store persists into, creating it if needed.
      *
      * Reuses Microsoft::Xna::Framework::Storage::StorageDevice::GetStorageRootEXT() (the
-     * project's existing user-data-directory convention, SDL_GetPrefPath-backed) rather than
+     * project's existing platform-owned user-data-directory convention) rather than
      * inventing a new one, appending a "GamerServices" subdirectory.
      *
      * @return Absolute path to the GamerServices local store root.

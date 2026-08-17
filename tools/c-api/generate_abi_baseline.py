@@ -1,0 +1,398 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: MS-PL
+"""Measure the C ABI's actual layout and exports, and hold them against a checked-in baseline.
+
+The hand-written assertion walls in ``tests/pure_c/AbiHeaderC.c`` and ``tests/cpp/AbiHeaderCpp.cpp``
+pin the values each slice remembered to pin.  This tool pins the ones nobody thought of: it reads
+every public header, generates a probe that reports what the compiler *actually* laid out, links it
+against the real library to ask its runtime ABI version, lists the library's dynamic exports, and
+compares the whole picture with ``abi_baseline.json``.
+
+The point is not that the numbers are asserted — many already are — but that a change to any of them
+shows up as a **reviewable diff** instead of a silently different binary.  ``docs/c-api/ABI_VERSIONING.md``
+allows additions and forbids changing an existing meaning, so when the baseline and the build
+disagree this tool says which kind of difference it found:
+
+* additions — permitted by the evolution policy, and the baseline needs updating;
+* removals or changed layouts, values or offsets — **ABI breaks**, named individually.
+
+``--library`` is optional, which splits the gate in two.  With it, everything above is measured.
+Without it the headers are measured on their own — every struct size, alignment and field offset,
+every scalar width, every constant — and the two library-dependent sections are reported as skipped
+by name rather than silently passing.  That header-only half needs no build, so it can run in the
+ordinary build and in a build-free CI job, where most changes are actually made.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+INCLUDE_DIR = REPO_ROOT / "modules" / "c-api" / "include"
+HEADER_DIR = INCLUDE_DIR / "CNA" / "C"
+BASELINE_PATH = Path(__file__).resolve().parent / "abi_baseline.json"
+
+SCHEMA_VERSION = 1
+
+# `CNA_C_API` is the platform linkage macro and expands to a storage-class attribute, not a value.
+SKIPPED_MACROS = {"CNA_C_API"}
+
+
+def read_headers() -> dict[str, str]:
+    sources = {}
+    for path in sorted(HEADER_DIR.glob("*.h")):
+        text = path.read_text(encoding="utf-8")
+        text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+        text = re.sub(r"//[^\n]*", "", text)
+        # Splice continued lines, as the preprocessor would: a `#define` whose value sits on the
+        # next line otherwise looks like a macro whose value is a single backslash, and a string
+        # constant written that way would be measured as whatever integer that backslash became.
+        text = re.sub(r"\\\n[ \t]*", " ", text)
+        sources[path.name] = text
+    if not sources:
+        raise SystemExit(f"No public headers were found under {HEADER_DIR}.")
+    return sources
+
+
+def collect_symbols(sources: dict[str, str]) -> tuple[dict[str, list[str]], list[str], dict[str, list[str]]]:
+    """Return (struct name -> field names), scalar typedef names, and macro names by category."""
+    structs: dict[str, list[str]] = {}
+    scalars: list[str] = []
+    macros: dict[str, list[str]] = {"integers": [], "strings": [], "colors": []}
+
+    for text in sources.values():
+        for match in re.finditer(r"typedef\s+struct\s+(CNA_[A-Za-z0-9_]+)\s*\{(.*?)\}\s*\1\s*;", text, re.S):
+            name, body = match.group(1), match.group(2)
+            fields = []
+            for line in body.splitlines():
+                field = re.match(
+                    r"\s*(?:const\s+)?[A-Za-z_][A-Za-z0-9_]*(?:\s*\*)*\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[\s*\d+\s*\])?\s*;\s*$",
+                    line)
+                if field:
+                    fields.append(field.group(1))
+            structs[name] = fields
+
+        for match in re.finditer(r"^typedef\s+([A-Za-z_][A-Za-z0-9_ ]*?)\s+(CNA_[A-Za-z0-9_]+)\s*;", text, re.M):
+            scalars.append(match.group(2))
+
+        # `[ \t]` rather than `\s`: a whitespace class that matches newlines makes an include
+        # guard -- a `#define` with no value at all -- swallow the following line as its value.
+        for match in re.finditer(r"^#define[ \t]+(CNA_[A-Z0-9_]+)[ \t]+(?!\()([^\n]+)$", text, re.M):
+            name, value = match.group(1), match.group(2).strip()
+            if name in SKIPPED_MACROS:
+                continue
+            if value.startswith("CNA_COLOR_RGBA"):
+                macros["colors"].append(name)
+            elif value.startswith('"'):
+                macros["strings"].append(name)
+            else:
+                macros["integers"].append(name)
+
+    scalars = sorted(set(scalars) - set(structs))
+    for key in macros:
+        macros[key] = sorted(set(macros[key]))
+    return structs, scalars, macros
+
+
+def render_probe(structs: dict[str, list[str]], scalars: list[str], macros: dict[str, list[str]],
+                 with_library: bool) -> str:
+    lines = [
+        "/* Generated by tools/c-api/generate_abi_baseline.py. Do not edit or check in. */",
+        "#include <CNA/C/cna.h>",
+        "#include <stddef.h>",
+        "#include <stdio.h>",
+        "",
+        "int main(void)",
+        "{",
+        '    printf("ABI\\tmajor\\t%llu\\n", (unsigned long long)CNA_ABI_VERSION_MAJOR);',
+        '    printf("ABI\\tminor\\t%llu\\n", (unsigned long long)CNA_ABI_VERSION_MINOR);',
+        '    printf("ABI\\tpatch\\t%llu\\n", (unsigned long long)CNA_ABI_VERSION_PATCH);',
+        '    printf("ABI\\tencoded\\t%llu\\n", (unsigned long long)CNA_ABI_VERSION);',
+    ]
+    if with_library:
+        # Only the built library can be asked what version it *is*, as opposed to what the headers
+        # say it should be; the header-only run answers the second question and says so.
+        lines.append(
+            '    printf("ABI\\truntime\\t%llu\\n", (unsigned long long)cna_get_abi_version());')
+    for name in sorted(structs):
+        lines.append(f'    printf("STRUCT\\t{name}\\t%llu\\t%llu\\n",'
+                     f' (unsigned long long)sizeof({name}), (unsigned long long)_Alignof({name}));')
+        for field in structs[name]:
+            lines.append(
+                f'    printf("FIELD\\t{name}\\t{field}\\t%llu\\t%llu\\n",'
+                f' (unsigned long long)offsetof({name}, {field}),'
+                f' (unsigned long long)sizeof((({name} *)0)->{field}));')
+    for name in scalars:
+        lines.append(f'    printf("SCALAR\\t{name}\\t%llu\\t%llu\\n",'
+                     f' (unsigned long long)sizeof({name}), (unsigned long long)_Alignof({name}));')
+    for name in macros["integers"]:
+        # Printed through the widest signed and unsigned forms so a value of either signedness
+        # round-trips exactly; the sign test is what picks the correct one.
+        lines.append(
+            f'    if (({name}) < 0) {{ printf("INT\\t{name}\\t%lld\\n", (long long)({name})); }}'
+            f' else {{ printf("INT\\t{name}\\t%llu\\n", (unsigned long long)({name})); }}')
+    for name in macros["strings"]:
+        lines.append(f'    printf("STR\\t{name}\\t%s\\n", {name});')
+    for name in macros["colors"]:
+        lines.append(f'    {{ CNA_Color color_ = {name};'
+                     f' printf("COLOR\\t{name}\\t%u\\t%u\\t%u\\t%u\\n",'
+                     f' (unsigned)color_.r, (unsigned)color_.g,'
+                     f' (unsigned)color_.b, (unsigned)color_.a); }}')
+    lines.append("    return 0;")
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+def measure(library: Path | None, compiler: str, compile_flags: list[str]) -> dict:
+    structs, scalars, macros = collect_symbols(read_headers())
+    with tempfile.TemporaryDirectory() as workspace:
+        work = Path(workspace)
+        source = work / "abi_probe.c"
+        source.write_text(render_probe(structs, scalars, macros, library is not None), encoding="utf-8")
+        binary = work / "abi_probe"
+        # Warnings are deliberately off: this program is a measuring instrument, and a signedness
+        # comparison it performs on purpose is not a defect. Conformance warnings are the
+        # compatibility matrix's job.
+        compile_command = [
+            compiler, "-std=c11", "-w", *compile_flags, "-I", str(INCLUDE_DIR), str(source),
+            "-o", str(binary),
+        ]
+        if library is not None:
+            compile_command += [str(library), f"-Wl,-rpath,{library.parent}"]
+        completed = subprocess.run(compile_command, capture_output=True, text=True)
+        if completed.returncode != 0:
+            raise SystemExit(f"The ABI probe failed to build:\n{completed.stderr.strip()}")
+        run = subprocess.run([str(binary)], capture_output=True, text=True)
+        if run.returncode != 0:
+            raise SystemExit(f"The ABI probe failed to run:\n{run.stderr.strip()}")
+        output = run.stdout
+        # Run it a second time and demand the same answer. A macro that is not a compile-time
+        # constant -- an address, most plausibly -- measures differently under ASLR, and would
+        # otherwise be recorded as a baseline value that every later run disagrees with. This
+        # catches that class of mistake at the moment it is made rather than in the next CI run.
+        again = subprocess.run([str(binary)], capture_output=True, text=True)
+        if again.returncode != 0 or again.stdout != output:
+            unstable = sorted({
+                line.split("\t")[1]
+                for line in set(output.splitlines()) ^ set(again.stdout.splitlines())
+                if len(line.split("\t")) > 1
+            })
+            raise SystemExit(
+                "The ABI probe measured different values on two consecutive runs, so at least one "
+                "of these is not a compile-time constant:\n  " + "\n  ".join(unstable))
+
+    measured: dict = {
+        "schema_version": SCHEMA_VERSION,
+        "abi_version": {},
+        "structs": {},
+        "scalars": {},
+        "integers": {},
+        "strings": {},
+        "colors": {},
+        "exports": [],
+    }
+    for line in output.splitlines():
+        parts = line.split("\t")
+        kind = parts[0]
+        if kind == "ABI":
+            measured["abi_version"][parts[1]] = int(parts[2])
+        elif kind == "STRUCT":
+            measured["structs"].setdefault(parts[1], {})
+            measured["structs"][parts[1]]["size"] = int(parts[2])
+            measured["structs"][parts[1]]["align"] = int(parts[3])
+            measured["structs"][parts[1]].setdefault("fields", {})
+        elif kind == "FIELD":
+            measured["structs"].setdefault(parts[1], {}).setdefault("fields", {})
+            measured["structs"][parts[1]]["fields"][parts[2]] = [int(parts[3]), int(parts[4])]
+        elif kind == "SCALAR":
+            measured["scalars"][parts[1]] = [int(parts[2]), int(parts[3])]
+        elif kind == "INT":
+            measured["integers"][parts[1]] = int(parts[2])
+        elif kind == "STR":
+            measured["strings"][parts[1]] = "\t".join(parts[2:])
+        elif kind == "COLOR":
+            measured["colors"][parts[1]] = [int(value) for value in parts[2:6]]
+
+    if library is not None:
+        measured["exports"] = read_exports(library)
+    else:
+        # Not an empty export list, which would read as "the library exports nothing": the section
+        # is absent, and describe_differences leaves an absent section alone.
+        del measured["exports"]
+    return measured
+
+
+def read_exports(library: Path) -> list[str]:
+    nm = shutil.which("nm")
+    if nm is None:
+        raise SystemExit("nm is required to read the library's dynamic exports.")
+    completed = subprocess.run([nm, "-D", "--defined-only", str(library)], capture_output=True, text=True)
+    if completed.returncode != 0:
+        raise SystemExit(f"Reading dynamic exports failed:\n{completed.stderr.strip()}")
+    exports = set()
+    for line in completed.stdout.splitlines():
+        fields = line.split()
+        if not fields:
+            continue
+        symbol = fields[-1].split("@@")[0]
+        if symbol.startswith("cna_"):
+            exports.add(symbol)
+    return sorted(exports)
+
+
+def describe_differences(baseline: dict, measured: dict) -> tuple[list[str], list[str], list[str]]:
+    """Split the baseline/build disagreement into additions, ABI breaks and skipped sections."""
+    additions: list[str] = []
+    breaks: list[str] = []
+    skipped: list[str] = []
+
+    def compare_map(section: str, old: dict, new: dict, label: str) -> None:
+        for key in sorted(set(new) - set(old)):
+            additions.append(f"{label} added: {key}")
+        for key in sorted(set(old) - set(new)):
+            breaks.append(f"{label} removed: {key}")
+        for key in sorted(set(old) & set(new)):
+            if old[key] != new[key]:
+                breaks.append(f"{label} changed: {key}: {old[key]!r} -> {new[key]!r}")
+
+    for section, label in (("scalars", "scalar"), ("integers", "constant"),
+                           ("strings", "string constant"), ("colors", "color constant")):
+        compare_map(section, baseline.get(section, {}), measured.get(section, {}), label)
+
+    old_structs = baseline.get("structs", {})
+    new_structs = measured.get("structs", {})
+    for name in sorted(set(new_structs) - set(old_structs)):
+        additions.append(f"struct added: {name}")
+    for name in sorted(set(old_structs) - set(new_structs)):
+        breaks.append(f"struct removed: {name}")
+    for name in sorted(set(old_structs) & set(new_structs)):
+        old, new = old_structs[name], new_structs[name]
+        if old.get("size") != new.get("size") or old.get("align") != new.get("align"):
+            breaks.append(
+                f"struct layout changed: {name}: size/align "
+                f"{old.get('size')}/{old.get('align')} -> {new.get('size')}/{new.get('align')}")
+        old_fields, new_fields = old.get("fields", {}), new.get("fields", {})
+        for field in sorted(set(new_fields) - set(old_fields)):
+            # Appending a field to a versioned struct is the evolution policy's second path; it is
+            # an addition only when it does not move anything already there, which the size/align
+            # and per-field comparisons above and below decide independently.
+            additions.append(f"struct field added: {name}.{field}")
+        for field in sorted(set(old_fields) - set(new_fields)):
+            breaks.append(f"struct field removed: {name}.{field}")
+        for field in sorted(set(old_fields) & set(new_fields)):
+            if old_fields[field] != new_fields[field]:
+                breaks.append(
+                    f"struct field moved or resized: {name}.{field}: "
+                    f"offset/size {old_fields[field]} -> {new_fields[field]}")
+
+    # Absence is skipped by name, presence is binding: a header-only run cannot see the exports, and
+    # says so rather than reporting the whole recorded list as removed.
+    if "exports" in measured:
+        old_exports = set(baseline.get("exports", []))
+        new_exports = set(measured["exports"])
+        for symbol in sorted(new_exports - old_exports):
+            additions.append(f"export added: {symbol}")
+        for symbol in sorted(old_exports - new_exports):
+            breaks.append(f"export removed: {symbol}")
+    else:
+        skipped.append(
+            f"exported symbols ({len(baseline.get('exports', []))} recorded): no library was given, "
+            "so the headers were measured on their own")
+
+    old_version = baseline.get("abi_version", {})
+    new_version = measured.get("abi_version", {})
+    for key in sorted(set(old_version) & set(new_version)):
+        if old_version[key] != new_version[key]:
+            breaks.append(f"ABI version changed: {key}: {old_version[key]} -> {new_version[key]}")
+    for key in sorted(set(new_version) - set(old_version)):
+        additions.append(f"ABI version field added: {key}")
+    if "runtime" in new_version:
+        if new_version.get("encoded") != new_version.get("runtime"):
+            breaks.append(
+                f"the library reports ABI version {new_version.get('runtime')} but its headers "
+                f"declare {new_version.get('encoded')}")
+    else:
+        skipped.append("the runtime's own ABI version: no library was given to ask")
+
+    return additions, breaks, skipped
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--write", action="store_true", help="record the current build as the baseline")
+    group.add_argument("--check", action="store_true", help="hold the current build against the baseline")
+    # Optional on purpose. The header half of the ABI -- every layout, offset, width and constant --
+    # needs no build at all, which is what lets the same gate run in a build-free CI job; the export
+    # half needs the library, and is reported as skipped by name when there is none.
+    parser.add_argument("--library", help="the built cna_c_api shared library")
+    parser.add_argument("--compiler", default="cc", help="C compiler used to build the probe")
+    # A sanitized library refuses to load into a probe that was not built the same way, so the
+    # sanitized tree passes its own flags through rather than being excluded from the gate.
+    parser.add_argument("--compile-flag", action="append", default=[], dest="compile_flags",
+                        help="extra flag for the probe's compile and link (repeatable)")
+    arguments = parser.parse_args()
+
+    library = None
+    if arguments.library:
+        library = Path(arguments.library).resolve()
+        if not library.exists():
+            raise SystemExit(f"The C API library was not found: {library}")
+    elif arguments.write:
+        # A baseline missing its export list would turn every later full run into thousands of
+        # "additions", so recording one is deliberately not allowed without the library.
+        raise SystemExit("--write needs --library: a baseline without the export list is not one.")
+
+    measured = measure(library, arguments.compiler, arguments.compile_flags)
+    summary = (
+        f"{len(measured['structs'])} structs, {len(measured['scalars'])} scalar types, "
+        f"{len(measured['integers'])} constants, {len(measured['strings'])} string constants, "
+        f"{len(measured['colors'])} color constants, "
+        + (f"{len(measured['exports'])} exports" if "exports" in measured else "headers only"))
+
+    if arguments.write:
+        BASELINE_PATH.write_text(
+            json.dumps(measured, indent=1, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(f"wrote {BASELINE_PATH.relative_to(REPO_ROOT)}: {summary}")
+        return 0
+
+    if not BASELINE_PATH.exists():
+        print(f"{BASELINE_PATH.relative_to(REPO_ROOT)} does not exist; "
+              "run generate_abi_baseline.py --write", file=sys.stderr)
+        return 1
+
+    baseline = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
+    additions, breaks, skipped = describe_differences(baseline, measured)
+    for entry in skipped:
+        print(f"  skipped  {entry}")
+    if not additions and not breaks:
+        print(f"C API ABI baseline is current: {summary}")
+        return 0
+
+    if breaks:
+        print(f"{len(breaks)} ABI break(s) against the recorded baseline:", file=sys.stderr)
+        for entry in breaks[:40]:
+            print(f"  BREAK  {entry}", file=sys.stderr)
+        if len(breaks) > 40:
+            print(f"  ... and {len(breaks) - 40} more", file=sys.stderr)
+        print("docs/c-api/ABI_VERSIONING.md forbids changing an existing meaning within a major "
+              "version. Add a new name instead, or record an owner-approved break.", file=sys.stderr)
+    if additions:
+        print(f"{len(additions)} addition(s), which the evolution policy permits:", file=sys.stderr)
+        for entry in additions[:40]:
+            print(f"  add    {entry}", file=sys.stderr)
+        if len(additions) > 40:
+            print(f"  ... and {len(additions) - 40} more", file=sys.stderr)
+        print("Re-record them with generate_abi_baseline.py --write.", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

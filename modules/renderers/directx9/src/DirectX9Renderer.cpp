@@ -9,6 +9,7 @@
 // names if windows.h is parsed first.
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
+#include "CNA/Internal/Renderers/DirectX9/D3D9ProfileCapabilities.hpp"
 #include "CNA/Internal/Renderers/Common/NotYetImplemented.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9ConstantUpload.hpp"
@@ -28,13 +29,12 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/NoSuitableGraphicsDeviceException.hpp"
 
-#include <SDL3/SDL.h>
-
 #include <algorithm>
 #include <bit>
 #include <cstdio>
 #include <cstring>
 #include <iterator>
+#include <stdexcept>
 
 namespace CNA::Internal::Renderers::DirectX9
 {
@@ -79,7 +79,7 @@ namespace CNA::Internal::Renderers::DirectX9
             return static_cast<std::size_t>(operation);
         }
 
-        /// D9-82: XNA's own PrimitiveType only ever needs these 4 D3DPRIMITIVETYPE values --
+        /// D9-82/GLTF-394: XNA's four topologies plus CNAEXT PointListEXT map explicitly --
         /// unlike D3D11/Vulkan/D3D12's own per-renderer VertexCountForPrimitives() precedent, D3D9's
         /// DrawPrimitive/DrawIndexedPrimitive already take a PrimitiveCount directly (not a raw
         /// vertex/index count), so no equivalent conversion helper is needed here.
@@ -91,8 +91,10 @@ namespace CNA::Internal::Renderers::DirectX9
             case PrimitiveType::TriangleStrip: return D3DPT_TRIANGLESTRIP;
             case PrimitiveType::LineList:      return D3DPT_LINELIST;
             case PrimitiveType::LineStrip:     return D3DPT_LINESTRIP;
+            case PrimitiveType::PointListEXT:  return D3DPT_POINTLIST;
             }
-            return D3DPT_TRIANGLELIST;
+            throw std::runtime_error(
+                "DirectX9 renderer does not support the requested PrimitiveType value");
         }
 
         using Microsoft::Xna::Framework::Graphics::DepthFormat;
@@ -130,7 +132,7 @@ namespace CNA::Internal::Renderers::DirectX9
     }
 
     DirectX9Renderer::DirectX9Renderer(const GraphicsRendererCreateArgs& args)
-        : window_(args.window)
+        : surface_(args.surface, "DirectX9Renderer")
         , virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
         , presentationMode_(static_cast<int>(args.presentationMode))
@@ -141,19 +143,25 @@ namespace CNA::Internal::Renderers::DirectX9
         , graphicsProfileOrdinal_(args.graphicsProfile)
         , deviceEventCallback_(args.deviceEventCallback)
     {
-        if (window_)
-        {
-            SDL_GetWindowSizeInPixels(window_, &width_, &height_);
-        }
+        CNA::Platform::Win32NativeWindow nativeWindow;
+        if (!CNA::Platform::TryGetWin32(surface_.GetNativeHandle(), nativeWindow))
+            throw std::runtime_error("DirectX9Renderer requires a Win32 native window.");
+        hwnd_ = static_cast<HWND>(nativeWindow.hwnd);
+
+        const auto drawableSize = surface_.GetDrawableSize();
+        width_ = drawableSize.width;
+        height_ = drawableSize.height;
         if (width_ <= 0) width_ = args.virtualWidth > 0 ? args.virtualWidth : 1024;
         if (height_ <= 0) height_ = args.virtualHeight > 0 ? args.virtualHeight : 768;
 
         CreateDeviceResources(args);
 
-        SDL_Log("[D3D9] Renderer initialised (%dx%d), VertexShaderVersion=0x%08lx PixelShaderVersion=0x%08lx",
-                width_, height_,
-                static_cast<unsigned long>(caps_.VertexShaderVersion),
-                static_cast<unsigned long>(caps_.PixelShaderVersion));
+        CNA::Logger::Info(
+            "D3D9 renderer initialised (" + std::to_string(width_) + "x" +
+                std::to_string(height_) + "), VertexShaderVersion=" +
+                FormatHr(caps_.VertexShaderVersion) + " PixelShaderVersion=" +
+                FormatHr(caps_.PixelShaderVersion),
+            CNA::LogCategory::RENDER);
     }
 
     DirectX9Renderer::~DirectX9Renderer() = default;
@@ -371,8 +379,7 @@ namespace CNA::Internal::Renderers::DirectX9
         pp.BackBufferHeight = static_cast<UINT>(height_);
         pp.BackBufferCount = 1;
 
-        pp.hDeviceWindow = window_ ? static_cast<HWND>(SDL_GetPointerProperty(
-            SDL_GetWindowProperties(window_), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr)) : nullptr;
+        pp.hDeviceWindow = hwnd_;
 
         if (HasDepthBuffer(depthStencilFormatOrdinal_))
         {
@@ -398,14 +405,6 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void DirectX9Renderer::CreateDeviceResources(const GraphicsRendererCreateArgs&)
     {
-        if (!window_)
-            throw std::runtime_error("DirectX9Renderer: no window available to create a device for");
-
-        HWND hwnd = static_cast<HWND>(SDL_GetPointerProperty(
-            SDL_GetWindowProperties(window_), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
-        if (!hwnd)
-            throw std::runtime_error("DirectX9Renderer: could not obtain HWND from SDL window");
-
         // design decision 2: plain Direct3DCreate9, not D3D9Ex. Direct3DCreate9 returns an
         // already-AddRef'd pointer (unlike CreateDevice-style out-params) -- ComPtr::Attach is the
         // correct adoption method, not an assignment (which would AddRef a second time and leak).
@@ -426,7 +425,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
         D3DPRESENT_PARAMETERS pp = BuildPresentParameters();
 
-        hr = d3d9_->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hwnd, vertexProcessingFlags,
+        hr = d3d9_->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hwnd_, vertexProcessingFlags,
                                   &pp, device_.ReleaseAndGetAddressOf());
         if (FAILED(hr))
             throw std::runtime_error("IDirect3D9::CreateDevice failed, hr=" + FormatHr(hr));
@@ -462,10 +461,9 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void DirectX9Renderer::EnsureDeviceSize()
     {
-        if (!window_) return;
-
-        int w = 0, h = 0;
-        SDL_GetWindowSizeInPixels(window_, &w, &h);
+        const auto drawableSize = surface_.GetDrawableSize();
+        const int w = drawableSize.width;
+        const int h = drawableSize.height;
         if (w <= 0 || h <= 0) return;
 
         const bool sizeChanged = (w != width_ || h != height_);
@@ -526,6 +524,11 @@ namespace CNA::Internal::Renderers::DirectX9
         // D3DPOOL_DEFAULT resources were just released above anyway.
         currentCustomRT_ = nullptr;
         currentCustomCubeRT_ = nullptr;
+    }
+
+    void DirectX9Renderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        surface_.Update(surface);
     }
 
     void DirectX9Renderer::UpdatePresentationFormatEXT(int backBufferFormat, int depthStencilFormat,
@@ -1539,11 +1542,43 @@ namespace CNA::Internal::Renderers::DirectX9
         if (!deviceLost_) return;
         PerformResetRecovery();
     }
+
+    // --- GraphicsProfile ceilings (plan_runtimerenderer.md design decision 9) -----------------
+    //
+    // D9-100's own table, previously enforced from #ifdef CNA_RENDERER_DIRECTX9 blocks inside
+    // Texture2D/Texture3D/TextureCube/GraphicsDevice. Checked as profile CEILINGS, not hardware
+    // queries: even where this device could allocate more, a Reach-profile game is restricted to
+    // the profile's limit, which is what XNA's portability guarantee means.
+
+    int DirectX9Renderer::GetMaxTextureSizeForProfileEXT(int graphicsProfile) const
+    {
+        return MaxTextureSizeForProfileEXT(graphicsProfile);
+    }
+
+    int DirectX9Renderer::GetMaxRenderTargetsForProfileEXT(int graphicsProfile) const
+    {
+        return MaxRenderTargetsForProfileEXT(graphicsProfile);
+    }
+
+    int DirectX9Renderer::GetMaxCubeSizeForProfileEXT(int graphicsProfile) const
+    {
+        return MaxCubeSizeForProfileEXT(graphicsProfile);
+    }
+
+    int DirectX9Renderer::GetMaxVolumeExtentForProfileEXT(int graphicsProfile) const
+    {
+        return MaxVolumeExtentForProfileEXT(graphicsProfile);
+    }
 }
 
 namespace CNA::Internal::Renderers
 {
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace DirectX9 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> DirectX9::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<DirectX9::DirectX9Renderer>(args);
     }

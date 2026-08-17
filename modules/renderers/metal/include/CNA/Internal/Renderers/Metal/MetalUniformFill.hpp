@@ -81,15 +81,23 @@ namespace CNA::Internal::Renderers::Metal
         float light1Dir[4], light1Diffuse[4];
         float light2Dir[4], light2Diffuse[4];
         float eyePosition[4];
-        float pbrFactors[4];   // x=MetallicFactor, y=RoughnessFactor
+        float pbrFactors[4];   // x=MetallicFactor, y=RoughnessFactor, z=NormalScale, w=OcclusionStrength
         float alphaTest[4];
         float fogColorEnabled[4], fogVector[4];
+        float srgbFlags[4];    // x=base decode, y=emissive decode, z=output encode
+        float dielectricFresnel[4]; // xyz=dielectric F0, w=dielectric F90
+        float textureTransformRows[10][4]; // two affine rows per PBR texture slot
     };
 
     // Plain C++ mirror of kMetalShaderSource's `SkinnedPbrTransform` (reuses `MetalPbrUniforms`
     // as-is -- the fragment-side uniforms are identical between skinned and unskinned PBR).
     /** @brief CPU mirror of the skinned-PBR shader's transform and skinning constants. */
-    struct MetalSkinnedPbrTransform { float wvp[16]; float world[16]; float skinParams[4]; };
+    struct MetalSkinnedPbrTransform {
+        float wvp[16];
+        float world[16];
+        float normalCol0[4], normalCol1[4], normalCol2[4];
+        float skinParams[4];
+    };
 
     // plan_metal.md METAL-38-47: fills LitTransform/LitUniforms from GpuDrawParams, field-for-field
     // matching EasyGLRenderer::BindDrawParams()'s own real mapping (ground truth, ported not
@@ -265,10 +273,21 @@ namespace CNA::Internal::Renderers::Metal
                 pu.light0Diffuse[component]=pu.light1Diffuse[component]=pu.light2Diffuse[component]=0.0f;
         }
         pu.eyePosition[0]=params.eyePositionWorld[0]; pu.eyePosition[1]=params.eyePositionWorld[1]; pu.eyePosition[2]=params.eyePositionWorld[2]; pu.eyePosition[3]=0;
-        pu.pbrFactors[0]=params.pbrMetallicFactor; pu.pbrFactors[1]=params.pbrRoughnessFactor; pu.pbrFactors[2]=0; pu.pbrFactors[3]=0;
+        pu.pbrFactors[0]=params.pbrMetallicFactor; pu.pbrFactors[1]=params.pbrRoughnessFactor;
+        pu.pbrFactors[2]=params.pbrNormalScale; pu.pbrFactors[3]=params.pbrOcclusionStrength;
         std::memcpy(pu.alphaTest, params.alphaTest, sizeof(pu.alphaTest));
         pu.fogColorEnabled[0]=params.fogColor[0]; pu.fogColorEnabled[1]=params.fogColor[1]; pu.fogColorEnabled[2]=params.fogColor[2]; pu.fogColorEnabled[3]=params.fogEnabled?1.0f:0.0f;
         std::memcpy(pu.fogVector, params.fogVector, sizeof(pu.fogVector));
+        pu.srgbFlags[0]=params.pbrBaseColorTextureIsSrgb?1.0f:0.0f;
+        pu.srgbFlags[1]=params.pbrEmissiveTextureIsSrgb?1.0f:0.0f;
+        pu.srgbFlags[2]=params.pbrEncodeOutputToSrgb?1.0f:0.0f;
+        pu.srgbFlags[3]=0.0f;
+        pu.dielectricFresnel[0]=params.pbrDielectricF0[0];
+        pu.dielectricFresnel[1]=params.pbrDielectricF0[1];
+        pu.dielectricFresnel[2]=params.pbrDielectricF0[2];
+        pu.dielectricFresnel[3]=params.pbrDielectricF90;
+        std::memcpy(pu.textureTransformRows, params.pbrTextureTransformRows,
+                    sizeof(pu.textureTransformRows));
     }
 
     // plan_metal.md METAL-82: fills SkinnedPbrTransform/PbrUniforms from GpuDrawParams. The uniform
@@ -296,6 +315,9 @@ namespace CNA::Internal::Renderers::Metal
         FillMetalPbrUniforms(unusedT, pu, wvp, params);
         std::memcpy(t.wvp, wvp.m, sizeof(t.wvp));
         std::memcpy(t.world, params.worldColMajor, sizeof(t.world));
+        std::memcpy(t.normalCol0, unusedT.normalCol0, sizeof(t.normalCol0));
+        std::memcpy(t.normalCol1, unusedT.normalCol1, sizeof(t.normalCol1));
+        std::memcpy(t.normalCol2, unusedT.normalCol2, sizeof(t.normalCol2));
         t.skinParams[0]=(float)params.weightsPerVertex; t.skinParams[1]=t.skinParams[2]=t.skinParams[3]=0;
     }
 }

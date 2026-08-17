@@ -327,6 +327,21 @@ TEST(EffectParameterTest, GetValueInt32ArrayPartialCount)
     EXPECT_EQ(got[1], 2);
 }
 
+TEST(EffectParameterTest, NegativeScalarArrayCountsReturnEmpty)
+{
+    EffectParameter integers("i", "", 1, 1,
+                             EffectParameterClass::Scalar,
+                             EffectParameterType::Int32);
+    integers.SetValue(std::vector<int>{1, 2});
+    EffectParameter singles("f", "", 1, 1,
+                            EffectParameterClass::Scalar,
+                            EffectParameterType::Single);
+    singles.SetValue(std::vector<float>{1.0f, 2.0f});
+
+    EXPECT_TRUE(integers.GetValueInt32Array(-1).empty());
+    EXPECT_TRUE(singles.GetValueSingleArray(-1).empty());
+}
+
 // --- GetValueVector2Array / SetValue(vector<Vector2>) ---
 
 TEST(EffectParameterTest, SetValueVector2ArrayRoundTrip)

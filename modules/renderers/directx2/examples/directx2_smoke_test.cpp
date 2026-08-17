@@ -5,7 +5,7 @@
 // Clear()/Present(), real pixel readback. SpriteBatch/Texture2D draws are covered by
 // directx2_spritebatch_test.cpp (Phase O4).
 //
-// Check A -- GetWindowInternal() returns a real, non-null window (DIRECTX2 needs a genuine Win32 HWND,
+// Check A -- GameWindow handle returns a real, non-null window (DIRECTX2 needs a genuine Win32 HWND,
 //   obtained from it via SDL_PROP_WINDOW_WIN32_HWND_POINTER, design decision 3).
 // Check B -- Clear(r,g,b,a) followed by GetBackBufferData() reads back the exact clear color
 //   (RGB and alpha), read from DIRECTX2's own Lockable shadow-backbuffer surface (design decision 4).
@@ -54,7 +54,7 @@ protected:
         auto& renderer = static_cast<DirectX2Renderer&>(dev.GetRenderer());
 
         // Check A: real window.
-        check(renderer.GetWindowInternal() != nullptr, "GraphicsDevice has a real window under the DIRECTX2 renderer");
+        check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) != nullptr, "GraphicsDevice has a real window under the DIRECTX2 renderer");
 
         // Check B: real, correct pixel readback after Clear(), via the shadow-backbuffer surface,
         // including the alpha channel.

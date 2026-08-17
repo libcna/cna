@@ -2,8 +2,8 @@
 #include <gtest/gtest.h>
 #include <any>
 
-#include <SDL3/SDL.h>
-
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -27,7 +27,7 @@
 // avoid that requirement - confirmed not feasible, and not valuable enough to justify diverging
 // from the real XNA API to force it:
 //   1. Game's own constructor unconditionally stands up a real GraphicsDevice/backend/window
-//      (`Window_.setWindowInternal(GraphicsDevice_.GetBackend().GetWindowInternal());` in
+//      (`Window_.setWindowInternal(GraphicsDevice_.GetPlatformWindowInternal(), ...);` in
 //      Game::Game()) - there is no "lightweight" Game to fake; any Game instance needs a real
 //      backend regardless.
 //   2. GamerServicesComponent's public constructor signature (`GamerServicesComponent(Game&
@@ -122,9 +122,25 @@ TEST(GuideTest, NotificationPositionDefaultAndSet) {
 }
 
 TEST(GuideTest, IsScreenSaverEnabledGetSet) {
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    CNA::Platform::IPlatform& platform = CNA::Platform::GetCurrentPlatform();
+    if (platform.GetDisplays() == nullptr)
     {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+        // Headless and Terminal deliberately advertise no display service. Guide's safe fallback
+        // is "enabled", and setting an unavailable host feature is a no-op rather than fabricated
+        // mutable state.
+        EXPECT_TRUE(Guide::getIsScreenSaverEnabledProperty());
+        Guide::setIsScreenSaverEnabledProperty(false);
+        EXPECT_TRUE(Guide::getIsScreenSaverEnabledProperty());
+        GTEST_SKIP() << "the selected platform has no display/screen-saver service";
+    }
+
+    try
+    {
+        platform.AcquireSubsystem(CNA::Platform::PlatformSubsystem::Video);
+    }
+    catch (const CNA::Platform::PlatformException& error)
+    {
+        GTEST_SKIP() << "video subsystem unavailable: " << error.what();
     }
 
     Guide::setIsScreenSaverEnabledProperty(true);
@@ -132,7 +148,7 @@ TEST(GuideTest, IsScreenSaverEnabledGetSet) {
     Guide::setIsScreenSaverEnabledProperty(false);
     EXPECT_FALSE(Guide::getIsScreenSaverEnabledProperty());
 
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    platform.ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Video);
 }
 
 // --- Guide keyboard input capture (Task 3.2) ---

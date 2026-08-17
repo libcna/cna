@@ -259,6 +259,13 @@ namespace CNA::Internal::Renderers::Software
                 "The destination holds fewer than the " + std::to_string(requiredBytes) +
                     " bytes the requested rectangle needs.");
 
+        // An active 4x target writes its per-sample plane, while `color` is the resolved cache used
+        // by every public colour consumer. Refresh that cache for this level-zero snapshot without
+        // ending the render pass or making generated mip levels visible. Further draws keep writing
+        // the sample plane and the next read/unbind resolves the new contents again.
+        if (level == 0)
+            framebuffer_.ResolveColor();
+
         // The colour attachment is the ONLY storage read here -- framebuffer_.depthBuffer is never
         // consulted, so depth/stencil content can never leak through a colour readback.
         const std::vector<std::uint8_t>& source = ColorPixels(level);

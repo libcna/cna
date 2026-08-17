@@ -25,9 +25,10 @@ import re
 import sys
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-PUBLIC_DIR = os.path.join(REPO_ROOT, "include", "Microsoft", "Xna", "Framework", "Input")
-INTERNAL_DIR = os.path.join(REPO_ROOT, "include", "CNA", "Internal", "Input")
-TESTS_DIR = os.path.join(REPO_ROOT, "tests")
+INPUT_MODULE = os.path.join(REPO_ROOT, "modules", "input")
+PUBLIC_DIR = os.path.join(INPUT_MODULE, "include", "Microsoft", "Xna", "Framework", "Input")
+INTERNAL_DIR = os.path.join(INPUT_MODULE, "include", "CNA", "Internal", "Input")
+TESTS_DIR = os.path.join(INPUT_MODULE, "tests")
 
 # Types that are deliberately exercised through a sibling suite rather than a same-named one, so a
 # missing dedicated suite is expected, not a gap. Keyed by type -> covering suite/file (for the note).
@@ -38,26 +39,19 @@ KNOWN_COVERED_ELSEWHERE = {
     "GestureSample": "TouchInputTests.cpp (GestureSampleTest)",
     # 'Keys' has no KeysTest suite by design — it is the enum exercised by the exhaustive 160-entry
     # value table + reflection tests in KeyboardInputTests.cpp (INPUT-KBD-001) and driven through the
-    # bridge in SdlInputBridgeKeyboardTests.cpp.
+    # state machine in PlatformInputBridgeKeyboardTest.
     "Keys": "KeyboardInputTests.cpp (exhaustive Keys value table, INPUT-KBD-001)",
     # Internal singletons/seams: verified but with no same-named suite (they are the substrate every
     # bridge/reset test drives, not a value type to test in isolation).
-    "InputManager": "InputResetTests / SdlInputBridge* / SdlGamepadBackendTests (no same-named suite by design)",
-    "ISdlGamepadBackend": "SdlGamepadBackendTests.cpp via the FakeSdlGamepadBackend seam",
-    "GamePadAxis": "SdlInputBridge* / InputManager gamepad tests (internal enum)",
-    "MouseButton": "SdlInputBridgeMouseTests / InputManager (internal enum)",
-    # GetRawGamePadState(...) is asserted in SdlGamepadBackendTests.cpp (leftY etc.); the return value is
-    # bound with `auto`, so the type name never appears literally, but the struct is exercised.
-    "RawGamePadState": "SdlGamepadBackendTests.cpp via InputManager::GetRawGamePadState (bound as auto)",
-    # INP-AUD-audit (2026-07-16): these 7 interfaces are each exercised through a dedicated
-    # fake-backend-driven suite, same as ISdlGamepadBackend above -- but the suite is named after the
+    "InputManager": "InputResetTests / PlatformInputBridge* (no same-named suite by design)",
+    "MouseButton": "PlatformInputBridgeMouse* / InputManager (internal enum)",
+    "SdlInputBridge": "key-name helper tests; event state is covered by PlatformInputBridge*",
+    # INP-AUD-audit (2026-07-16): these legacy interfaces are exercised through a dedicated
+    # fake-backend-driven suite, but the suite is named after the
     # concrete Fake*/CnaInput* type, not the "I"-prefixed interface, so suite_re's literal
     # `<TypeName>\w*Test` prefix match never fires. Confirmed real coverage exists for every one of
     # these before adding the exemption (not just a name collision at the same file).
-    "ISdlHapticBackend": "SdlHapticBackendTests.cpp (FakeHapticTest) via the FakeSdlHapticBackend seam",
-    "ISdlJoystickBackend": "SdlJoystickBackendTests.cpp (FakeJoystickTest) via the FakeSdlJoystickBackend seam",
     "ISystemDeviceBackend": "InputDevicesTests.cpp (CnaInputDevicesTest) / TouchEdgeCaseTests.cpp (TouchCapabilitiesEnumerationTest) via FakeSystemDeviceBackend",
-    "ISystemKeyboardBackend": "KeyboardModStateTests.cpp (KeyboardModStateEXTTest) via a fake system-keyboard-backend seam",
     "ISystemMouseBackend": "MouseGlobalTests.cpp (MouseGlobalEXTTest) via a fake system-mouse-backend seam",
     "ISystemPowerBackend": "PowerTests.cpp (CnaInputPowerTest) via a fake system-power-backend seam",
     "ISystemSensorBackend": "SensorsTests.cpp (CnaInputSensorsTest) via a fake system-sensor-backend seam",
@@ -177,7 +171,6 @@ def render(rows_public, rows_internal) -> str:
     section("Public XNA Input types", rows_public)
     section("Internal (`CNA::Internal::Input`) types", rows_internal)
 
-    out.insert(6, "")
     summary = ["## Gaps (candidate INPUT-TEST-* tasks)", ""]
     if not gaps:
         summary.append("None — every Input type has a dedicated suite or a documented sibling-suite cover.")
@@ -186,8 +179,8 @@ def render(rows_public, rows_internal) -> str:
             kind = "orphaned (no test reference)" if refs == 0 else f"no dedicated suite ({refs} refs)"
             summary.append(f"- `{name}` (`{header}`) — {kind}")
     summary.append("")
-    out[6:6] = summary
-    return "\n".join(out) + "\n"
+    out[9:9] = summary
+    return "\n".join(out).rstrip() + "\n"
 
 
 def main(argv=None) -> int:

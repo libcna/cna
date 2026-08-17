@@ -196,7 +196,7 @@ namespace
                       device.getPresentationParametersProperty().getBackBufferHeightProperty() == 41,
                   "GraphicsDeviceManager resize applies an ordinary 73x41 backbuffer");
 
-            SDL_Window* window = device.GetRenderer().GetWindowInternal();
+            SDL_Window* window = reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty());
             Check(window != nullptr, "Noop keeps the normal CNA window contract");
             if (window != nullptr)
             {

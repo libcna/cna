@@ -1,0 +1,101 @@
+# plan_binding.md CBIND-042A: the known-limitations matrix as a gate.
+#
+# A limitations document is the one document a consumer reads to decide whether an ABI can carry
+# their program, and the one most likely to rot, because nothing breaks when it goes stale. This job
+# enforces the three rules that keep it true:
+#
+#   * every unmapped reason falls under a declared theme -- no silent "other" bucket;
+#   * no deferral names a task the plan records as finished -- "planned in CBIND-035" stops being a
+#     plan the moment CBIND-035 closes, and becomes an omission wearing a plan's clothes;
+#   * the counts come from the inventory rather than from prose.
+#
+# Build-free, like the coverage and compatibility gates, so it runs on every push.
+
+name: C API limitations matrix
+
+on:
+  push:
+    paths:
+      - 'docs/c-api/COVERAGE.md'
+      - 'docs/c-api/LIMITATIONS.md'
+      - 'tools/c-api/limitations.json'
+      - 'tools/c-api/coverage_mappings.json'
+      - 'tools/c-api/generate_limitations.py'
+      - 'plan_binding.md'
+      - '.github/workflows/c-api-limitations.yml'
+  pull_request:
+    branches: [develop, master]
+    paths:
+      - 'docs/c-api/COVERAGE.md'
+      - 'docs/c-api/LIMITATIONS.md'
+      - 'tools/c-api/limitations.json'
+      - 'tools/c-api/coverage_mappings.json'
+      - 'tools/c-api/generate_limitations.py'
+      - 'plan_binding.md'
+  workflow_dispatch:
+
+concurrency:
+  group: c-api-limitations-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  limitations:
+    name: What the ABI does not do, and who still owns it
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check the published matrix
+        run: python3 tools/c-api/generate_limitations.py --check
+
+      # A gate that cannot fail is not a gate. This reinstates the exact defect the first run of
+      # this tool found -- a deferral to a task that has since closed -- and requires the check to
+      # reject it.
+      - name: Prove the gate rejects a deferral to a closed task
+        run: |
+          set -euo pipefail
+          cp tools/c-api/coverage_mappings.json /tmp/coverage_mappings.json.orig
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("tools/c-api/coverage_mappings.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          for rule in data["rules"]:
+              if rule.get("id") == "spritebatch-begin-partial":
+                  rule["mapping"] = rule["mapping"].replace("CBIND-044", "CBIND-035")
+                  break
+          else:
+              raise SystemExit("the rule this check perturbs no longer exists")
+          path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+          PY
+          status=0
+          python3 tools/c-api/generate_limitations.py --check || status=$?
+          cp /tmp/coverage_mappings.json.orig tools/c-api/coverage_mappings.json
+          if [ "$status" -eq 0 ]; then
+            echo "::error::the limitations check accepted a deferral to a finished task" >&2
+            exit 1
+          fi
+          echo "the gate rejected the stale deferral, as it must"
+
+      - name: Confirm the tree was restored
+        run: git diff --exit-code -- tools/c-api/coverage_mappings.json
+
+      # Regenerating must be a no-op on a correct tree, for the same reason the coverage matrix's
+      # must: a generator that churns makes the document unreviewable.
+      - name: Verify regeneration is deterministic
+        run: |
+          set -euo pipefail
+          python3 tools/c-api/generate_limitations.py --write
+          if ! git diff --quiet -- docs/c-api/LIMITATIONS.md; then
+            echo "::error::--write changed LIMITATIONS.md even though --check passed" >&2
+            git --no-pager diff --stat -- docs/c-api/LIMITATIONS.md
+            exit 1
+          fi
+          echo "regeneration is a no-op, as it must be"

@@ -1,11 +1,14 @@
 # CNA renderer registry
 
-Current as of the addition of `PIXIJS` (2026-08-16): CNA exposes exactly **47 public
-renderer identities**. `ASCII` was removed as a public renderer identity and its reusable
+Current as of the addition of `PIXIJS` (2026-08-16, merged alongside `TINYGL` from a parallel
+branch): CNA exposes exactly **48 public renderer identities**. `TINYGL` (C-Chads/tinygl) is CNA's
+fixed-function CPU OpenGL renderer -- see `docs/tinygl-renderer.md` and `plan_tinygl.md`. Before
+these two, as of the eleven-lane renderer integration (2026-08-11), there were **46**. `ASCII` was
+removed as a public renderer identity and its reusable
 quantization/glyph-atlas logic migrated to a renderer-neutral post-process effect,
 `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) — see
-`docs/ascii-post-process-effect.md`. `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`, `PORTABLEGL`
-and `PIXIJS` were added. EasyGL is an internal
+`docs/ascii-post-process-effect.md`. `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`,
+`PORTABLEGL`, `TINYGL`, and `PIXIJS` were added since. EasyGL is an internal
 implementation shared by five public GL profiles and does not add a public identity. Internal
 renderer/API choices made by bgfx, Skia, Sokol, Diligent, LLGL, or another abstraction likewise do
 not add CNA identities.
@@ -60,10 +63,11 @@ not add CNA identities.
 | 44 | `SvgDom` | `SVG_DOM` | `CNA_RENDERER_SVG_DOM` | SVG DOM / `SvgDomRenderer` | Emscripten |
 | 45 | `OpenVg` | `OPENVG` | `CNA_RENDERER_OPENVG` | ShivaVG / `OpenVgRenderer` | desktop OpenGL (compat profile) |
 | 46 | `PortableGL` | `PORTABLEGL` | `CNA_RENDERER_PORTABLEGL` | PortableGL / `PortableGLRenderer` | none (CPU-only, fetched header) |
-| 47 | `PixiJs` | `PIXIJS` | `CNA_RENDERER_PIXIJS` | PixiJS / `PixiJsRenderer` | Emscripten + vendored PixiJS UMD build |
+| 47 | `TinyGL` | `TINYGL` | `CNA_RENDERER_TINYGL` | TinyGL / `TinyGLRenderer` | none (CPU-only, fetched+built source) |
+| 48 | `PixiJs` | `PIXIJS` | `CNA_RENDERER_PIXIJS` | PixiJS / `PixiJsRenderer` | Emscripten + vendored PixiJS UMD build |
 
-The five GL profiles share one implementation target, macro, and factory, so 47 public identities
-map to 43 concrete implementation factories. Their public contracts remain distinct because the
+The five GL profiles share one implementation target, macro, and factory, so 48 public identities
+map to 44 concrete implementation factories. Their public contracts remain distinct because the
 selected context, shader language/profile, and supported platform differ. `FREEDIRECT` is the
 renamed free-direct-backed identity; current `DIRECTX3` is the genuine DirectX 3 implementation.
 `EASYGL` and the temporary `DX30` are not accepted selectors or compatibility aliases.
@@ -74,8 +78,8 @@ renamed free-direct-backed identity; current `DIRECTX3` is the genuine DirectX 3
   fidelity claim.
 - **2D-oriented:** `SDL_RENDERER`, `CANVAS`, `HTML_DOM`, `SKIA`, `BLEND2D`, `FREEDIRECT`,
   `DIRECTX1`, `DIRECT2D`, and `GDI`.
-- **CPU bounded 3D:** `SOFTWARE`.
-- **Legacy or fixed-function bounded 3D:** `OPENGLES1`, `OPENGL1`, `DIRECTX2`, `DIRECTX3`, `DIRECTX5`, `DIRECTX6`,
+- **CPU bounded 3D:** `SOFTWARE`, `PORTABLEGL`, `TINYGL`.
+- **Legacy or fixed-function bounded 3D:** `OPENGLES1`, `OPENGL1`, `TINYGL` (also CPU, above), `DIRECTX2`, `DIRECTX3`, `DIRECTX5`, `DIRECTX6`,
   `DIRECTX7`, `DIRECTX8`, and `GLIDE`.
 - **Programmable/modern, with renderer-specific limits:** `OPENGLES2` (deliberately the
   narrowest of the GL family -- shader-based but bounded by core OpenGL ES 2.0, see

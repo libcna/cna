@@ -56,7 +56,7 @@ namespace Microsoft::Devices::Sensors
          * ThreadSanitizer run confirmed had an unguarded data race on
          * `state_`/`started_` (Task SENSORBASE-004) — unlike Accelerometer/
          * Gyroscope, whose equivalent fields are guarded by their shared
-         * `Detail::SdlSensorSubsystem<TSensor>::mutex_`. `control_->mutex`
+         * `Detail::PlatformSensorSubsystem<TSensor>::mutex_`. `control_->mutex`
          * is *the* lock guarding `state_`/`started_`/`transitioning_`/
          * `stopClaimed_`/`backendCallsInFlight_`/`backend_` — replaces this
          * class's previous plain `mutex_` member. Living in a separately

@@ -1,0 +1,464 @@
+// SPDX-License-Identifier: MS-PL
+
+#include <CNA/C/cna.h>
+
+#include <stdint.h>
+#include <string.h>
+
+static const char ContainerName[] = "ReaderRoot";
+static const char AssetFile[] = "graph.bin";
+static const char EffectReaderName[] = "Microsoft.Xna.Framework.Content.EffectReader";
+static const char EffectTargetName[] = "Microsoft.Xna.Framework.Graphics.Effect";
+
+typedef struct ReaderFixture {
+    CNA_StorageDeviceHandle device;
+    CNA_StorageContainerHandle container;
+} ReaderFixture;
+
+static CNA_StringView view(const char* const text)
+{
+    CNA_StringView result;
+    result.data = text;
+    result.byte_length = (uint64_t)strlen(text);
+    return result;
+}
+
+static void push_byte(uint8_t* const data, size_t* const offset, const uint8_t value)
+{
+    data[(*offset)++] = value;
+}
+
+static void push_float(uint8_t* const data, size_t* const offset, const float value)
+{
+    uint32_t bits = 0U;
+    memcpy(&bits, &value, sizeof(bits));
+    push_byte(data, offset, (uint8_t)(bits & UINT32_C(0xff)));
+    push_byte(data, offset, (uint8_t)((bits >> 8U) & UINT32_C(0xff)));
+    push_byte(data, offset, (uint8_t)((bits >> 16U) & UINT32_C(0xff)));
+    push_byte(data, offset, (uint8_t)((bits >> 24U) & UINT32_C(0xff)));
+}
+
+/* 3 protocol bytes + 2+3+4+4+16 floats + 4 color bytes + 4 sphere floats + 4 raw bytes. */
+#define ASSET_BYTE_COUNT 143U
+
+static size_t build_asset(uint8_t data[ASSET_BYTE_COUNT])
+{
+    size_t offset = 0U;
+    push_byte(data, &offset, 0x00U); /* type-reader count */
+    push_byte(data, &offset, 0x00U); /* shared-resource count */
+    push_byte(data, &offset, 0x00U); /* null object reference */
+
+    push_float(data, &offset, 1.0F);
+    push_float(data, &offset, 2.0F);
+
+    push_float(data, &offset, 3.0F);
+    push_float(data, &offset, 4.0F);
+    push_float(data, &offset, 5.0F);
+
+    push_float(data, &offset, 6.0F);
+    push_float(data, &offset, 7.0F);
+    push_float(data, &offset, 8.0F);
+    push_float(data, &offset, 9.0F);
+
+    push_float(data, &offset, 0.25F);
+    push_float(data, &offset, 0.5F);
+    push_float(data, &offset, 0.75F);
+    push_float(data, &offset, 1.0F);
+
+    for (int index = 1; index <= 16; ++index) {
+        push_float(data, &offset, (float)index);
+    }
+
+    push_byte(data, &offset, 10U);
+    push_byte(data, &offset, 20U);
+    push_byte(data, &offset, 30U);
+    push_byte(data, &offset, 40U);
+
+    push_float(data, &offset, 11.0F);
+    push_float(data, &offset, 12.0F);
+    push_float(data, &offset, 13.0F);
+    push_float(data, &offset, 14.0F);
+
+    push_byte(data, &offset, 0xAAU);
+    push_byte(data, &offset, 0xBBU);
+    push_byte(data, &offset, 0xCCU);
+    push_byte(data, &offset, 0xDDU);
+    return offset;
+}
+
+static int create_fixture(ReaderFixture* const fixture)
+{
+    uint8_t asset[ASSET_BYTE_COUNT];
+    CNA_StorageStreamHandle writer = CNA_INVALID_HANDLE;
+
+    fixture->device = CNA_INVALID_HANDLE;
+    fixture->container = CNA_INVALID_HANDLE;
+    if (build_asset(asset) != sizeof(asset)) {
+        return 0;
+    }
+    if (cna_storage_set_app_name_ext(view("cna-c-api-content-reader-smoke")) !=
+            CNA_RESULT_SUCCESS ||
+        cna_storage_device_show_selector(0, 0, &fixture->device) != CNA_RESULT_SUCCESS ||
+        cna_storage_device_delete_container(fixture->device, view(ContainerName)) !=
+            CNA_RESULT_SUCCESS ||
+        cna_storage_container_open(
+            fixture->device,
+            view(ContainerName),
+            0,
+            0,
+            &fixture->container) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    return cna_storage_container_create_file(fixture->container, view(AssetFile), &writer) ==
+            CNA_RESULT_SUCCESS &&
+        cna_storage_stream_write(writer, asset, (uint64_t)sizeof(asset)) == CNA_RESULT_SUCCESS &&
+        cna_storage_stream_close(writer) == CNA_RESULT_SUCCESS;
+}
+
+static int open_asset_stream(
+    const ReaderFixture* const fixture,
+    CNA_StorageStreamHandle* const outStream)
+{
+    return cna_storage_container_open_file(
+        fixture->container,
+        view(AssetFile),
+        CNA_FILE_MODE_OPEN,
+        outStream) == CNA_RESULT_SUCCESS;
+}
+
+static int destroy_fixture(const ReaderFixture* const fixture)
+{
+    return cna_storage_container_destroy(fixture->container) == CNA_RESULT_SUCCESS &&
+        cna_storage_device_delete_container(fixture->device, view(ContainerName)) ==
+            CNA_RESULT_SUCCESS &&
+        cna_storage_device_destroy(fixture->device) == CNA_RESULT_SUCCESS;
+}
+
+static CNA_ContentReaderCreateInfo make_create_info(const CNA_StorageStreamHandle stream)
+{
+    const CNA_ContentReaderCreateInfo create_info = {
+        sizeof(CNA_ContentReaderCreateInfo), UINT32_C(1), CNA_INVALID_HANDLE, stream,
+        {"graph", UINT64_C(5)}, INT32_C(5), (uint8_t)'w', {0U, 0U, 0U}
+    };
+    return create_info;
+}
+
+static int validate_identity(const CNA_ContentReaderHandle reader)
+{
+    char buffer[32];
+    uint64_t bytes = 0U;
+    int32_t version = 0;
+    uint8_t platform = 0U;
+    CNA_Handle manager = UINT64_C(7);
+
+    if (cna_content_reader_get_asset_name_size(reader, &bytes) != CNA_RESULT_SUCCESS ||
+        bytes != UINT64_C(5)) {
+        return 0;
+    }
+    memset(buffer, 0, sizeof(buffer));
+    if (cna_content_reader_copy_asset_name(reader, buffer, (uint64_t)sizeof(buffer), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        bytes != UINT64_C(5) || strcmp(buffer, "graph") != 0 ||
+        cna_content_reader_copy_asset_name(reader, buffer, UINT64_C(1), &bytes) !=
+            CNA_RESULT_BUFFER_TOO_SMALL) {
+        return 0;
+    }
+    if (cna_content_reader_get_version(reader, &version) != CNA_RESULT_SUCCESS || version != 5 ||
+        cna_content_reader_get_platform(reader, &platform) != CNA_RESULT_SUCCESS ||
+        platform != (uint8_t)'w') {
+        return 0;
+    }
+    /* A standalone reader reports no manager rather than inventing one. */
+    return cna_content_reader_get_content_manager(reader, &manager) == CNA_RESULT_SUCCESS &&
+        manager == CNA_INVALID_HANDLE &&
+        cna_content_reader_get_version(reader, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+        cna_content_reader_get_version(CNA_INVALID_HANDLE, &version) == CNA_RESULT_INVALID_HANDLE;
+}
+
+static int validate_values(const CNA_ContentReaderHandle reader)
+{
+    CNA_Vector2 vector2 = {0.0F, 0.0F};
+    CNA_Vector3 vector3 = {0.0F, 0.0F, 0.0F};
+    CNA_Vector4 vector4 = {0.0F, 0.0F, 0.0F, 0.0F};
+    CNA_Quaternion quaternion = {0.0F, 0.0F, 0.0F, 0.0F};
+    CNA_Matrix matrix;
+    CNA_Color color = {0U, 0U, 0U, 0U};
+    CNA_BoundingSphere sphere = {{0.0F, 0.0F, 0.0F}, 0.0F};
+    CNA_Bool has_value = CNA_TRUE;
+
+    memset(&matrix, 0, sizeof(matrix));
+
+    /* The stream opens on the compiled type-reader table, so the protocol steps run first. */
+    if (cna_content_reader_initialize_type_readers(reader) != CNA_RESULT_SUCCESS ||
+        cna_content_reader_read_shared_resources(reader) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_content_reader_read_object_tag(reader, &has_value) != CNA_RESULT_SUCCESS ||
+        has_value != CNA_FALSE) {
+        return 0;
+    }
+
+    if (cna_content_reader_read_vector2(reader, &vector2) != CNA_RESULT_SUCCESS ||
+        vector2.x != 1.0F || vector2.y != 2.0F) {
+        return 0;
+    }
+    if (cna_content_reader_read_vector3(reader, &vector3) != CNA_RESULT_SUCCESS ||
+        vector3.x != 3.0F || vector3.y != 4.0F || vector3.z != 5.0F) {
+        return 0;
+    }
+    if (cna_content_reader_read_vector4(reader, &vector4) != CNA_RESULT_SUCCESS ||
+        vector4.x != 6.0F || vector4.y != 7.0F || vector4.z != 8.0F || vector4.w != 9.0F) {
+        return 0;
+    }
+    if (cna_content_reader_read_quaternion(reader, &quaternion) != CNA_RESULT_SUCCESS ||
+        quaternion.x != 0.25F || quaternion.y != 0.5F || quaternion.z != 0.75F ||
+        quaternion.w != 1.0F) {
+        return 0;
+    }
+    if (cna_content_reader_read_matrix(reader, &matrix) != CNA_RESULT_SUCCESS ||
+        matrix.m11 != 1.0F || matrix.m14 != 4.0F || matrix.m22 != 6.0F || matrix.m33 != 11.0F ||
+        matrix.m41 != 13.0F || matrix.m44 != 16.0F) {
+        return 0;
+    }
+    if (cna_content_reader_read_color(reader, &color) != CNA_RESULT_SUCCESS || color.r != 10U ||
+        color.g != 20U || color.b != 30U || color.a != 40U) {
+        return 0;
+    }
+    return cna_content_reader_read_bounding_sphere(reader, &sphere) == CNA_RESULT_SUCCESS &&
+        sphere.center.x == 11.0F && sphere.center.y == 12.0F && sphere.center.z == 13.0F &&
+        sphere.radius == 14.0F;
+}
+
+static int validate_limits_and_bytes(const CNA_ContentReaderHandle reader)
+{
+    uint8_t buffer[8];
+    uint64_t bytes = 0U;
+
+    if (cna_content_reader_check_collection_element_count(reader, INT64_C(5), view("R")) !=
+            CNA_RESULT_SUCCESS ||
+        cna_content_reader_check_collection_element_count(reader, INT64_C(-1), view("R")) !=
+            CNA_RESULT_IO) {
+        return 0;
+    }
+    if (cna_content_reader_check_decoded_byte_size(reader, INT64_C(1024), view("R")) !=
+            CNA_RESULT_SUCCESS ||
+        cna_content_reader_check_decoded_byte_size(reader, INT64_C(-1), view("R")) !=
+            CNA_RESULT_IO) {
+        return 0;
+    }
+
+    /* Capacity is decided before the stream is touched, so a refusal costs no bytes. */
+    if (cna_content_reader_read_bytes_exact(
+            reader, INT32_C(4), view("R"), buffer, UINT64_C(2), &bytes) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        bytes != UINT64_C(4)) {
+        return 0;
+    }
+    memset(buffer, 0, sizeof(buffer));
+    if (cna_content_reader_read_bytes_exact(
+            reader, INT32_C(4), view("R"), buffer, (uint64_t)sizeof(buffer), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        bytes != UINT64_C(4) || buffer[0] != 0xAAU || buffer[1] != 0xBBU || buffer[2] != 0xCCU ||
+        buffer[3] != 0xDDU) {
+        return 0;
+    }
+    if (cna_content_reader_read_bytes_exact(
+            reader, INT32_C(-1), view("R"), buffer, (uint64_t)sizeof(buffer), &bytes) !=
+        CNA_RESULT_IO) {
+        return 0;
+    }
+    /* The stream is exhausted, so a further exact read is a truncation failure. */
+    return cna_content_reader_read_bytes_exact(
+        reader, INT32_C(4), view("R"), buffer, (uint64_t)sizeof(buffer), &bytes) == CNA_RESULT_IO;
+}
+
+static int validate_reader(const ReaderFixture* const fixture)
+{
+    CNA_StorageStreamHandle stream = CNA_INVALID_HANDLE;
+    CNA_ContentReaderHandle reader = CNA_INVALID_HANDLE;
+    CNA_ContentReaderHandle rejected = UINT64_C(9);
+
+    if (!open_asset_stream(fixture, &stream)) {
+        return 0;
+    }
+    CNA_ContentReaderCreateInfo create_info = make_create_info(stream);
+
+    create_info.reserved[0] = 1U;
+    if (cna_content_reader_create(&create_info, &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
+        rejected != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    create_info.reserved[0] = 0U;
+    create_info.stream = CNA_INVALID_HANDLE;
+    if (cna_content_reader_create(&create_info, &rejected) != CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+    create_info.stream = stream;
+    if (cna_content_reader_create(0, &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_content_reader_create(&create_info, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    if (cna_content_reader_create(&create_info, &reader) != CNA_RESULT_SUCCESS ||
+        reader == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    const int ok = validate_identity(reader) && validate_values(reader) &&
+        validate_limits_and_bytes(reader) &&
+        /* A borrowed stream cannot be closed out from under its reader. */
+        cna_storage_stream_close(stream) == CNA_RESULT_INVALID_STATE;
+    if (!ok) {
+        (void)cna_content_reader_destroy(reader);
+        (void)cna_storage_stream_close(stream);
+        return 0;
+    }
+    /* Destroying the reader closes the stream it borrowed, matching the canonical BinaryReader
+       contract; the stream handle itself is still released explicitly. */
+    return cna_content_reader_destroy(reader) == CNA_RESULT_SUCCESS &&
+        cna_content_reader_destroy(reader) == CNA_RESULT_INVALID_HANDLE &&
+        cna_storage_stream_close(stream) == CNA_RESULT_SUCCESS &&
+        cna_storage_stream_close(stream) == CNA_RESULT_INVALID_HANDLE;
+}
+
+static int validate_type_readers(const ReaderFixture* const fixture)
+{
+    CNA_StorageStreamHandle stream = CNA_INVALID_HANDLE;
+    CNA_ContentReaderHandle reader = CNA_INVALID_HANDLE;
+    CNA_ContentTypeReaderHandle type_reader = CNA_INVALID_HANDLE;
+    CNA_ContentTypeReaderHandle placeholder = CNA_INVALID_HANDLE;
+    CNA_ContentTypeReaderHandle rejected = UINT64_C(9);
+    CNA_Bool flag = CNA_TRUE;
+    char buffer[128];
+    uint64_t bytes = 0U;
+    int32_t version = -1;
+
+    if (cna_content_register_known_unsupported_xnb_readers() != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_content_type_reader_manager_get_is_registered(view("cna.NoSuchReader"), &flag) !=
+            CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_content_type_reader_manager_create_reader(view("cna.NoSuchReader"), &rejected) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        rejected != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_content_type_reader_manager_get_is_registered(view(EffectReaderName), &flag) !=
+            CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_content_type_reader_manager_create_reader(view(EffectReaderName), &type_reader) !=
+            CNA_RESULT_SUCCESS ||
+        type_reader == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    memset(buffer, 0, sizeof(buffer));
+    if (cna_content_type_reader_get_target_type_name_size(type_reader, &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        bytes != (uint64_t)strlen(EffectTargetName) ||
+        cna_content_type_reader_copy_target_type_name(
+            type_reader, buffer, (uint64_t)sizeof(buffer), &bytes) != CNA_RESULT_SUCCESS ||
+        strcmp(buffer, EffectTargetName) != 0 ||
+        cna_content_type_reader_copy_target_type_name(type_reader, buffer, UINT64_C(2), &bytes) !=
+            CNA_RESULT_BUFFER_TOO_SMALL) {
+        return 0;
+    }
+    if (cna_content_type_reader_get_type_version(type_reader, &version) != CNA_RESULT_SUCCESS ||
+        version != 0 ||
+        cna_content_type_reader_supports_version(type_reader, 0, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_content_type_reader_supports_version(type_reader, 1, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE) {
+        return 0;
+    }
+    if (cna_content_type_reader_get_can_deserialize_into_existing_object(type_reader, &flag) !=
+            CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_content_type_reader_initialize(type_reader) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    if (!open_asset_stream(fixture, &stream)) {
+        return 0;
+    }
+    const CNA_ContentReaderCreateInfo create_info = make_create_info(stream);
+    if (cna_content_reader_create(&create_info, &reader) != CNA_RESULT_SUCCESS) {
+        (void)cna_storage_stream_close(stream);
+        return 0;
+    }
+    /* A recognized but unsupported reader refuses with its canonical diagnostic. */
+    const int refused =
+        cna_content_type_reader_read_untyped(type_reader, reader, &flag) == CNA_RESULT_IO;
+    const int released = cna_content_reader_destroy(reader) == CNA_RESULT_SUCCESS &&
+        cna_storage_stream_close(stream) == CNA_RESULT_SUCCESS;
+    if (!refused || !released) {
+        return 0;
+    }
+
+    if (cna_known_unsupported_content_type_reader_create(
+            view("cna.Placeholder"),
+            UINT32_C(9),
+            &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
+        rejected != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_known_unsupported_content_type_reader_create(
+            view("cna.Placeholder"),
+            CNA_UNSUPPORTED_CONTENT_READER_REASON_COMPILED_PLATFORM_SHADER_BYTECODE,
+            &placeholder) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    memset(buffer, 0, sizeof(buffer));
+    if (cna_content_type_reader_copy_target_type_name(
+            placeholder, buffer, (uint64_t)sizeof(buffer), &bytes) != CNA_RESULT_SUCCESS ||
+        strcmp(buffer, "cna.Placeholder") != 0 ||
+        cna_content_type_reader_destroy(placeholder) != CNA_RESULT_SUCCESS ||
+        cna_content_type_reader_destroy(placeholder) != CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+
+    if (cna_content_type_reader_destroy(type_reader) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* Clearing the process-wide registry is observable, and re-registration restores it. */
+    if (cna_content_type_reader_manager_clear_type_creators() != CNA_RESULT_SUCCESS ||
+        cna_content_type_reader_manager_get_is_registered(view(EffectReaderName), &flag) !=
+            CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE) {
+        return 0;
+    }
+    return cna_content_register_known_unsupported_xnb_readers() == CNA_RESULT_SUCCESS &&
+        cna_content_type_reader_manager_get_is_registered(view(EffectReaderName), &flag) ==
+            CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+}
+
+static int validate_identities(void)
+{
+    return CNA_UNSUPPORTED_CONTENT_READER_REASON_COMPILED_PLATFORM_SHADER_BYTECODE ==
+        UINT32_C(0);
+}
+
+int main(void)
+{
+    ReaderFixture fixture;
+
+    if (!validate_identities()) {
+        return 1;
+    }
+    if (!create_fixture(&fixture)) {
+        return 2;
+    }
+    if (!validate_reader(&fixture)) {
+        (void)destroy_fixture(&fixture);
+        return 3;
+    }
+    if (!validate_type_readers(&fixture)) {
+        (void)destroy_fixture(&fixture);
+        return 4;
+    }
+    if (!destroy_fixture(&fixture)) {
+        return 5;
+    }
+    return 0;
+}

@@ -63,6 +63,9 @@ CNA has 4 pluggable graphics renderers, chosen at CMake configure time
   `SkinnedEffect`, `Model`, render targets): use **OPENGLES3** (or **WEBGL2** under Emscripten) —
   internally implemented by EasyGL, it is the most mature 3D renderer, with the fewest open gaps
   and the most complete pixel-test coverage.
+- **Your game loads custom compiled XNA/FNA effects:** choose **FNA3D**. It is currently the only
+  renderer that advertises `GraphicsCapability::CompiledEffects`; all other renderers reject the
+  same constructor explicitly instead of substituting a stock shader.
 - **Vulkan** and **Bgfx** both have working 3D pipelines (core MVP/lighting/texture/fog is
   pixel-verified on all 3), but each has its own real, currently-open gaps — see the next section
   before picking one over EasyGL.
@@ -74,17 +77,18 @@ Per `docs/xna-4-api-coverage.md`'s per-class table (Task 483): `RenderTarget2D`/
 `PresentationParameters`, and `GraphicsAdapter` have **no open gaps on any renderer**. Most of the
 rest of the Graphics API surface is fully correct on at least EasyGL.
 
-## The two gaps that actually matter to most ports
+## The former blockers that matter to existing ports
 
 Before the smaller caveats below — these two are the ones most likely to block a real port:
 
-- **No `.xnb` content pipeline.** CNA's `ContentManager` does not read compiled `.xnb` binary
-  assets at all — see "Content pipeline" below. If your game ships `.xnb` assets, you cannot point
-  CNA at them unchanged.
-- **`Effect(GraphicsDevice&, byte[])` — compiled `.fx` shader bytecode — is not implemented.** This
-  is the single biggest real gap in CNA today: it is what blocks 23 of the 86 official XNA samples
-  in `../cna-samples`. If your game loads custom `.fx` effects via compiled bytecode (rather than
-  using only the 5 built-in stock effects), plan for this to be unported until this lands.
+- **`.xnb` is supported for the registered built-in readers**, including the general
+  `EffectReader`. Reflective custom readers and some media/surface formats remain explicit gaps;
+  consult `docs/xnb-content-pipeline-support.md` before assuming every asset type is portable.
+- **`Effect(GraphicsDevice&, byte[])` is implemented on FNA3D.** The input must be compiled
+  Direct3D 9 Effect Framework bytecode (`.fxb` or an XNB Effect payload), not HLSL `.fx` source and
+  not MonoGame MGFX. Public parameters, techniques/passes, cloning, pass state, general 3D draws,
+  and `SpriteBatch` use the native FNA3D/MojoShader runtime. Other renderers currently report
+  `CompiledEffects == false`, so use FNA3D or keep a renderer-specific CNAEXT `ShaderEffect` path.
 
 ## What has caveats — read this before porting anything using these
 
@@ -310,7 +314,7 @@ knowledge.
 
 ```bash
 cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3      # or SDL_RENDERER / VULKAN / BGFX
-cmake --build build --target CNA CnaTests
+cmake --build build --target CnaTests
 ```
 
 `CNA_GRAPHICS_RENDERER` defaults to `OPENGLES3` on Linux/Emscripten, `SDL_RENDERER` elsewhere. See the

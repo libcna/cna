@@ -135,13 +135,13 @@ protected:
         // easygl_pbreffect_golden_test.cpp's own already-verified expected values -- the shared
         // oracle this file's own header comment describes.
         ExpectPixel("quadA-flat-normal-lit", Rectangle(sampleAx, sampleY, 1, 1),
-                    Color(64, 74, 87, 255), /*tolerance=*/20);
+                    Color(137, 146, 158, 255), /*tolerance=*/20);
         ExpectPixel("quadB-tilted-normal-darker", Rectangle(sampleBx, sampleY, 1, 1),
-                    Color(56, 65, 80, 255), /*tolerance=*/20);
+                    Color(129, 139, 152, 255), /*tolerance=*/20);
         ExpectPixel("quadC-metallic-red", Rectangle(sampleCx, sampleY, 1, 1),
-                    Color(45, 1, 1, 255), /*tolerance=*/20);
+                    Color(117, 13, 11, 255), /*tolerance=*/20);
         ExpectPixel("quadD-dielectric-red", Rectangle(sampleDx, sampleY, 1, 1),
-                    Color(63, 2, 2, 255), /*tolerance=*/25);
+                    Color(137, 23, 21, 255), /*tolerance=*/25);
 
         CompareGoldenImage("skinnedpbreffect-quadA", Rectangle(sampleAx - 4, sampleY - 4, 8, 8),
                             "examples/golden/easygl_pbreffect_golden_test_a.png", /*tolerance=*/35);

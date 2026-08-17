@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "release": {
+    "name": "CNA C ABI 0.1.0, experimental",
+    "note": "This gate governs publishing an **experimental** C ABI release. ABI 1.0 -- the point at which only additive changes are permitted within a major version -- is a separate decision that this gate does not make and must not be read as making."
+  },
+  "criteria": [
+    {
+      "id": "compatibility-matrix",
+      "title": "The compatibility matrix is real, current and honest",
+      "requirement": "Every public header compiles on its own, in every declared language mode of every installed toolchain, and the published matrix matches its declaration.",
+      "check": "compatibility_matrix_current",
+      "recorded": "met",
+      "evidence": "docs/c-api/COMPATIBILITY.md, gated by CApiCompatibilityMatrix and CApiHeaderCompatibility",
+      "note": "C99 is a verified floor rather than a claim: the matrix found and killed a duplicate typedef that made C99 impossible."
+    },
+    {
+      "id": "abi-baseline",
+      "title": "No unreviewed ABI break",
+      "requirement": "Every struct layout, field offset, scalar width, constant value and exported symbol is recorded, and a change to any of them arrives as a reviewable diff.",
+      "check": "abi_baseline_current",
+      "recorded": "met",
+      "evidence": "tools/c-api/abi_baseline.json, gated by CApiAbiHeaderBaseline and CApiAbiBaseline",
+      "note": "The header half needs no build and runs everywhere; the export half runs in each C API build tree."
+    },
+    {
+      "id": "coverage-closed",
+      "title": "No public C++ symbol is unaccounted for",
+      "requirement": "The generated inventory has no `planned` row, and every partially mapped row carries an owner-approved disposition: every public declaration is mapped, partially mapped with its subset named and its limitation approved, or recorded as having no C form with the reason.",
+      "check": "coverage_has_no_planned_rows",
+      "recorded": "met",
+      "evidence": "docs/c-api/COVERAGE.md, gated by CApiCoverageMatrix",
+      "note": "Closed by CBIND-044 on 2026-08-16, reopened the same day by the merge of `next`, and closed again by CBIND-047 and CBIND-049. The second merge of `next` reopened it on 2026-08-17, and CBIND-050 found the first closure had been partly an illusion: 73 mapping rules matched a whole header with `.*`, so 121 symbols the merge added inherited \"implemented and tested\" without a single C route existing for them. Rules are now pinned to the stable IDs they were reviewed against, which is why this reopened at 176 rather than 55. CBIND-051A through CBIND-051E bound every one of them -- the KHR material extensions on both PBR effects, the glTF import report and its diagnostics, the mesh-part and clip target-space families, the model's cameras, skins, bounds and material variants, and the animation-player additions -- with a single row recorded not applicable, a `CNA::Internal` entry point that reaches a public header. An unapproved partial row still fails this criterion, and so does a rule that grows past what it was approved for."
+    },
+    {
+      "id": "limitations-matrix",
+      "title": "A known-limitations matrix a reader can act on",
+      "requirement": "What the ABI does not do is published, grouped by reason, with no unclassified reason and no deferral owned by a finished task.",
+      "check": "limitations_current",
+      "recorded": "met",
+      "evidence": "docs/c-api/LIMITATIONS.md, gated by CApiLimitations",
+      "note": "This is the document a consumer reads to decide whether to adopt the ABI at all."
+    },
+    {
+      "id": "real-c-application",
+      "title": "A real C application, built the way a consumer builds one",
+      "requirement": "A complete C program exists, is built from outside the source tree against an installed CNA through find_package, and is run.",
+      "check": "installed_consumer_gate_exists",
+      "recorded": "met",
+      "evidence": "modules/c-api/examples/c/hello_cna.c, gated by CApi_InstalledConsumer",
+      "note": "A program that only builds inside this repository would prove nothing about the package."
+    },
+    {
+      "id": "installable",
+      "title": "The package is installable and findable",
+      "requirement": "`find_package(CNA CONFIG)` resolves from an installed prefix and yields one target, and the package version is the C ABI version.",
+      "check": "package_config_installed",
+      "recorded": "met",
+      "evidence": "modules/c-api/cmake/CNAConfig.cmake.in and the CNACApi install component",
+      "note": "Before CBIND-041 the module installed a targets file and no package config, so this criterion was silently false."
+    },
+    {
+      "id": "documentation",
+      "title": "The consumer documentation exists",
+      "requirement": "Consumption, handles, errors, strings and buffers, callbacks and threading, renderer capabilities, ABI versioning and fuzzing are each documented.",
+      "check": "required_documents_present",
+      "recorded": "met",
+      "evidence": "docs/c-api/",
+      "note": "CONSUMING.md is the entry point for somebody who has never read this repository."
+    },
+    {
+      "id": "safety-evidence",
+      "title": "The lifetime and byte-facing contracts are measured, not asserted",
+      "requirement": "Handle lifetime, teardown ordering and buffer boundaries are stressed under a sanitizer, and the surfaces that read caller-supplied bytes are covered against an independent oracle.",
+      "check": "safety_tests_present",
+      "recorded": "met",
+      "evidence": "CApi_StressSmoke and CApi_Utf8Oracle, plus tests/fuzz/StringViewFuzz.cpp",
+      "note": "The stress suite found a heap use-after-free on its first run; that is what this criterion is for."
+    },
+    {
+      "id": "packaging-dependencies",
+      "title": "The package carries the native libraries CNA builds",
+      "requirement": "An installed CNA links and runs with no environment variable: the SDL3 libraries this project builds are installed beside libcna_c_api.so, whose RPATH is $ORIGIN.",
+      "check": "native_dependencies_shipped",
+      "recorded": "met",
+      "evidence": "the CNACApi install component, proved by CApi_InstalledConsumer",
+      "note": "Ruled on by the project owner on 2026-08-16: the package ships them. FFmpeg stays a system dependency for reasons that are not convenience -- redistribution terms, soname freezing against security updates, and the transitive libraries a distribution build was linked against. CApi_InstalledConsumer now passes no -rpath-link and no LD_LIBRARY_PATH, so a regression here fails a test rather than surprising a consumer."
+    },
+    {
+      "id": "static-configuration",
+      "title": "A static configuration that keeps the same ABI promise",
+      "requirement": "A static archive exists, exports the same cna_* names as the shared library and no others, and a consumer links and runs against it from the installed package.",
+      "check": "static_configuration_available",
+      "recorded": "met",
+      "evidence": "tools/c-api/generate_static_archive.py and CNA::CApiStatic, proved by CApi_InstalledConsumer",
+      "note": "Ruled on by the project owner on 2026-08-16: build it. The objection that stopped it before was real -- an archive carries every object it swallowed -- so the archive is not simply ar'd together: the closure is partially linked into one relocatable object and every symbol that is not part of the ABI is localized, with the build failing outright if any non-cna_* symbol other than an unlocalizable STB_GNU_UNIQUE C++ static survives. The same hello_cna.c is built both ways from the installed package and both are run."
+    }
+  ],
+  "required_documents": [
+    "README.md",
+    "CONSUMING.md",
+    "LIMITATIONS.md",
+    "ABI_VERSIONING.md",
+    "HANDLES.md",
+    "ERRORS.md",
+    "STRINGS_AND_BUFFERS.md",
+    "CALLBACKS_AND_THREADING.md",
+    "RENDERERS_AND_CAPABILITIES.md",
+    "OWNERSHIP.md",
+    "COMPATIBILITY.md",
+    "COVERAGE.md",
+    "FUZZING.md"
+  ]
+}

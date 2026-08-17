@@ -31,6 +31,10 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         EffectTechnique(Effect* owner, std::string name);
 
+        /** @brief Internal reflected-technique constructor with an initially empty pass list. */
+        CNAEXT EffectTechnique(Effect* owner, std::string name, std::uint32_t techniqueIndex,
+                               bool addDefaultPass);
+
         /**
          * @brief Gets the name of this technique.
          *
@@ -82,6 +86,9 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT [[nodiscard]] std::uint64_t getIdInternal() const;
 
+        /** @brief Stable zero-based runtime technique index for a compiled effect. */
+        CNAEXT [[nodiscard]] std::uint32_t getIndexInternal() const;
+
     private:
         static std::uint64_t NextId();
 
@@ -89,5 +96,6 @@ namespace Microsoft::Xna::Framework::Graphics
         EffectPassCollection passes_;
         EffectAnnotationCollection annotations_;
         std::uint64_t id_ = NextId();
+        std::uint32_t techniqueIndex_ = 0;
     };
 }

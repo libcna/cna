@@ -8,7 +8,7 @@ in the binary at once:
   *.gl.vert.glsl / *.gl.frag.glsl  OpenGL flavour, embedded verbatim as GLSL source strings
 
 Both are emitted into a single generated header so a build needs no shader toolchain at all -- the
-same discipline as the Bgfx and SDL_GPU renderers' own checked-in generated headers.
+same discipline as the other runtime-selected renderers' checked-in generated headers.
 
 Requires glslangValidator (Debian/Ubuntu package: glslang-tools) on PATH, or --glslang <path>.
 
@@ -61,16 +61,21 @@ SHADERS = [
     ("Skinned3dColorVert", "skinned3d_color.vert.glsl", "skinned3d_color.gl.vert.glsl", "vert"),
     ("Skinned3dColorFrag", "skinned3d_color.frag.glsl", "skinned3d_color.gl.frag.glsl", "frag"),
     ("Pbr3dVert", "pbr3d.vert.glsl", "pbr3d.gl.vert.glsl", "vert"),
+    ("Pbr3dDualUvVert", "pbr3d.vert.glsl", "pbr3d.gl.vert.glsl", "vert",
+     "CNA_PBR_DUAL_UV"),
     ("Pbr3dFrag", "pbr3d.frag.glsl", "pbr3d.gl.frag.glsl", "frag"),
     ("Pbr3dSkinnedVert", "pbr3d_skinned.vert.glsl", "pbr3d_skinned.gl.vert.glsl", "vert"),
+    ("Pbr3dSkinnedDualUvVert", "pbr3d_skinned.vert.glsl", "pbr3d_skinned.gl.vert.glsl",
+     "vert", "CNA_PBR_DUAL_UV"),
 ]
 
 
-def compile_spirv(glslang: str, source: Path, stage: str) -> list:
+def compile_spirv(glslang: str, source: Path, stage: str, defines=()) -> list:
     with tempfile.TemporaryDirectory() as tmp:
         output = Path(tmp) / (source.name + ".spv")
         result = subprocess.run(
-            [glslang, "-V", "-S", stage, "-o", str(output), str(source)],
+            [glslang, "-V", "-S", stage, "-o", str(output),
+             *[f"-D{define}=1" for define in defines], str(source)],
             capture_output=True,
             text=True,
         )
@@ -103,6 +108,17 @@ def format_glsl(name: str, source: str) -> str:
     )
 
 
+def apply_glsl_defines(source: str, defines) -> str:
+    """Insert variant defines after #version, which GLSL requires to remain the first directive."""
+    if not defines:
+        return source
+    lines = source.splitlines()
+    version_index = next(index for index, line in enumerate(lines)
+                         if line.lstrip().startswith("#version"))
+    lines[version_index + 1:version_index + 1] = [f"#define {define} 1" for define in defines]
+    return "\n".join(lines) + ("\n" if source.endswith("\n") else "")
+
+
 def generate(glslang: str) -> str:
     chunks = [
         "// SPDX-License-Identifier: MS-PL",
@@ -115,11 +131,14 @@ def generate(glslang: str) -> str:
         "namespace CNA::Internal::Renderers::Llgl::Shaders",
         "{",
     ]
-    for name, spirv_source, glsl_source, stage in SHADERS:
-        words = compile_spirv(glslang, HERE / spirv_source, stage)
+    for shader in SHADERS:
+        name, spirv_source, glsl_source, stage = shader[:4]
+        defines = shader[4:]
+        words = compile_spirv(glslang, HERE / spirv_source, stage, defines)
         chunks.append(format_spirv(name, words))
         chunks.append("")
-        chunks.append(format_glsl(name, (HERE / glsl_source).read_text()))
+        chunks.append(format_glsl(
+            name, apply_glsl_defines((HERE / glsl_source).read_text(), defines)))
         chunks.append("")
     chunks.append("}")
     chunks.append("")

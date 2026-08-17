@@ -14,8 +14,8 @@
 //   real boundary, not a clamp).
 // Check E -- the renderer's own documented refusals still fire and still name their reason:
 //   instanced drawing, custom effects, an unknown vertex stride, an out-of-contract state ordinal.
-// Check F -- teardown with resources still alive does not crash: resources created and left to
-//   their destructors are released in the right order relative to the device.
+// Check F -- resources created and destroyed before the device leave it usable. The converse
+//   destruction order is covered by the separate Fna3d_Device_Lifetime test.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs, 77 = skipped (no display).
 
@@ -29,10 +29,12 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
@@ -126,15 +128,13 @@ private:
     {
         std::string message;
         {
-            // The contract this codebase actually establishes for a disposed texture is enforced
-            // at DRAW time (see skia_presentation_edge_test.cpp), not at transfer time: the shared
-            // Texture2D::SetData carries no isDisposed_ guard. That is a shared-layer gap, not an
-            // FNA3D one -- it is recorded in plan_fna3d.md rather than patched from this lane --
-            // so what is measured here is the boundary that IS contractual.
             Texture2D texture(device, 4, 4);
             texture.Dispose();
             Check(texture.getIsDisposedProperty(),
                   "a disposed texture reports itself disposed");
+            std::vector<Color> pixels(16, Color::White);
+            Check(Threw([&] { texture.SetData(pixels.data(), 16); }, message),
+                  "uploading to a disposed texture is refused");
             // Disposal must also have withdrawn it from the device's sampler collections, so a
             // later frame cannot bind freed storage.
             Check(device.getTexturesProperty()[0] != &texture,
@@ -197,6 +197,8 @@ private:
         // Custom effects: structural, because FNA3D compiles no shader source.
         Check(fna3d->CreateEffectRenderer(std::string(), std::string()) == nullptr,
               "CreateEffectRenderer returns null, matching CustomEffects=false");
+        Check(device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects),
+              "compiled Effect Framework bytecode is a separate supported capability");
 
         // A compressed cube is refused by name (FNA3D-19's boundary), and the message says why.
         const bool cubeRefused = Threw(
@@ -207,15 +209,40 @@ private:
         Check(message.find("block-compressed") != std::string::npos,
               "the compressed-cube refusal names the reason");
 
+        // OpenGL has no native FNA3D volume readback. Its fallback must never turn a partial
+        // upload into resize-created zeroes for voxels the caller never supplied. Drivers with a
+        // genuine native readback path are checked by their own probe instead.
+        if (!fna3d->SupportsTexture3DReadbackEXT())
+        {
+            Texture3D volume(device, 2, 2, 2, false, SurfaceFormat::Color);
+            const Color written(17, 34, 51, 255);
+            volume.SetData(0, 0, 0, 1, 1, 0, 1, &written, 0, 1);
+            std::vector<Color> wholeVolume(8, Color(222, 222, 222, 222));
+            const bool undefinedRefused = Threw(
+                [&] { volume.GetData(wholeVolume.data(), static_cast<int>(wholeVolume.size())); },
+                message);
+            Check(undefinedRefused,
+                  "a volume fallback refuses a read that includes never-uploaded voxels");
+            Check(undefinedRefused && wholeVolume[0].getRProperty() == 222 &&
+                      wholeVolume[7].getAProperty() == 222,
+                  "a refused partial volume read leaves the caller's destination unchanged");
+
+            Color recovered(0, 0, 0, 0);
+            const bool knownVoxelServed = !Threw(
+                [&] { volume.GetData(0, 0, 0, 1, 1, 0, 1, &recovered, 0, 1); }, message);
+            Check(knownVoxelServed && recovered.getRProperty() == 17 &&
+                      recovered.getGProperty() == 34 && recovered.getBProperty() == 51,
+                  "the defined volume voxel still reads back exactly");
+        }
+
         // An out-of-contract enum ordinal must be refused rather than cast into an undefined
         // FNA3D enumerator.
         const bool ordinalRefused = Threw(
             [&] { (void) fna3d->CreateTextureCube(8, false, 9999); }, message);
         Check(ordinalRefused, "an out-of-contract SurfaceFormat ordinal is refused");
 
-        // Instancing: reported false, and the draw route says so rather than stacking instances.
-        Check(!fna3d->SupportsCapability(CNA::GraphicsCapability::Instancing),
-              "Instancing is reported false");
+        // Stock effects still cannot consume an instance stream even on a driver with native
+        // instancing. Compiled custom effects opt into that path with their own input semantics.
     }
 
     // ---- Check F --------------------------------------------------------------------------

@@ -19,7 +19,7 @@ namespace CNA::Input
      */
     CNAEXT struct JoystickStateEXT
     {
-        /** @brief Raw axis values, in SDL's native range (-32768 to 32767), one per axis. */
+        /** @brief Raw signed axis values (-32768 to 32767), one per axis. */
         std::vector<std::int16_t> axes;
 
         /** @brief Button down/up state, one per button. */
@@ -28,7 +28,7 @@ namespace CNA::Input
         /** @brief POV hat positions, one per hat. */
         std::vector<JoystickHatPositionEXT> hats;
 
-        /** @brief Trackball relative motion since the last read, one per ball. */
+        /** @brief Trackball relative motion published by the latest platform update, one per ball. */
         std::vector<Microsoft::Xna::Framework::Point> balls;
     };
 

@@ -4,8 +4,6 @@
 
 #include "CNA/Logger.hpp"
 
-#include <SDL3/SDL.h>
-
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -262,21 +260,21 @@ namespace CNA::Internal::Renderers::Diligent
         /// `TryCreateDevice()` always requests `TEX_FORMAT_RGBA8_UNORM` (its own comment: "a
         /// non-sRGB back buffer keeps colours numerically identical to what a game wrote, matching
         /// every other CNA renderer"), but the default window framebuffer this project's Mesa/
-        /// llvmpipe test environment hands back for a plain `SDL_WINDOW_OPENGL` window is itself
+        /// llvmpipe test environment hands back for a plain OpenGL-capable window is itself
         /// sRGB-capable, so that unconditional enable silently gamma-encodes every write regardless
         /// -- every colour this renderer produced under the OpenGL device type read back visibly
         /// brighter than written (confirmed: readback values consistently matched an sRGB decode of
         /// the expected linear value, e.g. expected 204 decodes to 204/255 -> ^(1/2.2) -> *255 ~= 232,
         /// matching the observed 231 to within rounding, across every mismatching check in
         /// `Diligent_Pbr`/`Diligent_LightingFidelity`). Disabled explicitly right after OpenGL
-        /// device/context creation to restore the stated non-sRGB contract; resolved through SDL's
-        /// own `SDL_GL_GetProcAddress()` rather than adding a GL loader dependency to this renderer.
-        void DisableGLFramebufferSrgb()
+        /// device/context creation to restore the stated non-sRGB contract; resolved through the
+        /// platform context service rather than adding a GL loader dependency to this renderer.
+        void DisableGLFramebufferSrgb(CNA::Platform::IPlatformGlContext& service)
         {
             using PFNGLDISABLEPROC = void(CNA_DILIGENT_GLAPI*)(unsigned int);
             constexpr unsigned int kGlFramebufferSrgb = 0x8DB9;
-            auto* glDisableFn =
-                reinterpret_cast<PFNGLDISABLEPROC>(SDL_GL_GetProcAddress("glDisable"));
+            auto* glDisableFn = reinterpret_cast<PFNGLDISABLEPROC>(
+                service.GetProcAddress("glDisable"));
             if (glDisableFn != nullptr)
                 glDisableFn(kGlFramebufferSrgb);
         }
@@ -1447,18 +1445,16 @@ namespace CNA::Internal::Renderers::Diligent
     // ---- DiligentRenderer ----
 
     DiligentRenderer::DiligentRenderer(const GraphicsRendererCreateArgs& args)
-        : window_(args.window)
+        : surface_(args.surface, "CNA Diligent")
+        , platformGlContextService_(args.glContext)
         , virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
         , swapInterval_(args.swapInterval)
         , presentationMode_(args.presentationMode)
     {
-        if (window_ == nullptr)
-            throw std::runtime_error("CNA Diligent: a live SDL window is required");
-
-        SDL_GetWindowSizeInPixels(window_, &physicalWidth_, &physicalHeight_);
-        if (physicalWidth_ <= 0 || physicalHeight_ <= 0)
-            SDL_GetWindowSize(window_, &physicalWidth_, &physicalHeight_);
+        const CNA::Platform::WindowSize drawableSize = surface_.GetDrawableSize();
+        physicalWidth_ = drawableSize.width;
+        physicalHeight_ = drawableSize.height;
 
         CreateDeviceAndSwapChain(args);
         CreateConstantBuffer();
@@ -1486,15 +1482,14 @@ namespace CNA::Internal::Renderers::Diligent
         state_.stencilMasks = PackBytes(0xFF, 0xFF, 0, 0);
         state_.raster = PackBytes(0, 0, 0, 0);
 
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(surface_.GetWindowId(), this);
         CNA::Logger::Info(std::string("CNA Diligent: device type ") + GetDeviceTypeName(deviceType_),
                           CNA::LogCategory::GPU);
     }
 
     DiligentRenderer::~DiligentRenderer()
     {
-        if (window_ != nullptr)
-            IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(surface_.GetWindowId());
         if (context_)
         {
             context_->Flush();
@@ -1518,12 +1513,7 @@ namespace CNA::Internal::Renderers::Diligent
         context_.Release();
         device_.Release();
         engineFactory_.Release();
-        if (glContext_ != nullptr)
-        {
-            SDL_GL_MakeCurrent(window_, nullptr);
-            SDL_GL_DestroyContext(reinterpret_cast<SDL_GLContext>(glContext_));
-            glContext_ = nullptr;
-        }
+        glContext_.reset();
     }
 
     void DiligentRenderer::CreateDeviceAndSwapChain(const GraphicsRendererCreateArgs& args)
@@ -1559,15 +1549,9 @@ namespace CNA::Internal::Renderers::Diligent
             context_.Release();
             swapChain_.Release();
             engineFactory_.Release();
-            // A failed OpenGL attempt may have gotten as far as creating (and making current) a
-            // real SDL GL context before CreateDeviceAndSwapChainGL() itself threw -- release it
-            // too, or it leaks and stays wrongly current for whatever candidate tries next.
-            if (glContext_ != nullptr)
-            {
-                SDL_GL_MakeCurrent(window_, nullptr);
-                SDL_GL_DestroyContext(reinterpret_cast<SDL_GLContext>(glContext_));
-                glContext_ = nullptr;
-            }
+            // A failed OpenGL attempt may have created a current platform context before
+            // CreateDeviceAndSwapChainGL() threw. Return it before trying the next candidate.
+            glContext_.reset();
         }
 
         throw std::runtime_error("CNA Diligent: no device type could be created -- tried " + failures);
@@ -1592,28 +1576,20 @@ namespace CNA::Internal::Renderers::Diligent
 
         Dg::NativeWindow nativeWindow{};
 #if defined(__linux__)
-        SDL_PropertiesID properties = SDL_GetWindowProperties(window_);
-        const char* driver = SDL_GetCurrentVideoDriver();
-        if (driver != nullptr && std::strcmp(driver, "x11") == 0)
-        {
-            nativeWindow.pDisplay = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
-            nativeWindow.WindowId = static_cast<Dg::Uint32>(
-                SDL_GetNumberProperty(properties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
-            if (nativeWindow.pDisplay == nullptr || nativeWindow.WindowId == 0)
-                throw std::runtime_error("SDL did not expose X11 display/window properties");
-        }
-        else
-        {
-            // Diligent's Linux native window is X11/XCB only; a Wayland session has to go through
-            // SDL's own X11 fallback (SDL_VIDEODRIVER=x11).
-            throw std::runtime_error(std::string("unsupported SDL video driver for Diligent: ") +
-                                     (driver != nullptr ? driver : "unknown"));
-        }
+        CNA::Platform::X11NativeWindow x11;
+        if (!CNA::Platform::TryGetX11(surface_.GetNativeHandle(), x11))
+            throw std::runtime_error(
+                "CNA Diligent: Linux requires an X11 native window, got " +
+                CNA::Platform::Describe(surface_.GetNativeHandle()));
+        nativeWindow.pDisplay = x11.display;
+        nativeWindow.WindowId = static_cast<Dg::Uint32>(x11.window);
 #elif defined(_WIN32)
-        SDL_PropertiesID properties = SDL_GetWindowProperties(window_);
-        nativeWindow.hWnd = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
-        if (nativeWindow.hWnd == nullptr)
-            throw std::runtime_error("SDL did not expose a Win32 HWND");
+        CNA::Platform::Win32NativeWindow win32;
+        if (!CNA::Platform::TryGetWin32(surface_.GetNativeHandle(), win32))
+            throw std::runtime_error(
+                "CNA Diligent: Windows requires a Win32 native window, got " +
+                CNA::Platform::Describe(surface_.GetNativeHandle()));
+        nativeWindow.hWnd = win32.hwnd;
 #else
         throw std::runtime_error("native window handling is not implemented on this platform");
 #endif
@@ -1639,19 +1615,12 @@ namespace CNA::Internal::Renderers::Diligent
             {
                 // Unlike Vulkan/D3D, Diligent's own GLContext (GLContextLinux.cpp) does not create a
                 // GL context itself -- it asserts one is already current on this thread
-                // (glXGetCurrentContext()) and attaches to it. SDL owns creating and making it
-                // current; this has to happen before CreateDeviceAndSwapChainGL() even attempts
-                // anything.
-                SDL_GLContext sdlGlContext = SDL_GL_CreateContext(window_);
-                if (sdlGlContext == nullptr)
-                    throw std::runtime_error(std::string("SDL_GL_CreateContext failed: ") + SDL_GetError());
-                if (!SDL_GL_MakeCurrent(window_, sdlGlContext))
-                {
-                    const std::string message = std::string("SDL_GL_MakeCurrent failed: ") + SDL_GetError();
-                    SDL_GL_DestroyContext(sdlGlContext);
-                    throw std::runtime_error(message);
-                }
-                glContext_ = reinterpret_cast<SDL_GLContextState*>(sdlGlContext);
+                // (glXGetCurrentContext()) and attaches to it. The narrow platform service owns
+                // creating and binding that context before Diligent attempts device creation.
+                CNA::Platform::GlContextDescription description;
+                glContext_ = std::make_unique<PlatformGlContextOwner>(
+                    RequirePlatformGlContext(platformGlContextService_, "CNA Diligent"),
+                    surface_.GetWindowId(), description);
 
                 auto* factory = Dg::GetEngineFactoryOpenGL();
                 Dg::EngineGLCreateInfo createInfo;
@@ -1664,7 +1633,7 @@ namespace CNA::Internal::Renderers::Diligent
                                                     &swapChain_);
                 engineFactory_ = Dg::RefCntAutoPtr<Dg::IEngineFactory>(factory);
                 if (device_ && context_)
-                    DisableGLFramebufferSrgb();
+                    DisableGLFramebufferSrgb(*platformGlContextService_);
                 break;
             }
 #endif
@@ -1731,7 +1700,8 @@ namespace CNA::Internal::Renderers::Diligent
 
         Dg::BufferDesc pbrDesc;
         pbrDesc.Name = "CNA PBR constants";
-        pbrDesc.Size = 2 * sizeof(float) * 4; // g_PbrAmbientMetallic, g_PbrEmissiveRoughness
+        // Five material/state rows followed by ten core and four extension-map affine rows.
+        pbrDesc.Size = 76 * sizeof(float);
         pbrDesc.BindFlags = Dg::BIND_UNIFORM_BUFFER;
         pbrDesc.Usage = Dg::USAGE_DYNAMIC;
         pbrDesc.CPUAccessFlags = Dg::CPU_ACCESS_WRITE;
@@ -1752,12 +1722,23 @@ namespace CNA::Internal::Renderers::Diligent
 
     void DiligentRenderer::UploadPbrConstants(const GpuDrawParams& params)
     {
-        const float values[8] = {
+        float values[76] = {
             params.ambientColor[0], params.ambientColor[1], params.ambientColor[2],
             params.pbrMetallicFactor,
             params.emissiveColor[0], params.emissiveColor[1], params.emissiveColor[2],
             params.pbrRoughnessFactor,
+            params.pbrNormalScale, params.pbrOcclusionStrength,
+            params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+            params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
+            params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
+            params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor,
+            params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f,
+            static_cast<float>(params.pbrTextureCoordinateSetMask & 0x7fu), 0.0f, 0.0f,
         };
+        std::memcpy(values + 20, params.pbrTextureTransformRows,
+                    sizeof(params.pbrTextureTransformRows));
+        std::memcpy(values + 60, params.pbrSpecularTextureTransformRows,
+                    sizeof(params.pbrSpecularTextureTransformRows));
         void* mapped = nullptr;
         context_->MapBuffer(pbrBuffer_, Dg::MAP_WRITE, Dg::MAP_FLAG_DISCARD, mapped);
         if (mapped == nullptr)
@@ -1939,9 +1920,9 @@ namespace CNA::Internal::Renderers::Diligent
 
     void DiligentRenderer::SyncSwapChainSize()
     {
-        int width = 0;
-        int height = 0;
-        SDL_GetWindowSizeInPixels(window_, &width, &height);
+        const CNA::Platform::WindowSize drawableSize = surface_.GetDrawableSize();
+        const int width = drawableSize.width;
+        const int height = drawableSize.height;
         if (width <= 0 || height <= 0)
             return;
         if (width == physicalWidth_ && height == physicalHeight_)
@@ -2227,6 +2208,12 @@ namespace CNA::Internal::Renderers::Diligent
         height = static_cast<int>(std::lround(viewport.logicalHeight));
     }
 
+    void DiligentRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        surface_.Update(surface);
+        SyncSwapChainSize();
+    }
+
     void DiligentRenderer::SetVirtualResolution(int width, int height)
     {
         virtualWidth_ = width;
@@ -2254,9 +2241,12 @@ namespace CNA::Internal::Renderers::Diligent
         const LogicalViewport viewport = ComputeLogicalViewport();
         if (viewport.width <= 0.0f || viewport.height <= 0.0f)
             return false;
-        logX = (windowX - viewport.x) * viewport.logicalWidth / viewport.width;
-        logY = (windowY - viewport.y) * viewport.logicalHeight / viewport.height;
-        return true;
+        const float drawableX = surface_.WindowToDrawable(windowX);
+        const float drawableY = surface_.WindowToDrawable(windowY);
+        logX = (drawableX - viewport.x) * viewport.logicalWidth / viewport.width;
+        logY = (drawableY - viewport.y) * viewport.logicalHeight / viewport.height;
+        return drawableX >= viewport.x && drawableX < viewport.x + viewport.width
+            && drawableY >= viewport.y && drawableY < viewport.y + viewport.height;
     }
 
     bool DiligentRenderer::TransformLogicalToWindow(float logX, float logY,
@@ -2265,8 +2255,10 @@ namespace CNA::Internal::Renderers::Diligent
         const LogicalViewport viewport = ComputeLogicalViewport();
         if (viewport.logicalWidth <= 0.0f || viewport.logicalHeight <= 0.0f)
             return false;
-        windowX = viewport.x + logX * viewport.width / viewport.logicalWidth;
-        windowY = viewport.y + logY * viewport.height / viewport.logicalHeight;
+        windowX = surface_.DrawableToWindow(
+            viewport.x + logX * viewport.width / viewport.logicalWidth);
+        windowY = surface_.DrawableToWindow(
+            viewport.y + logY * viewport.height / viewport.logicalHeight);
         return true;
     }
 
@@ -2901,6 +2893,7 @@ namespace CNA::Internal::Renderers::Diligent
         bool usesEnvironmentMap = false;
         bool usesBones = false;
         bool usesPbr = false;
+        bool usesDualPbrUv = false;
 
         switch (key.variant)
         {
@@ -3071,6 +3064,23 @@ namespace CNA::Internal::Renderers::Diligent
                 usesTexture = true;
                 usesPbr = true;
                 break;
+            case ShaderVariant::PbrDualUv3D:
+                vertexSource = kPbrVertexHlsl;
+                pixelSource = kPbrPixelHlsl;
+                layout = {
+                    // The public stride is 60 rather than the tightly packed 56 because the
+                    // importer appends four bytes of tail padding after UV1. State it explicitly:
+                    // Diligent's automatic stride is the end of the last attribute.
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False, 0, 60},  // Position
+                    Dg::LayoutElement{1, 0, 3, Dg::VT_FLOAT32, Dg::False, 12, 60}, // Normal
+                    Dg::LayoutElement{2, 0, 4, Dg::VT_FLOAT32, Dg::False, 24, 60}, // Tangent
+                    Dg::LayoutElement{3, 0, 2, Dg::VT_FLOAT32, Dg::False, 40, 60}, // UV0
+                    Dg::LayoutElement{4, 0, 2, Dg::VT_FLOAT32, Dg::False, 48, 60}, // UV1
+                };
+                usesTexture = true;
+                usesPbr = true;
+                usesDualPbrUv = true;
+                break;
             case ShaderVariant::SkinnedPbr3D:
                 vertexSource = kSkinnedPbrVertexHlsl;
                 pixelSource = kPbrPixelHlsl;
@@ -3088,34 +3098,100 @@ namespace CNA::Internal::Renderers::Diligent
                 usesPbr = true;
                 usesBones = true;
                 break;
+            case ShaderVariant::SkinnedPbrDualUv3D:
+                vertexSource = kSkinnedPbrVertexHlsl;
+                pixelSource = kPbrPixelHlsl;
+                layout = {
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False, 0, 76},  // Position
+                    Dg::LayoutElement{1, 0, 3, Dg::VT_FLOAT32, Dg::False, 12, 76}, // Normal
+                    Dg::LayoutElement{2, 0, 4, Dg::VT_FLOAT32, Dg::False, 24, 76}, // Tangent
+                    Dg::LayoutElement{3, 0, 2, Dg::VT_FLOAT32, Dg::False, 40, 76}, // UV0
+                    Dg::LayoutElement{4, 0, 4, Dg::VT_FLOAT32, Dg::False, 48, 76}, // BlendWeights
+                    Dg::LayoutElement{5, 0, 4, Dg::VT_UINT8, Dg::False, 64, 76},   // BlendIndices
+                    Dg::LayoutElement{6, 0, 2, Dg::VT_FLOAT32, Dg::False, 68, 76}, // UV1
+                };
+                usesTexture = true;
+                usesPbr = true;
+                usesBones = true;
+                usesDualPbrUv = true;
+                break;
         }
 
-        const std::string vertexHlsl = std::string(kConstantsHlsl) + kVertexLightingHlsl +
-            (usesBones ? kBonesHlsl : "") + vertexSource;
-        const std::string pixelHlsl = std::string(kConstantsHlsl) + kPixelHelpersHlsl + pixelSource;
+        std::string vertexHlsl = std::string(kConstantsHlsl) +
+            kVertexLightingHlsl + (usesBones ? kBonesHlsl : "") + vertexSource;
+        std::string pixelHlsl = std::string(kConstantsHlsl) +
+            kPixelHelpersHlsl + pixelSource;
+        if (usesPbr)
+        {
+            // Diligent's HLSL-to-GLSL converter analyses tokens inside inactive #if branches.
+            // Expand the tiny UV-layout template here so both converters receive one clean HLSL
+            // program containing exactly the attributes that its native input layout supplies.
+            const auto ReplaceAll = [](std::string& source, const char* marker,
+                                       const char* replacement) {
+                const std::size_t markerLength = std::strlen(marker);
+                const std::size_t replacementLength = std::strlen(replacement);
+                for (std::size_t at = source.find(marker); at != std::string::npos;
+                     at = source.find(marker, at + replacementLength))
+                    source.replace(at, markerLength, replacement);
+            };
+            const char* rigidAttribute = usesDualPbrUv ? "float2 UV1 : ATTRIB4;" : "";
+            const char* skinnedAttribute = usesDualPbrUv ? "float2 UV1 : ATTRIB6;" : "";
+            const char* interpolant = usesDualPbrUv ? "float2 UV1 : TEX_COORD1;" : "";
+            const char* assignment = usesDualPbrUv ? "psIn.UV1 = vsIn.UV1;" : "";
+            const char* selector = usesDualPbrUv
+                ? "int selectorMask = int(g_PbrSpecularState.y + 0.5);\n"
+                  "    return (selectorMask & (1 << slot)) != 0 ? value.UV1 : value.UV;"
+                : "return value.UV;";
+            for (std::string* source : {&vertexHlsl, &pixelHlsl})
+            {
+                ReplaceAll(*source, "/* CNA_PBR_UV1_RIGID_ATTRIBUTE */", rigidAttribute);
+                ReplaceAll(*source, "/* CNA_PBR_UV1_SKINNED_ATTRIBUTE */", skinnedAttribute);
+                ReplaceAll(*source, "/* CNA_PBR_UV1_INTERPOLANT */", interpolant);
+                ReplaceAll(*source, "/* CNA_PBR_UV1_ASSIGNMENT */", assignment);
+                ReplaceAll(*source, "/* CNA_PBR_UV_SELECTOR */", selector);
+                if (source->find("/* CNA_PBR_UV") != std::string::npos)
+                    throw std::runtime_error("CNA Diligent: unexpanded PBR UV shader marker");
+            }
+        }
 
         Dg::ShaderCreateInfo shaderCI;
         shaderCI.SourceLanguage = Dg::SHADER_SOURCE_LANGUAGE_HLSL;
         shaderCI.Desc.UseCombinedTextureSamplers = true;
         shaderCI.EntryPoint = "main";
 
+        const auto ShaderFailure = [](const char* stage, const Dg::IDataBlob* output) {
+            std::string message = "CNA Diligent: ";
+            message += stage;
+            message += " shader compilation failed";
+            if (output != nullptr && output->GetConstDataPtr() != nullptr && output->GetSize() > 0)
+            {
+                const auto* begin = static_cast<const char*>(output->GetConstDataPtr());
+                const auto* end = std::find(begin, begin + output->GetSize(), '\0');
+                message += ": ";
+                message.append(begin, end);
+            }
+            return message;
+        };
+
         Dg::RefCntAutoPtr<Dg::IShader> vertexShader;
+        Dg::RefCntAutoPtr<Dg::IDataBlob> compilerOutput;
         shaderCI.Desc.ShaderType = Dg::SHADER_TYPE_VERTEX;
         shaderCI.Desc.Name = "CNA vertex shader";
         shaderCI.Source = vertexHlsl.c_str();
         shaderCI.SourceLength = vertexHlsl.size();
-        device_->CreateShader(shaderCI, &vertexShader, nullptr);
+        device_->CreateShader(shaderCI, &vertexShader, &compilerOutput);
         if (!vertexShader)
-            throw std::runtime_error("CNA Diligent: vertex shader compilation failed");
+            throw std::runtime_error(ShaderFailure("vertex", compilerOutput));
 
         Dg::RefCntAutoPtr<Dg::IShader> pixelShader;
+        compilerOutput.Release();
         shaderCI.Desc.ShaderType = Dg::SHADER_TYPE_PIXEL;
         shaderCI.Desc.Name = "CNA pixel shader";
         shaderCI.Source = pixelHlsl.c_str();
         shaderCI.SourceLength = pixelHlsl.size();
-        device_->CreateShader(shaderCI, &pixelShader, nullptr);
+        device_->CreateShader(shaderCI, &pixelShader, &compilerOutput);
         if (!pixelShader)
-            throw std::runtime_error("CNA Diligent: pixel shader compilation failed");
+            throw std::runtime_error(ShaderFailure("pixel", compilerOutput));
 
         Dg::GraphicsPipelineStateCreateInfo psoCI;
         psoCI.PSODesc.Name = "CNA pipeline";
@@ -3194,7 +3270,7 @@ namespace CNA::Internal::Renderers::Diligent
         psoCI.pVS = vertexShader;
         psoCI.pPS = pixelShader;
 
-        Dg::ShaderResourceVariableDesc variables[7];
+        Dg::ShaderResourceVariableDesc variables[9];
         Dg::Uint32 variableCount = 0;
         if (usesTexture)
         {
@@ -3217,7 +3293,8 @@ namespace CNA::Internal::Renderers::Diligent
         if (usesPbr)
         {
             for (const char* name :
-                 {"g_NormalMap", "g_MetallicRoughnessMap", "g_EmissiveMap", "g_OcclusionMap"})
+                 {"g_NormalMap", "g_MetallicRoughnessMap", "g_EmissiveMap", "g_OcclusionMap",
+                  "g_SpecularMap", "g_SpecularColorMap"})
             {
                 variables[variableCount++] = Dg::ShaderResourceVariableDesc{
                     Dg::SHADER_TYPE_PIXEL, name, Dg::SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC};
@@ -3261,6 +3338,10 @@ namespace CNA::Internal::Renderers::Diligent
                 cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_EmissiveMap");
             cached.occlusionMapVariable =
                 cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_OcclusionMap");
+            cached.specularMapVariable =
+                cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_SpecularMap");
+            cached.specularColorMapVariable =
+                cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_SpecularColorMap");
         }
 
         return pipelines_.emplace(key, std::move(cached)).first->second;
@@ -3506,7 +3587,7 @@ namespace CNA::Internal::Renderers::Diligent
     namespace
     {
         // REMED-GFX-DECL-GUARD: this renderer selects its native input layout from the buffer's
-        // byte stride (DrawInternal's own `switch (stride)`), exactly like Vulkan/SDL_GPU/D3D11,
+        // byte stride (DrawInternal's own `switch (stride)`), exactly like the other native APIs,
         // so the shared stride-inferring rule is the right one to reuse rather than re-derive.
         //
         // The rule is asymmetric on purpose: only the bytes the caller actually declared are
@@ -3699,7 +3780,9 @@ namespace CNA::Internal::Renderers::Diligent
                     : ShaderVariant::Skinned3D;
                 break;
             case 48: variant = ShaderVariant::Pbr3D; break;
+            case 60: variant = ShaderVariant::PbrDualUv3D; break;
             case 68: variant = ShaderVariant::SkinnedPbr3D; break;
+            case 76: variant = ShaderVariant::SkinnedPbrDualUv3D; break;
             default:
                 throw std::runtime_error("CNA Diligent: unsupported vertex stride " +
                                          std::to_string(stride));
@@ -3714,13 +3797,13 @@ namespace CNA::Internal::Renderers::Diligent
             throw std::runtime_error(
                 "CNA Diligent: EnvironmentMapEffect needs a position/normal/UV vertex layout "
                 "(stride 32)");
-        if (params != nullptr && params->pbr && !params->skinned && stride != 48)
+        if (params != nullptr && params->pbr && !params->skinned && stride != 48 && stride != 60)
             throw std::runtime_error(
                 "CNA Diligent: PbrEffect needs a position/normal/tangent/UV vertex layout "
-                "(stride 48)");
-        if (params != nullptr && params->pbr && params->skinned && stride != 68)
+                "(stride 48 or 60)");
+        if (params != nullptr && params->pbr && params->skinned && stride != 68 && stride != 76)
             throw std::runtime_error(
-                "CNA Diligent: SkinnedPbrEffect needs a skinned PBR vertex layout (stride 68)");
+                "CNA Diligent: SkinnedPbrEffect needs a skinned PBR vertex layout (stride 68 or 76)");
 
         SyncSwapChainSize();
         EnsureRenderTargetsBound();
@@ -3780,6 +3863,7 @@ namespace CNA::Internal::Renderers::Diligent
             }
             for (int component = 0; component < 3; ++component)
                 constants.fogColor[component] = params->fogColor[component];
+            constants.fogColor[3] = params->pbrEncodeOutputToSrgb ? 1.0f : 0.0f;
             constants.flags[0] = params->textureEnabled && texture != nullptr ? 1.0f : 0.0f;
             constants.flags[1] = params->vertexColorEnabled ? 1.0f : 0.0f;
             constants.flags[2] = params->lightingEnabled ? 1.0f : 0.0f;
@@ -3790,11 +3874,15 @@ namespace CNA::Internal::Renderers::Diligent
             constants.flags[1] = 1.0f;
         }
         UploadConstants(constants);
-        if ((variant == ShaderVariant::Skinned3D || variant == ShaderVariant::SkinnedVertexLit3D ||
-            variant == ShaderVariant::SkinnedPbr3D) &&
+        if ((variant == ShaderVariant::Skinned3D ||
+             variant == ShaderVariant::SkinnedVertexLit3D ||
+             variant == ShaderVariant::SkinnedPbr3D ||
+             variant == ShaderVariant::SkinnedPbrDualUv3D) &&
             params != nullptr)
             UploadBoneTransforms(*params);
-        if ((variant == ShaderVariant::Pbr3D || variant == ShaderVariant::SkinnedPbr3D) &&
+        if ((variant == ShaderVariant::Pbr3D || variant == ShaderVariant::PbrDualUv3D ||
+             variant == ShaderVariant::SkinnedPbr3D ||
+             variant == ShaderVariant::SkinnedPbrDualUv3D) &&
             params != nullptr)
             UploadPbrConstants(*params);
 
@@ -3853,9 +3941,9 @@ namespace CNA::Internal::Renderers::Diligent
         {
             // PbrEffect's optional maps: an unbound one is ordinary XNA (glTF materials frequently
             // omit some), not an error -- BindPbrMap()'s own fallback view is each map's "absent"
-            // identity (flat tangent-space normal, or white for the other three -- see
-            // flatNormalTextureView_/fallbackTextureView_'s own doc comments). Slots 1-4 match
-            // pbr3d.frag.hlsl's own t1..t4 convention (base colour is slot 0, bound above).
+            // identity (flat tangent-space normal, or white for the other five -- see
+            // flatNormalTextureView_/fallbackTextureView_'s own doc comments). Slots 1-6 match
+            // the six named PBR maps (base colour is slot 0, bound above).
             const auto BindPbrMap = [this](Dg::IShaderResourceVariable* variable,
                                            const ITextureRenderer* texture,
                                            Dg::ITextureView* fallback, int slotIndex) {
@@ -3878,6 +3966,11 @@ namespace CNA::Internal::Renderers::Diligent
                       params != nullptr ? params->pbrEmissiveMap : nullptr, fallbackTextureView_, 3);
             BindPbrMap(pipeline.occlusionMapVariable,
                       params != nullptr ? params->pbrOcclusionMap : nullptr, fallbackTextureView_, 4);
+            BindPbrMap(pipeline.specularMapVariable,
+                      params != nullptr ? params->pbrSpecularMap : nullptr, fallbackTextureView_, 5);
+            BindPbrMap(pipeline.specularColorMapVariable,
+                      params != nullptr ? params->pbrSpecularColorMap : nullptr,
+                      fallbackTextureView_, 6);
         }
 
         context_->SetPipelineState(pipeline.pipeline);
@@ -3927,7 +4020,12 @@ namespace CNA::Internal::Renderers::Diligent
 
 namespace CNA::Internal::Renderers
 {
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace Diligent { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> Diligent::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<Diligent::DiligentRenderer>(args);
     }

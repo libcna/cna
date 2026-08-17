@@ -1,7 +1,8 @@
 // Shader Model 5.0 (vs_5_0). Physically-based (metallic-roughness) unskinned pipeline -- HLSL
 // port of EasyGLRenderer::EnsurePbrProgram()'s vertex stage (plan_cnj.md CNB-58, PbrEffect).
 // Stride 48: VertexPositionNormalTangentTexture (float3 pos + float3 normal + float4 tangent
-// [xyz + bitangent handedness sign in w, glTF convention] + float2 uv).
+// [xyz + bitangent handedness sign in w, glTF convention] + float2 uv). CNA_PBR_DUAL_UV adds
+// the canonical stride-60 TEXCOORD_1 suffix.
 
 cbuffer PerDraw : register(b0)
 {
@@ -31,6 +32,9 @@ struct VSInput
     float3 Normal   : NORMAL0;
     float4 Tangent  : TANGENT0;
     float2 UV       : TEXCOORD0;
+#ifdef CNA_PBR_DUAL_UV
+    float2 UV1      : TEXCOORD1;
+#endif
 };
 
 struct VSOutput
@@ -41,6 +45,9 @@ struct VSOutput
     float2 UV        : TEXCOORD2;
     float  FogFactor : TEXCOORD3;
     float3 WorldPos  : TEXCOORD4;
+#ifdef CNA_PBR_DUAL_UV
+    float2 UV1       : TEXCOORD5;
+#endif
 };
 
 // Returns transpose(inverse(m)) directly (the cofactor matrix over the determinant) -- reuses the
@@ -53,6 +60,11 @@ float3x3 InverseTranspose3x3(float3x3 m)
     float3 c2 = cross(m[0], m[1]);
     float det = dot(m[0], c0);
     return float3x3(c0, c1, c2) / det;
+}
+
+float CnaDirectionHandedness(float3x3 m)
+{
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
 }
 
 VSOutput main(VSInput input)
@@ -68,9 +80,14 @@ VSOutput main(VSInput input)
     // normal above) -- correct for uniform-scale World transforms, matching PbrEffect's EasyGL
     // reference (EnsurePbrProgram) exactly; a documented simplification shared with most real-time
     // engines lacking a full per-tangent inverse-transpose.
-    output.Tangent = float4(mul(input.Tangent.xyz, (float3x3)World), input.Tangent.w);
+    float3x3 worldDirectionMat = (float3x3)World;
+    output.Tangent = float4(mul(input.Tangent.xyz, worldDirectionMat),
+                            input.Tangent.w * CnaDirectionHandedness(worldDirectionMat));
 
     output.UV = input.UV;
+#ifdef CNA_PBR_DUAL_UV
+    output.UV1 = input.UV1;
+#endif
     output.WorldPos = mul(float4(input.Position, 1.0), World).xyz;
 
     // Matches this renderer's own established fog-factor formula (lit_textured3d.vert.hlsl/

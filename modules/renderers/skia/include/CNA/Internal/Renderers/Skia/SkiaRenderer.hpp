@@ -11,7 +11,6 @@
 #include "CNA/Internal/Renderers/Skia/SkiaStartupDiagnostic.hpp"
 #include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
 
-#include <SDL3/SDL.h>
 #include "include/core/SkBlender.h"
 #include "include/core/SkBlendMode.h"
 
@@ -30,7 +29,7 @@ namespace CNA::Internal::Renderers::Skia
     };
 
     /**
-     * First functional SKIA renderer slice: an SDL-presented Skia raster backbuffer.
+     * First functional SKIA renderer slice: a platform-presented Skia raster backbuffer.
      *
      * This deliberately contains no EasyGL calls or GL context. Unsupported resource/draw paths
      * throw clearly until their own Skia implementation tasks land; see plan_skia.md.
@@ -38,16 +37,16 @@ namespace CNA::Internal::Renderers::Skia
     class SkiaRenderer final : public IGraphicsRenderer
     {
     public:
-        SkiaRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                            CnaPresentationMode presentationMode, int swapInterval,
-                            std::function<void(RendererDeviceEvent)> deviceEventCallback = {},
-                            SkiaInitializationFailurePointEXT failurePoint =
-                                SkiaInitializationFailurePointEXT::None);
+        explicit SkiaRenderer(
+            const GraphicsRendererCreateArgs& args,
+            SkiaInitializationFailurePointEXT failurePoint =
+                SkiaInitializationFailurePointEXT::None);
         ~SkiaRenderer() override;
 
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
@@ -58,8 +57,6 @@ namespace CNA::Internal::Renderers::Skia
         bool TransformLogicalToWindow(float logX, float logY,
                                       float& windowX, float& windowY) const override;
 
-        SDL_Window* GetWindowInternal() const override { return window_; }
-        SDL_Renderer* GetRendererInternal() const override { return renderer_; }
         /// Returns bounded live-resource counters for raster-renderer diagnostics and debug tests.
         CNAEXT [[nodiscard]] SkiaResourceStats GetResourceStatsEXT() const noexcept
         {
@@ -70,9 +67,9 @@ namespace CNA::Internal::Renderers::Skia
         {
             return kSkiaStartupDiagnostic;
         }
-        /// Actual SDL presenter interval after any supported-driver clamp (2 may become 1).
+        /// Actual presenter interval after the boolean-vsync service clamp (2 becomes 1).
         CNAEXT [[nodiscard]] int GetSwapIntervalEXT() const noexcept { return swapInterval_; }
-        /// Deterministic minimized/zero-output seam; does not alter the real SDL window.
+        /// Deterministic minimized/zero-output seam; does not alter the real platform window.
         CNAEXT void DebugSetPresentationOutputSizeEXT(int width, int height);
         CNAEXT void DebugClearPresentationOutputSizeEXT();
 
@@ -113,6 +110,43 @@ namespace CNA::Internal::Renderers::Skia
 
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+
+        // plan_runtimerenderer.md design decision 9: Skia stores each promoted format in its own
+        // native layout, so unlike every other renderer it has real answers about which formats a
+        // texture may use and which of them a Color* transfer can meaningfully read. These used to
+        // live as #ifdef CNA_RENDERER_SKIA blocks inside Texture2D.cpp and RenderTarget2D.cpp.
+
+        /**
+         * @brief Whether a Texture2D may be created with the given surface format.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Supported when Skia stores that format natively, Unsupported otherwise.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+
+        /**
+         * @brief Whether a Color* transfer reads that format's real bits.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Supported only for the genuinely 32-bit RGBA-shaped formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyColorTransferFormatEXT(int surfaceFormat) const override;
+
+        /**
+         * @brief Whether a RenderTarget2D may use this format.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Supported for the formats real XNA/FNA hardware reports renderable.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
+
+        /**
+         * @brief Whether the format transfers as compressed blocks rather than pixels.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return true for the block-compressed formats Skia stores natively.
+         */
+        [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
         void Ensure3DSupported(const char* operation) const override;
 
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
@@ -163,18 +197,23 @@ namespace CNA::Internal::Renderers::Skia
         void GetPresentationOutputSize(int& width, int& height) const;
         void RefreshDynamicBackbufferIfNeeded();
         void RecreatePresentationRenderer();
-        void RecreatePresentationTexture();
-        void DestroyPresentationTexture() noexcept;
         void ApplyLogicalPresentation();
         void AssertOwnership(const char* operation) const;
+        struct PresentationViewport
+        {
+            float x = 0.0f;
+            float y = 0.0f;
+            float width = 0.0f;
+            float height = 0.0f;
+        };
+        [[nodiscard]] PresentationViewport ComputePresentationViewport() const;
         [[nodiscard]] SkiaSurface& ActiveSurface();
         [[nodiscard]] const SkiaSurface& ActiveSurface() const;
         [[nodiscard]] int LogicalWidth() const noexcept { return surface_.Width(); }
         [[nodiscard]] int LogicalHeight() const noexcept { return surface_.Height(); }
 
-        SDL_Window* window_ = nullptr;
-        SDL_Renderer* renderer_ = nullptr;
-        SDL_Texture* presentTexture_ = nullptr;
+        RendererSurfaceInfo surfaceInfo_;
+        CNA::Platform::IPlatformSurfacePresenter* presenter_ = nullptr;
         std::function<void(RendererDeviceEvent)> deviceEventCallback_;
         SkiaSurface surface_;
         std::shared_ptr<SkiaOwnership> ownership_ = std::make_shared<SkiaOwnership>();

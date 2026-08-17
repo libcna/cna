@@ -12,14 +12,14 @@ namespace CNA::Input
      * @brief CNAEXT — identity of one enumerated haptic (force-feedback) device.
      *
      * XNA 4.0 has no force-feedback API beyond `GamePad::SetVibration`'s simple rumble; this
-     * descriptor pairs the SDL haptic instance id with its human-readable name.
+     * descriptor pairs the platform device id with its human-readable name.
      */
     CNAEXT struct HapticInfoEXT
     {
-        /** @brief The SDL haptic instance id (`SDL_HapticID`). */
+        /** @brief The platform device id, stable while the device remains connected. */
         std::uint32_t id = 0;
 
-        /** @brief The device's human-readable name, or empty if SDL reports none. */
+        /** @brief The device's human-readable name, or empty if the platform reports none. */
         std::string name;
     };
 

@@ -1,5 +1,12 @@
 # SVG DOM Graphics Renderer — Implementation Plan
 
+
+> **Renderer selection.** This document describes the renderer as a compile-time choice
+> (`-DCNA_GRAPHICS_RENDERER=...`), which remains the default and recommended mode. Since
+> `plan_runtimerenderer.md`, CNA can also be built with several renderers and choose between
+> them at runtime — see `docs/runtime-renderer-selection.md`. Nothing below changes in
+> single-renderer mode.
+
 > **Reconstructed 2026-08-11.** This file was referenced from the very first commit of the
 > `SVG_DOM` renderer (`// plan_svg_dom.md design decision N/6 ...` throughout its source, the same
 > convention `plan_html_dom.md` established for `HTML_DOM`) but the plan document itself was never

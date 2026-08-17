@@ -1,0 +1,285 @@
+{
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "id": "sample-assets",
+      "task": "GLTF-013",
+      "repository": "https://github.com/KhronosGroup/glTF-Sample-Assets",
+      "revision": "2bac6f8c57bf471df0d2a1e8a8ec023c7801dddf",
+      "defaultBranch": "main",
+      "usage": "fetch-on-demand reference models only; no asset is vendored",
+      "runtimeDependency": false,
+      "ciDependency": false,
+      "license": {
+        "spdx": "LicenseRef-mixed-per-asset",
+        "summary": "The repository README is CC-BY-4.0, but every model has its own detailed licence and attribution under Models/<name>/README.md and sometimes LICENSE.md. A model may be used or redistributed only after that model-specific record is reviewed."
+      }
+    },
+    {
+      "id": "asset-generator",
+      "task": "GLTF-014",
+      "repository": "https://github.com/KhronosGroup/glTF-Asset-Generator",
+      "revision": "3d99767e9a67fbfe109f0d298c1e8d909bcac9db",
+      "defaultBranch": "main",
+      "usage": "fetch-on-demand permutation reference; manifests may be projected by the fixture runner",
+      "runtimeDependency": false,
+      "ciDependency": false,
+      "license": {
+        "spdx": "MIT",
+        "summary": "MIT License, Copyright (c) 2017 Khronos Group. Nothing from this repository is copied into CNA."
+      }
+    },
+    {
+      "id": "sample-renderer",
+      "task": "GLTF-016",
+      "repository": "https://github.com/KhronosGroup/glTF-Sample-Renderer",
+      "revision": "863b981fb755359063e370ff7b6e956bda0716e2",
+      "defaultBranch": "main",
+      "packageVersion": "1.1.0",
+      "usage": "developer-only L7 reference capture; never linked, fetched, or executed by CNA",
+      "runtimeDependency": false,
+      "ciDependency": false,
+      "license": {
+        "spdx": "Apache-2.0",
+        "summary": "Apache License 2.0. Its npm lock and third-party notices remain authoritative for a local reference checkout; no renderer code or package is redistributed by CNA."
+      }
+    }
+  ],
+  "assetGeneratorManifest": {
+    "mappingScope": "group-semantic-overlap",
+    "paths": {
+      "positive": "Output/Positive/Manifest.json",
+      "negative": "Output/Negative/Manifest.json"
+    },
+    "sha256": {
+      "positive": "100ccab87d7f9a072532ccc3f3cd998e234365c03404b080d1fef96db8096330",
+      "negative": "6502a9724d1ec90ff6e55ae8db99b1c8185927df14d9f6831e275fe27555ec94"
+    },
+    "groupMappings": [
+      {
+        "suite": "positive",
+        "folder": "Accessor_Sparse",
+        "id": 26,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["sparse-position", "sparse-indices", "sparse-interleaved-base"],
+        "note": "Sparse values, sparse indices, an absent base view, and an interleaved base are isolated by CNA fixtures."
+      },
+      {
+        "suite": "positive",
+        "folder": "Accessor_SparseType",
+        "id": 27,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["sparse-position", "sparse-indices", "normalized-i8-normal"],
+        "note": "CNA separates sparse layout from component conversion instead of combining their permutations."
+      },
+      {
+        "suite": "positive",
+        "folder": "Animation_Node",
+        "id": 0,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["anim-rigid-node", "anim-translation-scale", "anim-parent-child"],
+        "note": "Node animation paths and hierarchy composition have independent CNA witnesses."
+      },
+      {
+        "suite": "positive",
+        "folder": "Animation_NodeMisc",
+        "id": 1,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["anim-nonzero-start", "anim-two-clips", "anim-out-of-scene-target", "anim-repeated-time"],
+        "note": "Timing, clip identity, scene reachability, and repeated input times are isolated."
+      },
+      {
+        "suite": "positive",
+        "folder": "Animation_SamplerType",
+        "id": 23,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["anim-rigid-node", "anim-step", "anim-cubicspline"],
+        "note": "LINEAR, STEP, and CUBICSPLINE each have a dedicated analytic oracle."
+      },
+      {
+        "suite": "positive",
+        "folder": "Animation_Skin",
+        "id": 2,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["skin-two-weighted", "skin-four-weighted", "skin-parented-joints", "anim-parent-child"],
+        "note": "Skin palette composition and animated hierarchy semantics are split across focused fixtures."
+      },
+      {
+        "suite": "positive",
+        "folder": "Animation_SkinType",
+        "id": 3,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["skin-ushort-joint-indices", "skin-two-weighted", "skin-unnormalized"],
+        "note": "Joint index width, weight decoding, and normalization policy are explicit CNA cases."
+      },
+      {
+        "suite": "positive",
+        "folder": "Buffer_Interleaved",
+        "id": 4,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["interleaved-position-normal", "interleaved-pos-nrm-uv", "interleaved-mixed-widths", "stride-padded"],
+        "note": "CNA covers interleaved offsets, mixed widths, three attributes, and padded stride."
+      },
+      {
+        "suite": "positive",
+        "folder": "Buffer_Misc",
+        "id": 25,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["accessor-offset", "bufferview-offset", "bufferview-stride-tight", "mat3-padded"],
+        "note": "Buffer and accessor placement rules are isolated by offset, stride, and matrix padding fixtures."
+      },
+      {
+        "suite": "positive",
+        "folder": "Compatibility",
+        "id": 5,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["gltf-external-bin", "gltf-data-uri-bin", "glb-basic", "gltf-uri-percent-encoded"],
+        "note": "The CNA container group separates external, inline, GLB, and URI compatibility paths."
+      },
+      {
+        "suite": "positive",
+        "folder": "Instancing",
+        "id": 24,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["xf-shared-mesh", "xf-mirror-child", "xf-multi-root"],
+        "note": "Shared meshes, transformed instances, and multiple roots are explicit scene-graph fixtures."
+      },
+      {
+        "suite": "positive",
+        "folder": "Material",
+        "id": 6,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["mat-default", "mat-factor-only-gold", "mat-unlit"],
+        "note": "Default, factor-only PBR, and unlit material selection are independent CNA cases."
+      },
+      {
+        "suite": "positive",
+        "folder": "Material_AlphaBlend",
+        "id": 7,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["mat-factor-only-gold", "mat-unlit-vertex-color-alpha", "mat-material-variants"],
+        "note": "Blend factors, vertex alpha, and application-owned transparent ordering are represented."
+      },
+      {
+        "suite": "positive",
+        "folder": "Material_AlphaMask",
+        "id": 8,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["mat-alpha-mask-cutoff"],
+        "note": "A non-default cutoff discriminates MASK from opaque or blend handling."
+      },
+      {
+        "suite": "positive",
+        "folder": "Material_DoubleSided",
+        "id": 9,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["mat-factor-only-gold"],
+        "note": "The factor-only PBR fixture explicitly authors and verifies doubleSided."
+      },
+      {
+        "suite": "positive",
+        "folder": "Material_MetallicRoughness",
+        "id": 10,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["mat-factor-only-gold", "mat-basecolor-factor-times-texture", "mat-normal-occlusion-scale"],
+        "note": "Factors, texture multiplication, and auxiliary material maps have separate CNA oracles."
+      },
+      {
+        "suite": "positive",
+        "folder": "Material_Mixed",
+        "id": 11,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["mat-normal-occlusion-scale", "tex-dual-texture-stride", "texture-transform-per-map"],
+        "note": "Mixed texture slots, chosen effect layout, and per-map transforms are mapped explicitly."
+      },
+      {
+        "suite": "positive",
+        "folder": "Material_SpecularGlossiness",
+        "id": 12,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["mat-specular-glossiness"],
+        "note": "The archived extension and CNA conversion policy have a dedicated fixture."
+      },
+      {
+        "suite": "positive",
+        "folder": "Mesh_PrimitiveAttribute",
+        "id": 13,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["normal-absent", "normal-quantized", "normalized-u8-color", "uv1-material", "mat-authored-tangent"],
+        "note": "Attribute presence, conversion, and semantic consumption are isolated rather than permuted."
+      },
+      {
+        "suite": "positive",
+        "folder": "Mesh_PrimitiveMode",
+        "id": 14,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["mode-points", "mode-lines", "mode-line-loop", "mode-line-strip", "mode-triangles", "mode-triangle-strip", "mode-triangle-fan"],
+        "note": "Every core primitive mode has a canonical CNA fixture and topology oracle."
+      },
+      {
+        "suite": "positive",
+        "folder": "Mesh_PrimitiveVertexColor",
+        "id": 16,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["normalized-u8-color", "normalized-u16-color", "float-color", "mat-unlit-vertex-color-alpha"],
+        "note": "All supported color component forms plus material alpha interaction are explicit."
+      },
+      {
+        "suite": "positive",
+        "folder": "Mesh_Primitives",
+        "id": 17,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["two-primitives-one-buffer", "mat-material-variants"],
+        "note": "Multiple primitives and per-primitive material identity are covered without duplicating geometry."
+      },
+      {
+        "suite": "positive",
+        "folder": "Mesh_PrimitivesUV",
+        "id": 18,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["uv1-material", "tex-texture-transform", "texture-transform-per-map"],
+        "note": "UV set selection and transform semantics map to independent CNA fixtures."
+      },
+      {
+        "suite": "positive",
+        "folder": "Node_Attribute",
+        "id": 19,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["xf-translation", "xf-scale-nonuniform", "xf-rot-z90", "xf-trs-order", "xf-matrix-node", "xf-parent-child"],
+        "note": "TRS, matrix, order, and hierarchy have analytic L4 witnesses."
+      },
+      {
+        "suite": "positive",
+        "folder": "Node_NegativeScale",
+        "id": 20,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["xf-negative-scale", "xf-mirror-child", "tangent-mirrored"],
+        "note": "Mirrored placement, hierarchy, winding, and tangent handedness are separated."
+      },
+      {
+        "suite": "positive",
+        "folder": "Texture_Sampler",
+        "id": 21,
+        "relationship": "overlap",
+        "cnaFixtureIds": ["uv-out-of-range-clamp", "uv-out-of-range-wrap", "uv-out-of-range-mirror", "sampler-trilinear", "texture-shared-two-samplers"],
+        "note": "Addressing, filtering, and shared-image/per-slot sampler state have discriminating fixtures."
+      },
+      {
+        "suite": "negative",
+        "folder": "Mesh_PrimitiveRestart",
+        "id": 15,
+        "relationship": "gap",
+        "cnaFixtureIds": [],
+        "note": "The CNA corpus does not yet isolate forbidden primitive-restart index values."
+      },
+      {
+        "suite": "negative",
+        "folder": "Mesh_NoPosition",
+        "id": 22,
+        "relationship": "gap",
+        "cnaFixtureIds": [],
+        "note": "The CNA corpus does not yet carry a primitive whose POSITION attribute is absent."
+      }
+    ]
+  }
+}

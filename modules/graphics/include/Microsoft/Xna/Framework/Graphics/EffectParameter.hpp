@@ -2,6 +2,8 @@
 #pragma once
 
 #include <memory>
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <variant>
 #include <vector>
@@ -18,6 +20,7 @@
 namespace Microsoft::Xna::Framework::Graphics
 {
     class EffectParameterCollection;
+    class Effect;
     class Texture;
     class Texture2D;
     class Texture3D;
@@ -92,6 +95,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @return Reference to the elements collection.
          */
         [[nodiscard]] EffectParameterCollection& getElementsProperty();
+        /** @brief Const overload of getElementsProperty(). */
+        [[nodiscard]] const EffectParameterCollection& getElementsProperty() const;
 
         /**
          * @brief Gets the collection of struct members for struct parameters.
@@ -99,6 +104,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @return Reference to the structure members collection.
          */
         [[nodiscard]] EffectParameterCollection& getStructureMembersProperty();
+        /** @brief Const overload of getStructureMembersProperty(). */
+        [[nodiscard]] const EffectParameterCollection& getStructureMembersProperty() const;
 
         /**
          * @brief Gets the collection of annotations attached to this parameter.
@@ -106,6 +113,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @return Reference to the annotation collection.
          */
         [[nodiscard]] EffectAnnotationCollection& getAnnotationsProperty();
+        /** @brief Const overload of getAnnotationsProperty(). */
+        [[nodiscard]] const EffectAnnotationCollection& getAnnotationsProperty() const;
 
         // GetValue overloads
 
@@ -436,12 +445,37 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetValue(TextureCube* value);
 
     private:
+        struct CompiledStorage
+        {
+            std::vector<std::uint8_t> bytes;
+            std::string stringValue;
+            Texture* texture = nullptr;
+            std::uint32_t runtimeIndex = 0;
+            bool dirty = false;
+        };
+
+        EffectParameter(std::string name, std::string semantic,
+                        int rowCount, int columnCount, int elementCount,
+                        EffectParameterClass paramClass, EffectParameterType paramType,
+                        std::shared_ptr<CompiledStorage> storage,
+                        std::size_t byteOffset, std::size_t byteSize);
+
+        [[nodiscard]] bool IsCompiledInternal() const noexcept;
+        [[nodiscard]] const void* GetRawValueInternal() const noexcept;
+        [[nodiscard]] std::size_t GetRawValueSizeInternal() const noexcept;
+        [[nodiscard]] Texture* GetTextureInternal() const noexcept;
+        [[nodiscard]] std::uint32_t GetRuntimeIndexInternal() const noexcept;
+        [[nodiscard]] bool IsDirtyInternal() const noexcept;
+        void MarkCleanInternal() noexcept;
+        void CopyMutableValueFromInternal(const EffectParameter& source);
+
         std::string name_;
         std::string semantic_;
         int rowCount_;
         int columnCount_;
         EffectParameterClass paramClass_;
         EffectParameterType paramType_;
+        int elementCount_ = 0;
 
         // Storage: raw float buffer for numeric types, string for string, pointer for textures.
         // Texture2D/Texture3D/TextureCube each get their own slot even though all three now
@@ -459,5 +493,13 @@ namespace Microsoft::Xna::Framework::Graphics
         std::unique_ptr<EffectParameterCollection> elements_;
         std::unique_ptr<EffectParameterCollection> members_;
         EffectAnnotationCollection annotations_;
+
+        // Compiled parameters and all of their element/member views share one bounded byte store.
+        // Standalone/stock parameters leave this null and retain the historical vector storage.
+        std::shared_ptr<CompiledStorage> compiledStorage_;
+        std::size_t compiledByteOffset_ = 0;
+        std::size_t compiledByteSize_ = 0;
+
+        friend class Effect;
     };
 }

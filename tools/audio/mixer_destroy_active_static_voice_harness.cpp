@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 //
-// Task AUD-04-008: a small standalone (non-GTest) executable that plays a SoundEffectInstance,
-// then calls CNA::Internal::Audio::DestroyMixer() directly while that instance is still alive and
-// playing, then exercises every operation a caller could still reach on the now-orphaned instance
+// Tasks AUD-04-008 / PLAT-96: a small standalone (non-GTest) executable that plays a
+// SoundEffectInstance and a fire-and-forget SoundEffect, then calls
+// CNA::Internal::Audio::DestroyMixer() directly while both are still alive and playing. It then
+// exercises every operation a caller could still reach on the now-orphaned instance
 // (state query, Pause(), Stop(), Dispose(), and finally natural destruction). Needs its own
 // process, not the shared CnaTests binary: DestroyMixer() frees every MIX_Track/MIX_Audio the
 // mixer owned (confirmed against real SDL3_mixer source, MIX_DestroyMixer -> MIX_DestroyTrack ->
@@ -11,9 +12,10 @@
 // must not take down (or silently corrupt the results of) every other test in the shared binary,
 // same isolation rationale as tools/audio/audio_no_hardware_harness.cpp.
 //
-// Exit codes: 0 = every operation on the orphaned instance completed without crashing AND
-// getStateProperty() correctly reported Stopped after DestroyMixer() (proving the generation
-// check, not luck, is what kept this safe); 1 = an exception escaped; 2 = state was wrong
+// Exit codes: 0 = every operation on the orphaned instance completed without crashing,
+// getStateProperty() correctly reported Stopped after DestroyMixer(), and the surviving
+// SoundEffect played again on the next mixer generation; 1 = an exception escaped; 2 = state was
+// wrong; 3 = the surviving audio resource could not be rebuilt
 // (regression in the generation check itself, even though nothing crashed). A crash is detected
 // by the parent (AudioMixerTests.cpp) via an abnormal (non-WIFEXITED) process termination, not by
 // this harness's own exit code.
@@ -51,10 +53,15 @@ int main()
             std::fprintf(stderr, "Play() did not report Playing -- no audio device in this environment?\n");
             return 1;
         }
+        if (!effect.Play())
+        {
+            std::fprintf(stderr, "fire-and-forget Play() failed\n");
+            return 1;
+        }
 
-        // The core of AUD-04-008: destroy the shared mixer -- and every MIX_Track/MIX_Audio it
-        // owns -- out from under a still-alive, still-playing instance. Nothing above this line
-        // exercises the risk; everything below does.
+        // AUD-04-008: this invalidates the instance's borrowed track. PLAT-96: the
+        // fire-and-forget track's stopped callback runs from inside native shutdown and must not
+        // synchronously destroy a stream whose lock is still owned by the native StopTrack frame.
         CNA::Internal::Audio::DestroyMixer();
 
         // Every operation a real caller could still reach on `instance` after this point, in the
@@ -64,6 +71,12 @@ int main()
             std::fprintf(stderr, "state after DestroyMixer() was not Stopped -- generation check regressed\n");
             return 2;
         }
+        if (!effect.Play())
+        {
+            std::fprintf(stderr, "surviving SoundEffect did not play after mixer recreation\n");
+            return 3;
+        }
+        CNA::Internal::Audio::DestroyMixer();
         instance.Pause();
         instance.Stop();
         instance.Dispose();

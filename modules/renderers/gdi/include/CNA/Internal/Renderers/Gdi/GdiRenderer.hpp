@@ -3,8 +3,7 @@
 #include "CNA/Internal/Renderers/Gdi/GdiConfiguration.hpp"
 #include "CNA/Internal/Renderers/Gdi/GdiPresentation.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
-
-#include <SDL3/SDL_events.h>
+#include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 
 #include <atomic>
 #include <cstddef>
@@ -32,21 +31,18 @@ namespace CNA::Internal::Renderers::Gdi
      * @brief Win32 GDI presentation renderer for CNA's 2D API.
      *
      * SpriteBatch, textures and 2D render targets are CPU-rasterized by the reusable Software
-     * core. Present() transfers the RGBA8 backbuffer to the SDL window's HWND with Win32 DIB APIs:
+     * core. Present() transfers the RGBA8 backbuffer to the platform window's HWND with Win32 DIB APIs:
      * SetDIBitsToDevice for a 1:1 blit and StretchDIBits when scaling is necessary. This makes the
-     * final display operation real Win32 GDI rather than SDL_Renderer or a GPU API. The reusable
+     * final display operation real Win32 GDI rather than a GPU API. The reusable
      * rasterizer is privately composed behind explicit 2D forwards; GDI derives directly from the
      * renderer interface, and every 3D/resource entry is deliberately rejected.
      */
     class GdiRenderer final : public IGraphicsRenderer
     {
     public:
-        GdiRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                           CnaPresentationMode presentationMode);
+        explicit GdiRenderer(const GraphicsRendererCreateArgs& args);
         /** @brief Internal deterministic-construction overload used by focused renderer tests. */
-        GdiRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                           CnaPresentationMode presentationMode,
-                           GdiConfiguration configuration);
+        GdiRenderer(const GraphicsRendererCreateArgs& args, GdiConfiguration configuration);
         ~GdiRenderer() override;
 
         void Clear(float r, float g, float b, float a) override;
@@ -56,9 +52,26 @@ namespace CNA::Internal::Renderers::Gdi
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
+        void OnSurfaceInvalidated(CNA::Platform::WindowId window) override;
         int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
         void UpdatePresentationFormatEXT(int, int, bool) override {}
         [[nodiscard]] int GetMultiSampleCount() const override;
+
+        /**
+         * @brief Reports the sample count GDI actually applied, ignoring the request.
+         *
+         * plan_runtimerenderer.md design decision 9: GDI clamps to its one real optional mode (4x)
+         * at construction, so echoing the game's request back would misreport the device.
+         *
+         * @param requestedMultiSampleCount Ignored -- the applied count is what this renderer has.
+         * @return GetMultiSampleCount().
+         */
+        [[nodiscard]] int GetAppliedMultiSampleCountEXT(int requestedMultiSampleCount) const override
+        {
+            (void)requestedMultiSampleCount;
+            return GetMultiSampleCount();
+        }
         [[nodiscard]] int GetAppliedBackBufferFormatEXT(int) const override { return 0; }
         [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int) const override { return 0; }
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
@@ -73,8 +86,6 @@ namespace CNA::Internal::Renderers::Gdi
         bool TransformLogicalToWindow(float logX, float logY,
                                       float& windowX, float& windowY) const override;
 
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
 
@@ -83,7 +94,7 @@ namespace CNA::Internal::Renderers::Gdi
                                                     bool& fullyDirty) const;
         /** @brief Clears damage telemetry without issuing a native present; intended for tests. */
         void DebugResetBackbufferDamage();
-        /** @brief Whether a watched native-window event still requires a complete repaint. */
+        /** @brief Whether a platform invalidation still requires a complete repaint. */
         [[nodiscard]] bool DebugIsNativeClientInvalidated() const;
         /** @brief Makes the next DIB blit report zero lines, exercising failure retention. */
         void DebugForceNextDibBlitFailure() { debugForceNextDibBlitFailure_ = true; }
@@ -181,7 +192,6 @@ namespace CNA::Internal::Renderers::Gdi
         void OnSpriteRasterBounds(int minX, int minY, int maxX, int maxY);
 
     private:
-        static bool SDLCALL WindowEventWatch(void* userdata, SDL_Event* event);
         void RecordNativeClientInvalidation();
         void SynchronizeBackbufferSize();
         void GetLogicalSize(int& width, int& height) const;
@@ -192,12 +202,10 @@ namespace CNA::Internal::Renderers::Gdi
         void ResetBackbufferDamage();
 
         std::unique_ptr<GdiSoftware2DCore> software2D_;
-        SDL_Window* window_ = nullptr;
+        PlatformRendererSurfaceState surface_;
         void* nativeWindow_ = nullptr;
         int requestedVirtualWidth_ = 0;
         int requestedVirtualHeight_ = 0;
-        std::uint32_t windowId_ = 0;
-        bool eventWatchRegistered_ = false;
         std::atomic<std::uint64_t> nativeInvalidationGeneration_{1};
         std::uint64_t presentedNativeInvalidationGeneration_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
@@ -213,4 +221,17 @@ namespace CNA::Internal::Renderers::Gdi
         bool debugForceNextReleaseDcFailure_ = false;
         GdiPresentationTelemetry lastPresentationTelemetry_{};
     };
+
+    /**
+     * @brief Creates the GDI renderer.
+     *
+     * plan_runtimerenderer.md design decision 4: the factory lives in this family's own namespace
+     * so that several renderer archives can link into one binary. Declared here because this
+     * family's example/contract programs construct a renderer directly, without going through
+     * GraphicsDevice.
+     *
+     * @param args Construction arguments.
+     * @return The new renderer; never nullptr on success. Throws on failure.
+     */
+    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args);
 } // namespace CNA::Internal::Renderers::Gdi

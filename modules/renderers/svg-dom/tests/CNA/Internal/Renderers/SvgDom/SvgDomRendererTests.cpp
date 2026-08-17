@@ -2,7 +2,8 @@
 //
 // GTest coverage for everything on the SVG_DOM renderer that does not need a real browser: the
 // blend-state mapping, the PNG/base64/un-premultiply pixel pipeline (genuinely round-tripped via
-// SDL3_image, not merely asserted), the sprite geometry encoder, source-rectangle validation, and
+// the framework image codec, not merely asserted), the sprite geometry encoder,
+// source-rectangle validation, and
 // the 3D "not yet implemented" surface. Structured so it runs under this repo's native `CnaTests`
 // binary with no document/DOM/browser at all -- nothing here touches EM_JS.
 #include <gtest/gtest.h>
@@ -13,14 +14,12 @@
 #include "CNA/Internal/Renderers/SvgDom/SvgDomSpriteBatchRenderer.hpp"
 #include "CNA/Internal/Renderers/SvgDom/SvgDomState.hpp"
 #include "CNA/Internal/Renderers/SvgDom/SvgDomTextureRenderer.hpp"
+#include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
-
-#include <SDL3/SDL.h>
-#include <SDL3_image/SDL_image.h>
 
 #include <cstring>
 #include <limits>
@@ -37,7 +36,17 @@ using Microsoft::Xna::Framework::Graphics::SpriteEffects;
 
 namespace
 {
-    SDL_Window* FakeWindow() { return reinterpret_cast<SDL_Window*>(0x1); }
+    GraphicsRendererCreateArgs TestArgs()
+    {
+        GraphicsRendererCreateArgs args;
+        args.surface.windowId = 1;
+        args.surface.nativeHandle.system = CNA::Platform::NativeWindowSystem::Web;
+        args.surface.drawableSize = {800, 480};
+        args.virtualWidth = 800;
+        args.virtualHeight = 480;
+        args.presentationMode = CnaPresentationMode::FixedHeightDynamicWidth;
+        return args;
+    }
 
     ImageData MakeImage(int w, int h, const std::vector<std::uint8_t>& pixels)
     {
@@ -288,19 +297,14 @@ TEST(SvgDomPngRoundTrip, EncodedPngDecodesBackToTheExactPixels)
     ASSERT_GE(png.size(), 8u);
     EXPECT_EQ(std::memcmp(png.data(), kSig, 8), 0);
 
-    SDL_IOStream* io = SDL_IOFromConstMem(png.data(), png.size());
-    ASSERT_NE(io, nullptr);
-    SDL_Surface* decoded = IMG_Load_IO(io, true);
-    ASSERT_NE(decoded, nullptr);
-    EXPECT_EQ(decoded->w, 2);
-    EXPECT_EQ(decoded->h, 2);
-    SDL_Surface* rgba = SDL_ConvertSurface(decoded, SDL_PIXELFORMAT_RGBA32);
-    ASSERT_NE(rgba, nullptr);
-    const auto* bytes = static_cast<const std::uint8_t*>(rgba->pixels);
+    const ImageData decoded = CNA::Internal::Graphics::ImageLoader::LoadFromMemory(
+        png.data(), png.size());
+    EXPECT_EQ(decoded.width, 2);
+    EXPECT_EQ(decoded.height, 2);
+    ASSERT_EQ(decoded.pixels.size(), pixels.size());
     for (int i = 0; i < 16; ++i)
-        EXPECT_EQ(bytes[i], pixels[i]) << "byte " << i;
-    SDL_DestroySurface(rgba);
-    SDL_DestroySurface(decoded);
+        EXPECT_EQ(decoded.pixels[static_cast<std::size_t>(i)], pixels[static_cast<std::size_t>(i)])
+            << "byte " << i;
 }
 
 TEST(SvgDomPngRoundTrip, DataUriHasThePngMimePrefix)
@@ -370,7 +374,6 @@ TEST(SvgDomTextureRendererTest, ConstructsFromImageDataAndReportsSize)
     SvgDomTextureRenderer tex(MakeImage(2, 2, Sample2x2()));
     EXPECT_EQ(tex.GetWidth(), 2);
     EXPECT_EQ(tex.GetHeight(), 2);
-    EXPECT_EQ(tex.GetNativeTexture(), nullptr);
     EXPECT_GT(tex.GetCanvasIdEXT(), 0);
 }
 
@@ -1006,7 +1009,7 @@ TEST(SvgDomSpriteBatch, ZeroSizedSourceOrDestinationRectanglesAreSilentlySkipped
 class SvgDom3DSurfaceTest : public ::testing::Test
 {
 protected:
-    SvgDomRenderer renderer{FakeWindow(), 800, 480, CnaPresentationMode::FixedHeightDynamicWidth};
+    SvgDomRenderer renderer{TestArgs()};
 };
 
 TEST_F(SvgDom3DSurfaceTest, DepthAndStencilClearsThrow)
@@ -1104,11 +1107,8 @@ TEST_F(SvgDom3DSurfaceTest, ApplyBlendStateAcceptsPresetsAndRejectsCustomOnes)
 
 TEST_F(SvgDom3DSurfaceTest, ViewportFollowsTheVirtualResolutionSetting)
 {
-    // FakeWindow() is not a real SDL window, so SDL_GetWindowSize reports 0x0 for it --
-    // ComputeLogicalViewport's own physW<=0/physH<=0 guard then makes the logical size 0
-    // regardless of the requested virtual resolution (matching HtmlDomRenderer's identical
-    // FakeWindow()-based test, which asserts the "no virtual resolution" contract instead of a
-    // physical size this harness cannot produce).
+    // A zero virtual resolution explicitly disables logical-coordinate transforms even though the
+    // host snapshot has a physical drawable size. This covers the renderer contract without a DOM.
     EXPECT_NO_THROW(renderer.SetVirtualResolution(320, 240));
     renderer.SetVirtualResolution(0, 0);
     renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::NativeBackBuffer));
@@ -1157,10 +1157,8 @@ TEST_F(SvgDom3DSurfaceTest, SetViewportRecordsTheFullRectWithoutThrowing)
     renderer.SetViewport(0, 0, 800, 480, 0.0f, 1.0f);
 }
 
-TEST_F(SvgDom3DSurfaceTest, WindowAndRendererInternalAccessorsAreHonest)
+TEST_F(SvgDom3DSurfaceTest, AppliedDepthStencilFormatReportsNoDepthStorage)
 {
-    EXPECT_EQ(renderer.GetWindowInternal(), FakeWindow());
-    EXPECT_EQ(renderer.GetRendererInternal(), nullptr);
     EXPECT_EQ(renderer.GetAppliedDepthStencilFormatEXT(3), 0);
 }
 

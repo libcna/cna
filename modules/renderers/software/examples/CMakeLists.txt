@@ -21,6 +21,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         # CnaLibrary.cmake declares the real CNA <-> Software static-library cycle, so every
         # consumer gets a portable link line and these tests need no GNU-only archive group.
         target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        # plan_runtimerenderer.md P6: the CNA umbrella links the DEFAULT renderer only
+        # (modules/CMakeLists.txt), so in a multi-renderer build where SOFTWARE is present but not
+        # the default, these examples would not reach their own family's public-internal headers
+        # (CNA/Internal/Renderers/Software/...). Naming the family's target is the same remedy
+        # cmake/UnitTests.cmake applies to CnaTests for every present renderer. Not merge-related:
+        # the umbrella has always linked one target; no earlier multi set contained SOFTWARE.
+        if(TARGET cna_renderer_software)
+            target_link_libraries(${target} PRIVATE cna_renderer_software)
+        endif()
         if(TARGET SDL3::SDL3main)
             target_link_libraries(${target} PRIVATE SDL3::SDL3main)
         endif()
@@ -340,7 +349,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_frontface_winding
         TIMEOUT 300 LABELS "Software")
 
-    # REMED-GFX-183 control: Software v1 explicitly declares its TriangleList-only 3D boundary.
+    # REMED-GFX-183 control: TriangleStrip remains an explicit unsupported 3D boundary.
     cna_software_test(cna_test_software_triangle_strip_winding
         ${CNA_GRAPHICS_EXAMPLES_DIR}/triangle_strip_winding_test.cpp)
     cna_register_renderer_test(NAME Software_TriangleStripWinding

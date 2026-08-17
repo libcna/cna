@@ -14,6 +14,11 @@
 #include <vector>
 #include <gtest/gtest.h>
 
+#include "CNA/RendererTestGate.hpp"
+
+// Lets CNA_RENDERER_IS name identities bare, matching the guards it replaced.
+using namespace CNA::Testing::Renderers;
+
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -44,13 +49,28 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
-#ifdef CNA_RENDERER_BGFX
+// plan_runtimerenderer.md RTR-P9-9: these three blocks need their renderer's own headers and
+// types, so they stay COMPILE-time -- no runtime predicate makes a type exist. The condition
+// widens from the DEFAULT renderer's macro to "compiled into this build", so a multi-renderer
+// build that holds one of these without selecting it still compiles its checks. Every test that
+// uses them is gated at runtime on the renderer actually being ACTIVE.
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_PRESENT_BGFX)
+#define CNA_TEST_BGFX_AVAILABLE 1
+#endif
+#if defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_PRESENT_WEBGPU)
+#define CNA_TEST_WEBGPU_AVAILABLE 1
+#endif
+#if defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_PRESENT_VULKAN)
+#define CNA_TEST_VULKAN_AVAILABLE 1
+#endif
+
+#ifdef CNA_TEST_BGFX_AVAILABLE
 #include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #endif
-#ifdef CNA_RENDERER_WEBGPU
+#ifdef CNA_TEST_WEBGPU_AVAILABLE
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #endif
-#ifdef CNA_RENDERER_VULKAN
+#ifdef CNA_TEST_VULKAN_AVAILABLE
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 #endif
 
@@ -350,7 +370,7 @@ namespace
         }
     };
 
-#ifdef CNA_RENDERER_BGFX
+#ifdef CNA_TEST_BGFX_AVAILABLE
     CNA::Internal::Renderers::Bgfx::BgfxIndexBufferRenderer* GetBgfxIndexRenderer(
         IndexBuffer& buffer)
     {
@@ -374,7 +394,7 @@ namespace
     }
 #endif
 
-#ifdef CNA_RENDERER_WEBGPU
+#ifdef CNA_TEST_WEBGPU_AVAILABLE
     struct WebGpuErrorScopeState
     {
         bool completed = false;
@@ -445,7 +465,7 @@ namespace
     }
 #endif
 
-#ifdef CNA_RENDERER_VULKAN
+#ifdef CNA_TEST_VULKAN_AVAILABLE
     void AssertNoNewVulkanValidationMessages(
         const CNA::Internal::Renderers::Vulkan::VulkanRenderer& renderer,
         std::size_t firstMessage)
@@ -481,12 +501,11 @@ namespace
 // REMED-GFX-110 adds CNA_RENDERER_SOFTWARE: the CPU raster paths owe the same public addressing
 // contract as the GPU renderers -- startIndex as an index-element offset, baseVertex added exactly
 // once, primitiveCount limiting the consumed range, and hints that never change addressing.
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
-    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
-    defined(CNA_RENDERER_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsNonzeroStartIndex)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
     RequireIndexedRendering();
 
     const auto center = TriangleAt(0.0f, Color::Lime);
@@ -529,6 +548,9 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsNonzeroStartIndex)
 
 TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsPositiveBaseVertexWithSixteenBitIndices)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
     RequireIndexedRendering();
 
     const auto red = CenterTriangle(Color::Red);
@@ -564,6 +586,9 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsPositiveBaseVertexWithSixtee
 
 TEST_F(IndexedDrawDeferredTest, PersistentDynamicDrawCombinesStartBaseCountAndHints)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
     RequireIndexedRendering();
 
     const auto ignoredWithoutBase = TriangleAt(-0.75f, Color::Lime);
@@ -618,6 +643,9 @@ TEST_F(IndexedDrawDeferredTest, PersistentDynamicDrawCombinesStartBaseCountAndHi
 
 TEST_F(IndexedDrawDeferredTest, PersistentDrawTreatsVertexRangesAsHints)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
     RequireIndexedRendering();
 
     const auto decoy = CenterTriangle(Color::Red);
@@ -666,14 +694,12 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawTreatsVertexRangesAsHints)
         pixels.AtNdc(0.65f), Color::Blue,
         "narrow hint does not replace decoded-index addressing");
 }
-#endif
 
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
-    defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX9) || \
-    defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
     RequireIndexedRendering();
 
     const auto red = CenterTriangle(Color::Red);
@@ -706,14 +732,12 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
         ReadCenter(device), Color::Blue,
         "32-bit index element width");
 }
-#endif
 
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
-    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
-    defined(CNA_RENDERER_SDL_GPU) || defined(CNA_RENDERER_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, PublicStaticThirtyTwoBitIndicesAbove65535RenderExactGeometry)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, SdlGpu, Software);
     RequireIndexedRendering();
 
     constexpr std::uint32_t highVertex = 65536u;
@@ -753,7 +777,7 @@ TEST_F(IndexedDrawDeferredTest, PublicStaticThirtyTwoBitIndicesAbove65535RenderE
     indexBuffer.GetData(shadow.data(), 3);
     EXPECT_EQ(indices, shadow);
 
-#ifdef CNA_RENDERER_BGFX
+#ifdef CNA_TEST_BGFX_AVAILABLE
     auto* native =
         dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxIndexBufferRenderer*>(
             &indexBuffer.GetRenderer());
@@ -792,16 +816,18 @@ TEST_F(IndexedDrawDeferredTest, PublicStaticThirtyTwoBitIndicesAbove65535RenderE
         0,
         1);
 
-#ifndef CNA_RENDERER_SDL_GPU
-    ExpectExactColor(
-        ReadCenter(device),
-        Color::Blue,
-        "public static Uint32 values above 65535");
-#endif
+    // plan_runtimerenderer.md RTR-P9-5: SDL_GPU has no backbuffer readback, so it is the one
+    // renderer with nothing to compare here.
+    if (!CNA_RENDERER_IS(SdlGpu))
+    {
+        ExpectExactColor(
+            ReadCenter(device),
+            Color::Blue,
+            "public static Uint32 values above 65535");
+    }
 }
-#endif
 
-#ifdef CNA_RENDERER_BGFX
+#ifdef CNA_TEST_BGFX_AVAILABLE
 TEST_F(IndexedDrawDeferredTest, PublicBufferKindsUseExactFixedBgfxIndexFlags)
 {
     RequireIndexedRendering();
@@ -914,7 +940,7 @@ TEST_F(IndexedDrawDeferredTest, PublicBufferKindsUseExactFixedBgfxIndexFlags)
 }
 #endif
 
-#ifdef CNA_RENDERER_BGFX
+#ifdef CNA_TEST_BGFX_AVAILABLE
 TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitDrawHonorsCompleteRangeBaseCountAndHints)
 {
     RequireIndexedRendering();
@@ -968,7 +994,7 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitDrawHonorsCompleteRangeBaseCou
         rangedIndices.data(), 0, 9, SetDataOptions::Discard);
     hintBuffer.SetData(hintIndices.data(), 3);
 
-#ifdef CNA_RENDERER_BGFX
+#ifdef CNA_TEST_BGFX_AVAILABLE
     ExpectExactBgfxIndexFlags(rangedBuffer, true);
     ExpectExactBgfxIndexFlags(hintBuffer, true);
 #endif
@@ -1060,15 +1086,17 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitDrawHonorsCompleteRangeBaseCou
 
 TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths)
 {
-#ifdef CNA_RENDERER_SOFTWARE
-    GTEST_SKIP() << "Software v1 intentionally supports indexed TriangleList only";
-#else
+    // plan_runtimerenderer.md RTR-P9-5: asked of the ACTIVE renderer. GTEST_SKIP() returns from
+    // the test body it is written in, so what used to be the `#else` arm is simply what follows.
+    if (CNA_RENDERER_IS(Software))
+        GTEST_SKIP() << "Software v1 intentionally supports indexed TriangleList only";
+
     if (!device.SupportsCapability(GraphicsCapability::ThreeD))
         GTEST_SKIP() << "Renderer explicitly does not support indexed triangle strips";
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setDepthStencilStateProperty(DepthStencilState::None);
 
-#ifdef CNA_RENDERER_VULKAN
+#ifdef CNA_TEST_VULKAN_AVAILABLE
     auto* vulkanRenderer =
         dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
             &device.GetRenderer());
@@ -1103,26 +1131,24 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
     EXPECT_NO_THROW(device.DrawIndexedPrimitives(
         PrimitiveType::TriangleStrip, 0, 4, 4, 1, 2));
 
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
-    defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX9) || \
-    defined(CNA_RENDERER_DIRECTX11)
-    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
-    ExpectExactColor(pixels.AtNdc(-0.5f), Color::Red, "basic Uint16 strip");
-    ExpectExactColor(pixels.AtNdc(0.5f), Color::Blue, "basic Uint32 strip");
-#endif
-#ifdef CNA_RENDERER_VULKAN
+    // plan_runtimerenderer.md RTR-P9-5: the renderers with an exact-pixel backbuffer oracle.
+    if (CNA_RENDERER_IS(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
+                        DirectX9, DirectX11))
+    {
+        const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+        ExpectExactColor(pixels.AtNdc(-0.5f), Color::Red, "basic Uint16 strip");
+        ExpectExactColor(pixels.AtNdc(0.5f), Color::Blue, "basic Uint32 strip");
+    }
+#ifdef CNA_TEST_VULKAN_AVAILABLE
     AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
-#endif
 #endif
 }
 
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
-    defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX9) || \
-    defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, DeferredAtoBtoACapturesDataCountsAndLifetimes)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
     RequireIndexedRendering();
 
     const auto left = TriangleAt(-0.65f, Color::Red);
@@ -1189,6 +1215,9 @@ TEST_F(IndexedDrawDeferredTest, DeferredAtoBtoACapturesDataCountsAndLifetimes)
 
 TEST_F(IndexedDrawDeferredTest, DeferredStaticVertexAtoBtoAPreservesEveryQueuedVersion)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
     RequireIndexedRendering();
 
     auto sourceA = CenterTriangle(Color::Red);
@@ -1243,9 +1272,13 @@ TEST_F(IndexedDrawDeferredTest, DeferredStaticVertexAtoBtoAPreservesEveryQueuedV
     ExpectExactColor(pixels.AtNdc(0.68f), Color::Red, "static vertex A restore");
 }
 
-#if !defined(CNA_RENDERER_DIRECTX9) && !defined(CNA_RENDERER_DIRECTX11)
 TEST_F(IndexedDrawDeferredTest, DeferredDynamicVertexAtoBtoAPreservesEveryQueuedVersion)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    // D3D9/D3D11 are excluded here: this deferred-queue contract was never measured on
+    // them, and an unmeasured renderer must not be asserted either way.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Software);
     RequireIndexedRendering();
 
     auto sourceA = CenterTriangle(Color::Blue);
@@ -1285,10 +1318,12 @@ TEST_F(IndexedDrawDeferredTest, DeferredDynamicVertexAtoBtoAPreservesEveryQueued
     ExpectExactColor(pixels.AtNdc(0.0f), Color::Yellow, "dynamic vertex B");
     ExpectExactColor(pixels.AtNdc(0.68f), Color::Blue, "dynamic vertex A restore");
 }
-#endif
 
 TEST_F(IndexedDrawDeferredTest, DeferredDistinctIdenticalVertexBuffersRemainIndependent)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
     RequireIndexedRendering();
 
     const auto identical = CenterTriangle(Color::Blue);
@@ -1327,9 +1362,13 @@ TEST_F(IndexedDrawDeferredTest, DeferredDistinctIdenticalVertexBuffersRemainInde
     ExpectExactColor(pixels.AtNdc(0.55f), Color::Blue, "independent identical buffer");
 }
 
-#if !defined(CNA_RENDERER_DIRECTX9) && !defined(CNA_RENDERER_DIRECTX11)
 TEST_F(IndexedDrawDeferredTest, DeferredDynamicIndexAtoBtoAPreservesEveryQueuedVersion)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    // D3D9/D3D11 are excluded here: this deferred-queue contract was never measured on
+    // them, and an unmeasured renderer must not be asserted either way.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Software);
     RequireIndexedRendering();
 
     const auto red = CenterTriangle(Color::Red);
@@ -1383,11 +1422,9 @@ TEST_F(IndexedDrawDeferredTest, DeferredDynamicIndexAtoBtoAPreservesEveryQueuedV
     ExpectExactColor(pixels.AtNdc(0.0f), Color::Lime, "dynamic index B");
     ExpectExactColor(pixels.AtNdc(0.68f), Color::Red, "dynamic index A restore");
 }
-#endif
 
-#endif
 
-#ifdef CNA_RENDERER_BGFX
+#ifdef CNA_TEST_BGFX_AVAILABLE
 TEST_F(IndexedDrawDeferredTest, BgfxIndexedAtoBtoACapturesEveryRangeAndBufferVersion)
 {
     RequireIndexedRendering();
@@ -2246,11 +2283,11 @@ TEST_F(IndexedDrawDeferredTest, BgfxNativeBufferVersionCountsRemainBounded)
 }
 #endif
 
-#if defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX9) || \
-    defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclaration)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
     RequireIndexedRendering();
 
     auto left = TriangleAt(-0.65f, Color::Red);
@@ -2316,16 +2353,15 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclar
     ExpectExactColor(pixels.AtNdc(0.0f), Color::Lime, "DrawUser declaration offset B");
     ExpectExactColor(pixels.AtNdc(0.65f), Color::Blue, "DrawUser Uint32 offset C");
 }
-#endif
 
-#if defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX9) || \
-    defined(CNA_RENDERER_DIRECTX11)
 TEST_F(IndexedDrawDeferredTest, DrawUserIndexedTriangleStripsPreserveWidthsOffsetsAndSources)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11);
     RequireIndexedRendering();
 
-#ifdef CNA_RENDERER_VULKAN
+#ifdef CNA_TEST_VULKAN_AVAILABLE
     auto* vulkanRenderer =
         dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
             &device.GetRenderer());
@@ -2386,21 +2422,19 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedTriangleStripsPreserveWidthsOffse
     ExpectExactColor(pixels.AtNdc(0.5f), Color::Blue, "DrawUser Uint32 strip");
     ExpectExactColor(pixels.AtNdc(0.0f), Color::Black, "DrawUser strip padding/background");
 
-#ifdef CNA_RENDERER_VULKAN
+#ifdef CNA_TEST_VULKAN_AVAILABLE
     AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
 #endif
 }
-#endif
 
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
-    defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX9) || \
-    defined(CNA_RENDERER_DIRECTX11)
 TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRangesAndPixels)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11);
     RequireIndexedRendering();
 
-#ifdef CNA_RENDERER_WEBGPU
+#ifdef CNA_TEST_WEBGPU_AVAILABLE
     auto* renderer =
         dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPURenderer*>(
             &device.GetRenderer());
@@ -2410,7 +2444,7 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
     wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_OutOfMemory);
     wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_Validation);
 #endif
-#ifdef CNA_RENDERER_VULKAN
+#ifdef CNA_TEST_VULKAN_AVAILABLE
     auto* vulkanRenderer =
         dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
             &device.GetRenderer());
@@ -2480,7 +2514,7 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
     ExpectExactColor(pixels.AtNdc(0.65f), Color::Blue, "odd Uint16/baseVertex strip");
     ExpectExactColor(pixels.AtNdc(-0.98f), Color::Black, "strip padding/background");
 
-#ifdef CNA_RENDERER_WEBGPU
+#ifdef CNA_TEST_WEBGPU_AVAILABLE
     // Two format-compatible Uint16 buffer objects reuse one pipeline; the intervening Uint32
     // command creates the sole required additional variant.
     EXPECT_EQ(2u, renderer->GetColoredPipelineCacheSizeEXT());
@@ -2488,18 +2522,19 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
     PopAndExpectClean(*renderer);
     EXPECT_EQ(uncapturedBefore, renderer->GetUncapturedErrorCountEXT());
 #endif
-#ifdef CNA_RENDERER_VULKAN
+#ifdef CNA_TEST_VULKAN_AVAILABLE
     AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
 #endif
 }
-#endif
 
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_VULKAN)
 TEST_F(IndexedDrawDeferredTest, IndexedTopologiesRenderExactDistinctGeometry)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, Vulkan);
     RequireIndexedRendering();
 
-#ifdef CNA_RENDERER_VULKAN
+#ifdef CNA_TEST_VULKAN_AVAILABLE
     auto* vulkanRenderer =
         dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
             &device.GetRenderer());
@@ -2565,16 +2600,19 @@ TEST_F(IndexedDrawDeferredTest, IndexedTopologiesRenderExactDistinctGeometry)
     ExpectExactColorNear(
         pixels, 0.85f, 0.0f, Color::Yellow, "indexed line strip second segment");
 
-#ifdef CNA_RENDERER_VULKAN
+#ifdef CNA_TEST_VULKAN_AVAILABLE
     AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
 #endif
 }
 
 TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctGeometry)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, Vulkan);
     RequireIndexedRendering();
 
-#ifdef CNA_RENDERER_VULKAN
+#ifdef CNA_TEST_VULKAN_AVAILABLE
     auto* vulkanRenderer =
         dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
             &device.GetRenderer());
@@ -2615,7 +2653,7 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctG
     lineStripBuffer.SetData(
         lineStrip.data(), 0, 3, SetDataOptions::NoOverwrite);
 
-#ifdef CNA_RENDERER_BGFX
+#ifdef CNA_TEST_BGFX_AVAILABLE
     ExpectExactBgfxIndexFlags(triangleListBuffer, true);
     ExpectExactBgfxIndexFlags(triangleStripBuffer, true);
     ExpectExactBgfxIndexFlags(lineListBuffer, true);
@@ -2649,16 +2687,17 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctG
     ExpectExactColorNear(
         pixels, 0.85f, 0.0f, Color::Yellow, "Uint32 line strip second segment");
 
-#ifdef CNA_RENDERER_VULKAN
+#ifdef CNA_TEST_VULKAN_AVAILABLE
     AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
 #endif
 }
 
-#endif
 
-#ifdef CNA_RENDERER_SOFTWARE
 TEST_F(IndexedDrawDeferredTest, SoftwareExplicitlyRejectsUnsupportedIndexedTopologies)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software);
     RequireIndexedRendering();
 
     const auto vertices = StripQuadAt(0.0f, Color::White);
@@ -2698,6 +2737,9 @@ TEST_F(IndexedDrawDeferredTest, SoftwareExplicitlyRejectsUnsupportedIndexedTopol
 // pointer. The public arguments below are all individually legal; only the decoded address is not.
 TEST_F(IndexedDrawDeferredTest, SoftwareRejectsDecodedVertexAddressesOutsideTheBoundBuffer)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software);
     RequireIndexedRendering();
 
     const auto triangle = CenterTriangle(Color::White);
@@ -2749,7 +2791,6 @@ TEST_F(IndexedDrawDeferredTest, SoftwareRejectsDecodedVertexAddressesOutsideTheB
         ReadCenter(device), Color::Black,
         "rejected Software indexed draws write nothing");
 }
-#endif
 
 TEST_F(IndexedDrawDeferredTest, PublicContractValidatesEveryIndexedRangeBeforeSubmission)
 {
@@ -2899,7 +2940,7 @@ TEST_F(IndexedDrawDeferredTest, PublicContractRejectsNegativeIndexedBaseVertex)
         System::ArgumentOutOfRangeException);
 }
 
-#ifdef CNA_RENDERER_WEBGPU
+#ifdef CNA_TEST_WEBGPU_AVAILABLE
 TEST_F(IndexedDrawDeferredTest, WebGpuIndexedTriangleStripMatchesBoundIndexFormat)
 {
     RequireIndexedRendering();

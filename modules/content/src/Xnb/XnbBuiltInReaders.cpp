@@ -4,6 +4,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Xnb/CurveContentTypeReader.hpp"
 #include "CNA/Internal/Xnb/DecimalDateTimeContentTypeReaders.hpp"
+#include "CNA/Internal/Xnb/EffectContentTypeReader.hpp"
 #include "CNA/Internal/Xnb/MathContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/ModelContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/PrimitiveContentTypeReaders.hpp"
@@ -34,11 +35,12 @@ namespace CNA::Internal::Xnb
         // REMED-BUILD-013 (discovered while verifying it): VideoContentTypeReader.cpp is excluded
         // from CNA_SOURCES on FFmpeg-unavailable platforms (CnaLibrary.cmake), same as its Video.cpp/
         // VideoPlayer.cpp/VideoDecoder.cpp siblings -- RegisterVideoXnbReader() would otherwise be an
-        // undefined reference on any MinGW/Emscripten/Android build (none of them have CNA_FFMPEG_AVAILABLE).
+        // undefined reference on any FFmpeg-free build, including iOS.
 #ifdef CNA_FFMPEG_AVAILABLE
         RegisterVideoXnbReader();
 #endif
         RegisterStockEffectXnbReaders();
+        RegisterEffectXnbReader();
         RegisterModelXnbReaders();
         Microsoft::Xna::Framework::Content::RegisterKnownUnsupportedXnbReaders();
     }

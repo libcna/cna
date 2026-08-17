@@ -110,6 +110,12 @@ namespace CNA::Internal::Renderers::Software
                 // own buffer with that buffer's own stride and binding offset, with no interleaved
                 // temporary and no per-vertex allocation.
                 return true;
+            case CNA::GraphicsCapability::MultipleRenderTargets:
+                // SetRenderTargets() throws for count > 1 and ApplyBlendState() notes the same
+                // limit: this renderer has ONE active colour buffer. Reported honestly instead of
+                // inherited as the blanket true below -- a capability is a promise, and this one
+                // was being made and then broken.
+                return false;
             case CNA::GraphicsCapability::Instancing:
                 // Not implemented: this renderer does not override DrawInstancedPrimitivesEx, so
                 // an instanced draw is the shared base-class refusal -- reported honestly instead
@@ -280,9 +286,8 @@ namespace CNA::Internal::Renderers::Software
     // REMED-GFX-073: store the viewport so the SpriteBatch path can place its viewport-local quads
     // at (x,y) and clip them to (x,y,w,h). GraphicsDevice pushes this on every setViewportProperty()
     // and resets it to the full target on each RenderTarget transition, so this single field is
-    // always relative to the currently active target. (The 3D DrawPrimitivesEx path still maps NDC
-    // over the full framebuffer -- a separate, non-SpriteBatch viewport gap; see the remediation
-    // notes.)
+    // always relative to the currently active target. REMED-GFX-079 now consumes the same stored
+    // rectangle and depth range in every 3D draw path as well.
     void SoftwareRenderer::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
     {
         viewportSet_ = true;

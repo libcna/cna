@@ -16,9 +16,9 @@ using CNA::toStringView;
 static_assert(getCurrentGraphicsBackendCategory() == getCurrentGraphicsBackendCategory());
 static_assert(!toStringView(getCurrentGraphicsBackendCategory()).empty());
 constexpr GraphicsBackendCategory kCompileTimeCategory = getCurrentGraphicsBackendCategory();
-constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::PortableGL) + 1;
-static_assert(kPublicRendererCount == 46,
-              "GraphicsRendererType must expose all 46 genuine renderer identities");
+constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::TinyGL) + 1;
+static_assert(kPublicRendererCount == 47,
+              "GraphicsRendererType must expose all 47 genuine renderer identities");
 
 TEST(GraphicsBackendCategoryTest, GetCurrentGraphicsBackendCategoryDoesNotThrow)
 {
@@ -87,6 +87,7 @@ namespace
             case GraphicsRendererType::Skia:
             case GraphicsRendererType::Blend2D:
             case GraphicsRendererType::PortableGL:
+            case GraphicsRendererType::TinyGL:
                 return GraphicsBackendCategory::Software;
 
             case GraphicsRendererType::WebGL1:

@@ -41,8 +41,6 @@ namespace CNA::Internal::Renderers::Glide
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
-        SDL_Window* GetWindowInternal() const override;
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;

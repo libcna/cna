@@ -1,0 +1,172 @@
+# plan_gltf.md GLTF-158 / GLTF-398 / GLTF-420: exercise every glTF conformance rung and every
+# vertex declaration at each campaign renderer boundary.
+#
+# L0-L6 are exact, renderer-independent oracles. The focused stride test then adds seven real
+# Model::Draw + Present calls. STUB has no 3D capability, so it verifies the common
+# upload/declaration half and reports the native-draw half as an explicit skip. A separate pinned
+# viewer job supplies L7: two OPENGLES3 processes per canonical fixture against committed goldens.
+# There is no allow-failure path: any rung or native boundary failure blocks the commit.
+
+name: glTF renderer conformance
+
+on:
+  push: {}
+  pull_request:
+    branches: [develop, master]
+  workflow_dispatch:
+
+concurrency:
+  # Per-SHA rather than per-branch: a later push must not cancel the prior commit's required
+  # evidence before it produces a result (GLTF-420).
+  group: gltf-renderer-conformance-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  stride-conformance:
+    name: glTF conformance (${{ matrix.renderer }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        renderer: [STUB, HEADLESS, OPENGLES3, VULKAN]
+    env:
+      CC: gcc-14
+      CXX: g++-14
+
+    steps:
+      - name: Checkout cna (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Clone sibling repositories
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/.."
+          for repo in sharp-runtime easy-gl meta-gl; do
+            git clone --depth 1 --branch develop \
+              "https://github.com/openeggbert/${repo}.git" "${repo}"
+          done
+
+      - name: Install system dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-14 cmake ninja-build pkg-config xvfb \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+            libvulkan-dev mesa-vulkan-drivers \
+            libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev \
+            libwayland-dev wayland-protocols libxkbcommon-dev \
+            libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
+
+      - name: Record SDL submodule commit
+        id: sdlsha
+        run: echo "sha=$(git -C third_party/SDL rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache prebuilt SDL
+        uses: actions/cache@v4
+        with:
+          path: .sdl-prebuilt-Linux-x86_64
+          key: sdl-${{ runner.os }}-${{ steps.sdlsha.outputs.sha }}
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCNA_GRAPHICS_RENDERER=${{ matrix.renderer }} \
+            -DCNA_BUILD_TESTS=ON \
+            -DCNA_BUILD_EXAMPLES=OFF \
+            -DCNA_ENABLE_NET=OFF
+
+      - name: Build CnaTests
+        run: cmake --build build --target CnaTests --parallel 4
+
+      - name: Run the complete glTF conformance ladder
+        env:
+          SDL_VIDEODRIVER: x11
+          SDL_AUDIODRIVER: dummy
+          LIBGL_ALWAYS_SOFTWARE: 1
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.renderer }}" == "VULKAN" ]]; then
+            lvp_icd="$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' -print -quit)"
+            test -n "${lvp_icd}"
+            export VK_ICD_FILENAMES="${lvp_icd}"
+          fi
+          xvfb-run -a ctest --test-dir build -L gltf-conformance --output-on-failure
+
+      - name: Run all seven stride boundaries
+        env:
+          SDL_VIDEODRIVER: x11
+          SDL_AUDIODRIVER: dummy
+          LIBGL_ALWAYS_SOFTWARE: 1
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.renderer }}" == "VULKAN" ]]; then
+            lvp_icd="$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' -print -quit)"
+            test -n "${lvp_icd}"
+            export VK_ICD_FILENAMES="${lvp_icd}"
+          fi
+          xvfb-run -a ./build/CnaTests \
+            --gtest_filter='GltfStrideAndBuffer.EveryImportedGltfStrideCarriesItsCanonicalVertexDeclaration:RendererStrideConformance.EveryGltfStrideReachesTheNativeDrawBoundary'
+
+  l7-corpus:
+    name: glTF conformance (OPENGLES3 L7)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CC: gcc-14
+      CXX: g++-14
+
+    steps:
+      - name: Checkout cna (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Clone pinned viewer and sibling repositories
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/.."
+          for repo in sharp-runtime easy-gl meta-gl; do
+            git clone --depth 1 --branch develop \
+              "https://github.com/openeggbert/${repo}.git" "${repo}"
+          done
+          git clone --filter=blob:none \
+            https://github.com/openeggbert/cna-gltf-viewer.git cna-gltf-viewer
+          git -C cna-gltf-viewer checkout --detach \
+            f32d1f136c74ed1508d4887952bf5a7a3d3b8b40
+
+      - name: Install system dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-14 cmake ninja-build pkg-config xvfb python3-pil \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+            libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev \
+            libwayland-dev wayland-protocols libxkbcommon-dev \
+            libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
+
+      - name: Configure pinned viewer against this CNA commit
+        run: |
+          cmake -S "${GITHUB_WORKSPACE}/../cna-gltf-viewer" \
+            -B "${RUNNER_TEMP}/cna-gltf-viewer-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCNA_ROOT_DIR="${GITHUB_WORKSPACE}" \
+            -DCNA_GRAPHICS_RENDERER=OPENGLES3 \
+            -DCNA_GLTF_VIEWER_BUILD_TESTS=ON
+
+      - name: Build production viewer
+        run: |
+          cmake --build "${RUNNER_TEMP}/cna-gltf-viewer-build" \
+            --target cna_gltf_viewer --parallel 3
+
+      - name: Run the whole-corpus L7 rung
+        run: |
+          xvfb-run -a ctest --test-dir "${RUNNER_TEMP}/cna-gltf-viewer-build" \
+            -R '^CnaGltfConformanceL7$' --output-on-failure

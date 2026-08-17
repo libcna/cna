@@ -9,7 +9,11 @@
 // binaries instead.
 #include <gtest/gtest.h>
 
-#if defined(CNA_RENDERER_DILIGENT)
+// plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
+// device-free policy coverage for its own renderer, so it is worth compiling and running
+// whenever that renderer is COMPILED IN -- in a multi-renderer build it need not be the
+// selected one. Only the default renderer's CNA_RENDERER_DILIGENT is defined project-wide.
+#if defined(CNA_RENDERER_DILIGENT) || defined(CNA_RENDERER_PRESENT_DILIGENT)
 #include "CNA/Internal/Renderers/Diligent/DiligentRenderer.hpp"
 
 #include <algorithm>
@@ -236,4 +240,4 @@ TEST(DiligentDeviceSelectionTest, EvaluateCapabilityMultiSampleAntiAliasingFollo
         EvaluateCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing, noFeatures, 1, true));
 }
 
-#endif // CNA_RENDERER_DILIGENT
+#endif // CNA_RENDERER_DILIGENT / CNA_RENDERER_PRESENT_DILIGENT

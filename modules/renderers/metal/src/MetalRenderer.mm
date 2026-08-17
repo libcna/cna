@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Metal/MetalRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalPipelineKey.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalCommandFailure.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalNormalMatrix.hpp"
@@ -33,10 +34,9 @@
 #include "System/NotSupportedException.hpp"
 
 #ifdef __APPLE__
+#import <Cocoa/Cocoa.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_metal.h>
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -50,6 +50,52 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+@interface CNAMetalView : NSView
+- (void)updateDrawableWidth:(int)width height:(int)height displayScale:(float)displayScale;
+@end
+
+@implementation CNAMetalView
++ (Class)layerClass
+{
+    return [CAMetalLayer class];
+}
+
+- (BOOL)wantsUpdateLayer
+{
+    return YES;
+}
+
+- (CALayer*)makeBackingLayer
+{
+    return [CAMetalLayer layer];
+}
+
+- (instancetype)initWithFrame:(NSRect)frame
+{
+    self = [super initWithFrame:frame];
+    if (self != nil)
+    {
+        self.wantsLayer = YES;
+        self.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+        self.layer.opaque = YES;
+    }
+    return self;
+}
+
+- (void)updateDrawableWidth:(int)width height:(int)height displayScale:(float)displayScale
+{
+    CAMetalLayer* metalLayer = (CAMetalLayer*)self.layer;
+    metalLayer.contentsScale = displayScale > 0.0f ? displayScale : 1.0f;
+    metalLayer.drawableSize = CGSizeMake(MAX(1, width), MAX(1, height));
+}
+
+- (NSView*)hitTest:(NSPoint)point
+{
+    (void)point;
+    return nil;
+}
+@end
 
 namespace CNA::Internal::Renderers::Metal
 {
@@ -464,13 +510,19 @@ struct PbrUniforms {
     float4 light1Dir; float4 light1Diffuse;
     float4 light2Dir; float4 light2Diffuse;
     float4 eyePosition;
-    float4 pbrFactors;      // x=MetallicFactor, y=RoughnessFactor
+    float4 pbrFactors;      // x=MetallicFactor, y=RoughnessFactor, z=NormalScale, w=OcclusionStrength
     float4 alphaTest;
     float4 fogColorEnabled;
     float4 fogVector;
+    float4 srgbFlags;          // x=base decode, y=emissive decode, z=output encode
+    float4 dielectricFresnel;  // xyz=dielectric F0, w=dielectric F90
+    float4 textureTransformRows[10];
 };
 struct VPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; };
 struct VPbrOut { float4 position [[position]]; float3 normal; float3 tangent; float bitangentSign; float2 uv; float fogFactor; float3 worldPos; };
+float cna_direction_handedness(float3x3 m) {
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
 vertex VPbrOut cna_v3d_pbr(VPbrIn in [[stage_in]], constant PbrTransform& t [[buffer(1)]], constant PbrUniforms& pu [[buffer(2)]]) {
     VPbrOut o;
     o.position = t.wvp * float4(in.position, 1.0);
@@ -478,13 +530,13 @@ vertex VPbrOut cna_v3d_pbr(VPbrIn in [[stage_in]], constant PbrTransform& t [[bu
     o.normal = normalMat * in.normal;
     float3x3 world3 = float3x3(t.world[0].xyz, t.world[1].xyz, t.world[2].xyz);
     o.tangent = world3 * in.tangent.xyz;
-    o.bitangentSign = in.tangent.w;
+    o.bitangentSign = in.tangent.w * cna_direction_handedness(world3);
     o.uv = in.uv;
     o.worldPos = (t.world * float4(in.position, 1.0)).xyz;
     o.fogFactor = 1.0 - clamp(dot(float4(in.position, 1.0), pu.fogVector), 0.0, 1.0);
     return o;
 }
-inline float3 cna_pbr_light(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0, float roughness, float metallic) {
+inline float3 cna_pbr_light(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0, float3 F90, float roughness, float metallic) {
     float3 H = normalize(V + L);
     float NdotL = max(dot(N, L), 0.0);
     float NdotV = max(dot(N, V), 1e-4);
@@ -495,11 +547,26 @@ inline float3 cna_pbr_light(float3 N, float3 V, float3 L, float3 lightColor, flo
     float D = a2 / (3.14159265*dTerm*dTerm + 1e-7);
     float k = (roughness+1.0); k = k*k/8.0;
     float G = (NdotV/(NdotV*(1.0-k)+k)) * (NdotL/(NdotL*(1.0-k)+k));
-    float3 F = F0 + (float3(1.0)-F0) * pow(clamp(1.0-VdotH, 0.0, 1.0), 5.0);
+    float3 F = F0 + (F90-F0) * pow(clamp(1.0-VdotH, 0.0, 1.0), 5.0);
     float3 specular = (D*G*F) / max(4.0*NdotV*NdotL, 1e-4);
     float3 diffuseColor = albedo * (1.0-metallic);
     float3 kd = float3(1.0) - F;
     return (kd*diffuseColor/3.14159265 + specular) * lightColor * NdotL;
+}
+inline float3 cna_srgb_to_linear(float3 c) {
+    float3 lo = c / 12.92;
+    float3 hi = pow((c + 0.055) / 1.055, float3(2.4));
+    return mix(lo, hi, step(float3(0.04045), c));
+}
+inline float3 cna_linear_to_srgb(float3 c) {
+    float3 lo = c * 12.92;
+    float3 hi = 1.055 * pow(max(c, float3(0.0)), float3(1.0 / 2.4)) - 0.055;
+    return mix(lo, hi, step(float3(0.0031308), c));
+}
+inline float2 cna_pbr_transform_uv(float2 uv, int slot, constant PbrUniforms& pu) {
+    float3 value = float3(uv, 1.0);
+    return float2(dot(value, pu.textureTransformRows[slot * 2].xyz),
+                  dot(value, pu.textureTransformRows[slot * 2 + 1].xyz));
 }
 fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]],
@@ -509,41 +576,54 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     texture2d<float> occlusionMap [[texture(4)]], sampler occlusionSmp [[sampler(4)]],
     constant PbrUniforms& pu [[buffer(2)]])
 {
-    float4 baseColorTex = tex.sample(smp, in.uv);
-    float3 albedo = baseColorTex.rgb * pu.diffuseColor.rgb;
+    float4 baseColorTex = tex.sample(smp, cna_pbr_transform_uv(in.uv, 0, pu));
+    float3 baseColor = mix(baseColorTex.rgb, cna_srgb_to_linear(baseColorTex.rgb), pu.srgbFlags.x);
+    float3 albedo = baseColor * pu.diffuseColor.rgb;
     float alpha = baseColorTex.a * pu.diffuseColor.a;
     float3 N = normalize(in.normal);
     float3 T = normalize(in.tangent - N*dot(N, in.tangent));
     float3 B = cross(N, T) * in.bitangentSign;
     float3x3 TBN = float3x3(T, B, N);
-    float3 sampledNormal = normalMap.sample(normalSmp, in.uv).rgb*2.0 - 1.0;
+    float3 sampledNormal = normalMap.sample(normalSmp, cna_pbr_transform_uv(in.uv, 1, pu)).rgb*2.0 - 1.0;
+    sampledNormal.xy *= pu.pbrFactors.z;
     float3 finalNormal = normalize(TBN * sampledNormal);
-    float4 mr = mrMap.sample(mrSmp, in.uv);
+    float4 mr = mrMap.sample(mrSmp, cna_pbr_transform_uv(in.uv, 2, pu));
     float roughness = clamp(mr.g * pu.pbrFactors.y, 0.045, 1.0);
     float metallic = clamp(mr.b * pu.pbrFactors.x, 0.0, 1.0);
     float3 V = normalize(pu.eyePosition.xyz - in.worldPos);
-    float3 F0 = mix(float3(0.04), albedo, metallic);
+    float3 F0 = mix(pu.dielectricFresnel.xyz, albedo, metallic);
+    float3 F90 = mix(float3(pu.dielectricFresnel.w), float3(1.0), metallic);
     float3 Lo = float3(0.0);
-    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light0Dir.xyz), pu.light0Diffuse.xyz, albedo, F0, roughness, metallic);
-    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light1Dir.xyz), pu.light1Diffuse.xyz, albedo, F0, roughness, metallic);
-    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light2Dir.xyz), pu.light2Diffuse.xyz, albedo, F0, roughness, metallic);
-    float occlusion = occlusionMap.sample(occlusionSmp, in.uv).r;
+    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light0Dir.xyz), pu.light0Diffuse.xyz, albedo, F0, F90, roughness, metallic);
+    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light1Dir.xyz), pu.light1Diffuse.xyz, albedo, F0, F90, roughness, metallic);
+    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light2Dir.xyz), pu.light2Diffuse.xyz, albedo, F0, F90, roughness, metallic);
+    float occlusionSample = occlusionMap.sample(occlusionSmp, cna_pbr_transform_uv(in.uv, 4, pu)).r;
+    float occlusion = 1.0 + pu.pbrFactors.w * (occlusionSample - 1.0);
     float3 ambient = pu.ambientColor.xyz * albedo * occlusion;
-    float3 emissive = pu.emissiveColor.xyz * emissiveMap.sample(emissiveSmp, in.uv).rgb;
+    float3 emissiveSample = emissiveMap.sample(emissiveSmp, cna_pbr_transform_uv(in.uv, 3, pu)).rgb;
+    emissiveSample = mix(emissiveSample, cna_srgb_to_linear(emissiveSample), pu.srgbFlags.y);
+    float3 emissive = pu.emissiveColor.xyz * emissiveSample;
     float4 c = float4(ambient + Lo + emissive, alpha);
     if (cna_alpha_test_fails(c.a, pu.alphaTest)) discard_fragment();
-    c.rgb = mix(pu.fogColorEnabled.xyz, c.rgb, in.fogFactor);
+    float3 fogLinear = mix(pu.fogColorEnabled.xyz,
+                           cna_srgb_to_linear(pu.fogColorEnabled.xyz), pu.srgbFlags.z);
+    c.rgb = mix(fogLinear, c.rgb, in.fogFactor);
+    c.rgb = mix(c.rgb, cna_linear_to_srgb(c.rgb), pu.srgbFlags.z);
     return c;
 }
 
-// CNAEXT SkinnedPbrEffect (plan_metal.md METAL-82): combines cna_skin_common's real GPU-skinning
-// blend (position+normal+tangent all transformed by the same per-vertex weighted bone matrix sum,
-// mat3(skinMat) directly -- no separate inverse-transpose normal-matrix step, matching
-// SkinnedEffect's own established precedent, not PBR's unskinned inverse-transpose path) with
-// cna_f3d_pbr's existing fragment shader unchanged -- both emit/consume the same VPbrOut, so no new
-// fragment shader is needed, only a new vertex shader producing that same interpolant struct.
-struct SkinnedPbrTransform { float4x4 wvp; float4x4 world; float4 skinParams; }; // skinParams.x = weightsPerVertex
+// CNAEXT SkinnedPbrEffect (plan_metal.md METAL-82, GLTF-264): GPU skinning plus the same PBR
+// interpolants as cna_v3d_pbr. Normals use inverse-transpose joint and world matrices while
+// tangents remain ordinary directions.
+struct SkinnedPbrTransform { float4x4 wvp; float4x4 world; float4 normalCol0; float4 normalCol1; float4 normalCol2; float4 skinParams; }; // skinParams.x = weightsPerVertex
 struct VSkinnedPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; float4 boneWeights [[attribute(4)]]; uchar4 boneIndices [[attribute(5)]]; };
+float3 cna_skin_normal(float3x3 m, float3 n) {
+    float3 c0=m[0], c1=m[1], c2=m[2];
+    float3 co0=cross(c1,c2), co1=cross(c2,c0), co2=cross(c0,c1);
+    float det=dot(c0,co0);
+    float3 transformed=float3x3(co0,co1,co2)*n;
+    return (abs(det)>1e-6) ? transformed*((det<0.0)?-1.0:1.0) : m*n;
+}
 vertex VPbrOut cna_v3d_skinned_pbr(VSkinnedPbrIn in [[stage_in]], constant SkinnedPbrTransform& t [[buffer(1)]], constant PbrUniforms& pu [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
     VPbrOut o;
     int weightsPerVertex = int(t.skinParams.x);
@@ -553,14 +633,18 @@ vertex VPbrOut cna_v3d_skinned_pbr(VSkinnedPbrIn in [[stage_in]], constant Skinn
     float4 skinnedPos = skinMat * float4(in.position, 1.0);
     o.position = t.wvp * skinnedPos;
     float3x3 skinMat3 = float3x3(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
-    float3 skinnedNormal = skinMat3 * in.normal;
+    float3 skinnedNormal = cna_skin_normal(skinMat3, in.normal);
     float skinnedNormalLen = length(skinnedNormal);
-    o.normal = (skinnedNormalLen > 1e-6) ? (skinnedNormal / skinnedNormalLen) : in.normal;
+    float3 boneNormal = (skinnedNormalLen > 1e-6) ? (skinnedNormal / skinnedNormalLen) : in.normal;
+    float3x3 normalMat = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz);
+    o.normal = normalize(normalMat * boneNormal);
     // Not renormalized here (matches the unskinned cna_v3d_pbr's own o.tangent = world3*tangent.xyz,
     // which is also left unnormalized) -- cna_f3d_pbr's Gram-Schmidt orthogonalization against the
     // interpolated normal already renormalizes it per-pixel regardless.
-    o.tangent = skinMat3 * in.tangent.xyz;
-    o.bitangentSign = in.tangent.w;
+    float3x3 world3 = float3x3(t.world[0].xyz, t.world[1].xyz, t.world[2].xyz);
+    o.tangent = world3 * (skinMat3 * in.tangent.xyz);
+    o.bitangentSign = in.tangent.w * cna_direction_handedness(world3)
+                                   * cna_direction_handedness(skinMat3);
     o.uv = in.uv;
     o.worldPos = (t.world * skinnedPos).xyz;
     o.fogFactor = 1.0 - clamp(dot(skinnedPos, pu.fogVector), 0.0, 1.0);
@@ -969,7 +1053,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         ~MetalTexture() override { [texture_ release]; [queue_ release]; [dev_ release]; }
         int GetWidth() const override { return w_; }
         int GetHeight() const override { return h_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         // plan_metal.md METAL-256: real bug found (Phase 18's own resource-lifetime audit, METAL-175)
         // and fixed here -- the original implementation mutated `texture_` in place via
         // `replaceRegion:`, which Apple's own Metal synchronization guidance is explicit is NOT
@@ -1425,10 +1509,15 @@ static id<MTLTexture> makeMultisampleTexture(id<MTLDevice> dev, MTLPixelFormat f
 
 struct MetalRenderer::Impl
 {
+    explicit Impl(const RendererSurfaceInfo& surfaceInfo)
+        : surface(surfaceInfo, "MetalRenderer")
+    {
+    }
+
     ~Impl();
 
-    SDL_Window* window=nullptr;
-    SDL_MetalView view=nullptr;
+    PlatformRendererSurfaceState surface;
+    CNAMetalView* view=nil;
     CAMetalLayer* layer=nil;
     id<MTLDevice> device=nil;
     id<MTLCommandQueue> queue=nil;
@@ -1987,22 +2076,22 @@ struct MetalRenderer::Impl
     }
 
     // plan_metal.md Phase 15 (METAL-153/155/156/158/159): the shared letterbox/overscan/stretch/
-    // native/fixed-height-dynamic-width viewport math, ported near-verbatim from
-    // SdlGpuRenderer::ComputeLogicalViewport() (an already-shipped, already-relied-upon
-    // implementation of the exact same CnaPresentationMode contract every renderer shares) rather
-    // than re-derived from scratch. `width`/`height`/`x`/`y` are the logical canvas's rectangle in
+    // native/fixed-height-dynamic-width viewport math, ported near-verbatim from the already-
+    // shipped GPU presentation implementation rather than re-derived from scratch.
+    // `width`/`height`/`x`/`y` are the logical canvas's rectangle in
     // physical window pixels; `logicalWidth`/`logicalHeight` are the virtual-resolution size that
     // rectangle represents (equal to the physical size whenever no virtual resolution is set,
     // which is also this struct's all-zero-input-safe degenerate case).
     // plan_metal.md METAL-34-style extraction: the real arithmetic now lives in the plain-C++
     // MetalLogicalViewport.hpp (no Objective-C, buildable and unit-tested on any platform without
     // an Apple toolchain) -- kept as a thin same-name alias plus a wrapper here so all existing call
-    // sites in this file are unaffected; this method's only remaining job is asking SDL for the
-    // real physical window size, which genuinely does need a live window.
+    // sites in this file are unaffected; physical sizing comes from the latest platform snapshot.
     using LogicalViewport = MetalLogicalViewport;
     LogicalViewport computeLogicalViewport() const
     {
-        int pw=0, ph=0; SDL_GetWindowSizeInPixels(window, &pw, &ph);
+        const auto drawableSize=surface.GetDrawableSize();
+        const int pw=drawableSize.width;
+        const int ph=drawableSize.height;
         LogicalViewport vp = ComputeMetalLogicalViewport(pw, ph, (CnaPresentationMode)presentationMode, virtualW, virtualH);
         return vp;
     }
@@ -2028,26 +2117,27 @@ struct MetalRenderer::Impl
     Sprite2DTransform computeSpriteTransform() const;
 
     // plan_metal.md METAL-153/154: real window<->logical coordinate transforms, previously
-    // entirely unimplemented (base `IGraphicsRenderer` default returns false) -- SdlInputBridge
+    // entirely unimplemented (base `IGraphicsRenderer` default returns false) -- the input bridge
     // depends on this for correct mouse coordinates on any letterboxed/scaled window, per this
-    // method's own doc comment on IGraphicsRenderer.hpp. Ported from
-    // SdlGpuRenderer::TransformWindowToLogical/TransformLogicalToWindow verbatim (same
-    // LogicalViewport shape, same formula) rather than re-derived.
+    // method's own doc comment on IGraphicsRenderer.hpp. Ported from the established GPU
+    // renderer transform (same LogicalViewport shape and formula) rather than re-derived.
     bool transformWindowToLogical(float windowX, float windowY, float& logX, float& logY) const
     {
         LogicalViewport vp = computeLogicalViewport();
         if (vp.width == 0.0f || vp.height == 0.0f) return false;
-        logX = (windowX - vp.x) * vp.logicalWidth / vp.width;
-        logY = (windowY - vp.y) * vp.logicalHeight / vp.height;
-        return windowX >= vp.x && windowX < vp.x + vp.width &&
-               windowY >= vp.y && windowY < vp.y + vp.height;
+        const float drawableX=surface.WindowToDrawable(windowX);
+        const float drawableY=surface.WindowToDrawable(windowY);
+        logX = (drawableX - vp.x) * vp.logicalWidth / vp.width;
+        logY = (drawableY - vp.y) * vp.logicalHeight / vp.height;
+        return drawableX >= vp.x && drawableX < vp.x + vp.width &&
+               drawableY >= vp.y && drawableY < vp.y + vp.height;
     }
     bool transformLogicalToWindow(float logX, float logY, float& windowX, float& windowY) const
     {
         LogicalViewport vp = computeLogicalViewport();
         if (vp.logicalWidth == 0.0f || vp.logicalHeight == 0.0f) return false;
-        windowX = vp.x + logX * vp.width / vp.logicalWidth;
-        windowY = vp.y + logY * vp.height / vp.logicalHeight;
+        windowX = surface.DrawableToWindow(vp.x + logX * vp.width / vp.logicalWidth);
+        windowY = surface.DrawableToWindow(vp.y + logY * vp.height / vp.logicalHeight);
         return true;
     }
 };
@@ -2077,7 +2167,7 @@ MetalRenderer::Impl::~Impl()
     [library release]; library=nil;
     [queue release]; queue=nil;
     [layer release]; layer=nil;
-    if (view) { SDL_Metal_DestroyView(view); view=nullptr; }
+    if (view) { [view removeFromSuperview]; [view release]; view=nil; }
     [device release]; device=nil;
 }
 
@@ -2561,7 +2651,7 @@ public:
     }
     int GetWidth() const override { return w_; }
     int GetHeight() const override { return h_; }
-    SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
     // Public count zero is the deterministic unsupported/no-MSAA value.
     int GetMultiSampleCount() const override { return appliedSampleCount_; }
     int GetAppliedDepthStencilFormatEXT(int /*requestedDepthStencilFormat*/) const override
@@ -3011,7 +3101,7 @@ MetalRenderer::Impl::Sprite2DTransform MetalRenderer::Impl::computeSpriteTransfo
     if (currentRenderTarget) {
         // An offscreen RenderTarget2D's own pixel space IS the logical space -- no
         // window-relative letterbox scaling applies at all (computeLogicalViewport() queries the
-        // real window size via SDL, which has nothing to do with an offscreen texture's own
+        // live window size, which has nothing to do with an offscreen texture's own
         // coordinate space); this is a real, deliberate 1:1 mapping, not a shortcut.
         id<MTLTexture> rtColor = currentRenderTarget->colorTexture();
         const float dw=(float)rtColor.width, dh=(float)rtColor.height;
@@ -3116,18 +3206,23 @@ static std::function<void()> makeMetalResourceOwnerHealthCheck(
     };
 }
 
-MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::make_shared<Impl>())
+MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::make_shared<Impl>(args.surface))
 {
-    auto& p=*impl_; p.window=args.window; p.virtualW=args.virtualWidth; p.virtualH=args.virtualHeight; p.swapInterval=args.swapInterval;
+    auto& p=*impl_; p.virtualW=args.virtualWidth; p.virtualH=args.virtualHeight; p.swapInterval=args.swapInterval;
     // plan_metal.md Phase 15: real, previously-invisible bug -- args.presentationMode was never
     // read at all (Impl::presentationMode's own field default, Letterbox=0, silently won this
     // instead), even though GraphicsRendererCreateArgs::presentationMode's own doc comment states
-    // its default is FixedHeightDynamicWidth (XNA/Windows-Phone-matching) and SdlGpu/EasyGL's own
+    // its default is FixedHeightDynamicWidth (XNA/Windows-Phone-matching) and the GPU/EasyGL
     // constructors both already forward it correctly. Had zero observable effect before this
     // phase since nothing consumed `presentationMode` yet; matters now that computeLogicalViewport()
     // does.
     p.presentationMode=(int)args.presentationMode;
-    if(!p.window) throw std::runtime_error("Metal renderer requires an SDL_Window");
+    CNA::Platform::CocoaNativeWindow nativeWindow;
+    if(!CNA::Platform::TryGetCocoa(p.surface.GetNativeHandle(),nativeWindow))
+        throw std::runtime_error("Metal renderer requires a Cocoa native window");
+    NSWindow* cocoaWindow=(NSWindow*)nativeWindow.window;
+    NSView* contentView=[cocoaWindow contentView];
+    if(!contentView) throw std::runtime_error("Metal renderer requires a Cocoa content view");
     // MTLCreateSystemDefaultDevice follows the Create ownership convention and returns one owned
     // (+1) reference under MRR. Do not retain it again. Likewise, every `new*` result stored below
     // is already +1; only borrowed factory/getter results that survive their call scope
@@ -3136,12 +3231,17 @@ MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::
     // The historical MSAA path engaged on macOS CI but did not produce correct edge coverage.
     // Keep the supported contract deterministic until an adapted build has passing Mac evidence.
     p.deviceSampleCount=MetalAppliedMultiSampleCount(args.multiSampleCount)+1;
-    p.view=SDL_Metal_CreateView(p.window); if(!p.view) throw std::runtime_error(std::string("Metal: SDL_Metal_CreateView failed: ")+SDL_GetError());
-    p.layer=(CAMetalLayer*)SDL_Metal_GetLayer(p.view);
-    if(!p.layer) throw std::runtime_error("Metal: SDL_Metal_GetLayer returned null");
+    p.view=[[CNAMetalView alloc] initWithFrame:[contentView bounds]];
+    if(!p.view) throw std::runtime_error("Metal: failed to create a layer-backed Cocoa view");
+    [contentView addSubview:p.view];
+    const auto drawableSize=p.surface.GetDrawableSize();
+    [p.view updateDrawableWidth:drawableSize.width height:drawableSize.height
+                   displayScale:p.surface.GetDisplayScale()];
+    p.layer=(CAMetalLayer*)p.view.layer;
+    if(!p.layer) throw std::runtime_error("Metal: Cocoa view did not create a CAMetalLayer");
     [p.layer retain]; p.layer.device=p.device; p.layer.pixelFormat=MTLPixelFormatBGRA8Unorm; p.layer.framebufferOnly=NO;
     // plan_metal.md METAL-168: swapInterval was previously stored but never applied -- CAMetalLayer
-    // has no direct integer-interval knob (unlike SDL_GL_SetSwapInterval's 0/1/-1 or Vulkan's
+    // has no direct integer-interval knob (unlike OpenGL's 0/1/-1 swap interval or Vulkan's
     // present-mode choice, both real per-value behavior elsewhere in this codebase), only the
     // boolean displaySyncEnabled. XNA PresentInterval::Immediate(0) -> NO (uncapped); One(1, the
     // default)/Two(2) both -> YES (real, honest vsync) since Metal has no true half-rate present
@@ -3202,6 +3302,13 @@ void MetalRenderer::GetViewportSize(int&w,int&h){
     auto vp=impl_->computeLogicalViewport();
     w=(int)std::lround(vp.logicalWidth); h=(int)std::lround(vp.logicalHeight);
 }
+void MetalRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+{
+    impl_->surface.Update(surface);
+    const auto drawableSize=impl_->surface.GetDrawableSize();
+    [impl_->view updateDrawableWidth:drawableSize.width height:drawableSize.height
+                        displayScale:impl_->surface.GetDisplayScale()];
+}
 void MetalRenderer::GetDefaultViewportRect(int&x,int&y,int&w,int&h)
 {
     const auto vp=impl_->computeLogicalViewport();
@@ -3245,7 +3352,6 @@ void MetalRenderer::ReadBackbuffer(int x,int y,int w,int h,uint8_t* pixels)
         "GraphicsDevice::GetBackBufferData: Metal backbuffer readback is disabled because the "
         "historical macOS test run returned clear-color-only data after real draws.");
 }
-SDL_Window* MetalRenderer::GetWindowInternal()const{return impl_->window;} SDL_Renderer* MetalRenderer::GetRendererInternal()const{return nullptr;}
 std::unique_ptr<ITextureRenderer> MetalRenderer::CreateTexture(const ImageData& d)
 {
     impl_->throwPendingCommandFailure();
@@ -3731,7 +3837,7 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
     }
     int n=primitiveVertexCount(pt,pc);
     // plan_metal.md: real bug found and fixed 2026-07-20 -- every other renderer (EasyGL/Vulkan/
-    // Bgfx/SdlGpu/WebGPU) reads GpuDrawParams::vertexStart/startIndex/baseVertex and applies them;
+    // Bgfx/native GPU/WebGPU) reads GpuDrawParams::vertexStart/startIndex/baseVertex and applies them;
     // this function silently hardcoded 0/0 for all three, so any draw with a nonzero offset into a
     // shared vertex/index buffer rendered the wrong vertex range. Never caught until
     // Metal_PbrEffect_Golden/Metal_SkinnedPbrEffect_Golden (METAL-89) became the first Metal test
@@ -3834,7 +3940,12 @@ bool MetalRenderer::SupportsCapability(CNA::GraphicsCapability capability) const
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_METAL
-std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args){return std::make_unique<Metal::MetalRenderer>(args);}
+// plan_runtimerenderer.md design decision 4: declared in this family's own
+// namespace so several renderer archives can link into one binary, then defined
+// below with a qualified name -- the body keeps its place unchanged.
+namespace Metal { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+std::unique_ptr<IGraphicsRenderer> Metal::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args){return std::make_unique<Metal::MetalRenderer>(args);}
 #endif
 }
 #else

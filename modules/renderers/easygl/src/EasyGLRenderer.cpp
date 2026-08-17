@@ -1,12 +1,41 @@
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
+#include "CNA/Internal/Graphics/SrgbTransfer.hpp"
+#include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
+
+namespace CNA::Internal::Renderers::EasyGL
+{
+    namespace
+    {
+        // plan_runtimerenderer.md phase P11: the runtime replacements for this file's former
+        // CNA_GL_PROFILE_* preprocessor guards. Argument-less on purpose -- they read the active
+        // profile themselves, so a guard converts to a one-line condition with no plumbing through
+        // the many free helpers this file is built from.
+        //
+        // threeissues.md finding 1, FIXED: ProfileIsEs2ApiGeneration() covers OPENGLES2 AND WEBGL1.
+        //
+        // It used to reproduce `#if defined(CNA_GL_PROFILE_OPENGLES2)` exactly, excluding WEBGL1 --
+        // faithful to the compile-time guards, and wrong. Every remaining use guards an ES 2.0
+        // API-GENERATION limitation, not a shading-language difference where the two profiles could
+        // legitimately diverge, and WebGL 1 is an ES 2.0-class API with the same limitation in each
+        // case. Excluding it meant a WEBGL1 build took the ES 3.0 path and called entry points its
+        // context does not have.
+        [[nodiscard]] inline bool ProfileIsDesktopCore()  { return IsDesktopCoreProfile(ActiveGlProfile()); }
+        [[nodiscard]] inline bool ProfileUsesGlslEs100()  { return UsesGlslEs100(ActiveGlProfile()); }
+        [[nodiscard]] inline bool ProfileIsEs2ApiGeneration() { return UsesEs2ApiGeneration(ActiveGlProfile()); }
+        [[nodiscard]] inline bool ProfileIs(GlProfile expected) { return ActiveGlProfile() == expected; }
+    }
+}
+
+#include "CNA/Platform/PlatformException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "System/NotSupportedException.hpp"
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <span>
 
-#include "CNA/Platform.hpp"
+#include "CNA/TargetPlatform.hpp"
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
@@ -35,7 +64,6 @@
 #include <vector>
 #include <cmath>
 #include <cstring>
-#include <SDL3/SDL.h>
 #include <string>
 #include <sstream>
 #include <set>
@@ -76,7 +104,7 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 // the rows), which is why the public GetData contract has always been top-down. Sampling did not,
 // so a rendered texture arrived vertically mirrored while an uploaded one did not.
 //
-// uRtFlipV.x/.y/.z/.w carry texture units 0-3 and uRtFlipVHi.x carries unit 4: 1 when the source
+// uRtFlipV.x/.y/.z/.w carry texture units 0-3 and uRtFlipVHi.x/.y/.z carry units 4-6: 1 when the source
 // bound there is a render-target colour attachment, 0 for an ordinary texture (and 0 always on a
 // renderer whose framebuffer origin is top-left). Exactly one correction is applied, at sample
 // time, per bound source -- nothing is copied, read back or re-uploaded, and no shader variant is
@@ -87,9 +115,40 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 "uniform vec4 uRtFlipV;\n" \
 "vec2 cnaSampleUV(vec2 uv,float flip){return vec2(uv.x,mix(uv.y,1.0-uv.y,flip));}\n"
 
-/// REMED-GFX-147: unit 4's flag, declared only by the shaders that reach that far (PbrEffect).
+/// REMED-GFX-147: units 4-6, declared only by the shaders that reach that far (PbrEffect).
 #define CNA_GL_RT_SAMPLE_UV_HI_DECL \
 "uniform vec4 uRtFlipVHi;\n"
+
+/// plan_gltf.md GLTF-210/GLTF-212: the sRGB transfer, pasted into the PbrEffect shaders. The text
+/// is not written here -- it comes from CNA/Internal/Graphics/SrgbTransfer.hpp, which is also
+/// where the C++ implementation of the same formula lives, so the two cannot drift into two
+/// slightly different curves.
+#define CNA_GL_SRGB_TRANSFER_DECL CNA_GLSL_SRGB_TRANSFER
+
+// plan_gltf.md GLTF-264: a normal follows the inverse transpose of the blended skin matrix.
+// All EasyGL profiles, including GLSL ES 1.00, support cross/dot but ES 1.00 has no inverse() for
+// matrices. The three cross products are the columns of det(m)*inverseTranspose(m). Normalisation
+// cancels abs(det); multiplying by sign(det) retains the orientation under a mirrored joint. A
+// nearly singular blend falls back to the historical direct transform, after which each caller's
+// existing zero-length guard prevents a NaN from poisoning the lighting calculation.
+#define CNA_GL_SKIN_NORMAL_DECL \
+"vec3 cnaSkinNormal(mat3 m,vec3 n){\n" \
+"    vec3 c0=m[0],c1=m[1],c2=m[2];\n" \
+"    vec3 co0=cross(c1,c2),co1=cross(c2,c0),co2=cross(c0,c1);\n" \
+"    float det=dot(c0,co0);\n" \
+"    vec3 transformed=mat3(co0,co1,co2)*n;\n" \
+"    return (abs(det)>1e-6)?transformed*sign(det):m*n;\n" \
+"}\n"
+
+// plan_gltf.md GLTF-176: a tangent frame changes orientation under a negative-determinant
+// direction transform. GLSL ES 1.00 has no determinant(mat3), so compute the scalar triple product
+// shared by both PBR vertex programs. A singular transform has no meaningful tangent frame; +1 is
+// the stable fallback and, unlike sign(0), does not erase an otherwise valid authored sign.
+#define CNA_GL_DIRECTION_HANDEDNESS_DECL \
+"float cnaDirectionHandedness(mat3 m){\n" \
+"    float det=dot(m[0],cross(m[1],m[2]));\n" \
+"    return (det<0.0)?-1.0:1.0;\n" \
+"}\n"
 
 // REMED-GFX-122: stock EasyGL effects share one optional per-instance world matrix input. Locations
 // 12-15 reserve the final four slots of GLES 3's guaranteed 16-attribute floor. That leaves the
@@ -112,6 +171,224 @@ namespace CNA::Internal::Renderers::EasyGL
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
     using namespace CNA::Internal::Renderers;
+
+    namespace
+    {
+        // MERGE (plan_platform.md PLAT-* x plan_runtimerenderer.md P11): the version/profile the
+        // platform is asked for is DATA, so it is computed from the runtime profile rather than
+        // from `#if defined(CNA_GL_PROFILE_*)`. The compile-time form could only ever describe one
+        // profile, which is exactly what P11 removed: a single binary may hold up to five, and the
+        // one in force is known only when the renderer is constructed.
+        //
+        // The profile is a parameter rather than a read of ActiveGlProfile() on purpose: this is
+        // called from the constructor's member-initializer list, which runs before the constructor
+        // body could publish the active profile.
+        CNA::Platform::GlContextDescription RequestedGlContext(GlProfile profile)
+        {
+            CNA::Platform::GlContextDescription description;
+            if (IsDesktopCoreProfile(profile))
+            {
+                description.majorVersion = 3;
+                description.minorVersion = 3;
+                description.profile = CNA::Platform::GlProfile::Core;
+            }
+            else if (UsesGlslEs100(profile))
+            {
+                description.majorVersion = 2;
+                description.minorVersion = 0;
+                description.profile = CNA::Platform::GlProfile::Es;
+            }
+            else
+            {
+                description.majorVersion = 3;
+                description.minorVersion = 0;
+                description.profile = CNA::Platform::GlProfile::Es;
+            }
+            description.depthBits = 24;
+            description.stencilBits = 8;
+            description.doubleBuffer = true;
+            return description;
+        }
+
+        CNA::Platform::WindowId RequireEasyGlWindowId(const RendererSurfaceInfo& surface)
+        {
+            if (surface.windowId == 0)
+            {
+                throw CNA::Platform::PlatformException(
+                    "EasyGLRenderer::CreateContext", "surface has no platform window id");
+            }
+            return surface.windowId;
+        }
+
+        CNA::Platform::GlProcAddressLoader glProcAddressLoader = nullptr;
+
+        void* LoadEasyGlProcAddress(const char* name)
+        {
+            return glProcAddressLoader != nullptr ? glProcAddressLoader(name) : nullptr;
+        }
+    }
+
+    class EasyGLPlatformContext
+    {
+    public:
+        EasyGLPlatformContext(CNA::Platform::IPlatformGlContext& service,
+                              const CNA::Platform::WindowId window,
+                              CNA::Platform::GlContextDescription description)
+            : service_(service), window_(window), description_(std::move(description))
+        {
+            context_ = service_.CreateContext(window_, description_);
+            try
+            {
+                service_.MakeCurrent(window_, context_);
+            }
+            catch (...)
+            {
+                service_.DestroyContext(context_);
+                context_ = nullptr;
+                throw;
+            }
+        }
+
+        ~EasyGLPlatformContext()
+        {
+            service_.DestroyContext(context_);
+        }
+
+        EasyGLPlatformContext(const EasyGLPlatformContext&) = delete;
+        EasyGLPlatformContext& operator=(const EasyGLPlatformContext&) = delete;
+
+        void Recreate()
+        {
+            if (context_ != nullptr)
+            {
+                service_.MakeCurrent(window_, nullptr);
+                service_.DestroyContext(context_);
+                context_ = nullptr;
+            }
+
+            context_ = service_.CreateContext(window_, description_);
+            try
+            {
+                service_.MakeCurrent(window_, context_);
+            }
+            catch (...)
+            {
+                service_.DestroyContext(context_);
+                context_ = nullptr;
+                throw;
+            }
+        }
+
+        void SwapBuffers() { service_.SwapBuffers(window_); }
+        bool SetSwapInterval(const int interval) { return service_.SetSwapInterval(interval); }
+        [[nodiscard]] CNA::Platform::GlProcAddressLoader GetLoader() const
+        {
+            return service_.GetProcAddressLoader();
+        }
+
+    private:
+        CNA::Platform::IPlatformGlContext& service_;
+        CNA::Platform::WindowId window_ = 0;
+        CNA::Platform::GlContextDescription description_;
+        CNA::Platform::GlContextHandle context_ = nullptr;
+    };
+
+    EasyGLSurfaceState::EasyGLSurfaceState(
+        const RendererSurfaceInfo& surface, const int virtualWidth, const int virtualHeight,
+        const CnaPresentationMode presentationMode)
+        : surface_(surface), virtualWidth_(virtualWidth), virtualHeight_(virtualHeight),
+          presentationMode_(presentationMode)
+    {
+        Update(surface);
+    }
+
+    void EasyGLSurfaceState::Update(const RendererSurfaceInfo& surface)
+    {
+        surface_ = surface;
+        if (!(surface_.displayScale > 0.0f))
+        {
+            surface_.displayScale = 1.0f;
+        }
+    }
+
+    void EasyGLSurfaceState::SetVirtualResolution(const int width, const int height)
+    {
+        virtualWidth_ = width;
+        virtualHeight_ = height;
+    }
+
+    void EasyGLSurfaceState::SetPresentationMode(const CnaPresentationMode mode)
+    {
+        presentationMode_ = mode;
+    }
+
+    void EasyGLSurfaceState::GetDrawableSize(int& width, int& height) const
+    {
+        width = surface_.drawableSize.width;
+        height = surface_.drawableSize.height;
+    }
+
+    void EasyGLSurfaceState::GetClientSize(int& width, int& height) const
+    {
+        width = static_cast<int>(std::lround(
+            static_cast<double>(surface_.drawableSize.width) / surface_.displayScale));
+        height = static_cast<int>(std::lround(
+            static_cast<double>(surface_.drawableSize.height) / surface_.displayScale));
+    }
+
+    void EasyGLSurfaceState::GetLogicalSize(int& width, int& height) const
+    {
+        int clientWidth = 0;
+        int clientHeight = 0;
+        GetClientSize(clientWidth, clientHeight);
+        if (virtualHeight_ <= 0)
+        {
+            width = clientWidth;
+            height = clientHeight;
+            return;
+        }
+
+        height = virtualHeight_;
+        if (presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth && clientHeight > 0)
+        {
+            width = static_cast<int>(
+                static_cast<double>(clientWidth) * virtualHeight_ / clientHeight + 0.5);
+        }
+        else
+        {
+            width = virtualWidth_ > 0 ? virtualWidth_ : clientWidth;
+        }
+    }
+
+    bool EasyGLSurfaceState::WindowToLogical(const float windowX, const float windowY,
+                                             float& logicalX, float& logicalY) const
+    {
+        if (virtualHeight_ <= 0) return false;
+        int clientWidth = 0;
+        int clientHeight = 0;
+        GetClientSize(clientWidth, clientHeight);
+        if (clientHeight <= 0) return false;
+        const float scale = static_cast<float>(virtualHeight_) /
+                            static_cast<float>(clientHeight);
+        logicalX = windowX * scale;
+        logicalY = windowY * scale;
+        return true;
+    }
+
+    bool EasyGLSurfaceState::LogicalToWindow(const float logicalX, const float logicalY,
+                                             float& windowX, float& windowY) const
+    {
+        if (virtualHeight_ <= 0) return false;
+        int clientWidth = 0;
+        int clientHeight = 0;
+        GetClientSize(clientWidth, clientHeight);
+        if (clientHeight <= 0) return false;
+        const float scale = static_cast<float>(clientHeight) /
+                            static_cast<float>(virtualHeight_);
+        windowX = logicalX * scale;
+        windowY = logicalY * scale;
+        return true;
+    }
 
     // REMED-GFX-147. See the declaration in EasyGLRenderer.hpp.
     bool SampledRowOrderIsBottomUp(const ITextureRenderer* texture)
@@ -530,7 +807,8 @@ namespace CNA::Internal::Renderers::EasyGL
     // identical, so the two profiles share one transform branch.
     static std::string AdaptGlslEs300ForActiveProfile(const char* es300Source, GlShaderStageKind stage)
     {
-#if defined(CNA_GL_PROFILE_OPENGL33)
+if (ProfileIsDesktopCore())
+{
         std::string src(es300Source);
         const std::string versionLine = "#version 300 es\n";
         const auto versionPos = src.find(versionLine);
@@ -555,7 +833,9 @@ namespace CNA::Internal::Renderers::EasyGL
             }
         }
         return src;
-#elif defined(CNA_GL_PROFILE_WEBGL1) || defined(CNA_GL_PROFILE_OPENGLES2)
+        }
+        if (ProfileUsesGlslEs100())
+        {
         std::string src(es300Source);
         const std::string versionLine = "#version 300 es\n";
         const auto versionPos = src.find(versionLine);
@@ -578,13 +858,16 @@ namespace CNA::Internal::Renderers::EasyGL
                        << std::endl;
         }
         return transformed;
-#else
+        }
+
+        // OPENGLES3 / WEBGL2: the stored source is already GLSL ES 3.00.
         (void)stage;
         return std::string(es300Source);
-#endif
     }
 
-#if defined(CNA_GL_PROFILE_OPENGL33)
+    // plan_runtimerenderer.md P11: always compiled now; the call site is runtime-gated on the
+    // active profile instead. Loading the entry point is harmless on a non-core profile because it
+    // is only ever invoked when IsDesktopCoreProfile() holds.
     namespace
     {
         // plan_glbackends.md GLB-40: desktop GL core profile -- unlike GLES/WebGL, which always
@@ -603,12 +886,11 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             using GlEnableFn = void (*)(unsigned int);
             static const auto glEnableFn =
-                reinterpret_cast<GlEnableFn>(SDL_GL_GetProcAddress("glEnable"));
+                reinterpret_cast<GlEnableFn>(LoadEasyGlProcAddress("glEnable"));
             constexpr unsigned int kGlVertexProgramPointSize = 0x8642;
             if (glEnableFn) glEnableFn(kGlVertexProgramPointSize);
         }
     }
-#endif
 
     // --- EasyGLTexture3DRenderer ---
 
@@ -638,7 +920,7 @@ namespace CNA::Internal::Renderers::EasyGL
     //     enabled attribute pointer by baseVertex elements of its own stride instead
     //     (Es2ShiftEnabledVertexAttribPointers -- FNA3D's own no-base-vertex GL fallback shape);
     //   - GL_READ_FRAMEBUFFER does not exist (ES 3.0): readbacks bind GL_FRAMEBUFFER, whose single
-    //     color attachment is the implicit read source (kReadbackFramebufferTarget below).
+    //     color attachment is the implicit read source (ReadbackFramebufferTarget() below).
     // =============================================================================================
 
     /// Framebuffer binding point used by the non-MSAA texture/render-target readback paths.
@@ -646,24 +928,28 @@ namespace CNA::Internal::Renderers::EasyGL
     /// reads then come from the bound framebuffer's single color attachment implicitly. The MSAA
     /// resolve paths keep their separate READ/DRAW targets -- they are unreachable under
     /// OPENGLES2, which forces every sample count to 1.
-#if defined(CNA_GL_PROFILE_OPENGLES2)
-    static constexpr ::easygl::FramebufferTarget kReadbackFramebufferTarget =
-        ::easygl::FramebufferTarget::Framebuffer;
-#else
-    static constexpr ::easygl::FramebufferTarget kReadbackFramebufferTarget =
-        ::easygl::FramebufferTarget::ReadFramebuffer;
-#endif
+    /// plan_runtimerenderer.md P11: was a profile-selected constant, now a profile-selected value.
+    [[nodiscard]] inline ::easygl::FramebufferTarget ReadbackFramebufferTarget()
+    {
+        // GL_READ_FRAMEBUFFER is ES 3.0; WebGL 1, like ES 2.0, has only the combined target.
+        return UsesEs2ApiGeneration(ActiveGlProfile())
+            ? ::easygl::FramebufferTarget::Framebuffer
+            : ::easygl::FramebufferTarget::ReadFramebuffer;
+    }
 
     /// Internal format for the explicit-internal-format RGBA8 texture allocations in this file
     /// (render-target color storage and cube-map faces). GLES 2.0's glTexImage2D accepts only
     /// UNSIZED internal formats (sized RGBA8 arrived with ES 3.0 / GL_OES_required_internalformat),
     /// so the OPENGLES2 profile allocates GL_RGBA; every other profile keeps the sized RGBA8
     /// allocation unchanged.
-#if defined(CNA_GL_PROFILE_OPENGLES2)
-    static constexpr ::metagl::InternalFormat kRgbaTexImageInternalFormat = ::metagl::InternalFormat::Rgba;
-#else
-    static constexpr ::metagl::InternalFormat kRgbaTexImageInternalFormat = ::metagl::InternalFormat::Rgba8;
-#endif
+    /// plan_runtimerenderer.md P11: was a profile-selected constant, now a profile-selected value.
+    [[nodiscard]] inline ::metagl::InternalFormat RgbaTexImageInternalFormat()
+    {
+        // The sized internal format RGBA8 is ES 3.0; WebGL 1, like ES 2.0, needs the unsized one.
+        return UsesEs2ApiGeneration(ActiveGlProfile())
+            ? ::metagl::InternalFormat::Rgba
+            : ::metagl::InternalFormat::Rgba8;
+    }
 
     /// Attaches a render target's depth (or packed depth+stencil) renderbuffer to the bound FBO.
     /// GLES 2.0 has no GL_DEPTH_STENCIL_ATTACHMENT (the combined point is ES 3.0) -- a packed
@@ -673,7 +959,8 @@ namespace CNA::Internal::Renderers::EasyGL
                                                   ::metagl::FramebufferAttachment attachment,
                                                   ::easygl::Renderbuffer& rbo)
     {
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         if (attachment == ::metagl::FramebufferAttachment::DepthStencil)
         {
             fbo.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
@@ -682,11 +969,12 @@ namespace CNA::Internal::Renderers::EasyGL
                                     ::metagl::FramebufferAttachment::Stencil, rbo);
             return;
         }
-#endif
+}
         fbo.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer, attachment, rbo);
     }
 
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+    // plan_runtimerenderer.md P11: always compiled now. Every entry point below is called only
+    // from a runtime-gated path, so an ES 3.0 profile simply never reaches this bookkeeping.
     namespace
     {
         /// One recorded XNA sampler-state request (raw ordinals, exactly as ApplySamplerState
@@ -747,7 +1035,7 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             using GlTexParameterfFn = void (*)(unsigned int, unsigned int, float);
             static const auto glTexParameterfFn =
-                reinterpret_cast<GlTexParameterfFn>(SDL_GL_GetProcAddress("glTexParameterf"));
+                reinterpret_cast<GlTexParameterfFn>(LoadEasyGlProcAddress("glTexParameterf"));
             constexpr unsigned int kGlTextureMaxAnisotropyExt = 0x84FE;  // GL_TEXTURE_MAX_ANISOTROPY_EXT
             if (glTexParameterfFn)
                 glTexParameterfFn(static_cast<unsigned int>(target), kGlTextureMaxAnisotropyExt, value);
@@ -960,7 +1248,6 @@ namespace CNA::Internal::Renderers::EasyGL
                                    ::metagl::BufferId{static_cast<GLuint>(previousArrayBuffer)});
         }
     }
-#endif // CNA_GL_PROFILE_OPENGLES2
 
     // Mirrors Texture3D.cpp's CalculateMipLevels(w,h) — depth does not participate in the level
     // count, matching FNA's Texture3D constructor, but each level's own GPU storage still halves
@@ -1086,7 +1373,7 @@ namespace CNA::Internal::Renderers::EasyGL
             for (int level = 0; level < levelCount; ++level)
             {
                 tex_.set_image_2d(faceTarget, level,
-                                  kRgbaTexImageInternalFormat,
+                                  RgbaTexImageInternalFormat(),
                                   levelSize, levelSize,
                                   ::metagl::PixelFormat::Rgba,
                                   ::metagl::PixelType::UnsignedByte,
@@ -1094,16 +1381,19 @@ namespace CNA::Internal::Renderers::EasyGL
                 levelSize = std::max(1, levelSize / 2);
             }
         }
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // GLES 2.0 has no GL_TEXTURE_MAX_LEVEL -- completeness is instead handled by
         // Es2ApplyPendingSamplerToUnit's mip-term demotion, driven by this registration.
         Es2RegisterTextureLevels(tex_.native_handle(), levelCount_);
-#else
+}
+else
+{
         // REMED-GFX-174: see EasyGLRenderTargetRenderer's identical clamp -- a cube sampled through
         // EnvironmentMapEffect's slot-1 sampler faces exactly the same completeness rule.
         tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::MaxLevel,
                            levelCount_ - 1);
-#endif
+}
         tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::MinFilter, kTexLinear);
         tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::MagFilter, kTexLinear);
         tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::WrapS, kTexClampToEdge);
@@ -1152,10 +1442,11 @@ namespace CNA::Internal::Renderers::EasyGL
 
     EasyGLTextureCubeRenderer::~EasyGLTextureCubeRenderer()
     {
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // GL reuses deleted names; drop the level registration before tex_'s destructor frees it.
         Es2UnregisterTexture(tex_.native_handle());
-#endif
+}
     }
 
     void EasyGLTextureCubeRenderer::BindGL(int unit) const
@@ -1198,11 +1489,12 @@ namespace CNA::Internal::Renderers::EasyGL
                               ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
                               kCubeFaceTargets[face],
                               tex_, level);
-#if !defined(CNA_GL_PROFILE_OPENGLES2)
+if (!ProfileIsEs2ApiGeneration())
+{
         // GLES 2.0 has no glReadBuffer; the bound framebuffer's single color attachment is the
         // implicit read source there, so the explicit selection exists only for the ES 3.0 profiles.
         fbo.set_read_buffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
-#endif
+}
 
         const bool complete = fbo.is_complete(::easygl::FramebufferTarget::Framebuffer);
         if (complete)
@@ -1325,11 +1617,12 @@ namespace CNA::Internal::Renderers::EasyGL
         texture->BindGL(unit);
         TraceBoundTextureUnit("bind-texture-3d", unit);
         ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // ES 2.0 keeps sampling state on the texture object, so a texture bound AFTER the
         // GraphicsDevice applied this slot's SamplerState must receive that state now.
         Es2ApplyPendingSamplerToUnit(unit);
-#endif
+}
 
         // REMED-GFX-147: a custom ShaderEffect's GLSL belongs to the game, so this renderer cannot
         // rewrite its sampling for it -- but it can tell it what it is sampling. A user shader that
@@ -1361,10 +1654,11 @@ namespace CNA::Internal::Renderers::EasyGL
         if (!texture) return;
         texture->BindGL(unit);
         ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // See BindTexture just above -- same ES 2.0 texture-object sampling-state rule.
         Es2ApplyPendingSamplerToUnit(unit);
-#endif
+}
     }
 
     // plan_graphics.md Task 863: same shape as BindTextureCube(), but for a sampler3D --
@@ -1382,14 +1676,15 @@ namespace CNA::Internal::Renderers::EasyGL
     EasyGLOcclusionQueryRenderer::EasyGLOcclusionQueryRenderer(::easygl::ResourceRegistry* registry)
         : registry_(registry)
     {
-#if !defined(CNA_GL_PROFILE_OPENGLES2)
+if (!ProfileIsEs2ApiGeneration())
+{
         // GLES 2.0 has no query objects (glGenQueries is ES 3.0), and
         // SupportsCapability(OcclusionQuery) reports false under that profile -- never creating
         // the GL query there makes every method below take its existing !is_created() no-op
         // path, honest and crash-free on any ES 2.0 driver (IsComplete stays false,
         // PixelCount stays 0).
         query_.create();
-#endif
+}
         if (registry_) registry_->add(this);
     }
 
@@ -1430,10 +1725,11 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLOcclusionQueryRenderer::recreate_gl_resource()
     {
-#if !defined(CNA_GL_PROFILE_OPENGLES2)
+if (!ProfileIsEs2ApiGeneration())
+{
         // See the constructor -- no GL query objects exist under the OPENGLES2 profile.
         query_.create();
-#endif
+}
     }
 
     // --- EasyGLTextureRenderer ---
@@ -1446,19 +1742,22 @@ namespace CNA::Internal::Renderers::EasyGL
         texture.create();
         texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0, width, height, data.pixels.data());
         AllocateDeclaredLevels();
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // GLES 2.0 has no GL_TEXTURE_MAX_LEVEL, so Task 924's clamp cannot exist there --
         // completeness under mip-carrying filters is instead handled by
         // Es2ApplyPendingSamplerToUnit's mip-term demotion, driven by this registration.
         Es2RegisterTextureLevels(texture.native_handle(), mipLevels_);
-#else
+}
+else
+{
         // Task 924: clamp GL_TEXTURE_MAX_LEVEL to the real level count -- otherwise a mipmap-
         // requiring TextureFilter (e.g. Anisotropic) treats this as an incomplete mipmap chain
         // (GL's own default max level is 1000) and renders solid black, even for an ordinary
         // single-level (mipLevels_==1) texture that never uploads any level beyond 0.
         texture.set_parameter(::easygl::TextureTarget::Texture2D, ::easygl::TextureParameterSetter::MaxLevel,
                                mipLevels_ - 1);
-#endif
+}
         if (registry_) registry_->add(this);
     }
 
@@ -1487,20 +1786,22 @@ namespace CNA::Internal::Renderers::EasyGL
 
     EasyGLTextureRenderer::~EasyGLTextureRenderer()
     {
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // GL reuses deleted names; drop the level registration before texture's destructor frees it.
         Es2UnregisterTexture(texture.native_handle());
-#endif
+}
         if (registry_) registry_->remove(this);
     }
 
     void EasyGLTextureRenderer::release_gl_handle_only()
     {
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // Context loss: the name dies with the old context (and the new one may re-issue it), so
         // the registration must go BEFORE the handle is zeroed; recreate_gl_resource re-registers.
         Es2UnregisterTexture(texture.native_handle());
-#endif
+}
         texture.reset_handle_no_gl();
     }
 
@@ -1522,15 +1823,18 @@ namespace CNA::Internal::Renderers::EasyGL
         // chain has to be re-allocated here too or the texture comes back from a context loss
         // mipmap-incomplete and samples black under every mip-filtering ordinal.
         AllocateDeclaredLevels();
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // See the constructor: the fresh name replaces whatever release_gl_handle_only dropped.
         Es2RegisterTextureLevels(texture.native_handle(), mipLevels_);
-#else
+}
+else
+{
         // Task 924: the fresh GL texture object defaults GL_TEXTURE_MAX_LEVEL back to 1000 --
         // reapply the same clamp the constructor set, matching this texture's real level count.
         texture.set_parameter(::easygl::TextureTarget::Texture2D, ::easygl::TextureParameterSetter::MaxLevel,
                                mipLevels_ - 1);
-#endif
+}
     }
 
     void EasyGLTextureRenderer::BindGL(int unit) const
@@ -1612,10 +1916,11 @@ namespace CNA::Internal::Renderers::EasyGL
     {
         TargetTrace("rt2d.destroy", this, TraceNativeDetailEXT());
         DetachFromBindingEXT();
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // GL reuses deleted names; drop the level registration before colorTex_ is freed.
         Es2UnregisterTexture(colorTex_.native_handle());
-#endif
+}
         if (registry_) registry_->remove(this);
     }
 
@@ -1682,14 +1987,15 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLRenderTargetRenderer::CreateResources()
     {
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // GLES 2.0 has no multisample renderbuffers and no blit to resolve them
         // (glRenderbufferStorageMultisample/glBlitFramebuffer are ES 3.0), so the requested
         // preference degrades to single-sample -- the same silent clamp the GL_MAX_SAMPLES limit
         // applies on the ES 3.0 profiles, taken to this profile's real ceiling of 1.
         // GetMultiSampleCount() then reports 0, keeping the public applied count truthful.
         multiSampleCount_ = 0;
-#endif
+}
         colorTex_.create();
         // The 6-parameter set_image_2d overload does not call glBindTexture first;
         // bind the texture explicitly so glTexImage2D targets our handle.
@@ -1704,7 +2010,7 @@ namespace CNA::Internal::Renderers::EasyGL
             for (int level = 0; level < levelCount_; ++level)
             {
                 colorTex_.set_image_2d(::easygl::TextureTarget::Texture2D, level,
-                                       kRgbaTexImageInternalFormat,
+                                       RgbaTexImageInternalFormat(),
                                        levelW, levelH,
                                        ::metagl::PixelFormat::Rgba,
                                        ::metagl::PixelType::UnsignedByte,
@@ -1713,12 +2019,15 @@ namespace CNA::Internal::Renderers::EasyGL
                 levelH = std::max(1, levelH / 2);
             }
         }
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // GLES 2.0 has no GL_TEXTURE_MAX_LEVEL -- the same completeness problem REMED-GFX-174
         // describes is handled by Es2ApplyPendingSamplerToUnit's mip-term demotion instead,
         // driven by this registration.
         Es2RegisterTextureLevels(colorTex_.native_handle(), levelCount_);
-#else
+}
+else
+{
         // REMED-GFX-174: clamp GL_TEXTURE_MAX_LEVEL to the real level count, exactly as Task 924
         // already does for an ordinary Texture2D. GL evaluates mipmap completeness over
         // [BASE_LEVEL, MAX_LEVEL] and GL's own default MAX_LEVEL is 1000, so a render target with
@@ -1734,7 +2043,7 @@ namespace CNA::Internal::Renderers::EasyGL
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
                                 ::easygl::TextureParameterSetter::MaxLevel,
                                 levelCount_ - 1);
-#endif
+}
         // REMED-GFX-175: this is the texture object's OWN default min filter, which every draw's
         // sampler object overrides, so it decides nothing about how a game's TextureFilter samples
         // this target -- the level-range clamp above is what keeps it complete under any of them.
@@ -1899,20 +2208,21 @@ namespace CNA::Internal::Renderers::EasyGL
             }
         }
 
-#if defined(CNA_GL_PROFILE_OPENGLES2)
-        // GLES 2.0 has only the combined GL_FRAMEBUFFER binding (kReadbackFramebufferTarget), so
+GLint previousFramebuffer = 0;  // plan_runtimerenderer.md P11: hoisted -- read by a separate runtime-gated block below
+if (ProfileIsEs2ApiGeneration())
+{
+        // GLES 2.0 has only the combined GL_FRAMEBUFFER binding (ReadbackFramebufferTarget()), so
         // selecting a read source below also redirects draws; remember the current binding and
         // restore it afterwards, preserving the ES 3.0 paths' read-only semantics.
-        GLint previousFramebuffer = 0;
         ::metagl::glGetIntegerv(::metagl::GetParameter::FramebufferBinding, &previousFramebuffer);
-#endif
+}
         ::easygl::Framebuffer mipFbo;
         if (level == 0)
         {
             if (multiSampleCount_ > 0)
                 resolveFbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
             else
-                fbo_.bind(kReadbackFramebufferTarget);
+                fbo_.bind(ReadbackFramebufferTarget());
         }
         else
         {
@@ -1920,19 +2230,20 @@ namespace CNA::Internal::Renderers::EasyGL
             // (core ES 2.0 restricts glFramebufferTexture2D to level 0) -- universally shipped
             // wherever mip chains exist at all, and advertised by Mesa.
             mipFbo.create();
-            mipFbo.bind(kReadbackFramebufferTarget);
+            mipFbo.bind(ReadbackFramebufferTarget());
             mipFbo.attach_texture_2d(
-                kReadbackFramebufferTarget,
+                ReadbackFramebufferTarget(),
                 ::metagl::to_framebuffer_attachment(
                     ::metagl::ColorAttachment::Color0),
                 ::easygl::TextureTarget::Texture2D, colorTex_, level);
         }
-#if !defined(CNA_GL_PROFILE_OPENGLES2)
+if (!ProfileIsEs2ApiGeneration())
+{
         // GLES 2.0 has no glReadBuffer; the bound framebuffer's single color attachment is the
         // implicit read source there.
         ::metagl::glReadBuffer(
             ::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
-#endif
+}
         ::metagl::glReadPixels(
             x, levelHeight - y - h, w, h,
             ::metagl::PixelFormat::Rgba,
@@ -1949,13 +2260,16 @@ namespace CNA::Internal::Renderers::EasyGL
             std::copy(bottom, bottom + rowBytes, top);
             std::copy(row.begin(), row.end(), bottom);
         }
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         ::metagl::glBindFramebuffer(::metagl::FramebufferTarget::Framebuffer,
                                     ::metagl::FramebufferId{static_cast<GLuint>(previousFramebuffer)});
-#else
+}
+else
+{
         ::easygl::Framebuffer::unbind(
             ::easygl::FramebufferTarget::ReadFramebuffer);
-#endif
+}
         return true;
     }
 
@@ -2003,10 +2317,11 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLRenderTargetRenderer::release_gl_handle_only()
     {
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // Context loss: unregister before the handle is zeroed; recreate_gl_resource re-registers.
         Es2UnregisterTexture(colorTex_.native_handle());
-#endif
+}
         fbo_.reset_handle_no_gl();
         resolveFbo_.reset_handle_no_gl();
         colorTex_.reset_handle_no_gl();
@@ -2038,10 +2353,11 @@ namespace CNA::Internal::Renderers::EasyGL
     {
         TargetTrace("cube.destroy", this, TraceNativeDetailEXT());
         DetachFromBindingEXT();
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // GL reuses deleted names; drop the level registration before cubeTex_ is freed.
         Es2UnregisterTexture(cubeTex_.native_handle());
-#endif
+}
         if (registry_) registry_->remove(this);
     }
 
@@ -2081,11 +2397,12 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLRenderTargetCubeRenderer::CreateResources()
     {
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // See EasyGLRenderTargetRenderer::CreateResources -- GLES 2.0 has no multisample
         // renderbuffers/blit, so the requested preference degrades to single-sample.
         multiSampleCount_ = 0;
-#endif
+}
         cubeTex_.create();
         cubeTex_.bind(::easygl::TextureTarget::TextureCubeMap);
         // Allocate storage for all 6 faces, all mip levels (see EasyGLRenderTargetRenderer's
@@ -2104,7 +2421,7 @@ namespace CNA::Internal::Renderers::EasyGL
             for (int level = 0; level < levelCount_; ++level)
             {
                 cubeTex_.set_image_2d(faceTarget, level,
-                                       kRgbaTexImageInternalFormat,
+                                       RgbaTexImageInternalFormat(),
                                        levelSize, levelSize,
                                        ::metagl::PixelFormat::Rgba,
                                        ::metagl::PixelType::UnsignedByte,
@@ -2112,15 +2429,18 @@ namespace CNA::Internal::Renderers::EasyGL
                 levelSize = std::max(1, levelSize / 2);
             }
         }
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // GLES 2.0 has no GL_TEXTURE_MAX_LEVEL -- see EasyGLRenderTargetRenderer::CreateResources.
         Es2RegisterTextureLevels(cubeTex_.native_handle(), levelCount_);
-#else
+}
+else
+{
         // REMED-GFX-174: see EasyGLRenderTargetRenderer's identical clamp.
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
                                ::easygl::TextureParameterSetter::MaxLevel,
                                levelCount_ - 1);
-#endif
+}
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
                                ::easygl::TextureParameterSetter::MinFilter,
                                static_cast<int>(::metagl::TextureMagFilter::Linear));
@@ -2293,26 +2613,28 @@ namespace CNA::Internal::Renderers::EasyGL
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
         if (dataLength < w * h * 4) return false;
 
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+GLint previousFramebuffer = 0;  // plan_runtimerenderer.md P11: hoisted -- read by a separate runtime-gated block below
+if (ProfileIsEs2ApiGeneration())
+{
         // See EasyGLRenderTargetRenderer::GetData -- the combined GL_FRAMEBUFFER binding must be
         // restored so a read here cannot redirect subsequent draws.
-        GLint previousFramebuffer = 0;
         ::metagl::glGetIntegerv(::metagl::GetParameter::FramebufferBinding, &previousFramebuffer);
-#endif
+}
         ::easygl::Framebuffer fbo;
         fbo.create();
-        fbo.bind(kReadbackFramebufferTarget);
-        fbo.attach_texture_2d(kReadbackFramebufferTarget,
+        fbo.bind(ReadbackFramebufferTarget());
+        fbo.attach_texture_2d(ReadbackFramebufferTarget(),
                               ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
                               kCubeFaceTargets[face],
                               cubeTex_, level);
-#if !defined(CNA_GL_PROFILE_OPENGLES2)
+if (!ProfileIsEs2ApiGeneration())
+{
         // GLES 2.0 has no glReadBuffer; the bound framebuffer's single color attachment is the
         // implicit read source there.
         fbo.set_read_buffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
-#endif
+}
 
-        const bool complete = fbo.is_complete(kReadbackFramebufferTarget);
+        const bool complete = fbo.is_complete(ReadbackFramebufferTarget());
         if (complete)
         {
             ::metagl::glReadPixels(x, levelSize - y - h, w, h,
@@ -2332,21 +2654,25 @@ namespace CNA::Internal::Renderers::EasyGL
             }
         }
 
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         ::metagl::glBindFramebuffer(::metagl::FramebufferTarget::Framebuffer,
                                     ::metagl::FramebufferId{static_cast<GLuint>(previousFramebuffer)});
-#else
+}
+else
+{
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::ReadFramebuffer);
-#endif
+}
         return complete;
     }
 
     void EasyGLRenderTargetCubeRenderer::release_gl_handle_only()
     {
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // Context loss: unregister before the handle is zeroed; recreate_gl_resource re-registers.
         Es2UnregisterTexture(cubeTex_.native_handle());
-#endif
+}
         fbo_.reset_handle_no_gl();
         resolveFbo_.reset_handle_no_gl();
         cubeTex_.reset_handle_no_gl();
@@ -2458,7 +2784,8 @@ void main()
         program_.create();
         program_.attach(vertexShader);
         program_.attach(fragmentShader);
-#if defined(CNA_GL_PROFILE_WEBGL1) || defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileUsesGlslEs100())
+{
         // plan_glbackends.md GLB-36: see CompileAndLink's identical comment -- rebind the same
         // numeric attribute locations the ES 3.00 source's layout(location=N) qualifiers
         // specified, since the GLSL ES 1.00 shader text these profiles compile has no
@@ -2467,7 +2794,7 @@ void main()
         {
             program_.bind_attrib_location(static_cast<unsigned int>(location), name);
         }
-#endif
+}
         program_.link();
 
         if (!program_.is_linked())
@@ -2517,8 +2844,8 @@ void main()
         // requested) and left the real GL blend state permanently stuck at that hardcoded value
         // after End() -- any 3D draw issued afterward without the game explicitly reassigning
         // BlendState inherited SpriteBatch's leftover raw GL state instead of whatever
-        // GraphicsDevice.BlendState still claimed was active. Matches the same bug shape SDL_Renderer
-        // already fixed (Task 695) -- see docs/sdl-renderer-2d-completeness.md.
+        // GraphicsDevice.BlendState still claimed was active. Matches the same bug shape the
+        // toolkit-backed 2D renderer already fixed (Task 695).
         begun = true;
     }
 
@@ -2795,29 +3122,37 @@ void main()
 
     // --- EasyGLRenderer ---
 
-    EasyGLRenderer::EasyGLRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                                  CnaPresentationMode mode, bool contextRecoveryEnabled,
-                                                  int multiSampleCount, int swapInterval)
-        : window(window)
-        , virtualWidth_(virtualWidth)
-        , virtualHeight_(virtualHeight)
-        , presentationMode_(mode)
+    // MERGE: next's platform-based construction, carrying P11's runtime profile. The profile is
+    // threaded as a parameter because RequestedGlContext() runs in the initializer list, before the
+    // body can publish it.
+    EasyGLRenderer::EasyGLRenderer(
+        const RendererSurfaceInfo& surface, CNA::Platform::IPlatformGlContext& glContext,
+        const int virtualWidth, const int virtualHeight, const CnaPresentationMode mode,
+        const bool contextRecoveryEnabled, const int multiSampleCount, const int swapInterval,
+        const GlProfile profile)
+        : platformContext_(std::make_unique<EasyGLPlatformContext>(
+              glContext, RequireEasyGlWindowId(surface), RequestedGlContext(profile)))
+        , surfaceState_(surface, virtualWidth, virtualHeight, mode)
         , contextRecoveryEnabled_(contextRecoveryEnabled)
         , sampleCount_(multiSampleCount > 1 ? multiSampleCount : 1)
-        , swapInterval_(swapInterval)
     {
-        if (!window) throw std::runtime_error("EasyGLRenderer initialized with null window.");
+        // plan_runtimerenderer.md P11: publish the profile before anything else runs -- the context
+        // attributes, the shader adaptation and the API-generation checks all read it, and they run
+        // from free helpers that have no other way to reach this instance.
+        profile_ = profile;
+        ActiveGlProfile() = profile;
 
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+        // MERGE: next guarded the blocks below with #if defined(CNA_GL_PROFILE_<X>). P11 made the
+        // profile a RUNTIME value so all five identities can be compiled in at once, so each guard
+        // becomes the equivalent runtime question about the profile in hand.
+        if (ProfileIsEs2ApiGeneration())
+        {
         // GLES 2.0 has no multisample renderbuffers and no blit to resolve them
         // (glRenderbufferStorageMultisample/glBlitFramebuffer are ES 3.0), so the requested
         // backbuffer MultiSampleCount preference degrades to single-sample -- the profile's real
         // ceiling. GetMultiSampleCount() then reports 0, keeping the applied count truthful.
-        sampleCount_ = 1;
-#endif
-
-        // NOTE: SDL_Window is NOT owned by EasyGL renderer.
-        // It is owned by GraphicsDevice or higher level platform layer.
+            sampleCount_ = 1;
+        }
 
         // plan_glbackends.md GLB-8: context attributes depend on which of the 5 public GL
         // profiles this translation unit was compiled for (see cmake/RendererSelection.cmake).
@@ -2827,34 +3162,18 @@ void main()
         // legally return any ES context backward-compatible with 2.0, which is the same
         // version-floor semantic every other profile's request already has; OPENGL33 requests a
         // desktop GL 3.3 core profile context instead of an ES profile.
-#if defined(CNA_GL_PROFILE_OPENGL33)
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-#elif defined(CNA_GL_PROFILE_WEBGL1) || defined(CNA_GL_PROFILE_OPENGLES2)
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-#else // CNA_GL_PROFILE_OPENGLES3 or CNA_GL_PROFILE_WEBGL2
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-#endif
-        // Without this, no window ever gets stencil bits (SDL defaults to 0), making
-        // DepthStencilState.StencilEnable a permanent no-op regardless of what's requested.
-        SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-
-        // NOTE: GL context IS owned by EasyGL renderer.
-        gl_context = SDL_GL_CreateContext(window);
-        if (!gl_context)
+        // RequestedGlContext() carries those version/profile requirements together with the
+        // depth/stencil/double-buffer attributes to the platform before context creation.
+        glProcAddressLoader = platformContext_->GetLoader();
+        if (glProcAddressLoader == nullptr)
         {
-            throw std::runtime_error(std::string("SDL_GL_CreateContext failed: ") + SDL_GetError());
+            throw CNA::Platform::PlatformException(
+                "EasyGLRenderer::LoadGl", "platform returned a null GL loader");
         }
 
-        device.initialize(reinterpret_cast<::easygl::GLGetProcAddressFn>(SDL_GL_GetProcAddress));
-#if defined(CNA_GL_PROFILE_OPENGL33)
-        EnableVertexProgramPointSize();
-#endif
+        device.initialize(glProcAddressLoader);
+        if (ProfileIsDesktopCore())
+            EnableVertexProgramPointSize();
         std::cout << "EasyGLRenderer initialized with OpenGL "
             << device.capabilities().context_info().version_string << std::endl;
 
@@ -2862,7 +3181,11 @@ void main()
         // GL_EXT_texture_filter_anisotropic support in ApplySamplerState(); report the real,
         // runtime-detected status here instead of a hardcoded claim.
         {
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+            GLint maxSamplesCap = 0;
+            GLint maxDrawBuffers = 1;
+            GLint maxColorAttachments = 1;
+            if (ProfileIsEs2ApiGeneration())
+            {
             // GLES 2.0 defines none of GL_MAX_SAMPLES / GL_MAX_DRAW_BUFFERS /
             // GL_MAX_COLOR_ATTACHMENTS (all ES 3.0) -- querying them on a strict ES 2.0 context
             // raises GL_INVALID_ENUM, and a driver that generously returned a
@@ -2870,15 +3193,12 @@ void main()
             // profile must not act on. Pin the ES 2.0 truth instead: one sample, one color
             // attachment, no indexed color masks -- regardless of what the runtime context
             // could additionally do.
-            GLint maxSamplesCap = 1;
-            const GLint maxDrawBuffers = 1;
-            const GLint maxColorAttachments = 1;
+            maxSamplesCap = 1;
             maxMrtTargets_ = 1;
             supportsIndexedColorMasks_ = false;
-#else
-            GLint maxSamplesCap = 0;
-            GLint maxDrawBuffers = 1;
-            GLint maxColorAttachments = 1;
+            }
+            else
+            {
             metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamplesCap);
             metagl::glGetIntegerv(
                 ::metagl::GetParameter::MaxDrawBuffers, &maxDrawBuffers);
@@ -2901,7 +3221,7 @@ void main()
                         ? capabilities.is_at_least(3, 2)
                         : capabilities.is_opengl() && capabilities.is_at_least(3, 0))
                 && metagl::IsFunctionAvailable("glColorMaski");
-#endif
+            }
             const bool hasAniso = metagl::HasExtension("GL_EXT_texture_filter_anisotropic");
             GLfloat maxAnisoCap = 1.0f;
             if (hasAniso)
@@ -2919,14 +3239,14 @@ void main()
                       << "; SurfaceFormat: Color only (Task 176)" << std::endl;
         }
 
-        SDL_GL_SetSwapInterval(swapInterval_);
+        platformContext_->SetSwapInterval(swapInterval);
 
         registry_.register_with_meta_gl();
 
         if (sampleCount_ > 1)
         {
             int physW, physH;
-            SDL_GetWindowSize(window, &physW, &physH);
+            surfaceState_.GetDrawableSize(physW, physH);
             CreateMsaaBuffers(physW, physH);
             msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
         }
@@ -2939,7 +3259,7 @@ void main()
         // WebGPU/Canvas/SdlGpu) -- a constructor that throws never runs its destructor, so
         // registering earlier would leave a dangling entry in IGraphicsRenderer's static window
         // registry, later dereferenced unconditionally by SdlInputBridge.cpp/Mouse.cpp.
-        IGraphicsRenderer::RegisterForWindow(window, this);
+        IGraphicsRenderer::RegisterForWindow(surfaceState_.GetWindowId(), this);
     }
 
     void EasyGLRenderer::CreateMsaaBuffers(int w, int h)
@@ -2977,7 +3297,7 @@ void main()
         {
             // Recreate MSAA FBO if the window was resized.
             int physW, physH;
-            SDL_GetWindowSize(window, &physW, &physH);
+            surfaceState_.GetDrawableSize(physW, physH);
             if (physW != msaaW_ || physH != msaaH_)
                 CreateMsaaBuffers(physW, physH);
 
@@ -3011,11 +3331,28 @@ void main()
         // detach path. (Neither order is reachable through CNA's own Game harness, where
         // GraphicsDevice_ is a Game base member destroyed after every subclass member; a globally
         // held render target reaches the first one, which is why the ownership is weak at all.)
-        if (window) IGraphicsRenderer::UnregisterForWindow(window);
-        if (gl_context) SDL_GL_DestroyContext(gl_context);
-        // window is NOT owned by the renderer.
-        // No SDL_Quit or subsystem shutdown here - managed centrally.
+        IGraphicsRenderer::UnregisterForWindow(surfaceState_.GetWindowId());
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        // Must run here, in the destructor body, rather than relying on member destruction order:
+        // mojoShaderContext_ is a raw pointer (no destructor of its own) and needs the GL context
+        // still current, which platformContext_ (destroyed after this body returns) still owns.
+        if (mojoShaderContext_ != nullptr)
+        {
+            MOJOSHADER_glMakeContextCurrent(nullptr);
+            MOJOSHADER_glDestroyContext(mojoShaderContext_);
+            mojoShaderContext_ = nullptr;
+        }
+#endif
+        // platformContext_ is the first-declared member and therefore dies last, after every GL
+        // resource member has released while the context is still current.
     }
+
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+    CNA::Platform::GlProcAddressLoader EasyGLRenderer::GetProcAddressLoaderEXT() const
+    {
+        return platformContext_->GetLoader();
+    }
+#endif
 
     bool EasyGLRenderer::SupportsCapability(CNA::GraphicsCapability capability) const
     {
@@ -3023,17 +3360,20 @@ void main()
         {
             case CNA::GraphicsCapability::MultiSampleAntiAliasing:
             {
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
                 // GLES 2.0 has no multisample renderbuffers/blit (both ES 3.0), and GL_MAX_SAMPLES
                 // itself is undefined there -- reported false regardless of what a generously
                 // higher-versioned runtime context could do, matching the profile's forced
                 // single-sample surfaces.
                 return false;
-#else
+}
+else
+{
                 GLint maxSamplesCap = 0;
                 metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamplesCap);
                 return maxSamplesCap > 1;
-#endif
+}
             }
             case CNA::GraphicsCapability::AnisotropicFiltering:
                 return metagl::HasExtension("GL_EXT_texture_filter_anisotropic");
@@ -3043,53 +3383,71 @@ void main()
                 // present), so the previous `false` under-stated the implementation. The emulation
                 // draws line primitives and depends on no polygon-mode API, so it holds for every
                 // GL profile (OPENGLES3/OPENGL33/WEBGL1/WEBGL2) alike.
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
                 // ...with one ES 2.0 nuance: the re-expanded line indices are 32-bit, and
                 // GL_UNSIGNED_INT element indices are an extension there (core in ES 3.0), so the
                 // report is conditional on the runtime genuinely providing it.
                 return metagl::HasExtension("GL_OES_element_index_uint");
-#else
+}
+else
+{
                 return true;
-#endif
+}
             case CNA::GraphicsCapability::MultiStreamVertexInput:
                 // REMED-GFX-201: implemented -- Draw*PrimitivesEx binds every per-vertex stream
                 // into the VAO at locations continuing after the previous stream's, each with its
                 // own VBO, stride and byte offset, and restores the single-stream layout after.
-#if defined(CNA_GL_PROFILE_WEBGL1) || defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileUsesGlslEs100())
+{
                 // WebGL 1 / GLES 2.0 lack the attrib-divisor entry points the Ex routes bind
                 // through; claiming support would fail inside GL instead of being refused up front.
                 return false;
-#else
+}
+else
+{
                 return true;
-#endif
+}
             case CNA::GraphicsCapability::MultipleRenderTargets:
-#if defined(CNA_GL_PROFILE_WEBGL1) || defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileUsesGlslEs100())
+{
                 // WebGL 1 / GLES 2.0 core have no draw-buffers MRT.
                 return false;
-#else
+}
+else
+{
                 return true;
-#endif
+}
             case CNA::GraphicsCapability::OcclusionQuery:
-#if defined(CNA_GL_PROFILE_WEBGL1) || defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileUsesGlslEs100())
+{
                 // WebGL 1 / GLES 2.0 have no query objects.
                 return false;
-#else
+}
+else
+{
                 return true;
-#endif
+}
             case CNA::GraphicsCapability::Texture3D:
-#if defined(CNA_GL_PROFILE_WEBGL1) || defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileUsesGlslEs100())
+{
                 // WebGL 1 / GLES 2.0 have no 3D textures at all.
                 return false;
-#else
+}
+else
+{
                 return true;
-#endif
+}
             case CNA::GraphicsCapability::Instancing:
-#if defined(CNA_GL_PROFILE_WEBGL1) || defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileUsesGlslEs100())
+{
                 // WebGL 1 / GLES 2.0 core have no glDrawElementsInstanced/glVertexAttribDivisor.
                 return false;
-#else
+}
+else
+{
                 return true;
-#endif
+}
             default:
                 return true;
         }
@@ -3109,13 +3467,14 @@ void main()
         //    no GL calls made). Context is still valid here for proper cleanup.
         metagl::NotifyContextLost();
 
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // Textures outside the recovery registry (e.g. plain cube maps) leave stale entries in
         // the ES 2.0 level registry on context loss, and the fresh context may re-issue their GL
         // names -- start the registry empty; recreate_gl_resource() below re-registers every
         // recoverable texture with its fresh name.
         Es2TextureLevelCounts().clear();
-#endif
+}
 
         // 3D programs are recreated lazily by their Ensure* helpers.
         // Reset all handles so create() allocates fresh programs.
@@ -3129,26 +3488,40 @@ void main()
         prog_env_mapped_.reset_no_gl();
         prog_skinned_.reset_no_gl();
         prog_skinned_vertexlit_.reset_no_gl();
+        prog_pbr_.reset_no_gl();
+        prog_pbr_dual_uv_.reset_no_gl();
+        prog_pbr_skinned_.reset_no_gl();
+        prog_pbr_skinned_dual_uv_.reset_no_gl();
         default_white_texture_.reset_handle_no_gl();
         default_white_texture_ready_ = false;
+        default_flat_normal_texture_.reset_handle_no_gl();
+        default_flat_normal_texture_ready_ = false;
 
-        // 2. Destroy and recreate the SDL GL context.
-        if (gl_context)
+        // 2. Recreate the native context through the platform-owned transaction.
+        platformContext_->Recreate();
+
+        // 3. Reload GL function pointers and increment context generation. The fresh context
+        // brings a fresh loader, so re-take it from the platform rather than reusing the one
+        // that belonged to the destroyed context.
+        glProcAddressLoader = platformContext_->GetLoader();
+        if (glProcAddressLoader == nullptr)
         {
-            SDL_GL_MakeCurrent(window, nullptr);
-            SDL_GL_DestroyContext(gl_context);
-            gl_context = nullptr;
+            throw CNA::Platform::PlatformException(
+                "EasyGLRenderer::LoadGl", "platform returned a null GL loader");
         }
-        gl_context = SDL_GL_CreateContext(window);
-        if (!gl_context)
-            throw std::runtime_error(std::string("SDL_GL_CreateContext failed during debug context loss: ") + SDL_GetError());
-        SDL_GL_MakeCurrent(window, gl_context);
-
-        // 3. Reload GL function pointers and increment context generation.
-        device.initialize(reinterpret_cast<::easygl::GLGetProcAddressFn>(SDL_GL_GetProcAddress));
-#if defined(CNA_GL_PROFILE_OPENGL33)
-        EnableVertexProgramPointSize();
-#endif
+        // `easygl::Device` is already initialized and its initialize() method is deliberately
+        // one-shot, so calling it here returns without touching meta-gl. Context loss invalidated
+        // meta-gl's function table above; the next GL wrapper would consequently call
+        // std::terminate(). Reload the context-facing table directly while retaining Device's
+        // context-independent facade.
+        if (!metagl::LoadCurrentContext(
+                reinterpret_cast<metagl::GlGetProcAddressFn>(glProcAddressLoader)))
+        {
+            throw std::runtime_error(
+                "meta-gl failed to reload GL entry points after debug context loss");
+        }
+        if (ProfileIsDesktopCore())
+            EnableVertexProgramPointSize();
 
         // 4. Notify listeners that context is restored. ResourceRegistry calls
         //    recreate_gl_resource() on every tracked resource (shaders, textures, buffers, VAOs).
@@ -3190,12 +3563,13 @@ void main()
                 // Bind FBO 0 as the read source and select GL_BACK.
                 ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::ReadFramebuffer);
             }
-#if !defined(CNA_GL_PROFILE_OPENGLES2)
+if (!ProfileIsEs2ApiGeneration())
+{
             // GLES 2.0 has no glReadBuffer at all -- there the default framebuffer's color buffer
             // is the one and only read source, so the explicit GL_BACK selection this comment
             // block describes for EGL/GLES3 contexts neither exists nor is needed.
             device.set_read_buffer(::easygl::ReadBuffer::Back);
-#endif
+}
         }
 
         // Use the render-target's own height for the Y-flip when an RT is bound;
@@ -3259,47 +3633,45 @@ void main()
         if (metagl::IsContextLost()) return;
         if (sampleCount_ > 1)
             ResolveMsaa();
-        SDL_GL_SwapWindow(window);
+        platformContext_->SwapBuffers();
         if (sampleCount_ > 1)
             msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
     }
 
     void EasyGLRenderer::SetVirtualResolution(int width, int height)
     {
-        virtualWidth_ = width;
-        virtualHeight_ = height;
+        surfaceState_.SetVirtualResolution(width, height);
     }
 
     void EasyGLRenderer::SetPresentationMode(int mode)
     {
-        presentationMode_ = static_cast<CnaPresentationMode>(mode);
+        surfaceState_.SetPresentationMode(static_cast<CnaPresentationMode>(mode));
     }
 
     void EasyGLRenderer::SetSwapInterval(int interval)
     {
-        swapInterval_ = interval;
-        SDL_GL_SetSwapInterval(interval);
+        platformContext_->SetSwapInterval(interval);
+    }
+
+    void EasyGLRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        if (surface.windowId != surfaceState_.GetWindowId())
+        {
+            throw CNA::Platform::PlatformException(
+                "EasyGLRenderer::OnSurfaceChanged",
+                "a renderer's platform window identity cannot change");
+        }
+        surfaceState_.Update(surface);
     }
 
     void EasyGLRenderer::getLogicalSize(int& width, int& height) const
     {
-        if (virtualHeight_ <= 0)
-        {
-            SDL_GetWindowSize(window, &width, &height);
-            return;
-        }
-        int physW, physH;
-        SDL_GetWindowSize(window, &physW, &physH);
-        height = virtualHeight_;
-        if (presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth && physH > 0)
-            width = static_cast<int>((double)physW * virtualHeight_ / physH + 0.5);
-        else
-            width = virtualWidth_ > 0 ? virtualWidth_ : physW;
+        surfaceState_.GetLogicalSize(width, height);
     }
 
     void EasyGLRenderer::getPhysicalSize(int& width, int& height) const
     {
-        SDL_GetWindowSize(window, &width, &height);
+        surfaceState_.GetDrawableSize(width, height);
     }
 
     bool EasyGLRenderer::GetCurrentRenderTarget2DSize(int& width, int& height) const
@@ -3313,36 +3685,13 @@ void main()
     bool EasyGLRenderer::TransformWindowToLogical(float windowX, float windowY,
                                                           float& logX, float& logY) const
     {
-        if (virtualHeight_ <= 0) return false;
-        int physW, physH;
-        SDL_GetWindowSize(window, &physW, &physH);
-        if (physH <= 0) return false;
-        const float scale = static_cast<float>(virtualHeight_) / static_cast<float>(physH);
-        logX = windowX * scale;
-        logY = windowY * scale;
-        return true;
+        return surfaceState_.WindowToLogical(windowX, windowY, logX, logY);
     }
 
     bool EasyGLRenderer::TransformLogicalToWindow(float logX, float logY,
                                                          float& windowX, float& windowY) const
     {
-        // Inverse of TransformWindowToLogical: logical = window * (virtualHeight_ / physH), so
-        // window = logical * (physH / virtualHeight_). This is a pure uniform scale with NO offset,
-        // which is exact for EasyGL's default FixedHeightDynamicWidth presentation: the logical
-        // height is fixed and the logical *width* is derived from the window aspect
-        // (getLogicalSize), so the logical viewport fills the whole window — there are no letterbox
-        // bars and hence no offset to apply (unlike the SDL_Renderer renderer's true-letterbox
-        // modes, whose offset is handled by SDL_RenderCoordinates{From,To}Window). EasyGL does not
-        // implement per-mode offset transforms for its non-default modes; that is a pre-existing
-        // graphics-presentation concern, not an input-layer one, and the default mode is exact.
-        if (virtualHeight_ <= 0) return false;
-        int physW, physH;
-        SDL_GetWindowSize(window, &physW, &physH);
-        if (physH <= 0) return false;
-        const float invScale = static_cast<float>(physH) / static_cast<float>(virtualHeight_);
-        windowX = logX * invScale;
-        windowY = logY * invScale;
-        return true;
+        return surfaceState_.LogicalToWindow(logX, logY, windowX, windowY);
     }
 
     void EasyGLRenderer::GetViewportSize(int& width, int& height)
@@ -3978,7 +4327,8 @@ void main()
         if (metagl::IsContextLost()) return;
         if (slot < 0 || slot >= kMaxSamplerSlots) return;
 
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // GLES 2.0 has no sampler objects (glGenSamplers/glBindSampler are ES 3.0) -- sampling
         // state lives on the texture object itself, the same shape FNA3D's pre-3.0 GL path used.
         // The request is recorded per slot and written onto whatever texture(s) are bound to this
@@ -3989,7 +4339,9 @@ void main()
         Es2PendingSamplers()[slot] = { filter, addressU, addressV, maxAnisotropy };
         Es2ApplyPendingSamplerToUnit(slot);
         return;
-#else
+}
+else
+{
         ::easygl::Sampler& s = samplers_[slot];
         if (!s.is_created())
             s.create();
@@ -4114,7 +4466,7 @@ void main()
                << " minUsesMipChain=" << (GlMinFilterUsesMipChain(gotMin) ? 1 : 0);
             SamplerTrace("apply-sampler", os.str());
         }
-#endif // !CNA_GL_PROFILE_OPENGLES2
+}
     }
 
     // -------------------------------------------------------------------------
@@ -4155,7 +4507,8 @@ void main()
             case VertexElementFormat::Vector4:         return { 4, ::easygl::DataType::Float,        false, false };
             case VertexElementFormat::Color:           return { 4, ::easygl::DataType::UnsignedByte, true,  false };
             case VertexElementFormat::Byte4:
-#if defined(CNA_GL_PROFILE_WEBGL1) || defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileUsesGlslEs100())
+{
                 // plan_glbackends.md GLB-36 follow-up: GLSL ES 1.00 (WEBGL1 and OPENGLES2) has no
                 // integer vertex attributes at all -- glVertexAttribIPointer isn't available.
                 // Byte4 is used exclusively for BLENDINDICES-style bone-index attributes
@@ -4167,9 +4520,11 @@ void main()
                 // when indexing uBones[] for these profiles -- see TransformGlslEs300BodyToEs100's
                 // bone-index rewrite.
                 return { 4, ::easygl::DataType::UnsignedByte, false, false };
-#else
+}
+else
+{
                 return { 4, ::easygl::DataType::UnsignedByte, false, true  };
-#endif
+}
             case VertexElementFormat::Short2:          return { 2, ::easygl::DataType::Short,        false, false };
             case VertexElementFormat::Short4:          return { 4, ::easygl::DataType::Short,        false, false };
             case VertexElementFormat::NormalizedShort2:return { 2, ::easygl::DataType::Short,        true,  false };
@@ -4190,11 +4545,14 @@ void main()
         void SetBoneIndicesAttributePointer(::easygl::VertexArray& vao, unsigned int location,
                                             std::size_t stride, const void* offset)
         {
-#if defined(CNA_GL_PROFILE_WEBGL1) || defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileUsesGlslEs100())
+{
             vao.set_attribute_pointer(location, 4, ::easygl::DataType::UnsignedByte, false, stride, offset);
-#else
+}
+else
+{
             vao.set_attribute_i_pointer(location, 4, ::easygl::DataType::UnsignedByte, stride, offset);
-#endif
+}
         }
 
         void ConfigureDeclarationAttributes(
@@ -4498,6 +4856,20 @@ void main()
             vao.enable_attribute(3);
             vao.set_attribute_pointer(3, 2, ::easygl::DataType::Float, false, s, (void*)40);
             break;
+        case 60:
+            // GLTF-182/183: collision-free rigid PBR dual-UV layout. Bytes 0..47 are the
+            // established stride-48 prefix, UV1 is appended at 48 and bytes 56..59 are padding.
+            vao.enable_attribute(0);
+            vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
+            vao.enable_attribute(1);
+            vao.set_attribute_pointer(1, 3, ::easygl::DataType::Float, false, s, (void*)12);
+            vao.enable_attribute(2);
+            vao.set_attribute_pointer(2, 4, ::easygl::DataType::Float, false, s, (void*)24);
+            vao.enable_attribute(3);
+            vao.set_attribute_pointer(3, 2, ::easygl::DataType::Float, false, s, (void*)40);
+            vao.enable_attribute(4);
+            vao.set_attribute_pointer(4, 2, ::easygl::DataType::Float, false, s, (void*)48);
+            break;
         case 52:
             // Task 11.10: this layout is independently duplicated (magic stride 52) in
             // BgfxRenderer.cpp's MakeBgfxLayout and VulkanRenderer.cpp's
@@ -4566,12 +4938,36 @@ void main()
             vao.enable_attribute(5);
             SetBoneIndicesAttributePointer(vao, 5, s, (void*)64);
             break;
-        default:
-            // Unknown layout: bind position-only as a safe fallback
+        case 76:
+            // GLTF-182/183: the stride-68 skinned PBR record with packed UV1 appended at 68.
+            // Keeping the original six locations byte-for-byte stable lets both layouts share
+            // one shader; location 6 is unused/defaulted when an old stride-68 buffer is bound.
             vao.enable_attribute(0);
             vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
-            CNA_RENDER_LOG("ApplyLayout: unknown stride=" << stride << ", using position-only fallback");
+            vao.enable_attribute(1);
+            vao.set_attribute_pointer(1, 3, ::easygl::DataType::Float, false, s, (void*)12);
+            vao.enable_attribute(2);
+            vao.set_attribute_pointer(2, 4, ::easygl::DataType::Float, false, s, (void*)24);
+            vao.enable_attribute(3);
+            vao.set_attribute_pointer(3, 2, ::easygl::DataType::Float, false, s, (void*)40);
+            vao.enable_attribute(4);
+            vao.set_attribute_pointer(4, 4, ::easygl::DataType::Float, false, s, (void*)48);
+            vao.enable_attribute(5);
+            SetBoneIndicesAttributePointer(vao, 5, s, (void*)64);
+            vao.enable_attribute(6);
+            vao.set_attribute_pointer(6, 2, ::easygl::DataType::Float, false, s, (void*)68);
             break;
+        default:
+            // plan_gltf.md GLTF-157: a byte stride does not describe which attributes exist.
+            // Treating every unknown record as position-only left the other locations in stale
+            // VAO state and rendered normals, UVs or skin weights from unrelated buffers. Refuse
+            // it loudly; a genuinely custom layout reaches the generic declaration path above.
+            vao.unbind();
+            throw System::NotSupportedException(
+                "EasyGLRenderer::ApplyLayout: unsupported vertex stride " +
+                std::to_string(stride) +
+                " without a VertexDeclaration; the upload is refused rather than bound as "
+                "position-only.");
         }
         vao.unbind();
     }
@@ -4801,7 +5197,8 @@ void main()
             prog.create();
             prog.attach(vs);
             prog.attach(fs);
-#if defined(CNA_GL_PROFILE_WEBGL1) || defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileUsesGlslEs100())
+{
             // plan_glbackends.md GLB-36: these profiles' GLSL ES 1.00 shader text has no
             // layout(location=N) (GLSL ES 1.00 doesn't support it) -- rebind the SAME numeric
             // locations here, extracted from the ORIGINAL ES 3.00 source, so every
@@ -4811,7 +5208,7 @@ void main()
             {
                 prog.bind_attrib_location(static_cast<unsigned int>(location), name);
             }
-#endif
+}
             prog.link();
             if (!prog.is_linked())
                 std::cerr << "[CNA EasyGL 3D] " << label << " link failed:\n" << prog.info_log() << "\n";
@@ -5035,6 +5432,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "in vec3 vWorldPos;\n"
 "uniform sampler2D uTexture;\n"
 "uniform vec4 uDiffuseColor;\n"
+"uniform float uLightingEnabled;\n"
 "uniform vec3 uAmbientColor;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
@@ -5054,17 +5452,24 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out vec4 FragColor;\n"
 CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
-"    vec3 N=normalize(vNormal);\n"
-"    vec3 E=normalize(uEyePosition-vWorldPos);\n"
-"    float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
-"    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
-"    float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
-"    vec3 lightSum=uAmbientColor+uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
-"    vec3 litRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
-"    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
-"    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
-"    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
-"    vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
+// XNA uses a separate unlit shader variant. Do not merely zero the light colours and continue
+// through the lit math here: an unlit vertex at the default eye position makes normalize(0)
+// undefined, and NaN*zero is still NaN, turning the otherwise-correct diffuse result black.
+"    vec3 litRGB=uDiffuseColor.rgb;\n"
+"    vec3 specularRGB=vec3(0.0);\n"
+"    if(uLightingEnabled>0.5){\n"
+"        vec3 N=normalize(vNormal);\n"
+"        vec3 E=normalize(uEyePosition-vWorldPos);\n"
+"        float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
+"        float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
+"        float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
+"        vec3 lightSum=uAmbientColor+uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
+"        litRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
+"        vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
+"        vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
+"        vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
+"        specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
+"    }\n"
 "    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*vec4(litRGB,uDiffuseColor.a);\n"
 "    FragColor.rgb+=specularRGB*FragColor.a;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
@@ -5078,6 +5483,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
         prog_lit_textured_.loc_world       = prog_lit_textured_.prog.uniform_location("uWorld");
         prog_lit_textured_.loc_normalmat   = prog_lit_textured_.prog.uniform_location("uNormalMatrix");
         prog_lit_textured_.loc_diffuse     = prog_lit_textured_.prog.uniform_location("uDiffuseColor");
+        prog_lit_textured_.loc_lighting_enabled = prog_lit_textured_.prog.uniform_location("uLightingEnabled");
         prog_lit_textured_.loc_ambient     = prog_lit_textured_.prog.uniform_location("uAmbientColor");
         prog_lit_textured_.loc_l0dir       = prog_lit_textured_.prog.uniform_location("uLight0Dir");
         prog_lit_textured_.loc_l0diff      = prog_lit_textured_.prog.uniform_location("uLight0Diffuse");
@@ -5507,6 +5913,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out float vFogFactor;\n"
 "out vec3 vWorldPos;\n"
 "out vec4 vColor;\n"
+CNA_GL_SKIN_NORMAL_DECL
 "void main(){\n"
 // Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2, or 4)
 // weight/index pairs -- matches XNA's own validated property range, so >=2/>=4 gating suffices.
@@ -5527,15 +5934,16 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // normal for just that vertex rather than propagating NaN; XNA/FNA's own Skin() was
 // never validated against this degenerate case, so this is a numerical-safety guard,
 // not a deviation from its intended per-vertex transform.
-"    vec3 skinnedNormal=mat3(skinMat)*aNormal;\n"
+"    vec3 skinnedNormal=cnaSkinNormal(mat3(skinMat),aNormal);\n"
 "    float skinnedNormalLen=length(skinnedNormal);\n"
 "    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
 // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
 // (uNormalMatrix = transpose(inverse(World3x3)), CPU-precomputed in BindDrawParams() exactly as
-// every non-skinned lit program here already receives it). FNA's SkinnedEffect.fx Skin() applies
-// the bone 3x3, then Lighting.fxh applies mul(normal, WorldInverseTranspose); this shader dropped
-// the outer world factor entirely (audit Variant A), so any rotated or non-uniformly-scaled
-// skinned model was lit as if World were identity. The fragment stage re-normalizes vNormal.
+// every non-skinned lit program here already receives it). FNA's SkinnedEffect.fx establishes the
+// composition order; GLTF-264 strengthens its direct bone 3x3 to inverse-transpose because glTF
+// joints may carry non-uniform scale. This shader also used to drop the outer world factor entirely
+// (audit Variant A), so any rotated or non-uniformly-scaled skinned model was lit as if World were
+// identity. The fragment stage re-normalizes vNormal.
 "    vNormal=uNormalMatrix*cnaInstanceDirection(boneNormal);\n"
 "    vUV=aUV;\n"
 "    vWorldPos=(uWorld*cnaPos).xyz;\n"
@@ -5705,6 +6113,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out vec3 vLitRGB;\n"
 "out vec3 vSpecularRGB;\n"
 "out vec4 vColor;\n"
+CNA_GL_SKIN_NORMAL_DECL
 "void main(){\n"
 "    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x;\n"
 "    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
@@ -5725,7 +6134,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // Same degenerate-blend-normal guard as EnsureSkinnedProgram() above (see its own
 // comment for the root cause) -- this vertex-lit sibling does the identical skinning
 // and normal transform, just with lighting evaluated per-vertex instead of per-pixel.
-"    vec3 skinnedNormal=mat3(skinMat)*aNormal;\n"
+"    vec3 skinnedNormal=cnaSkinNormal(mat3(skinMat),aNormal);\n"
 "    float skinnedNormalLen=length(skinnedNormal);\n"
 "    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
 // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix (uNormalMatrix =
@@ -5814,23 +6223,30 @@ CNA_GL_RT_SAMPLE_UV_DECL
     // rather than image-based lighting (a much larger, separate feature: irradiance/prefiltered
     // environment maps + a BRDF LUT). Normal mapping via a per-pixel TBN basis built from the
     // vertex tangent (re-orthogonalized against the interpolated normal) and glTF's own
-    // bitangent-handedness-sign convention (Bitangent = cross(Normal,Tangent.xyz)*Tangent.w).
-    // Only the EasyGL renderer implements this program (CNB-58 explicitly scopes other renderers to
-    // separate follow-ups, CNB-61) -- PbrEffect::FillGpuDrawParams() still fills GpuDrawParams
-    // completely, so a non-EasyGL renderer simply ignores the new pbr*/texture fields already,
-    // matching this codebase's established "unimplemented field is safely ignored" convention.
-    void EasyGLRenderer::EnsurePbrProgram()
+    // bitangent-handedness-sign convention (Bitangent = cross(Normal,Tangent.xyz)*Tangent.w),
+    // including GLTF-176's per-draw determinant correction under mirrored direction transforms.
+    // This was CNA's first PBR program (CNB-58); the same normalized GpuDrawParams contract and
+    // reference BRDF are now implemented by every PBR-capable renderer, with a cross-renderer
+    // source audit guarding the fields whose native bindings necessarily differ by backend.
+    void EasyGLRenderer::EnsurePbrProgram(bool dualUv)
     {
-        if (prog_pbr_.ready) return;
+        // GLTF-182/183: keep the stride-48 program source byte-equivalent to the established
+        // single-UV shader. Merely adding an unused varying/selector changed thousands of
+        // llvmpipe fragments by one RGB unit, violating the zero-tolerance L7 oracle. Stride 60
+        // alone pays for the dual-UV variant, so existing content keeps its exact pixel path.
+        Prog3D& program = dualUv ? prog_pbr_dual_uv_ : prog_pbr_;
+        if (program.ready) return;
 
-        static const char* vsrc =
-"#version 300 es\n"
+        const std::string vsrc =
+std::string("#version 300 es\n") +
 "precision highp float;\n"
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec3 aNormal;\n"
 "layout(location=2) in vec4 aTangent;\n"
 "layout(location=3) in vec2 aUV;\n"
++ (dualUv ? "layout(location=4) in vec2 aUV1;\n" : "") +
 CNA_GL_INSTANCE_TRANSFORM_DECL
+CNA_GL_DIRECTION_HANDEDNESS_DECL
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
@@ -5839,6 +6255,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out vec3 vTangent;\n"
 "out float vBitangentSign;\n"
 "out vec2 vUV;\n"
++ (dualUv ? "out vec2 vUV1;\n" : "") +
 "out float vFogFactor;\n"
 "out vec3 vWorldPos;\n"
 "void main(){\n"
@@ -5849,20 +6266,34 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // uNormalMatrix use for the normal) -- correct for uniform-scale World transforms, a documented
 // simplification for non-uniform scale shared with most real-time engines lacking a full
 // per-tangent inverse-transpose.
-"    vTangent=mat3(uWorld)*cnaInstanceDirection(aTangent.xyz);\n"
-"    vBitangentSign=aTangent.w;\n"
+"    mat3 worldDirectionMat=mat3(uWorld);\n"
+"    vTangent=worldDirectionMat*cnaInstanceDirection(aTangent.xyz);\n"
+"    float instanceHandedness=(uCnaInstanced>0.5)?cnaDirectionHandedness(mat3(cnaInstanceMatrix())):1.0;\n"
+"    vBitangentSign=aTangent.w*cnaDirectionHandedness(worldDirectionMat)*instanceHandedness;\n"
 "    vUV=aUV;\n"
++ (dualUv ? "    vUV1=aUV1;\n" : "") +
 "    vWorldPos=(uWorld*cnaPos).xyz;\n"
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
 "}\n";
 
-        static const char* fsrc =
-"#version 300 es\n"
+        const char* const baseUv = dualUv ? "cnaPbrUV(uTextureCoordinateSets.x)" : "vUV";
+        const char* const normalUv = dualUv ? "cnaPbrUV(uTextureCoordinateSets.y)" : "vUV";
+        const char* const mrUv = dualUv ? "cnaPbrUV(uTextureCoordinateSets.z)" : "vUV";
+        const char* const emissiveUv = dualUv ? "cnaPbrUV(uTextureCoordinateSets.w)" : "vUV";
+        const char* const occlusionUv =
+            dualUv ? "cnaPbrUV(uOcclusionTextureCoordinateSet)" : "vUV";
+        const char* const specularUv =
+            dualUv ? "cnaPbrUV(uSpecularTextureCoordinateSets.x)" : "vUV";
+        const char* const specularColorUv =
+            dualUv ? "cnaPbrUV(uSpecularTextureCoordinateSets.y)" : "vUV";
+        const std::string fsrc =
+std::string("#version 300 es\n") +
 "precision mediump float;\n"
 "in vec3 vNormal;\n"
 "in vec3 vTangent;\n"
 "in float vBitangentSign;\n"
 "in vec2 vUV;\n"
++ (dualUv ? "in vec2 vUV1;\n" : "") +
 "in float vFogFactor;\n"
 "in vec3 vWorldPos;\n"
 "uniform sampler2D uTexture;\n"
@@ -5870,11 +6301,35 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform sampler2D uMetallicRoughnessMap;\n"
 "uniform sampler2D uEmissiveMap;\n"
 "uniform sampler2D uOcclusionMap;\n"
+"uniform sampler2D uSpecularMap;\n"
+"uniform sampler2D uSpecularColorMap;\n"
 "uniform vec4 uDiffuseColor;\n"
 "uniform vec3 uAmbientColor;\n"
 "uniform vec3 uEmissiveColor;\n"
 "uniform float uMetallicFactor;\n"
 "uniform float uRoughnessFactor;\n"
+// plan_gltf.md GLTF-343/344: factor-only KHR_materials_ior/specular state, already reduced by
+// FillGpuDrawParams to the exact shader-ready Fresnel endpoints. xyz is dielectric F0; w is F90.
+"uniform vec4 uDielectricFresnel;\n"
+// GLTF-344: the colour texture is multiplied before clamping, so this must retain the pre-clamp
+// value instead of attempting to reconstruct it from uDielectricFresnel.
+"uniform vec4 uSpecularFresnelInputs;\n"
+// plan_gltf.md GLTF-210/GLTF-212: x = decode the base-colour sample from sRGB, y = decode the
+// emissive sample, z = encode the fragment's RGB back. Each is 0 or 1 and drives a mix() rather
+// than a branch, so every fragment costs the same whichever way it is set.
+"uniform vec4 uSrgb;\n"
+// plan_gltf.md GLTF-224/GLTF-225: normalTexture.scale and occlusionTexture.strength. Two scalar
+// uniforms rather than one vec2, to stay on the single-float set_uniform overload this file
+// already uses everywhere.
+"uniform float uNormalScale;\n"
+"uniform float uOcclusionStrength;\n"
++ (dualUv ? "uniform vec4 uTextureCoordinateSets;\n"
+          "uniform float uOcclusionTextureCoordinateSet;\n"
+          "uniform vec2 uSpecularTextureCoordinateSets;\n" : "") +
+// GLTF-184: two precomputed affine rows per texture map. The selected vertex stream is transformed
+// before cnaSampleUV applies the storage-origin adjustment for a render-target texture.
+"uniform vec4 uTextureTransformRows[10];\n"
+"uniform vec4 uSpecularTextureTransformRows[4];\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
 "uniform vec3 uLight1Dir;\n"
@@ -5887,7 +6342,8 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out vec4 FragColor;\n"
 // GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility (direct-lighting k=(roughness+1)^2/8), and
 // Schlick Fresnel -- the glTF 2.0 spec's own reference BRDF (Appendix B.3.3/B.3.4/B.3.2).
-"vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic){\n"
+CNA_GL_SRGB_TRANSFER_DECL
+"vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec3 F90, float roughness, float metallic){\n"
 "    vec3 H=normalize(V+L);\n"
 "    float NdotL=max(dot(N,L),0.0);\n"
 "    float NdotV=max(dot(N,V),1e-4);\n"
@@ -5898,7 +6354,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    float D=a2/(3.14159265*dTerm*dTerm+1e-7);\n"
 "    float k=(roughness+1.0); k=k*k/8.0;\n"
 "    float G=(NdotV/(NdotV*(1.0-k)+k))*(NdotL/(NdotL*(1.0-k)+k));\n"
-"    vec3 F=F0+(vec3(1.0)-F0)*pow(clamp(1.0-VdotH,0.0,1.0),5.0);\n"
+"    vec3 F=F0+(F90-F0)*pow(clamp(1.0-VdotH,0.0,1.0),5.0);\n"
 "    vec3 specular=(D*G*F)/max(4.0*NdotV*NdotL,1e-4);\n"
 "    vec3 diffuseColor=albedo*(1.0-metallic);\n"
 "    vec3 kd=vec3(1.0)-F;\n"
@@ -5906,37 +6362,72 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "}\n"
 CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
++ (dualUv ? "vec2 cnaPbrUV(float setIndex){return setIndex<0.5?vUV:vUV1;}\n" : "") +
+"vec2 cnaPbrTransformUV(vec2 uv,int slot){\n"
+"    vec3 value=vec3(uv,1.0);\n"
+"    return vec2(dot(value,uTextureTransformRows[slot*2].xyz),dot(value,uTextureTransformRows[slot*2+1].xyz));\n"
+"}\n"
+"vec2 cnaPbrSpecularTransformUV(vec2 uv,int slot){\n"
+"    vec3 value=vec3(uv,1.0);\n"
+"    return vec2(dot(value,uSpecularTextureTransformRows[slot*2].xyz),dot(value,uSpecularTextureTransformRows[slot*2+1].xyz));\n"
+"}\n"
 "void main(){\n"
-"    vec4 baseColorTex=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
-"    vec3 albedo=baseColorTex.rgb*uDiffuseColor.rgb;\n"
+"    vec4 baseColorTex=texture(uTexture,cnaSampleUV(cnaPbrTransformUV(" + baseUv + ",0),uRtFlipV.x));\n"
+// glTF §3.9.2: the base-colour TEXTURE is sRGB-encoded, the base-colour FACTOR is linear. Only
+// the sample is decoded -- transferring both would apply it twice to one of them.
+"    vec3 baseRGB=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),uSrgb.x);\n"
+"    vec3 albedo=baseRGB*uDiffuseColor.rgb;\n"
 "    float alpha=baseColorTex.a*uDiffuseColor.a;\n"
 "    vec3 N=normalize(vNormal);\n"
 "    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
 "    mat3 TBN=mat3(T,B,N);\n"
-"    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(vUV,uRtFlipV.y)).rgb*2.0-1.0;\n"
+"    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(cnaPbrTransformUV(" + normalUv + ",1),uRtFlipV.y)).rgb*2.0-1.0;\n"
+// glTF §3.9.3: normalTexture.scale scales the tangent-space X and Y only. Scaling Z as well would
+// merely rescale the whole vector, which normalization then undoes -- the perturbation would not
+// change at all.
+"    sampledNormal.xy*=uNormalScale;\n"
 "    vec3 finalNormal=normalize(TBN*sampledNormal);\n"
-"    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(vUV,uRtFlipV.z));\n"
+"    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(cnaPbrTransformUV(" + mrUv + ",2),uRtFlipV.z));\n"
 "    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
 "    float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);\n"
 "    vec3 V=normalize(uEyePosition-vWorldPos);\n"
-"    vec3 F0=mix(vec3(0.04),albedo,metallic);\n"
+"    float specularWeight=uSpecularFresnelInputs.w*texture(uSpecularMap,cnaSampleUV(cnaPbrSpecularTransformUV(" + specularUv + ",0),uRtFlipVHi.y)).a;\n"
+"    vec3 specularColorTex=texture(uSpecularColorMap,cnaSampleUV(cnaPbrSpecularTransformUV(" + specularColorUv + ",1),uRtFlipVHi.z)).rgb;\n"
+"    specularColorTex=mix(specularColorTex,cnaSrgbToLinear(specularColorTex),uSrgb.w);\n"
+"    vec3 dielectricF0=min(uSpecularFresnelInputs.xyz*specularColorTex,vec3(1.0))*specularWeight;\n"
+"    vec3 F0=mix(dielectricF0,albedo,metallic);\n"
+"    vec3 F90=mix(vec3(specularWeight),vec3(1.0),metallic);\n"
 "    vec3 Lo=vec3(0.0);\n"
-"    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,roughness,metallic);\n"
-"    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,roughness,metallic);\n"
-"    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,roughness,metallic);\n"
-"    float occlusion=texture(uOcclusionMap,cnaSampleUV(vUV,uRtFlipVHi.x)).r;\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);\n"
+"    float occlusion=texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(" + occlusionUv + ",4),uRtFlipVHi.x)).r;\n"
+// §3.9.3's own formula: 1 + strength * (sampled - 1). At strength 0 this is 1 whatever the map
+// holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
+// darken everything to black.
+"    occlusion=1.0+uOcclusionStrength*(occlusion-1.0);\n"
 "    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
-"    vec3 emissive=uEmissiveColor*texture(uEmissiveMap,cnaSampleUV(vUV,uRtFlipV.w)).rgb;\n"
+"    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(cnaPbrTransformUV(" + emissiveUv + ",3),uRtFlipV.w)).rgb;\n"
+// Same split as the base colour. The factor is additionally allowed above 1 by
+// KHR_materials_emissive_strength, which is a second reason never to transfer it.
+"    vec3 emissive=uEmissiveColor*mix(emissiveTex,cnaSrgbToLinear(emissiveTex),uSrgb.y);\n"
 "    FragColor=vec4(ambient+Lo+emissive,alpha);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+// Fog is mixed in LINEAR space, so uFogColor -- an ordinary application-supplied sRGB
+// colour -- is decoded first. Mixing an encoded colour into a linear result would tint
+// the fade toward the wrong shade as it thickens.
+"    vec3 fogLinear=mix(uFogColor,cnaSrgbToLinear(uFogColor),uSrgb.z);\n"
+"    FragColor.rgb=mix(fogLinear,FragColor.rgb,vFogFactor);\n"
+// GLTF-212: encode last, and RGB only -- §3.9.4 makes alpha coverage, never colour.
+"    FragColor.rgb=mix(FragColor.rgb,cnaLinearToSrgb(FragColor.rgb),uSrgb.z);\n"
 "}\n";
 
-        CompileAndLink(prog_pbr_.prog, vsrc, fsrc, "pbr");
-        ResolveRenderTargetOrientationUniforms(prog_pbr_);
-        auto& p = prog_pbr_;
+        CompileAndLink(program.prog, vsrc.c_str(), fsrc.c_str(),
+                       dualUv ? "pbr_dual_uv" : "pbr");
+        ResolveRenderTargetOrientationUniforms(program);
+        auto& p = program;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
         p.loc_normalmat = p.prog.uniform_location("uNormalMatrix");
@@ -5955,8 +6446,31 @@ CNA_GL_RT_SAMPLE_UV_DECL
         p.loc_pbr_mr            = p.prog.uniform_location("uMetallicRoughnessMap");
         p.loc_pbr_emissivemap   = p.prog.uniform_location("uEmissiveMap");
         p.loc_pbr_occlusionmap  = p.prog.uniform_location("uOcclusionMap");
+        p.loc_pbr_specularmap   = p.prog.uniform_location("uSpecularMap");
+        p.loc_pbr_specularcolormap = p.prog.uniform_location("uSpecularColorMap");
         p.loc_pbr_metallic      = p.prog.uniform_location("uMetallicFactor");
         p.loc_pbr_roughness     = p.prog.uniform_location("uRoughnessFactor");
+        p.loc_pbr_dielectric_fresnel = p.prog.uniform_location("uDielectricFresnel");
+        p.loc_pbr_specular_fresnel_inputs =
+            p.prog.uniform_location("uSpecularFresnelInputs");
+        p.loc_pbr_srgb          = p.prog.uniform_location("uSrgb");
+        p.loc_pbr_normalscale   = p.prog.uniform_location("uNormalScale");
+        p.loc_pbr_occlstrength  = p.prog.uniform_location("uOcclusionStrength");
+        p.loc_pbr_texcoordsets  = p.prog.uniform_location("uTextureCoordinateSets");
+        p.loc_pbr_occlusiontexcoordset =
+            p.prog.uniform_location("uOcclusionTextureCoordinateSet");
+        p.loc_pbr_specular_texcoordsets =
+            p.prog.uniform_location("uSpecularTextureCoordinateSets");
+        for (std::size_t row = 0; row < p.loc_pbr_texture_transform_rows.size(); ++row)
+        {
+            p.loc_pbr_texture_transform_rows[row] = p.prog.uniform_location(
+                "uTextureTransformRows[" + std::to_string(row) + "]");
+        }
+        for (std::size_t row = 0; row < p.loc_pbr_specular_texture_transform_rows.size(); ++row)
+        {
+            p.loc_pbr_specular_texture_transform_rows[row] = p.prog.uniform_location(
+                "uSpecularTextureTransformRows[" + std::to_string(row) + "]");
+        }
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
         p.loc_fog_vector = p.prog.uniform_location("uFogVector");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
@@ -5968,12 +6482,15 @@ CNA_GL_RT_SAMPLE_UV_DECL
     // Position, Normal, and now also Tangent, since a skinned normal map needs a skinned TBN
     // basis too) feeding EnsurePbrProgram()'s own fragment-stage BRDF unchanged -- the two
     // programs' logic is additive, not a new algorithm (SkinnedPbrEffect, PBR+skinning combo).
-    void EasyGLRenderer::EnsurePbrSkinnedProgram()
+    void EasyGLRenderer::EnsurePbrSkinnedProgram(bool dualUv)
     {
-        if (prog_pbr_skinned_.ready) return;
+        // Match the rigid program's compatibility split: stride 68 retains the old shader shape,
+        // while only stride 76 declares and samples aUV1.
+        Prog3D& program = dualUv ? prog_pbr_skinned_dual_uv_ : prog_pbr_skinned_;
+        if (program.ready) return;
 
-        static const char* vsrc =
-"#version 300 es\n"
+        const std::string vsrc =
+std::string("#version 300 es\n") +
 "precision highp float;\n"
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec3 aNormal;\n"
@@ -5981,7 +6498,9 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=3) in vec2 aUV;\n"
 "layout(location=4) in vec4 aBoneWeights;\n"
 "layout(location=5) in uvec4 aBoneIndices;\n"
++ (dualUv ? "layout(location=6) in vec2 aUV1;\n" : "") +
 CNA_GL_INSTANCE_TRANSFORM_DECL
+CNA_GL_DIRECTION_HANDEDNESS_DECL
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
@@ -5992,8 +6511,10 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out vec3 vTangent;\n"
 "out float vBitangentSign;\n"
 "out vec2 vUV;\n"
++ (dualUv ? "out vec2 vUV1;\n" : "") +
 "out float vFogFactor;\n"
 "out vec3 vWorldPos;\n"
+CNA_GL_SKIN_NORMAL_DECL
 "void main(){\n"
 "    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x;\n"
 "    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
@@ -6001,27 +6522,44 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
 "    vec4 cnaPos=cnaInstancePosition(skinnedPos);\n"
 "    gl_Position=uWVP*cnaPos;\n"
-"    mat3 skinNormalMat=mat3(skinMat);\n"
+"    mat3 skinDirectionMat=mat3(skinMat);\n"
 // REMED-GFX-006 (Variant B): the normal takes the inverse-transpose world matrix (uNormalMatrix),
 // not raw mat3(uWorld). Raw World is only correct for rotation and uniform scale and diverges from
 // FNA's mul(normal, WorldInverseTranspose) under non-uniform scale; it also contradicted this
 // file's own unskinned EnsurePbrProgram, which already uses uNormalMatrix. The tangent stays on
 // raw World: tangents transform as directions, not as normals (glTF convention, unchanged).
-"    vNormal=normalize(uNormalMatrix*cnaInstanceDirection(skinNormalMat*aNormal));\n"
-"    vTangent=mat3(uWorld)*cnaInstanceDirection(skinNormalMat*aTangent.xyz);\n"
-"    vBitangentSign=aTangent.w;\n"
+"    vec3 skinnedNormal=cnaSkinNormal(skinDirectionMat,aNormal);\n"
+"    float skinnedNormalLen=length(skinnedNormal);\n"
+"    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
+"    vNormal=normalize(uNormalMatrix*cnaInstanceDirection(boneNormal));\n"
+"    mat3 worldDirectionMat=mat3(uWorld);\n"
+"    vTangent=worldDirectionMat*cnaInstanceDirection(skinDirectionMat*aTangent.xyz);\n"
+"    float instanceHandedness=(uCnaInstanced>0.5)?cnaDirectionHandedness(mat3(cnaInstanceMatrix())):1.0;\n"
+"    vBitangentSign=aTangent.w*cnaDirectionHandedness(worldDirectionMat)*instanceHandedness*cnaDirectionHandedness(skinDirectionMat);\n"
 "    vUV=aUV;\n"
++ (dualUv ? "    vUV1=aUV1;\n" : "") +
 "    vWorldPos=(uWorld*cnaPos).xyz;\n"
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
 "}\n";
 
-        static const char* fsrc =
-"#version 300 es\n"
+        const char* const baseUv = dualUv ? "cnaPbrUV(uTextureCoordinateSets.x)" : "vUV";
+        const char* const normalUv = dualUv ? "cnaPbrUV(uTextureCoordinateSets.y)" : "vUV";
+        const char* const mrUv = dualUv ? "cnaPbrUV(uTextureCoordinateSets.z)" : "vUV";
+        const char* const emissiveUv = dualUv ? "cnaPbrUV(uTextureCoordinateSets.w)" : "vUV";
+        const char* const occlusionUv =
+            dualUv ? "cnaPbrUV(uOcclusionTextureCoordinateSet)" : "vUV";
+        const char* const specularUv =
+            dualUv ? "cnaPbrUV(uSpecularTextureCoordinateSets.x)" : "vUV";
+        const char* const specularColorUv =
+            dualUv ? "cnaPbrUV(uSpecularTextureCoordinateSets.y)" : "vUV";
+        const std::string fsrc =
+std::string("#version 300 es\n") +
 "precision mediump float;\n"
 "in vec3 vNormal;\n"
 "in vec3 vTangent;\n"
 "in float vBitangentSign;\n"
 "in vec2 vUV;\n"
++ (dualUv ? "in vec2 vUV1;\n" : "") +
 "in float vFogFactor;\n"
 "in vec3 vWorldPos;\n"
 "uniform sampler2D uTexture;\n"
@@ -6029,11 +6567,30 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform sampler2D uMetallicRoughnessMap;\n"
 "uniform sampler2D uEmissiveMap;\n"
 "uniform sampler2D uOcclusionMap;\n"
+"uniform sampler2D uSpecularMap;\n"
+"uniform sampler2D uSpecularColorMap;\n"
 "uniform vec4 uDiffuseColor;\n"
 "uniform vec3 uAmbientColor;\n"
 "uniform vec3 uEmissiveColor;\n"
 "uniform float uMetallicFactor;\n"
 "uniform float uRoughnessFactor;\n"
+// plan_gltf.md GLTF-343/344: same shader-ready dielectric Fresnel endpoints as unskinned PBR.
+"uniform vec4 uDielectricFresnel;\n"
+"uniform vec4 uSpecularFresnelInputs;\n"
+// plan_gltf.md GLTF-210/GLTF-212: x = decode the base-colour sample from sRGB, y = decode the
+// emissive sample, z = encode the fragment's RGB back. Each is 0 or 1 and drives a mix() rather
+// than a branch, so every fragment costs the same whichever way it is set.
+"uniform vec4 uSrgb;\n"
+// plan_gltf.md GLTF-224/GLTF-225: normalTexture.scale and occlusionTexture.strength. Two scalar
+// uniforms rather than one vec2, to stay on the single-float set_uniform overload this file
+// already uses everywhere.
+"uniform float uNormalScale;\n"
+"uniform float uOcclusionStrength;\n"
++ (dualUv ? "uniform vec4 uTextureCoordinateSets;\n"
+          "uniform float uOcclusionTextureCoordinateSet;\n"
+          "uniform vec2 uSpecularTextureCoordinateSets;\n" : "") +
+"uniform vec4 uTextureTransformRows[10];\n"
+"uniform vec4 uSpecularTextureTransformRows[4];\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
 "uniform vec3 uLight1Dir;\n"
@@ -6044,7 +6601,8 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
-"vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic){\n"
+CNA_GL_SRGB_TRANSFER_DECL
+"vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec3 F90, float roughness, float metallic){\n"
 "    vec3 H=normalize(V+L);\n"
 "    float NdotL=max(dot(N,L),0.0);\n"
 "    float NdotV=max(dot(N,V),1e-4);\n"
@@ -6055,7 +6613,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    float D=a2/(3.14159265*dTerm*dTerm+1e-7);\n"
 "    float k=(roughness+1.0); k=k*k/8.0;\n"
 "    float G=(NdotV/(NdotV*(1.0-k)+k))*(NdotL/(NdotL*(1.0-k)+k));\n"
-"    vec3 F=F0+(vec3(1.0)-F0)*pow(clamp(1.0-VdotH,0.0,1.0),5.0);\n"
+"    vec3 F=F0+(F90-F0)*pow(clamp(1.0-VdotH,0.0,1.0),5.0);\n"
 "    vec3 specular=(D*G*F)/max(4.0*NdotV*NdotL,1e-4);\n"
 "    vec3 diffuseColor=albedo*(1.0-metallic);\n"
 "    vec3 kd=vec3(1.0)-F;\n"
@@ -6063,37 +6621,72 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "}\n"
 CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
++ (dualUv ? "vec2 cnaPbrUV(float setIndex){return setIndex<0.5?vUV:vUV1;}\n" : "") +
+"vec2 cnaPbrTransformUV(vec2 uv,int slot){\n"
+"    vec3 value=vec3(uv,1.0);\n"
+"    return vec2(dot(value,uTextureTransformRows[slot*2].xyz),dot(value,uTextureTransformRows[slot*2+1].xyz));\n"
+"}\n"
+"vec2 cnaPbrSpecularTransformUV(vec2 uv,int slot){\n"
+"    vec3 value=vec3(uv,1.0);\n"
+"    return vec2(dot(value,uSpecularTextureTransformRows[slot*2].xyz),dot(value,uSpecularTextureTransformRows[slot*2+1].xyz));\n"
+"}\n"
 "void main(){\n"
-"    vec4 baseColorTex=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
-"    vec3 albedo=baseColorTex.rgb*uDiffuseColor.rgb;\n"
+"    vec4 baseColorTex=texture(uTexture,cnaSampleUV(cnaPbrTransformUV(" + baseUv + ",0),uRtFlipV.x));\n"
+// glTF §3.9.2: the base-colour TEXTURE is sRGB-encoded, the base-colour FACTOR is linear. Only
+// the sample is decoded -- transferring both would apply it twice to one of them.
+"    vec3 baseRGB=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),uSrgb.x);\n"
+"    vec3 albedo=baseRGB*uDiffuseColor.rgb;\n"
 "    float alpha=baseColorTex.a*uDiffuseColor.a;\n"
 "    vec3 N=normalize(vNormal);\n"
 "    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
 "    mat3 TBN=mat3(T,B,N);\n"
-"    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(vUV,uRtFlipV.y)).rgb*2.0-1.0;\n"
+"    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(cnaPbrTransformUV(" + normalUv + ",1),uRtFlipV.y)).rgb*2.0-1.0;\n"
+// glTF §3.9.3: normalTexture.scale scales the tangent-space X and Y only. Scaling Z as well would
+// merely rescale the whole vector, which normalization then undoes -- the perturbation would not
+// change at all.
+"    sampledNormal.xy*=uNormalScale;\n"
 "    vec3 finalNormal=normalize(TBN*sampledNormal);\n"
-"    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(vUV,uRtFlipV.z));\n"
+"    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(cnaPbrTransformUV(" + mrUv + ",2),uRtFlipV.z));\n"
 "    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
 "    float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);\n"
 "    vec3 V=normalize(uEyePosition-vWorldPos);\n"
-"    vec3 F0=mix(vec3(0.04),albedo,metallic);\n"
+"    float specularWeight=uSpecularFresnelInputs.w*texture(uSpecularMap,cnaSampleUV(cnaPbrSpecularTransformUV(" + specularUv + ",0),uRtFlipVHi.y)).a;\n"
+"    vec3 specularColorTex=texture(uSpecularColorMap,cnaSampleUV(cnaPbrSpecularTransformUV(" + specularColorUv + ",1),uRtFlipVHi.z)).rgb;\n"
+"    specularColorTex=mix(specularColorTex,cnaSrgbToLinear(specularColorTex),uSrgb.w);\n"
+"    vec3 dielectricF0=min(uSpecularFresnelInputs.xyz*specularColorTex,vec3(1.0))*specularWeight;\n"
+"    vec3 F0=mix(dielectricF0,albedo,metallic);\n"
+"    vec3 F90=mix(vec3(specularWeight),vec3(1.0),metallic);\n"
 "    vec3 Lo=vec3(0.0);\n"
-"    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,roughness,metallic);\n"
-"    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,roughness,metallic);\n"
-"    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,roughness,metallic);\n"
-"    float occlusion=texture(uOcclusionMap,cnaSampleUV(vUV,uRtFlipVHi.x)).r;\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);\n"
+"    float occlusion=texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(" + occlusionUv + ",4),uRtFlipVHi.x)).r;\n"
+// §3.9.3's own formula: 1 + strength * (sampled - 1). At strength 0 this is 1 whatever the map
+// holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
+// darken everything to black.
+"    occlusion=1.0+uOcclusionStrength*(occlusion-1.0);\n"
 "    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
-"    vec3 emissive=uEmissiveColor*texture(uEmissiveMap,cnaSampleUV(vUV,uRtFlipV.w)).rgb;\n"
+"    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(cnaPbrTransformUV(" + emissiveUv + ",3),uRtFlipV.w)).rgb;\n"
+// Same split as the base colour. The factor is additionally allowed above 1 by
+// KHR_materials_emissive_strength, which is a second reason never to transfer it.
+"    vec3 emissive=uEmissiveColor*mix(emissiveTex,cnaSrgbToLinear(emissiveTex),uSrgb.y);\n"
 "    FragColor=vec4(ambient+Lo+emissive,alpha);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+// Fog is mixed in LINEAR space, so uFogColor -- an ordinary application-supplied sRGB
+// colour -- is decoded first. Mixing an encoded colour into a linear result would tint
+// the fade toward the wrong shade as it thickens.
+"    vec3 fogLinear=mix(uFogColor,cnaSrgbToLinear(uFogColor),uSrgb.z);\n"
+"    FragColor.rgb=mix(fogLinear,FragColor.rgb,vFogFactor);\n"
+// GLTF-212: encode last, and RGB only -- §3.9.4 makes alpha coverage, never colour.
+"    FragColor.rgb=mix(FragColor.rgb,cnaLinearToSrgb(FragColor.rgb),uSrgb.z);\n"
 "}\n";
 
-        CompileAndLink(prog_pbr_skinned_.prog, vsrc, fsrc, "pbr_skinned");
-        ResolveRenderTargetOrientationUniforms(prog_pbr_skinned_);
-        auto& p = prog_pbr_skinned_;
+        CompileAndLink(program.prog, vsrc.c_str(), fsrc.c_str(),
+                       dualUv ? "pbr_skinned_dual_uv" : "pbr_skinned");
+        ResolveRenderTargetOrientationUniforms(program);
+        auto& p = program;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
         p.loc_normalmat = p.prog.uniform_location("uNormalMatrix");
@@ -6114,8 +6707,31 @@ CNA_GL_RT_SAMPLE_UV_DECL
         p.loc_pbr_mr            = p.prog.uniform_location("uMetallicRoughnessMap");
         p.loc_pbr_emissivemap   = p.prog.uniform_location("uEmissiveMap");
         p.loc_pbr_occlusionmap  = p.prog.uniform_location("uOcclusionMap");
+        p.loc_pbr_specularmap   = p.prog.uniform_location("uSpecularMap");
+        p.loc_pbr_specularcolormap = p.prog.uniform_location("uSpecularColorMap");
         p.loc_pbr_metallic      = p.prog.uniform_location("uMetallicFactor");
         p.loc_pbr_roughness     = p.prog.uniform_location("uRoughnessFactor");
+        p.loc_pbr_dielectric_fresnel = p.prog.uniform_location("uDielectricFresnel");
+        p.loc_pbr_specular_fresnel_inputs =
+            p.prog.uniform_location("uSpecularFresnelInputs");
+        p.loc_pbr_srgb          = p.prog.uniform_location("uSrgb");
+        p.loc_pbr_normalscale   = p.prog.uniform_location("uNormalScale");
+        p.loc_pbr_occlstrength  = p.prog.uniform_location("uOcclusionStrength");
+        p.loc_pbr_texcoordsets  = p.prog.uniform_location("uTextureCoordinateSets");
+        p.loc_pbr_occlusiontexcoordset =
+            p.prog.uniform_location("uOcclusionTextureCoordinateSet");
+        p.loc_pbr_specular_texcoordsets =
+            p.prog.uniform_location("uSpecularTextureCoordinateSets");
+        for (std::size_t row = 0; row < p.loc_pbr_texture_transform_rows.size(); ++row)
+        {
+            p.loc_pbr_texture_transform_rows[row] = p.prog.uniform_location(
+                "uTextureTransformRows[" + std::to_string(row) + "]");
+        }
+        for (std::size_t row = 0; row < p.loc_pbr_specular_texture_transform_rows.size(); ++row)
+        {
+            p.loc_pbr_specular_texture_transform_rows[row] = p.prog.uniform_location(
+                "uSpecularTextureTransformRows[" + std::to_string(row) + "]");
+        }
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
         p.loc_fog_vector = p.prog.uniform_location("uFogVector");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
@@ -6198,9 +6814,11 @@ CNA_GL_RT_SAMPLE_UV_DECL
         switch (SelectStockProgramShape(stride, params))
         {
         case StockProgramShape::PbrSkinned:
-            EnsurePbrSkinnedProgram();          return prog_pbr_skinned_;
+            EnsurePbrSkinnedProgram(stride == 76);
+            return stride == 76 ? prog_pbr_skinned_dual_uv_ : prog_pbr_skinned_;
         case StockProgramShape::Pbr:
-            EnsurePbrProgram();                 return prog_pbr_;
+            EnsurePbrProgram(stride == 60);
+            return stride == 60 ? prog_pbr_dual_uv_ : prog_pbr_;
         case StockProgramShape::SkinnedVertexLit:
             EnsureSkinnedVertexLitProgram();    return prog_skinned_vertexlit_;
         case StockProgramShape::Skinned:
@@ -6246,6 +6864,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
             VertexElementUsage::Color, 0, VertexElementFormat::Color, "aColor"};
         static constexpr StockProgramInput kUv{
             VertexElementUsage::TextureCoordinate, 0, VertexElementFormat::Vector2, "aUV"};
+        static constexpr StockProgramInput kUv1{
+            VertexElementUsage::TextureCoordinate, 1, VertexElementFormat::Vector2, "aUV1"};
         static constexpr StockProgramInput kNormal{
             VertexElementUsage::Normal, 0, VertexElementFormat::Vector3, "aNormal"};
         static constexpr StockProgramInput kTangent{
@@ -6262,8 +6882,12 @@ CNA_GL_RT_SAMPLE_UV_DECL
         static constexpr StockProgramInput kSkinned[]        = {kPos, kNormal, kUv, kWeights,
                                                                 kIndices, kColor};
         static constexpr StockProgramInput kPbr[]            = {kPos, kNormal, kTangent, kUv};
+        static constexpr StockProgramInput kPbrDualUv[]      = {kPos, kNormal, kTangent, kUv,
+                                                                kUv1};
         static constexpr StockProgramInput kPbrSkinned[]     = {kPos, kNormal, kTangent, kUv,
                                                                 kWeights, kIndices};
+        static constexpr StockProgramInput kPbrSkinnedDualUv[] = {
+            kPos, kNormal, kTangent, kUv, kWeights, kIndices, kUv1};
 
         const StockProgramInput* inputs = kColored;
         std::size_t count = std::size(kColored);
@@ -6271,9 +6895,25 @@ CNA_GL_RT_SAMPLE_UV_DECL
         switch (SelectStockProgramShape(stride, params))
         {
         case StockProgramShape::PbrSkinned:
-            inputs = kPbrSkinned; count = std::size(kPbrSkinned); name = "pbr_skinned3d"; break;
+            if (stride == 76)
+            {
+                inputs = kPbrSkinnedDualUv; count = std::size(kPbrSkinnedDualUv);
+            }
+            else
+            {
+                inputs = kPbrSkinned; count = std::size(kPbrSkinned);
+            }
+            name = "pbr_skinned3d"; break;
         case StockProgramShape::Pbr:
-            inputs = kPbr; count = std::size(kPbr); name = "pbr3d"; break;
+            if (stride == 60)
+            {
+                inputs = kPbrDualUv; count = std::size(kPbrDualUv);
+            }
+            else
+            {
+                inputs = kPbr; count = std::size(kPbr);
+            }
+            name = "pbr3d"; break;
         case StockProgramShape::SkinnedVertexLit:
             inputs = kSkinned; count = std::size(kSkinned); name = "skinned3d_vertexlit"; break;
         case StockProgramShape::Skinned:
@@ -6320,7 +6960,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
         // A render target's GL texel memory is bottom-up; an uploaded texture's is not. Cube maps
         // are deliberately absent -- REMED-GFX-137 owns rendered cube faces, and uEnvMap is sampled
         // with a direction vector, not a UV.
-        float rtFlipV[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+        float rtFlipV[7] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
         // WVP
         const Matrix wvp = world * view * projection;
@@ -6361,6 +7001,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
             p.prog.set_uniform(p.loc_diffuse,
                 params.diffuseColor[0], params.diffuseColor[1],
                 params.diffuseColor[2], params.diffuseColor[3]);
+        if (p.loc_lighting_enabled >= 0)
+            p.prog.set_uniform(p.loc_lighting_enabled, params.lightingEnabled ? 1.0f : 0.0f);
 
         // VertexColorEnabled gate (colored3D / BasicEffect no-texture path only — Task 364).
         if (p.loc_vertexcolor >= 0)
@@ -6572,10 +7214,105 @@ CNA_GL_RT_SAMPLE_UV_DECL
                                                    ::easygl::TextureTarget::Texture2D);
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
+        // GLTF-344: both KHR_materials_specular inputs use white as their identity fallback.
+        // The strength texture consumes alpha; the colour texture consumes RGB in sRGB space.
+        if (p.loc_pbr_specularmap >= 0)
+        {
+            EnsureDefaultWhiteTexture();
+            p.prog.set_uniform(p.loc_pbr_specularmap, 5);
+            rtFlipV[5] = SampledRowOrderIsBottomUp(params.pbrSpecularMap) ? 1.0f : 0.0f;
+            if (params.pbrSpecularMap)
+                params.pbrSpecularMap->BindGL(5);
+            else
+                default_white_texture_.active_bind(::easygl::TextureUnit::Texture5,
+                                                   ::easygl::TextureTarget::Texture2D);
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+        }
+        if (p.loc_pbr_specularcolormap >= 0)
+        {
+            EnsureDefaultWhiteTexture();
+            p.prog.set_uniform(p.loc_pbr_specularcolormap, 6);
+            rtFlipV[6] = SampledRowOrderIsBottomUp(params.pbrSpecularColorMap) ? 1.0f : 0.0f;
+            if (params.pbrSpecularColorMap)
+                params.pbrSpecularColorMap->BindGL(6);
+            else
+                default_white_texture_.active_bind(::easygl::TextureUnit::Texture6,
+                                                   ::easygl::TextureTarget::Texture2D);
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+        }
         if (p.loc_pbr_metallic >= 0)
             p.prog.set_uniform(p.loc_pbr_metallic, params.pbrMetallicFactor);
         if (p.loc_pbr_roughness >= 0)
             p.prog.set_uniform(p.loc_pbr_roughness, params.pbrRoughnessFactor);
+        if (p.loc_pbr_dielectric_fresnel >= 0)
+        {
+            p.prog.set_uniform(
+                p.loc_pbr_dielectric_fresnel,
+                params.pbrDielectricF0[0], params.pbrDielectricF0[1],
+                params.pbrDielectricF0[2], params.pbrDielectricF90);
+        }
+        if (p.loc_pbr_specular_fresnel_inputs >= 0)
+        {
+            p.prog.set_uniform(
+                p.loc_pbr_specular_fresnel_inputs,
+                params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
+                params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor);
+        }
+        // plan_gltf.md GLTF-210/GLTF-212. Three independent decisions, so three independent
+        // components: two about what a bound texture contains, one about where the fragment is
+        // going. A renderer that ignored this field entirely would keep the pre-GLTF-209
+        // behaviour exactly, which is what makes adopting it a per-renderer step.
+        if (p.loc_pbr_normalscale >= 0)
+            p.prog.set_uniform(p.loc_pbr_normalscale, params.pbrNormalScale);
+        if (p.loc_pbr_occlstrength >= 0)
+            p.prog.set_uniform(p.loc_pbr_occlstrength, params.pbrOcclusionStrength);
+        if (p.loc_pbr_texcoordsets >= 0)
+        {
+            const std::uint32_t mask = params.pbrTextureCoordinateSetMask;
+            p.prog.set_uniform(
+                p.loc_pbr_texcoordsets,
+                (mask & (std::uint32_t{1} << 0)) != 0 ? 1.0f : 0.0f,
+                (mask & (std::uint32_t{1} << 1)) != 0 ? 1.0f : 0.0f,
+                (mask & (std::uint32_t{1} << 2)) != 0 ? 1.0f : 0.0f,
+                (mask & (std::uint32_t{1} << 3)) != 0 ? 1.0f : 0.0f);
+        }
+        if (p.loc_pbr_occlusiontexcoordset >= 0)
+        {
+            p.prog.set_uniform(
+                p.loc_pbr_occlusiontexcoordset,
+                (params.pbrTextureCoordinateSetMask & (std::uint32_t{1} << 4)) != 0
+                    ? 1.0f : 0.0f);
+        }
+        if (p.loc_pbr_specular_texcoordsets >= 0)
+        {
+            const std::uint32_t mask = params.pbrTextureCoordinateSetMask;
+            p.prog.set_uniform(
+                p.loc_pbr_specular_texcoordsets,
+                (mask & (std::uint32_t{1} << 5)) != 0 ? 1.0f : 0.0f,
+                (mask & (std::uint32_t{1} << 6)) != 0 ? 1.0f : 0.0f);
+        }
+        for (std::size_t row = 0; row < p.loc_pbr_texture_transform_rows.size(); ++row)
+        {
+            const int location = p.loc_pbr_texture_transform_rows[row];
+            if (location < 0) { continue; }
+            const float* values = params.pbrTextureTransformRows[row];
+            p.prog.set_uniform(location, values[0], values[1], values[2], values[3]);
+        }
+        for (std::size_t row = 0; row < p.loc_pbr_specular_texture_transform_rows.size(); ++row)
+        {
+            const int location = p.loc_pbr_specular_texture_transform_rows[row];
+            if (location < 0) { continue; }
+            const float* values = params.pbrSpecularTextureTransformRows[row];
+            p.prog.set_uniform(location, values[0], values[1], values[2], values[3]);
+        }
+        if (p.loc_pbr_srgb >= 0)
+        {
+            p.prog.set_uniform(p.loc_pbr_srgb,
+                params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                params.pbrEmissiveTextureIsSrgb  ? 1.0f : 0.0f,
+                params.pbrEncodeOutputToSrgb     ? 1.0f : 0.0f,
+                params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f);
+        }
 
         // Texture (unit 0)
         if (p.loc_texture >= 0)
@@ -6591,14 +7328,15 @@ CNA_GL_RT_SAMPLE_UV_DECL
             TraceBoundTextureUnit("stock3d-texture0", 0);
         }
 
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // ES 2.0 keeps sampling state on the texture objects -- re-apply each unit's recorded
         // SamplerState onto whatever this draw just bound above (GraphicsDevice applies sampler
         // state BEFORE the draw binds its textures on this route, so the bind is what must pull
-        // the state in). Units 0-4 are the stock effects' complete sampling range.
-        for (int unit = 0; unit < 5; ++unit)
+        // the state in). Units 0-6 are the stock effects' complete sampling range.
+        for (int unit = 0; unit < 7; ++unit)
             Es2ApplyPendingSamplerToUnit(unit);
-#endif
+}
 
         // Alpha test (always uploaded; default {0,0,1,1} = Always pass)
         if (p.loc_alphatest >= 0)
@@ -6624,7 +7362,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
         if (p.loc_rt_flip_v >= 0)
             p.prog.set_uniform(p.loc_rt_flip_v, rtFlipV[0], rtFlipV[1], rtFlipV[2], rtFlipV[3]);
         if (p.loc_rt_flip_v_hi >= 0)
-            p.prog.set_uniform(p.loc_rt_flip_v_hi, rtFlipV[4], 0.0f, 0.0f, 0.0f);
+            p.prog.set_uniform(
+                p.loc_rt_flip_v_hi, rtFlipV[4], rtFlipV[5], rtFlipV[6], 0.0f);
     }
 
     void EasyGLRenderer::ClearColorAndDepth(float r, float g, float b, float a, float depth)
@@ -6799,17 +7538,20 @@ CNA_GL_RT_SAMPLE_UV_DECL
             device.draw_elements(::easygl::PrimitiveType::Lines, lineIndexCount,
                                  ::easygl::DataType::UnsignedInt, nullptr);
         } else {
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
             // GLES 2.0 has no glDrawElementsBaseVertex (ES 3.2) -- shift every enabled attribute
             // pointer by baseVertex elements instead, draw, and restore (see the helper's doc).
             Es2ShiftEnabledVertexAttribPointers(baseVertex, +1);
             device.draw_elements(::easygl::PrimitiveType::Lines, lineIndexCount,
                                  ::easygl::DataType::UnsignedInt, nullptr);
             Es2ShiftEnabledVertexAttribPointers(baseVertex, -1);
-#else
+}
+else
+{
             ::metagl::glDrawElementsBaseVertex(::easygl::PrimitiveType::Lines, lineIndexCount,
                                                ::easygl::DataType::UnsignedInt, nullptr, baseVertex);
-#endif
+}
         }
         vb.vao.unbind();
         return true;
@@ -6924,6 +7666,32 @@ CNA_GL_RT_SAMPLE_UV_DECL
                                                  const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        // plan_fx.md FX-062: a compiled effect's vertex layout is arbitrary and validated against
+        // the applied pass's own shader reflection (BindCompiledEffectForDrawEXT), not against the
+        // fixed-stride table RequireDeclarationFitsStockProgramEXT enforces below -- so this
+        // dispatches before that guard runs, not after.
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            const auto& compiledVb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
+            const auto& declaredElements = compiledVb.GetDeclarationElements();
+            if (declaredElements.empty())
+            {
+                throw System::NotSupportedException(
+                    "CNA EasyGL: a compiled-effect draw needs the vertex buffer's own "
+                    "VertexDeclaration; this renderer does not infer one from stride for this "
+                    "route.");
+            }
+            const std::size_t stride = CombinedVertexStrideOr(params, compiledVb.GetStride());
+            compiledVb.vao.bind();
+            compiledVb.vbo.bind(::easygl::BufferTarget::Array);
+            BindCompiledEffectForDrawEXT(declaredElements, stride, *params.compiledEffectRuntime);
+            const int compiledVertexCount = VertexCountForPrimitives(primitive, primitiveCount);
+            device.draw_arrays(ToEasyGl(primitive), params.vertexStart, compiledVertexCount);
+            compiledVb.vao.unbind();
+            return;
+        }
+#endif
         // REMED-GFX-DECL-GUARD (REMED-GFX-218): before the VAO is touched, before a program is
         // selected and before any draw is issued. A custom ShaderEffect owns its own
         // element-index attribute convention and is deliberately untouched.
@@ -6994,6 +7762,55 @@ CNA_GL_RT_SAMPLE_UV_DECL
                                                         const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        // plan_fx.md FX-062: see DrawPrimitivesEx's own compiled-effect branch for why this
+        // dispatches before RequireDeclarationFitsStockProgramEXT runs.
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            const auto& compiledVb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
+            const auto& compiledIb = static_cast<const EasyGLIndexBufferRenderer&>(ib_in);
+            const auto& declaredElements = compiledVb.GetDeclarationElements();
+            if (declaredElements.empty())
+            {
+                throw System::NotSupportedException(
+                    "CNA EasyGL: a compiled-effect draw needs the vertex buffer's own "
+                    "VertexDeclaration; this renderer does not infer one from stride for this "
+                    "route.");
+            }
+            const std::size_t stride = CombinedVertexStrideOr(params, compiledVb.GetStride());
+            compiledVb.vao.bind();
+            compiledVb.vbo.bind(::easygl::BufferTarget::Array);
+            BindCompiledEffectForDrawEXT(declaredElements, stride, *params.compiledEffectRuntime);
+            compiledIb.ibo.bind(::easygl::BufferTarget::ElementArray);
+            const int compiledIndexCount = VertexCountForPrimitives(primitive, primitiveCount);
+            const auto compiledIdxType = compiledIb.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
+                                                                  : ::easygl::DataType::UnsignedShort;
+            const int compiledIndexSize = compiledIb.thirtyTwoBit ? 4 : 2;
+            const void* compiledIndexOffset = reinterpret_cast<const void*>(
+                static_cast<std::uintptr_t>(params.startIndex) *
+                static_cast<std::uintptr_t>(compiledIndexSize));
+            if (params.baseVertex == 0)
+            {
+                device.draw_elements(ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
+                                     compiledIndexOffset);
+            }
+            else
+            {
+#if defined(CNA_GL_PROFILE_OPENGLES2)
+                Es2ShiftEnabledVertexAttribPointers(params.baseVertex, +1);
+                device.draw_elements(ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
+                                     compiledIndexOffset);
+                Es2ShiftEnabledVertexAttribPointers(params.baseVertex, -1);
+#else
+                ::metagl::glDrawElementsBaseVertex(ToEasyGl(primitive), compiledIndexCount,
+                                                   compiledIdxType, compiledIndexOffset,
+                                                   params.baseVertex);
+#endif
+            }
+            compiledVb.vao.unbind();
+            return;
+        }
+#endif
         // REMED-GFX-DECL-GUARD (REMED-GFX-218): before the VAO is touched, before a program is
         // selected and before any draw is issued. A custom ShaderEffect owns its own
         // element-index attribute convention and is deliberately untouched.
@@ -7037,16 +7854,19 @@ CNA_GL_RT_SAMPLE_UV_DECL
             if (params.baseVertex == 0) {
                 device.draw_elements(ToEasyGl(primitive), index_count, idxTypeCustom, indexOffsetCustom);
             } else {
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
                 // GLES 2.0 has no glDrawElementsBaseVertex (ES 3.2) -- shift every enabled
                 // attribute pointer by baseVertex elements instead, draw, and restore.
                 Es2ShiftEnabledVertexAttribPointers(params.baseVertex, +1);
                 device.draw_elements(ToEasyGl(primitive), index_count, idxTypeCustom, indexOffsetCustom);
                 Es2ShiftEnabledVertexAttribPointers(params.baseVertex, -1);
-#else
+}
+else
+{
                 ::metagl::glDrawElementsBaseVertex(ToEasyGl(primitive), index_count, idxTypeCustom,
                                                    indexOffsetCustom, params.baseVertex);
-#endif
+}
             }
             if (multiStream) RestoreSingleStreamAttributes(vao, params);
             vb.vao.unbind();
@@ -7077,16 +7897,19 @@ CNA_GL_RT_SAMPLE_UV_DECL
         if (params.baseVertex == 0) {
             device.draw_elements(ToEasyGl(primitive), index_count, idxType2, indexOffset);
         } else {
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
             // GLES 2.0 has no glDrawElementsBaseVertex (ES 3.2) -- shift every enabled attribute
             // pointer by baseVertex elements instead, draw, and restore.
             Es2ShiftEnabledVertexAttribPointers(params.baseVertex, +1);
             device.draw_elements(ToEasyGl(primitive), index_count, idxType2, indexOffset);
             Es2ShiftEnabledVertexAttribPointers(params.baseVertex, -1);
-#else
+}
+else
+{
             ::metagl::glDrawElementsBaseVertex(ToEasyGl(primitive), index_count, idxType2,
                                                indexOffset, params.baseVertex);
-#endif
+}
         }
         if (multiStream) RestoreSingleStreamAttributes(vao, params);
         vb.vao.unbind();
@@ -7103,7 +7926,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
                                                           const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
-#if defined(CNA_GL_PROFILE_OPENGLES2)
+if (ProfileIsEs2ApiGeneration())
+{
         // GLES 2.0 core has no glDrawElementsInstanced/glVertexAttribDivisor, and this profile
         // deliberately claims no instancing extension either -- SupportsCapability(Instancing)
         // answers false, so take the shared base-class refusal (the exact route OPENGLES1 keeps
@@ -7113,7 +7937,9 @@ CNA_GL_RT_SAMPLE_UV_DECL
                                                      primitive, primitiveCount, instanceCount,
                                                      params);
         return;
-#else
+}
+else
+{
         // REMED-GFX-DECL-GUARD (REMED-GFX-218): before the VAO is touched, before a program is
         // selected and before any draw is issued. A custom ShaderEffect owns its own
         // element-index attribute convention and is deliberately untouched.
@@ -7254,19 +8080,43 @@ CNA_GL_RT_SAMPLE_UV_DECL
                 p.prog.set_uniform(p.loc_instanced, 0.0f);
         }
         vao.unbind();
-#endif // !CNA_GL_PROFILE_OPENGLES2
+}
     }
 }
 
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_EASYGL
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace EasyGL
     {
+        std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args);
+        std::unique_ptr<IGraphicsRenderer> CreateGraphicsRendererForProfile(
+            const GraphicsRendererCreateArgs& args, GlProfile profile);
+    }
+
+    std::unique_ptr<IGraphicsRenderer> EasyGL::CreateGraphicsRendererForProfile(
+        const GraphicsRendererCreateArgs& args, EasyGL::GlProfile profile)
+    {
+        if (args.glContext == nullptr)
+        {
+            throw CNA::Platform::PlatformNotSupportedException(
+                CNA::Platform::PlatformCapability::OpenGlContext, "EasyGL renderer");
+        }
         return std::make_unique<EasyGL::EasyGLRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight,
+            args.surface, *args.glContext,
+            args.virtualWidth, args.virtualHeight,
             args.presentationMode, args.contextRecoveryEnabled,
-            args.multiSampleCount, args.swapInterval);
+            args.multiSampleCount, args.swapInterval, profile);
+    }
+
+    std::unique_ptr<IGraphicsRenderer> EasyGL::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    {
+        // plan_runtimerenderer.md P11: the build's default profile. Every registry entry uses
+        // CreateGraphicsRendererForProfile with its own identity's profile instead.
+        return EasyGL::CreateGraphicsRendererForProfile(args, EasyGL::kCompileTimeGlProfile);
     }
 #endif
 }

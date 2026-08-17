@@ -2,15 +2,22 @@
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 
-#include "CNA/Internal/Input/SdlInputBridge.hpp"
+#include "CNA/Internal/Input/PlatformInputBridge.hpp"
 #include "CNA/Logger.hpp"
-
-#include <SDL3/SDL.h>
-#include <SDL3_mixer/SDL_mixer.h>
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/PlatformEvent.hpp"
+#include "CNA/Platform/PlatformFactory.hpp"
+#include "CNA/TargetPlatform.hpp"
 
 #include <algorithm>
+#include <iterator>
+#include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <thread>
+#include <type_traits>
+#include <vector>
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
@@ -21,25 +28,13 @@
 
 namespace Microsoft::Xna::Framework
 {
+    struct Game::PlatformEventBatch
+    {
+        std::vector<CNA::Platform::PlatformEvent> events;
+    };
+
     namespace
     {
-        void InitAudio()
-        {
-#ifdef SOUND_ENABLED
-            if (!MIX_Init())
-            {
-                throw std::runtime_error(std::string("MIX_Init failed: ") + SDL_GetError());
-            }
-#endif
-        }
-
-        void ShutdownAudio()
-        {
-#ifdef SOUND_ENABLED
-            MIX_Quit();
-#endif
-        }
-
         [[nodiscard]] double TotalMilliseconds(const System::TimeSpan& value)
         {
             return value.getTotalMillisecondsProperty();
@@ -84,6 +79,81 @@ namespace Microsoft::Xna::Framework
         {
             values.erase(std::remove(values.begin(), values.end(), value), values.end());
         }
+
+        /// Reads the currently installed platform without triggering the lazy creation
+        /// GetCurrentPlatform() performs when nothing is installed.
+        [[nodiscard]] CNA::Platform::IPlatform* InstalledPlatformOrNull()
+        {
+            return CNA::Platform::HasCurrentPlatform() ? &CNA::Platform::GetCurrentPlatform()
+                                                       : nullptr;
+        }
+
+        // Live games, in the order they installed themselves; the back entry is the one currently
+        // aimed at by the ambient accessor.
+        //
+        // A per-game "the platform I displaced" pointer looks simpler and is wrong: games are not
+        // guaranteed to be destroyed in reverse construction order, and a game that saved a
+        // predecessor which is destroyed first would restore a dangling pointer on its own way
+        // out. Keeping the order in one place lets a game remove itself from the middle, which is
+        // the case that actually goes wrong.
+        std::mutex& PlatformStackMutex()
+        {
+            static std::mutex mutex;
+            return mutex;
+        }
+
+        std::vector<CNA::Platform::IPlatform*>& PlatformStack()
+        {
+            static std::vector<CNA::Platform::IPlatform*> stack;
+            return stack;
+        }
+
+        /// Installs the game's owned platform as the process-wide one in a single step.
+        ///
+        /// Doing both from a member initialiser rather than from the constructor body is what
+        /// makes the ordering guarantee real: every other member is constructed after this one,
+        /// so a graphics device or content manager that reaches for the ambient platform during
+        /// its own construction finds the game's instance rather than lazily creating a second.
+        [[nodiscard]] std::unique_ptr<CNA::Platform::IPlatform> InstallPlatform(
+            std::unique_ptr<CNA::Platform::IPlatform> platform)
+        {
+            if (!platform)
+            {
+                throw std::invalid_argument("Game requires a non-null platform");
+            }
+
+            {
+                const std::lock_guard<std::mutex> guard(PlatformStackMutex());
+                PlatformStack().push_back(platform.get());
+            }
+            CNA::Platform::SetCurrentPlatform(platform.get());
+            return platform;
+        }
+
+        /// Removes a game's platform from the stack and re-aims the ambient accessor at whatever
+        /// is left, which may be nothing.
+        void UninstallPlatform(CNA::Platform::IPlatform* platform)
+        {
+            CNA::Platform::IPlatform* successor = nullptr;
+            {
+                const std::lock_guard<std::mutex> guard(PlatformStackMutex());
+                std::vector<CNA::Platform::IPlatform*>& stack = PlatformStack();
+                const auto found = std::find(stack.rbegin(), stack.rend(), platform);
+                if (found != stack.rend())
+                {
+                    stack.erase(std::next(found).base());
+                }
+                successor = stack.empty() ? nullptr : stack.back();
+            }
+
+            // Only re-aim if this game is the one currently aimed at. Something outside Game may
+            // have installed its own platform (tests do), and a game going away is no reason to
+            // take that over.
+            if (InstalledPlatformOrNull() == platform)
+            {
+                CNA::Platform::SetCurrentPlatform(successor);
+            }
+        }
     }
 
     const System::TimeSpan Game::MaxElapsedTime = System::TimeSpan::FromMilliseconds(500.0);
@@ -95,7 +165,15 @@ namespace Microsoft::Xna::Framework
     }
 
     Game::Game()
-        : Components_(),
+        : Game(CNA::Platform::PlatformFactory::Create())
+    {
+    }
+
+    Game::Game(std::unique_ptr<CNA::Platform::IPlatform> platform)
+        : platform_(InstallPlatform(std::move(platform))),
+          platformCapabilities_(platform_->GetCapabilities()),
+          eventBatch_(std::make_unique<PlatformEventBatch>()),
+          Components_(),
           GraphicsDevice_(),
           Content_(),
           Window_(),
@@ -114,9 +192,11 @@ namespace Microsoft::Xna::Framework
           graphicsDeviceManager_(nullptr),
           currentAdapter_(nullptr),
           hasInitialized_(false),
+          controllerSubsystemAcquired_(false),
           suppressDraw_(false),
           isDisposed_(false),
           forceElapsedTimeToZero_(false),
+          isSuspended_(false),
           gameTime_(),
           previousPerformanceCounter_(0),
           accumulatedElapsedTime_(System::TimeSpan::Zero),
@@ -131,17 +211,31 @@ namespace Microsoft::Xna::Framework
             previousSleepTime = System::TimeSpan::FromMilliseconds(1.0);
         }
 
-        Window_.setWindowInternal(GraphicsDevice_.GetRenderer().GetWindowInternal());
+        Window_.setWindowInternal(
+            GraphicsDevice_.GetPlatformWindowInternal(),
+            GraphicsDevice_.GetWindowHandleInternal());
         Content_.setGraphicsDevice(GraphicsDevice_);
 
         FrameworkDispatcher::Update();
-        InitAudio();
     }
 
     Game::~Game()
     {
         Dispose(false);
-        ShutdownAudio();
+        // Hand the ambient installation back to whichever game is still alive, if any. This runs
+        // before platform_ is destroyed (members are destroyed after the body), so the accessor
+        // is never left aimed at a platform that has already gone away.
+        UninstallPlatform(platform_.get());
+    }
+
+    CNA::Platform::IPlatform& Game::GetPlatformEXT() const
+    {
+        return *platform_;
+    }
+
+    const CNA::Platform::PlatformCapabilities& Game::GetPlatformCapabilitiesEXT() const
+    {
+        return platformCapabilities_;
     }
 
     GameComponentCollection& Game::getComponentsProperty()
@@ -247,13 +341,14 @@ namespace Microsoft::Xna::Framework
 
         IsMouseVisible_ = value;
 
-        if (GraphicsDevice_.GetWindowInternal() != nullptr)
+        // Still gated on there being a window: cursor visibility is meaningless without one, and
+        // the platform's mouse service is null when the platform has no pointer at all (headless,
+        // and eventually terminal), which is a second reason the same call can be a no-op.
+        if (GraphicsDevice_.GetPlatformWindowInternal() != nullptr)
         {
-            if (value) {
-                SDL_ShowCursor();
-            } else
+            if (CNA::Platform::IPlatformMouse* mouse = platform_->GetMouse())
             {
-                SDL_HideCursor();
+                mouse->SetCursorVisible(value);
             }
         }
     }
@@ -327,7 +422,7 @@ namespace Microsoft::Xna::Framework
         if (!hasInitialized_)
         {
             DoInitialize();
-            previousPerformanceCounter_ = SDL_GetPerformanceCounter();
+            previousPerformanceCounter_ = platform_->GetPerformanceCounter();
             hasInitialized_ = true;
         }
 
@@ -347,7 +442,7 @@ namespace Microsoft::Xna::Framework
         BeginRun();
         BeforeLoop();
 
-        previousPerformanceCounter_ = SDL_GetPerformanceCounter();
+        previousPerformanceCounter_ = platform_->GetPerformanceCounter();
         RunLoop();
 
         EndRun();
@@ -362,7 +457,7 @@ namespace Microsoft::Xna::Framework
         {
             while (TimeSpanLess(accumulatedElapsedTime_ + worstCaseSleepPrecision_, TargetElapsedTime_))
             {
-                SDL_Delay(1);
+                platform_->Delay(1);
                 const System::TimeSpan timeAdvancedSinceSleeping = AdvanceElapsedTime();
                 UpdateEstimatedSleepPrecision(timeAdvancedSinceSleeping);
             }
@@ -641,11 +736,14 @@ namespace Microsoft::Xna::Framework
                 }
             }
 
-            // P8-002: mirrors FNA's ProgramExit, which quits SDL_INIT_VIDEO | SDL_INIT_GAMEPAD
-            // together. GraphicsDevice::Dispose (above) already quit SDL_INIT_VIDEO; this is the
-            // SDL_INIT_GAMEPAD counterpart, since that subsystem is Input's own responsibility
-            // (DoInitialize() below is the matching startup call).
-            CNA::Internal::Input::SdlInputBridge::ShutdownGamepadSubsystem();
+        }
+
+        // This is an unmanaged platform reference owned by Game itself, so the destructor's
+        // Dispose(false) path must release it just as surely as an explicit Dispose().
+        if (controllerSubsystemAcquired_)
+        {
+            platform_->ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Gamepad);
+            controllerSubsystemAcquired_ = false;
         }
 
         isDisposed_ = true;
@@ -669,13 +767,14 @@ namespace Microsoft::Xna::Framework
             graphicsDeviceManager_->CreateDevice();
         }
 
-        // Startup invariant: initialize the SDL gamepad subsystem here — DoInitialize() runs once,
-        // before the first event pump and before the first Update() (via both Run() and
-        // RunOneFrame()). This makes gamepads that were already connected before the first frame get
-        // enumerated by SDL (which queues SDL_EVENT_GAMEPAD_ADDED for each), so they are visible to
-        // GamePad::GetState from frame one. SdlInputBridge::ProcessEvent still calls this lazily as a
-        // defensive fallback for any host that pumps events without going through Game's loop.
-        CNA::Internal::Input::SdlInputBridge::EnsureGamepadSubsystemInitialized();
+        // The game owns this subsystem reference, but not its implementation. A platform may map
+        // it to native subsystem lifetime, make it a no-op, or provide a different lifetime.
+        // Acquiring before the first event pump makes already-connected pads visible in frame one.
+        if (platform_->GetGamepad() != nullptr || platform_->GetJoystick() != nullptr)
+        {
+            platform_->AcquireSubsystem(CNA::Platform::PlatformSubsystem::Gamepad);
+            controllerSubsystemAcquired_ = true;
+        }
 
         Initialize();
 
@@ -788,7 +887,9 @@ namespace Microsoft::Xna::Framework
 
             state.game->PollEvents();
 
-            const std::uint64_t nowMs = SDL_GetTicks();
+            // The platform's epoch is its own creation rather than library init, which changes
+            // nothing here: only deltas are used, and the first callback seeds lastTickMs either way.
+            const std::uint64_t nowMs = state.game->GetPlatformEXT().GetTicksMilliseconds();
             if (state.lastTickMs == 0)
             {
                 state.lastTickMs = nowMs;
@@ -866,6 +967,15 @@ namespace Microsoft::Xna::Framework
 #else
         while (RunApplication)
         {
+            // plan_apple.md APPLE-7: a backgrounded mobile application keeps its main thread
+            // alive but must neither render nor burn CPU. isMobilePlatform() is a
+            // compile-time constant, so desktop builds keep the plain Tick() loop unchanged.
+            if (CNA::isMobilePlatform() && isSuspended_)
+            {
+                WaitWhileSuspended();
+                continue;
+            }
+
             Tick();
         }
 
@@ -873,10 +983,24 @@ namespace Microsoft::Xna::Framework
 #endif
     }
 
+    void Game::WaitWhileSuspended()
+    {
+        // Park the thread instead of spinning: while suspended there is nothing to update and
+        // nothing that may be drawn. The platform contract has no blocking event wait, and
+        // deliberately so -- a sleep-then-poll pair says the same thing without every
+        // implementation having to grow one. The interval is short enough that the resume event,
+        // which arrives on the queue polled below, is acted on within a frame, and long enough
+        // that the wait costs nothing measurable.
+        constexpr std::uint32_t suspendedPollIntervalMs = 16;
+        platform_->Delay(suspendedPollIntervalMs);
+        PollEvents();
+    }
+
     System::TimeSpan Game::AdvanceElapsedTime()
     {
-        // FNA uses System.Diagnostics.Stopwatch; CNA uses SDL_GetPerformanceCounter for equivalent high-resolution timing.
-        const std::uint64_t currentCounter = SDL_GetPerformanceCounter();
+        // FNA uses System.Diagnostics.Stopwatch; CNA uses the platform's high-resolution
+        // monotonic counter for the equivalent.
+        const std::uint64_t currentCounter = platform_->GetPerformanceCounter();
 
         if (previousPerformanceCounter_ == 0)
         {
@@ -884,7 +1008,7 @@ namespace Microsoft::Xna::Framework
             return System::TimeSpan::Zero;
         }
 
-        const std::uint64_t frequency = SDL_GetPerformanceFrequency();
+        const std::uint64_t frequency = platform_->GetPerformanceFrequency();
         const double elapsedMilliseconds =
             (static_cast<double>(currentCounter - previousPerformanceCounter_) * 1000.0) /
             static_cast<double>(frequency);
@@ -921,56 +1045,133 @@ namespace Microsoft::Xna::Framework
 
     void Game::PollEvents()
     {
-        SDL_Event event;
-        while (SDL_PollEvent(&event))
+        std::vector<CNA::Platform::PlatformEvent>& events = eventBatch_->events;
+        platform_->PollEvents(events);
+
+        for (const CNA::Platform::PlatformEvent& event : events)
         {
-            CNA::Internal::Input::SdlInputBridge::ProcessEvent(event);
+            // Input observes every mapped event first. In particular, Exit() below must not stop
+            // the rest of this batch from reaching the input state machine (PLAT-6 finding 4).
+            CNA::Internal::Input::PlatformInputBridge::ProcessEvent(event);
 
-            switch (event.type)
+            std::visit([this](const auto& platformEvent)
             {
-                case SDL_EVENT_QUIT:
-                    Exit();
-                    break;
+                using Event = std::decay_t<decltype(platformEvent)>;
 
-                case SDL_EVENT_KEY_DOWN:
-                    if (!event.key.repeat)
+                if constexpr (std::is_same_v<Event, CNA::Platform::QuitEvent>)
+                {
+                    Exit();
+                }
+                else if constexpr (std::is_same_v<Event, CNA::Platform::KeyEvent>)
+                {
+                    if (platformEvent.pressed && !platformEvent.repeat)
                     {
-                        if (event.key.key == SDLK_F9)
+                        if (platformEvent.keycode == CNA::Platform::KeyCode::F9)
                             GraphicsDevice_.GetRenderer().DebugSimulateContextLoss();
-                        else if (event.key.key == SDLK_F10)
+                        else if (platformEvent.keycode == CNA::Platform::KeyCode::F10)
                             GraphicsDevice_.GetRenderer().DebugRestoreContext();
                     }
-                    break;
+                }
+                else if constexpr (std::is_same_v<Event, CNA::Platform::WindowEvent>)
+                {
+                    // Deliberately do not filter by window id and do not consume the size payload:
+                    // both details are observable legacy behaviour captured by PLAT-6.
+                    switch (platformEvent.kind)
+                    {
+                    case CNA::Platform::WindowEventKind::Resized:
+                    case CNA::Platform::WindowEventKind::PixelSizeChanged:
+                        Window_.updateFromPlatform();
+                        GraphicsDevice_.UpdateViewportFromWindow();
+                        GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(platformEvent.window);
+                        break;
+                    case CNA::Platform::WindowEventKind::DisplayScaleChanged:
+                        Window_.updateFromPlatform();
+                        GraphicsDevice_.UpdateViewportFromWindow();
+                        GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(platformEvent.window);
+                        break;
+                    case CNA::Platform::WindowEventKind::FocusLost:
+                        setIsActiveProperty(false);
+                        break;
+                    case CNA::Platform::WindowEventKind::FocusGained:
+                        setIsActiveProperty(true);
+                        GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(platformEvent.window);
+                        break;
+                    case CNA::Platform::WindowEventKind::Exposed:
+                    case CNA::Platform::WindowEventKind::Minimized:
+                    case CNA::Platform::WindowEventKind::Maximized:
+                    case CNA::Platform::WindowEventKind::Restored:
+                    case CNA::Platform::WindowEventKind::DisplayChanged:
+                        GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(platformEvent.window);
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                else if constexpr (std::is_same_v<Event, CNA::Platform::AppLifecycleEvent>)
+                {
+                    switch (platformEvent.kind)
+                    {
+                    // plan_apple.md APPLE-7 — a deviation from FNA, which tracks only IsActive
+                    // here. A mobile operating system terminates an application that submits GPU
+                    // work once it is in the background (iOS), or destroys the rendering surface
+                    // at that point (Android), so the loop must actually stop between these two
+                    // events rather than keep drawing into a dead surface. The flag is set on
+                    // every platform and acted on only where the events are raised, which is
+                    // mobile.
+                    case CNA::Platform::AppLifecycleKind::WillEnterBackground:
+                        isSuspended_ = true;
+                        setIsActiveProperty(false);
+                        break;
+                    case CNA::Platform::AppLifecycleKind::DidEnterForeground:
+                        isSuspended_ = false;
+                        // The suspension was not gameplay time. Restarting the counter makes the
+                        // first frame after the resume measure only itself, instead of the whole
+                        // background period clamped to MaxElapsedTime — which would run a burst of
+                        // catch-up Updates before the first visible frame.
+                        previousPerformanceCounter_ = 0;
+                        accumulatedElapsedTime_ = System::TimeSpan::Zero;
+                        ResetElapsedTime();
+                        setIsActiveProperty(true);
+                        GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(0);
+                        break;
+                    // Mobile memory pressure. The game itself decides what to release (XNA has no
+                    // hook for it), but the warning belongs in the log: the next step after this
+                    // event is usually the operating system killing the process.
+                    case CNA::Platform::AppLifecycleKind::LowMemory:
+                        CNA::Logger::Warn("Game: the operating system reported low memory.");
+                        break;
+                    // Already decided by the operating system: this is the last event the
+                    // application receives, so the loop has to end here for OnExiting to run at
+                    // all. Clearing the suspended flag first is what lets Run() leave the wait
+                    // loop and reach OnExiting instead of parking until the process is killed.
+                    case CNA::Platform::AppLifecycleKind::Terminating:
+                        isSuspended_ = false;
+                        Exit();
+                        break;
+                    }
+                }
+            }, event);
+        }
 
-                case SDL_EVENT_WINDOW_RESIZED:
-                case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-                    Window_.updateFromSDL();
-                    break;
-
-                case SDL_EVENT_WILL_ENTER_BACKGROUND:
-                    setIsActiveProperty(false);
-                    break;
-
-                case SDL_EVENT_DID_ENTER_FOREGROUND:
-                    setIsActiveProperty(true);
-                    break;
-
-                // Desktop focus switch (e.g. Alt-Tab), as opposed to the mobile-style
-                // background/foreground events above. Matches FNA's SDL3 platform loop, which sets
-                // game.IsActive = false/true on these same two events
-                // (SDL3_FNAPlatform.cs:1006-1037). Keyboard/mouse state is intentionally NOT
-                // cleared here — see DEC-15 in docs/input-fna-fidelity.md.
-                case SDL_EVENT_WINDOW_FOCUS_LOST:
-                    setIsActiveProperty(false);
-                    break;
-
-                case SDL_EVENT_WINDOW_FOCUS_GAINED:
-                    setIsActiveProperty(true);
-                    break;
-
-                default:
-                    break;
-            }
+        // Snapshot services advance once per frame, after the native queue has been pumped and
+        // before Update()/Draw() can read them. Keyboard keys/modifiers share one clock; mouse
+        // absolute state/buttons share another. Relative mouse displacement remains consume-on-read
+        // inside that service to preserve FNA's deliberate draining semantics.
+        if (CNA::Platform::IPlatformKeyboard* keyboard = platform_->GetKeyboard())
+        {
+            keyboard->Update();
+        }
+        if (CNA::Platform::IPlatformMouse* mouse = platform_->GetMouse())
+        {
+            mouse->Update();
+        }
+        if (CNA::Platform::IPlatformGamepad* gamepad = platform_->GetGamepad())
+        {
+            gamepad->Update();
+        }
+        if (CNA::Platform::IPlatformJoystick* joystick = platform_->GetJoystick())
+        {
+            joystick->Update();
         }
     }
 

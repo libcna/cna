@@ -3,45 +3,44 @@
 
 #include "CNA/Input/InputDeviceInfo.hpp"
 #include "CNA/Input/InputDevices.hpp"
-#include "CNA/Internal/Input/SystemDeviceBackend.hpp"
+#include "CNA/Platform/CannedInputDevices.hpp"
 
+#include <memory>
 #include <vector>
 
 using CNA::Input::InputDeviceInfoEXT;
 using CNA::Input::InputDevices;
-using CNA::Internal::Input::ISystemDeviceBackend;
-using CNA::Internal::Input::SetSystemDeviceBackendForTests;
+using CNA::Platform::InputDeviceInfo;
+using CNA::Platform::InputDeviceKind;
+using CNA::Platform::Testing::CannedInputDevicePlatform;
+using CNA::Platform::Testing::ScopedCurrentPlatform;
 
 namespace
 {
-    // A fake device enumeration source, so InputDevices is exercised deterministically (CI has no
-    // predictable set of physical mice/keyboards/touch devices).
-    class FakeSystemDeviceBackend final : public ISystemDeviceBackend
-    {
-    public:
-        std::vector<InputDeviceInfoEXT> mice;
-        std::vector<InputDeviceInfoEXT> keyboards;
-        std::vector<InputDeviceInfoEXT> touchDevices;
-
-        std::vector<InputDeviceInfoEXT> GetMice() override { return mice; }
-        std::vector<InputDeviceInfoEXT> GetKeyboards() override { return keyboards; }
-        std::vector<InputDeviceInfoEXT> GetTouchDevices() override { return touchDevices; }
-    };
-
+    // CI has no predictable set of physical mice, keyboards or touch devices, so the enumeration
+    // is scripted. It arrives through the platform contract rather than through the old
+    // per-subsystem backend seam, which PLAT-77 concluded should go away rather than be renamed.
     class CnaInputDevicesTest : public ::testing::Test
     {
     protected:
-        FakeSystemDeviceBackend fake;
-        void SetUp() override { SetSystemDeviceBackendForTests(&fake); }
-        void TearDown() override { SetSystemDeviceBackendForTests(nullptr); }
+        CannedInputDevicePlatform platform;
+        std::unique_ptr<ScopedCurrentPlatform> installed;
+
+        void SetUp() override { installed = std::make_unique<ScopedCurrentPlatform>(platform); }
+        void TearDown() override { installed.reset(); }
     };
 }
 
 TEST_F(CnaInputDevicesTest, EachCategoryForwardsItsEnumeration)
 {
-    fake.mice = {{1, "Primary Mouse"}, {2, "Trackpad"}};
-    fake.keyboards = {{10, "Internal Keyboard"}};
-    fake.touchDevices = {{100, "Touchscreen"}, {101, "Pen Digitizer"}};
+    platform.Canned().Set(InputDeviceKind::Mouse,
+                          {{1, InputDeviceKind::Mouse, "Primary Mouse"},
+                           {2, InputDeviceKind::Mouse, "Trackpad"}});
+    platform.Canned().Set(InputDeviceKind::Keyboard,
+                          {{10, InputDeviceKind::Keyboard, "Internal Keyboard"}});
+    platform.Canned().Set(InputDeviceKind::Touch,
+                          {{100, InputDeviceKind::Touch, "Touchscreen"},
+                           {101, InputDeviceKind::Touch, "Pen Digitizer"}});
 
     const auto mice = InputDevices::GetMiceEXT();
     ASSERT_EQ(mice.size(), 2u);

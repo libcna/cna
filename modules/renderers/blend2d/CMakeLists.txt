@@ -6,7 +6,7 @@
 # renderer's test/example executables -- which link ${RENDERER_TARGET} transitively through
 # CNA -- need blend2d's include directories reachable too, not just this archive's own TUs.
 cna_add_renderer()
-target_link_libraries(${RENDERER_TARGET} PUBLIC blend2d::blend2d SDL3::SDL3)
+target_link_libraries(${RENDERER_TARGET} PUBLIC blend2d::blend2d)
 
 # Module-owned examples (module-examples campaign): the family's example/test
 # registration is module-local; its historical selection/platform conditions

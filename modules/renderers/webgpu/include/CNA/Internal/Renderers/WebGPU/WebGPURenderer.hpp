@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 #if __has_include(<webgpu/webgpu.h>)
@@ -140,7 +141,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
         /// WEBGPU-51: real CPU readback of an arbitrary Texture2D renderer, via the same staged
@@ -215,7 +216,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         /// REMED-GFX-127: returns true only once the whole requested rectangle has been written;
         /// false for an empty request, a torn-down owner or a destination too small for it. The
         /// former behaviour -- memset the destination to zero and return -- reported a fabricated
@@ -781,8 +782,7 @@ namespace CNA::Internal::Renderers::WebGPU
             }
         };
 
-        WebGPURenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                              CnaPresentationMode presentationMode, int swapInterval);
+        explicit WebGPURenderer(const GraphicsRendererCreateArgs& args);
         ~WebGPURenderer() override;
 
         WebGPURenderer(const WebGPURenderer&) = delete;
@@ -877,6 +877,7 @@ namespace CNA::Internal::Renderers::WebGPU
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         /// WEBGPU-58: reconfigures this renderer's single GLOBAL MSAA sample count in place --
         /// mirroring VulkanRenderer::ApplyMultiSampleCount()'s own "one value, invalidate
         /// every pipeline cache, rebuild lazily" design (see sampleCount_'s own comment for why
@@ -888,8 +889,6 @@ namespace CNA::Internal::Renderers::WebGPU
         bool TransformWindowToLogical(float windowX, float windowY, float& logicalX, float& logicalY) const override;
         bool TransformLogicalToWindow(float logicalX, float logicalY, float& windowX, float& windowY) const override;
 
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
@@ -1524,8 +1523,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // leaving the other 5 faces' mip chains untouched -- called once per face.
         void GenerateMipsCubeFace(WGPUTexture texture, int face, int size, int mipLevels);
 
-        SDL_Window* window_ = nullptr;
-        void* metalView_ = nullptr;
+        PlatformRendererSurfaceState surfaceState_;
+        void* metalSurfaceOwner_ = nullptr;
         WGPUInstance instance_ = nullptr;
         WGPUSurface surface_ = nullptr;
         WGPUAdapter adapter_ = nullptr;
@@ -2219,7 +2218,7 @@ namespace CNA::Internal::Renderers::WebGPU
             ///@{ REMED-GFX-172: the reflection cube's own GraphicsDevice.SamplerStates[1], captured
             /// by value at the public draw call. FNA's EnvironmentMapEffect.fx declares
             /// `DECLARE_TEXTURE(Texture, 0)` and `DECLARE_CUBEMAP(EnvironmentMap, 1)`, so the cube
-            /// has its own public sampler slot; the same field names SDL_GPU's own
+            /// has its own public sampler slot; the same field names the native GPU backend's
             /// EnvMapDrawCommand uses since REMED-GFX-173.
             int envMapFilter = 0;
             int envMapAddressU = 1;
@@ -2338,18 +2337,16 @@ namespace CNA::Internal::Renderers::WebGPU
         // all yet (see needsUnsupportedEffect's own skinned gate in DrawPrimitivesEx()), so
         // SkinnedPbrEffect (stride 68) is a separate, pre-existing, out-of-scope gap and keeps
         // falling back exactly as it did before. Genuinely new bind-group shapes on both sides:
-        // group 0 needs a THIRD uniform buffer (PbrFactors: metallic/roughness factors -- the
+        // group 0 needs a THIRD uniform buffer (PbrFactors: metallic/roughness, alpha coverage,
+        // and glTF colour-space flags -- the
         // existing 128-byte Uniforms and 272-byte LitLightParams blocks are both already fully
         // packed and are reused verbatim via the existing FillExtUniforms()/
         // FillLitLightUniforms() helpers), and group 1 needs FIVE textures (base color, normal,
         // metallic-roughness, emissive, occlusion) behind one shared sampler, each falling back to
         // a 1x1 default texture (matching EasyGLRenderer's own
         // EnsureDefaultFlatNormalTexture()/EnsureDefaultWhiteTexture() "map absent" convention)
-        // when PbrEffect leaves that map unbound. Fog and alpha-test are deliberately NOT wired
-        // into this shader: every other WebGPU 3D shader already defers fog identically (see
-        // CreateLitTexturedResources()'s own comment), and PbrEffect::FillGpuDrawParams() never
-        // touches GpuDrawParams::alphaTest at all (stays the default always-pass value), so
-        // embedding that branch here would be permanently dead code.
+        // when PbrEffect leaves that map unbound. Fog remains deferred like the other WebGPU 3D
+        // shaders; alpha coverage stays in this PBR shader for glTF MASK draws.
         struct PbrDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
@@ -2363,7 +2360,7 @@ namespace CNA::Internal::Renderers::WebGPU
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> uniforms{};
             std::array<float, 68> lightUniforms{};
-            std::array<float, 4> pbrFactors{};
+            std::array<float, 56> pbrFactors{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2536,7 +2533,7 @@ namespace CNA::Internal::Renderers::WebGPU
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> uniforms{};
             std::array<float, 68> lightUniforms{};
-            std::array<float, 4> pbrFactors{};
+            std::array<float, 56> pbrFactors{};
             std::array<float, 4 + 72 * 16> skinningParams{};
             bool depthTest = false;
             bool depthWrite = false;

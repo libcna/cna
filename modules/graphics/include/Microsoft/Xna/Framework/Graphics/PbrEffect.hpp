@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <array>
 #include <memory>
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AlphaModeEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectFog.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectLights.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureTransformEXT.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -26,7 +29,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * own reference BRDF (GGX distribution + Smith-Schlick-GGX visibility + Schlick Fresnel, see
      * EasyGLRenderer::EnsurePbrProgram()'s own doc comment), not image-based lighting (a
      * separate, much larger feature). Every renderer except Software/Canvas/Ascii/Headless/
-     * SDL_Renderer/FreeDirect has a real shader for this effect (plan_cnj.md CNB-58, CNB-103..109); those
+     * The native 2D renderer/FreeDirect has a real shader for this effect (plan_cnj.md CNB-58, CNB-103..109); those
      * remaining renderers accept a bound PbrEffect without erroring but currently render it as an
      * untextured/unlit fallback. WebGPU's shader covers the unskinned case only — see
      * SkinnedPbrEffect's own doc comment.
@@ -198,10 +201,256 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Sets the roughness factor [0,1]. @param value The new roughness factor. */
         CNAEXT void setRoughnessFactorProperty(float value);
 
+        /** @brief Gets `KHR_materials_ior`'s index of refraction (default 1.5). @return The IOR. */
+        CNAEXT [[nodiscard]] float getIorEXTProperty() const;
+        /** @brief Sets the dielectric index of refraction. @param value The new IOR. */
+        CNAEXT void setIorEXTProperty(float value);
+        /** @brief Gets the specular reflection strength (default 1). @return The strength. */
+        CNAEXT [[nodiscard]] float getSpecularFactorEXTProperty() const;
+        /** @brief Sets the dielectric specular strength. @param value The new strength. */
+        CNAEXT void setSpecularFactorEXTProperty(float value);
+        /** @brief Gets the linear-RGB F0 colour factor (default white). @return The colour factor. */
+        CNAEXT [[nodiscard]] Vector3 getSpecularColorFactorEXTProperty() const;
+        /** @brief Sets the dielectric F0 colour factor. @param value The new colour factor. */
+        CNAEXT void setSpecularColorFactorEXTProperty(const Vector3& value);
+
+        /** @brief Gets `KHR_materials_specular`'s scalar strength map (alpha channel, linear). */
+        CNAEXT [[nodiscard]] Texture2D* getSpecularMapEXTProperty() const;
+        /** @brief Sets the scalar specular-strength map. */
+        CNAEXT void setSpecularMapEXTProperty(Texture2D* value);
+        /** @brief Gives this effect shared ownership of its scalar specular-strength map. */
+        CNAEXT void SetOwnedSpecularMapEXT(std::shared_ptr<Texture2D> texture);
+        /** @brief Gets `KHR_materials_specular`'s colour map (RGB, sRGB by default). */
+        CNAEXT [[nodiscard]] Texture2D* getSpecularColorMapEXTProperty() const;
+        /** @brief Sets the specular-colour map. */
+        CNAEXT void setSpecularColorMapEXTProperty(Texture2D* value);
+        /** @brief Gives this effect shared ownership of its specular-colour map. */
+        CNAEXT void SetOwnedSpecularColorMapEXT(std::shared_ptr<Texture2D> texture);
+
+        /** @brief Gets the packed UV channel used by the scalar specular map. */
+        CNAEXT [[nodiscard]] int getSpecularTextureCoordinateSetEXTProperty() const;
+        /** @brief Selects packed UV channel 0 or 1 for the scalar specular map. */
+        CNAEXT void setSpecularTextureCoordinateSetEXTProperty(int set);
+        /** @brief Gets the packed UV channel used by the specular-colour map. */
+        CNAEXT [[nodiscard]] int getSpecularColorTextureCoordinateSetEXTProperty() const;
+        /** @brief Selects packed UV channel 0 or 1 for the specular-colour map. */
+        CNAEXT void setSpecularColorTextureCoordinateSetEXTProperty(int set);
+        /** @brief Gets the scalar specular map's independent UV transform. */
+        CNAEXT [[nodiscard]] TextureTransformEXT getSpecularTextureTransformEXTProperty() const;
+        /** @brief Sets the scalar specular map's independent UV transform. */
+        CNAEXT void setSpecularTextureTransformEXTProperty(const TextureTransformEXT& value);
+        /** @brief Gets the specular-colour map's independent UV transform. */
+        CNAEXT [[nodiscard]] TextureTransformEXT getSpecularColorTextureTransformEXTProperty() const;
+        /** @brief Sets the specular-colour map's independent UV transform. */
+        CNAEXT void setSpecularColorTextureTransformEXTProperty(const TextureTransformEXT& value);
+        /** @brief Whether specular-colour samples are sRGB encoded (true by default). */
+        CNAEXT [[nodiscard]] bool getSpecularColorTextureIsSrgbEXTProperty() const;
+        /** @brief Sets whether specular-colour samples require sRGB decoding. */
+        CNAEXT void setSpecularColorTextureIsSrgbEXTProperty(bool value);
+
         /** @brief Gets the emissive factor, multiplied with the emissive map's RGB. @return The emissive factor. */
         CNAEXT [[nodiscard]] Vector3 getEmissiveFactorProperty() const;
+
+        /**
+         * @brief Whether the bound base-colour texture's samples are sRGB-encoded.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-210`). glTF §3.9.2
+         * declares `baseColorTexture` sRGB-encoded, so `true` is the default and is what an
+         * imported glTF material wants. It is a property rather than a constant because this
+         * effect is reachable from content that is not glTF, where a caller may bind a texture it
+         * has already linearised.
+         *
+         * The base-colour **factor** (@ref getDiffuseColorProperty) is linear either way and is
+         * never decoded: the two multiply, and decoding both would apply the transfer twice.
+         *
+         * @return True when the texture is sRGB-encoded and must be decoded before lighting.
+         */
+        /**
+         * @brief How far the bound normal map perturbs the surface (glTF `normalTexture.scale`).
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-224`). Scales the sampled
+         * tangent-space normal's x and y before the tangent basis is applied: 0 flattens the map to
+         * the geometric normal, 1 is the map as authored, and values above 1 exaggerate it — glTF
+         * puts no upper bound on it, so neither does this.
+         *
+         * @return The normal scale; 1 by default.
+         */
+        CNAEXT [[nodiscard]] float getNormalScaleEXTProperty() const;
+
+        /**
+         * @brief Sets how far the bound normal map perturbs the surface.
+         * @param value The scale; 0 flattens the map, 1 is as authored.
+         */
+        CNAEXT void setNormalScaleEXTProperty(float value);
+
+        /**
+         * @brief How far the bound occlusion map darkens (glTF `occlusionTexture.strength`).
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-225`). Applied as
+         * `1 + strength * (sampled - 1)`, the specification's own formula: at 0 the result is 1 —
+         * no occlusion at all, whatever the map holds — and at 1 it is the map unchanged.
+         *
+         * @return The occlusion strength; 1 by default.
+         */
+        CNAEXT [[nodiscard]] float getOcclusionStrengthEXTProperty() const;
+
+        /**
+         * @brief Sets how far the bound occlusion map darkens.
+         * @param value The strength; 0 disables occlusion, 1 applies the map as authored.
+         */
+        CNAEXT void setOcclusionStrengthEXTProperty(float value);
+
+        /**
+         * @brief Gets the packed vertex UV channel sampled by each PBR texture slot.
+         *
+         * The five entries are, in order, base colour, normal, metallic-roughness, emissive and
+         * occlusion. Each value is 0 or 1 and selects the matching `TextureCoordinate` usage
+         * index in the current vertex declaration. All entries default to 0.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-182/GLTF-183`). This
+         * carries glTF's per-texture `texCoord` choice after the importer has packed its at-most
+         * two sampled source sets into the renderer-facing UV0/UV1 channels.
+         * @return The five per-texture packed UV selectors.
+         */
+        CNAEXT [[nodiscard]] const std::array<int, 5>&
+        getTextureCoordinateSetsEXTProperty() const;
+
+        /**
+         * @brief Selects the packed vertex UV channel for one PBR texture slot.
+         * @param slot Texture slot in [0,4]: base colour, normal, metallic-roughness, emissive,
+         *             then occlusion.
+         * @param set Packed UV channel, either 0 or 1.
+         * @throws std::out_of_range If either argument is outside its documented range.
+         */
+        CNAEXT void setTextureCoordinateSetEXTProperty(int slot, int set);
+
+        /**
+         * @brief Gets the texture-coordinate transform for each PBR texture slot.
+         *
+         * The five entries are base colour, normal, metallic-roughness, emissive and occlusion.
+         * Every entry defaults to the identity transform.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-184`). Transform state
+         * is independent of the five UV-channel selectors: first the selected coordinate is
+         * scaled, rotated and translated, then that result is sampled.
+         * @return The five per-texture transforms.
+         */
+        CNAEXT [[nodiscard]] const std::array<TextureTransformEXT, 5>&
+        getTextureTransformsEXTProperty() const;
+
+        /**
+         * @brief Sets one PBR texture slot's scale-rotate-translate transform.
+         * @param slot Texture slot in [0,4], in the order documented by the getter.
+         * @param value The new transform.
+         * @throws std::out_of_range If @p slot is outside [0,4].
+         */
+        CNAEXT void setTextureTransformEXTProperty(int slot, const TextureTransformEXT& value);
+
+        /**
+         * @brief Whether the bound base-colour texture's samples are sRGB-encoded.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. glTF §3.9.2 assigns each material texture a
+         * colour space, and the base-colour map is the one that is sRGB while the base-colour
+         * *factor* beside it is linear. The shader decodes only the sample, so this flag has to
+         * travel separately from the factor rather than being inferred from either.
+         *
+         * @return True when the sample must be decoded before lighting.
+         */
+        CNAEXT [[nodiscard]] bool getBaseColorTextureIsSrgbEXTProperty() const;
+
+        /**
+         * @brief Sets whether the bound base-colour texture's samples are sRGB-encoded.
+         * @param value True for an sRGB-encoded texture (glTF's own rule), false for a linear one.
+         */
+        CNAEXT void setBaseColorTextureIsSrgbEXTProperty(bool value);
+
+        /**
+         * @brief Whether the bound emissive texture's samples are sRGB-encoded.
+         *
+         * @note CNAEXT — plan_gltf.md `GLTF-210`, on the same terms as
+         * @ref getBaseColorTextureIsSrgbEXTProperty. The emissive **factor** is linear and is not
+         * decoded, which matters because `KHR_materials_emissive_strength` can legitimately push
+         * it above 1.
+         *
+         * @return True when the texture is sRGB-encoded and must be decoded before lighting.
+         */
+        CNAEXT [[nodiscard]] bool getEmissiveTextureIsSrgbEXTProperty() const;
+
+        /**
+         * @brief Sets whether the bound emissive texture's samples are sRGB-encoded.
+         * @param value True for an sRGB-encoded texture (glTF's own rule), false for a linear one.
+         */
+        CNAEXT void setEmissiveTextureIsSrgbEXTProperty(bool value);
+
+        /**
+         * @brief Whether the lit result is encoded from linear back to sRGB for display.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-212`). Unlike the two
+         * decode flags, this is a genuine policy choice rather than a fact about a texture: an
+         * application drawing into an sRGB render target, or doing its own tone mapping, must turn
+         * it off or the transfer is applied twice. It defaults to `true` because the common case
+         * is an ordinary UNORM back buffer shown directly.
+         *
+         * Alpha is never encoded — glTF §3.9.4 makes it coverage, not colour.
+         *
+         * @return True when the fragment's RGB is encoded to sRGB before it leaves the shader.
+         */
+        CNAEXT [[nodiscard]] bool getEncodeOutputToSrgbEXTProperty() const;
+
+        /**
+         * @brief Sets whether the lit result is encoded from linear back to sRGB for display.
+         * @param value False when the render target or a later pass already applies the transfer.
+         */
+        CNAEXT void setEncodeOutputToSrgbEXTProperty(bool value);
         /** @brief Sets the emissive factor. @param value The new emissive factor. */
         CNAEXT void setEmissiveFactorProperty(const Vector3& value);
+
+        /**
+         * @brief Gets how this material's alpha channel is interpreted (glTF §3.9.4).
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. Defaults to `AlphaModeEXT::Opaque`, glTF's
+         * own default, so an effect nobody configures behaves exactly as it did before this
+         * existed.
+         *
+         * @return The alpha-coverage mode.
+         */
+        CNAEXT [[nodiscard]] AlphaModeEXT getAlphaModeEXTProperty() const;
+        /** @brief Sets how this material's alpha channel is interpreted. @param value The mode. */
+        CNAEXT void setAlphaModeEXTProperty(AlphaModeEXT value);
+
+        /**
+         * @brief Gets the alpha threshold a `Mask` material is cut at (glTF §3.9.4).
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. Defaults to `0.5`, glTF's own default.
+         * Meaningful only when @ref getAlphaModeEXTProperty is `AlphaModeEXT::Mask`; it is carried
+         * regardless, because a material that switches modes must not lose the threshold it
+         * authored.
+         *
+         * @return The alpha cutoff.
+         */
+        CNAEXT [[nodiscard]] float getAlphaCutoffEXTProperty() const;
+        /** @brief Sets the alpha threshold a `Mask` material is cut at. @param value The cutoff. */
+        CNAEXT void setAlphaCutoffEXTProperty(float value);
+
+        /**
+         * @brief Gets whether this material's back faces are drawn (glTF §3.9.5).
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. Defaults to `false`, matching both glTF's
+         * own default and XNA's `CullCounterClockwise`.
+         *
+         * **This is carried state, not applied state.** Culling is a `RasterizerState` the
+         * application sets per draw, and having `Model::Draw` mutate device state as a side effect
+         * would surprise every XNA caller (`docs/gltf-api-change-review.md` §1.4). An application
+         * that wants glTF's sidedness honoured reads this and sets `RasterizerState::CullNone`
+         * itself. This remains application-owned, like `GLTF-230`'s verified blend-state and draw-
+         * ordering boundary.
+         *
+         * @return True when the material asks for both faces to be drawn.
+         */
+        CNAEXT [[nodiscard]] bool getDoubleSidedEXTProperty() const;
+        /** @brief Sets whether this material's back faces are drawn. @param value True for both. */
+        CNAEXT void setDoubleSidedEXTProperty(bool value);
+
 
         /**
          * @brief Fills a GpuDrawParams struct with this effect's current render parameters.
@@ -228,11 +477,15 @@ namespace Microsoft::Xna::Framework::Graphics
         Texture2D* metallicRoughnessMap_   = nullptr;
         Texture2D* emissiveMap_            = nullptr;
         Texture2D* occlusionMap_           = nullptr;
+        Texture2D* specularMapEXT_          = nullptr;
+        Texture2D* specularColorMapEXT_     = nullptr;
         std::shared_ptr<Texture2D> ownedTexture_;
         std::shared_ptr<Texture2D> ownedNormalMap_;
         std::shared_ptr<Texture2D> ownedMetallicRoughnessMap_;
         std::shared_ptr<Texture2D> ownedEmissiveMap_;
         std::shared_ptr<Texture2D> ownedOcclusionMap_;
+        std::shared_ptr<Texture2D> ownedSpecularMapEXT_;
+        std::shared_ptr<Texture2D> ownedSpecularColorMapEXT_;
 
         EffectParameter* diffuseColorParam_  = nullptr;
         EffectParameter* fogColorParam_      = nullptr;
@@ -241,6 +494,18 @@ namespace Microsoft::Xna::Framework::Graphics
 
         bool fogEnabled_ = false;
 
+        float normalScale_       = 1.0f;
+        float occlusionStrength_ = 1.0f;
+        bool baseColorTextureIsSrgb_ = true;
+        bool emissiveTextureIsSrgb_  = true;
+        bool specularColorTextureIsSrgbEXT_ = true;
+        bool encodeOutputToSrgb_     = true;
+        std::array<int, 5> textureCoordinateSetsEXT_{};
+        std::array<TextureTransformEXT, 5> textureTransformsEXT_{};
+        int specularTextureCoordinateSetEXT_ = 0;
+        int specularColorTextureCoordinateSetEXT_ = 0;
+        TextureTransformEXT specularTextureTransformEXT_{};
+        TextureTransformEXT specularColorTextureTransformEXT_{};
         Matrix world_      = Matrix::getIdentityProperty();
         Matrix view_       = Matrix::getIdentityProperty();
         Matrix projection_ = Matrix::getIdentityProperty();
@@ -252,9 +517,18 @@ namespace Microsoft::Xna::Framework::Graphics
         Vector3 emissiveFactor_    = Vector3::Zero;
         float   metallicFactor_    = 1.0f;
         float   roughnessFactor_   = 1.0f;
+        float   iorEXT_                 = 1.5f;
+        float   specularFactorEXT_      = 1.0f;
+        Vector3 specularColorFactorEXT_ = Vector3{1.0f, 1.0f, 1.0f};
 
         float fogStart_ = 0.0f;
         float fogEnd_   = 1.0f;
+
+
+        // plan_gltf.md GLTF-228/GLTF-229/GLTF-231: glTF's material-level alpha and sidedness state.
+        AlphaModeEXT alphaMode_ = AlphaModeEXT::Opaque;
+        float        alphaCutoff_ = 0.5f;
+        bool         doubleSided_ = false;
 
         int dirtyFlags_;
     };

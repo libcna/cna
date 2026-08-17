@@ -1,0 +1,4 @@
+# Built binaries only -- the source and README are the record of what this proved.
+terminal_probe
+*.o
+*.exe

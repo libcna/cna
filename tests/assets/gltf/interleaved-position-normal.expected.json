@@ -41,6 +41,9 @@
     "nodeCount": 1,
     "meshCount": 1,
     "materialCount": 0,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
     "skinCount": 0,
     "animationCount": 0,
     "accessorCount": 3,
@@ -48,7 +51,8 @@
     "bufferCount": 1,
     "bufferByteLength": 94,
     "extensionsUsed": [],
-    "extensionsRequired": []
+    "extensionsRequired": [],
+    "punctualLightCount": 0
   },
   "l2": {
     "accessors": [
@@ -170,6 +174,7 @@
             1.0
           ]
         ],
+        "tangents": [],
         "texcoords": [],
         "colors": [],
         "joints": [],
@@ -186,6 +191,18 @@
             2
           ]
         ],
+        "importPolicy": {
+          "imported": true,
+          "topologyMode": 4,
+          "topologyName": "TRIANGLES",
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "converted": false,
+          "primitiveCount": 1
+        },
         "material": null
       }
     ]
@@ -253,7 +270,7 @@
       {
         "mesh": 0,
         "primitive": 0,
-        "stride": 32,
+        "stride": 48,
         "vertexCount": 3,
         "fields": [
           {
@@ -267,23 +284,30 @@
             "size": 12
           },
           {
-            "name": "TextureCoordinate",
+            "name": "Tangent",
             "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
             "size": 8
           }
         ],
         "vertexBufferFile": "interleaved-position-normal.vb.bin",
-        "vertexBufferBytes": 96,
-        "vertexBufferSha256": "1867d16f24e644ed1348c0f15264de12581a1a1e16d37832df78517a495c0c90",
+        "vertexBufferBytes": 144,
+        "vertexBufferSha256": "f9de2f9261a351eea66984930c69ac5a51a1dbdd2260b6c567163e535defb82d",
         "indexElementSize": 2,
         "indexCount": 3,
         "indexBufferFile": "interleaved-position-normal.ib.bin",
         "indexBufferBytes": 6,
         "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "sourceTopology": "TRIANGLES",
         "topology": "TRIANGLES",
         "primitiveCount": 1
       }
     ]
   },
+  "rejection": null,
   "defects": []
 }

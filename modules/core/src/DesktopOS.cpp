@@ -5,13 +5,13 @@
 #include "CNA/DesktopOS.hpp"
 
 #include "CNA/CNAException.hpp"
-#include "CNA/Platform.hpp"
+#include "CNA/TargetPlatform.hpp"
 
 namespace CNA
 {
     DesktopOS getCurrentDesktopOS()
     {
-        if (getCurrentPlatform() != Platform::Desktop)
+        if (getCurrentPlatform() != TargetPlatform::Desktop)
         {
             throw CNAException("Current platform is not desktop.");
         }

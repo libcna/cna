@@ -39,5 +39,6 @@ void main() {
     gl_Position = pc.vp * world * vec4(aPos, 1.0);
     // REMED-GFX-011: renderer-wide Vulkan NDC Y-flip -- see pbr3d.vert.glsl.
     gl_Position.y = -gl_Position.y;
+    gl_PointSize = 1.0;
     fragColor   = (pc.vertexColorEnabled > 0.5) ? aColor * pc.diffuseColor : pc.diffuseColor;
 }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "CNA/GraphicsRendererSelection.hpp"
 #include "CNA/GraphicsRendererType.hpp"
 
 #if defined(CNA_RENDERER_BGFX) && __has_include(<bgfx/bgfx.h>)
@@ -168,6 +169,9 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_PORTABLEGL
     ++enabled;
 #endif
+#ifdef CNA_RENDERER_TINYGL
+    ++enabled;
+#endif
 
     // plan_pixijs.md: same registration discipline as every renderer above -- add the PIXIJS
     // entry here in the same task that adds the identity everywhere else, not after the fact.
@@ -175,7 +179,33 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
     ++enabled;
 #endif
 
+    // plan_runtimerenderer.md RTR-P7-8: exactly one, in BOTH modes.
+    //
+    // In a multi-renderer build this is not an accident -- it is the property that keeps this whole
+    // file, and the ~892 other renderer-gated sites in the test and example corpus, meaningful.
+    // Only the DEFAULT renderer's macro is defined project-wide; each family's own macro is private
+    // to that family's target. So a renderer-gated test still describes exactly one renderer: the
+    // default. (Making the corpus itself renderer-agnostic is phase P9.)
+    //
+    // If this ever reads more than 1, a renderer's macro has escaped its target and every gated
+    // test in the corpus has silently become ambiguous.
     EXPECT_EQ(enabled, 1);
+}
+
+TEST(GraphicsRendererCompileDefinitionsTest, CompileTimeIdentityIsTheBuildDefault)
+{
+    // getCurrentGraphicsRendererType() answers "what did this build select by default", and stays a
+    // constant expression in both modes. GraphicsDevice::GetGraphicsRendererType() is the one that
+    // answers "what is this device actually using", and is deliberately NOT constexpr.
+    static_assert(CNA::getCurrentGraphicsRendererName()
+                  == CNA::getGraphicsRendererName(CNA::getCurrentGraphicsRendererType()));
+
+#ifdef CNA_MULTI_RENDERER
+    // A multi-renderer build has more than one renderer available, but still exactly one default.
+    EXPECT_GT(CNA::GraphicsRendererSelection::GetAvailable().size(), 1u);
+#endif
+    EXPECT_TRUE(CNA::GraphicsRendererSelection::IsAvailable(
+        CNA::getCurrentGraphicsRendererType()));
 }
 
 #ifdef CNA_RENDERER_SOKOL

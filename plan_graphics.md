@@ -743,6 +743,22 @@ experimental workstream; task-level status and remaining parity work live in tha
 
 ## Phase 74 — XNA compiled effect bytecode (`.fx`) support via MojoShader
 
+> **Superseded/re-audited by [`plan_fx.md`](plan_fx.md).** The original rows below are retained as
+> historical evidence and contain assumptions now known to be false (MojoShader was already pinned
+> through FNA3D, genuine fixtures already existed, and direct SPIR-V is available). The production
+> FNA3D vertical slice now implements the byte-array constructor, reflection/parameters,
+> techniques/passes, state and sampler application, clone/lifecycle behavior, 3D and SpriteBatch
+> draws, the XNB `EffectReader`, format diagnostics, and `CompiledEffects` capability. Incomplete
+> renderers remain explicitly false; their rollout is tracked only in `plan_fx.md`.
+>
+> Row-by-row disposition of the original plan: 10200 is **obsolete** (MojoShader arrives with the
+> FNA3D pin, so no separate submodule is vendored); 10201, 10206, 10207 and 10208 are **delivered**
+> by `plan_fx.md` FX-011..FX-024 and FX-030..FX-038, against the six provenance-tracked `.fxb`
+> fixtures plus an in-tree synthetic conformance builder; 10202 is **re-scoped** to FX-062 and
+> 10203/10204 are **obsolete** as written (the pinned MojoShader emits SPIR-V directly, so the
+> glslang hop FX-064 replaces them); 10205 is **carried forward** unchanged as FX-068; 10209 is
+> **delivered** as `docs/fx-compiled-effects.md`. No row below should be picked up from this table.
+
 Opened by Task 352's full-support decision. Full research/reasoning behind this phase lives in
 `docs/fx-bytecode-support-plan.md` — read that first. Dedicated task-number block (`10200`+),
 mirroring the WebGPU backend's `10000`+ convention (Phases 56–69), since this is comparable in

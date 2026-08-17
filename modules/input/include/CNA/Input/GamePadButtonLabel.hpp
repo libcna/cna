@@ -10,8 +10,8 @@ namespace CNA::Input
      *
      * XNA 4.0 exposes only positional button names (A/B/X/Y); the printed label differs by controller
      * family (Xbox uses A/B/X/Y, PlayStation uses cross/circle/square/triangle, Nintendo swaps A/B and
-     * X/Y). This CNA extension lets UI prompts show the correct glyph. It mirrors SDL3's
-     * `SDL_GamepadButtonLabel`.
+     * X/Y). This CNA extension lets UI prompts show the correct glyph. It mirrors the platform
+     * contract's `GamepadButtonLabel`.
      */
     CNAEXT enum class GamePadButtonLabelEXT
     {

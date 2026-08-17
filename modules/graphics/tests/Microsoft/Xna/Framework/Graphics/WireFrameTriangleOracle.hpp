@@ -17,6 +17,8 @@
 #include <vector>
 #include <gtest/gtest.h>
 
+#include "CNA/RendererTestGate.hpp"
+
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -42,79 +44,60 @@
 
 // Renderers whose CnaTests build reaches a rasterizing device and reads pixels back through
 // RenderTarget2D::GetData -- VertexDeclarationLayoutTests.cpp's own oracle set.
-#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_SOFTWARE) || \
-    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_BGFX) || \
-    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_SDL_GPU) || \
-    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12) || \
-    defined(CNA_RENDERER_OPENGL4) || defined(CNA_RENDERER_OPENGL1) || defined(CNA_RENDERER_OPENGL2) || \
-    defined(CNA_RENDERER_WICKED) || defined(CNA_RENDERER_MAGNUM) || defined(CNA_RENDERER_SOKOL) || \
-    defined(CNA_RENDERER_DILIGENT)
-#define CNA_WIREFRAME_PIXEL_ORACLE 1
-#endif
-
-// The subset actually measured. D3D12 is excluded because no D3D12 runtime exists in this
-// environment: its device creation aborts under Wine for every device test in this file, including
-// the untouched `SupportsThreeD`, so calling it clean would be a fabrication. It still compiles
-// the oracle, and gains its reading the day a D3D12 runtime is available.
-#if defined(CNA_WIREFRAME_PIXEL_ORACLE) && !defined(CNA_RENDERER_DIRECTX12)
-#define CNA_WIREFRAME_MEASURED 1
-#endif
-
-// Measured to render a genuine wireframe: edges lit, interior empty. WebGPU is excluded because it
-// has no polygon-mode API at all and now refuses the request outright (WEBGPU-115).
-#if defined(CNA_WIREFRAME_MEASURED) && !defined(CNA_RENDERER_WEBGPU)
-#define CNA_WIREFRAME_RENDERS_EDGES 1
-#endif
-
-// WEBGPU-115: the renderers that answer a WireFrame request with a deterministic refusal instead of
-// pixels. This arm used to have an empty registration set -- no renderer rejected, so REMED-GFX-209
-// recorded the absence rather than manufacturing one. WebGPU now fills it, and it is the only
-// member: EasyGL renders a genuine wireframe despite reporting false (REMED-GFX-219, deferred and
-// deliberately untouched here), and every other measured renderer reports true and renders one.
-#if defined(CNA_WIREFRAME_MEASURED) && defined(CNA_RENDERER_WEBGPU)
-#define CNA_WIREFRAME_REJECTED 1
-#endif
-
-#ifdef CNA_WIREFRAME_PIXEL_ORACLE
-
+/// plan_runtimerenderer.md RTR-P9-7: the same four sets, asked of the ACTIVE renderer instead of
+/// the build default, so a multi-renderer binary answers them per run rather than once at compile
+/// time. Each predicate keeps the name and the meaning its macro had.
 namespace CnaTest::WireFrameOracle
 {
-    inline constexpr const char* kRendererName =
-#if defined(CNA_RENDERER_EASYGL)
-        "EasyGL";
-#elif defined(CNA_RENDERER_VULKAN)
-        "Vulkan";
-#elif defined(CNA_RENDERER_BGFX)
-        "bgfx";
-#elif defined(CNA_RENDERER_WEBGPU)
-        "WebGPU";
-#elif defined(CNA_RENDERER_SOFTWARE)
-        "Software";
-#elif defined(CNA_RENDERER_SDL_GPU)
-        "SDL_GPU";
-#elif defined(CNA_RENDERER_DIRECTX9)
-        "DIRECTX9";
-#elif defined(CNA_RENDERER_DIRECTX11)
-        "DIRECTX11";
-#elif defined(CNA_RENDERER_DIRECTX12)
-        "DIRECTX12";
-#elif defined(CNA_RENDERER_OPENGL4)
-        "OpenGL4";
-#elif defined(CNA_RENDERER_OPENGL1)
-        "OpenGL1";
-#elif defined(CNA_RENDERER_OPENGL2)
-        "OpenGL2";
-#elif defined(CNA_RENDERER_WICKED)
-        "Wicked";
-#elif defined(CNA_RENDERER_MAGNUM)
-        "Magnum";
-#elif defined(CNA_RENDERER_SOKOL)
-        "Sokol";
-#elif defined(CNA_RENDERER_DILIGENT)
-        "Diligent";
-#else
-        "unknown";
-#endif
+    // Lets CNA_RENDERER_IS name identities bare, exactly as the `defined(CNA_RENDERER_X)` guards it
+    // replaced did. Scoped to this namespace: a using-directive at header scope would reach every
+    // suite that includes the oracle.
+    using namespace ::CNA::Testing::Renderers;   // NOLINT(google-build-using-namespace)
+
+    /** @brief Whether the active renderer rasterizes and reads back, so pixels can be asserted. */
+    [[nodiscard]] inline bool HasPixelOracle()
+    {
+        return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Software, Vulkan, Bgfx, WebGPU, SdlGpu,
+                               DirectX9, DirectX11, DirectX12, OpenGL4, OpenGL1, OpenGL2,
+                               Wicked, Magnum, Sokol, Diligent);
+    }
+
+    // The subset actually measured. D3D12 is excluded because no D3D12 runtime exists in this
+    // environment: its device creation aborts under Wine for every device test in this file,
+    // including the untouched `SupportsThreeD`, so calling it clean would be a fabrication. It
+    // still compiles the oracle, and gains its reading the day a D3D12 runtime is available.
+    /** @brief Whether the active renderer's wireframe behaviour has actually been measured. */
+    [[nodiscard]] inline bool IsMeasured()
+    {
+        return HasPixelOracle() && !CNA_RENDERER_IS(DirectX12);
+    }
+
+    // Measured to render a genuine wireframe: edges lit, interior empty. WebGPU is excluded
+    // because it has no polygon-mode API at all and now refuses the request outright (WEBGPU-115).
+    /** @brief Whether the active renderer draws a genuine wireframe: edges lit, interior empty. */
+    [[nodiscard]] inline bool RendersEdges()
+    {
+        return IsMeasured() && !CNA_RENDERER_IS(WebGPU);
+    }
+
+    // WEBGPU-115: the renderers that answer a WireFrame request with a deterministic refusal
+    // instead of pixels. This arm used to have an empty registration set -- no renderer rejected,
+    // so REMED-GFX-209 recorded the absence rather than manufacturing one. WebGPU now fills it,
+    // and it is the only member: EasyGL renders a genuine wireframe despite reporting false
+    // (REMED-GFX-219, deferred and deliberately untouched here), and every other measured renderer
+    // reports true and renders one.
+    /** @brief Whether the active renderer refuses a WireFrame request deterministically. */
+    [[nodiscard]] inline bool RejectsWireFrame()
+    {
+        return IsMeasured() && CNA_RENDERER_IS(WebGPU);
+    }
+
+    /** @brief The active renderer's display name. */
+    [[nodiscard]] inline std::string RendererName()
+    {
+        return std::string(CNA::getGraphicsRendererName(
+            CNA::GraphicsRendererSelection::GetSelected()));
+    }
 
     using Microsoft::Xna::Framework::Color;
     using Microsoft::Xna::Framework::Rectangle;
@@ -414,9 +397,9 @@ namespace CnaTest::WireFrameOracle
     inline void ExpectClearOnly(const Frame& frame, const char* what)
     {
         EXPECT_EQ(0, frame.LitTotal())
-            << kRendererName << ' ' << what << " mutated the target -- " << frame.Describe();
+            << RendererName() << ' ' << what << " mutated the target -- " << frame.Describe();
         EXPECT_EQ(0, frame.LitIn(kInterior))
-            << kRendererName << ' ' << what << " filled the triangle interior -- "
+            << RendererName() << ' ' << what << " filled the triangle interior -- "
             << frame.Describe();
     }
 
@@ -424,7 +407,7 @@ namespace CnaTest::WireFrameOracle
     /// one -- a boundary that never states its measurement outlives the thing it describes.
     inline void PrintReading(const char* label, const Result& r)
     {
-        std::cout << "[ GFX-209  ] " << kRendererName << ' ' << label << ": ";
+        std::cout << "[ GFX-209  ] " << RendererName() << ' ' << label << ": ";
         if (!r.rendered)
             std::cout << "REJECTED, target " << r.frame.Describe() << " -- \"" << r.rejection << '"'
                       << std::endl;
@@ -437,24 +420,23 @@ namespace CnaTest::WireFrameOracle
     inline void ExpectSolidTriangle(const Result& solid)
     {
         ASSERT_TRUE(solid.rendered)
-            << kRendererName << " refused an ordinary Solid draw: " << solid.rejection;
+            << RendererName() << " refused an ordinary Solid draw: " << solid.rejection;
         EXPECT_EQ(kInteriorArea, solid.frame.LitIn(kInterior))
-            << kRendererName << " Solid left part of the triangle interior unfilled -- "
+            << RendererName() << " Solid left part of the triangle interior unfilled -- "
             << solid.frame.Describe();
         EXPECT_TRUE(Frame::NearInk(solid.frame.FirstLitIn(kInterior)))
-            << kRendererName << " Solid filled the interior with "
+            << RendererName() << " Solid filled the interior with "
             << Describe(solid.frame.FirstLitIn(kInterior)) << ", not the ink colour";
         // The rasterized area is a fixed property of the geometry; a few pixels of slack absorbs
         // each renderer's own top-left/pixel-centre rule and nothing more.
         EXPECT_GE(solid.frame.LitTotal(), kSolidArea - 64)
-            << kRendererName << " Solid covered less than the triangle -- "
+            << RendererName() << " Solid covered less than the triangle -- "
             << solid.frame.Describe();
         EXPECT_LE(solid.frame.LitTotal(), kSolidArea + 64)
-            << kRendererName << " Solid covered more than the triangle -- "
+            << RendererName() << " Solid covered more than the triangle -- "
             << solid.frame.Describe();
         EXPECT_TRUE(solid.frame.EveryLitPixelIsInk())
-            << kRendererName << " Solid produced a lit pixel that is neither ink nor clear";
+            << RendererName() << " Solid produced a lit pixel that is neither ink nor clear";
     }
 }   // namespace CnaTest::WireFrameOracle
 
-#endif  // CNA_WIREFRAME_PIXEL_ORACLE

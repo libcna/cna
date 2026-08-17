@@ -14,7 +14,7 @@ transitively unbuildable; it is not a runtime or rendering-conformance claim for
 - Compiler: GNU C++ 14.2.0
 - Generator: Ninja 1.12.1, CMake 3.31.6
 - Configuration: Debug, tests/examples/networking disabled, compiler cache disabled
-- Concurrency: every build used `cmake --build <dir> --target CNA --parallel 2`
+- Concurrency: every build used `cmake --build <dir> --parallel 2`
 
 Every positive row used a fresh `cmake-build-matrix-*` directory and the following configure
 shape, with `<RENDERER>` and `<name>` replaced per row:
@@ -29,7 +29,7 @@ cmake -S . -B cmake-build-matrix-<name> -G Ninja \
   -DCNA_USE_CCACHE=OFF \
   -DCMAKE_C_COMPILER_LAUNCHER= \
   -DCMAKE_CXX_COMPILER_LAUNCHER=
-cmake --build cmake-build-matrix-<name> --target CNA --parallel 2
+cmake --build cmake-build-matrix-<name> --parallel 2
 ```
 
 Disabling networking here means the optional CNA networking component, not dependency downloads.
@@ -37,7 +37,7 @@ BGFX and WebGPU followed their existing renderer-specific dependency resolution 
 
 ## Native Linux results
 
-| Selection | Configure | Full `CNA` target | Dependency evidence |
+| Selection | Configure | Full configured build | Dependency evidence |
 |---|---|---|---|
 | `HEADLESS` | pass | pass | no renderer-specific external dependency |
 | `SOFTWARE` | pass | pass | no renderer-specific external dependency |
@@ -104,7 +104,7 @@ cmake -S . -B /tmp/cna-skia113-<name> -G Ninja \
   -DCNA_BUILD_EXAMPLES=OFF \
   -DCNA_ENABLE_NET=OFF \
   -DCNA_USE_CCACHE=OFF
-cmake --build /tmp/cna-skia113-<name> --target CNA --parallel 8
+cmake --build /tmp/cna-skia113-<name> --parallel 8
 ```
 
 The Skia row used the same pinned CPU-raster artifact validated by SKIA-112. The BGFX row reused
@@ -113,7 +113,7 @@ this verification offline. No tracked source or dependency state was changed.
 
 ### Native Linux results
 
-| Selection | Fresh configure | Full `CNA` target | Notes |
+| Selection | Fresh configure | Full configured build | Notes |
 |---|---|---|---|
 | `SKIA` | pass | pass | selected the pinned raster renderer; 480 Ninja edges |
 | `EASYGL` | pass | pass | selected adjacent `../easy-gl`; 499 Ninja edges |

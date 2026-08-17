@@ -57,12 +57,44 @@ namespace Microsoft::Xna::Framework::Graphics
      * (see AvatarAnimationPresetToClipNameEXT), but SkinnedModelEXT itself has no dependency
      * on that enum.
      */
+    /**
+     * @brief Which index space a clip's `BoneTrackEXT::BoneIndex` values live in.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. The two are deliberately distinct and must never
+     * be silently interchanged (plan_gltf.md §15.1.2): a joint's palette slot has nothing to do
+     * with its position in the scene, and a rigid scene node has no palette slot at all. A clip
+     * that stated neither would let a reader apply one as the other, which is a silent corruption
+     * in place of the silent drop `GLTF-293` removed.
+     */
+    CNAEXT enum class ClipTargetSpaceEXT
+    {
+        /** @brief A slot in one skin's GPU joint palette — what `SkinningData` indexes. */
+        JointPalette,
+        /** @brief A node's index in `Model::Bones` — what rigid node animation drives. */
+        SceneNode,
+    };
+
+    /**
+     * @brief A named animation clip: a fixed duration and a set of per-bone keyframe tracks.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. CNA extension. Clip names conventionally
+     * match Microsoft::Xna::Framework::GamerServices::AvatarAnimationPreset enumerator names
+     * (see AvatarAnimationPresetToClipNameEXT), but SkinnedModelEXT itself has no dependency
+     * on that enum.
+     */
     CNAEXT struct AnimationClipEXT
     {
         /** @brief Total playback duration of this clip. */
         System::TimeSpan Duration;
         /** @brief Per-bone keyframe tracks. Bones with no track hold their bind pose. */
         std::vector<BoneTrackEXT> Tracks;
+        /**
+         * @brief Which index space @ref Tracks' bone indices are in.
+         *
+         * @note CNAEXT — plan_gltf.md `GLTF-294`. Defaults to `JointPalette`, which is what every
+         * clip was before rigid node animation existed, so no existing consumer's meaning changes.
+         */
+        ClipTargetSpaceEXT TargetSpace = ClipTargetSpaceEXT::JointPalette;
     };
 
     /**

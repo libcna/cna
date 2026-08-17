@@ -1,0 +1,185 @@
+name: TinyGL cross-platform CI
+
+on:
+  push:
+    branches: [next, develop, master]
+    paths:
+      - '.github/workflows/tinygl-cross-platform-ci.yml'
+      - 'CMakeLists.txt'
+      - 'cmake/RendererSelection.cmake'
+      - 'cmake/ThirdPartySDL.cmake'
+      - 'cmake/ThirdPartyTinyGL.cmake'
+      - 'cmake/TestHelpers.cmake'
+      - 'modules/CMakeLists.txt'
+      # Every module the TinyGL test executables actually link. The list used to name only six;
+      # a fix in modules/content then pushed without starting this matrix at all, even though
+      # cna_content is in the link closure of all fifteen targets below.
+      - 'modules/audio/**'
+      - 'modules/content/**'
+      - 'modules/core/**'
+      - 'modules/devices/**'
+      - 'modules/devices-ext/**'
+      - 'modules/graphics/**'
+      - 'modules/graphics-ext/**'
+      - 'modules/input/**'
+      - 'modules/math/**'
+      - 'modules/media/**'
+      - 'modules/platform/**'
+      - 'modules/renderers/tinygl/**'
+      - 'modules/runtime/**'
+      - 'modules/storage/**'
+  pull_request:
+    paths:
+      - '.github/workflows/tinygl-cross-platform-ci.yml'
+      - 'CMakeLists.txt'
+      - 'cmake/RendererSelection.cmake'
+      - 'cmake/ThirdPartySDL.cmake'
+      - 'cmake/ThirdPartyTinyGL.cmake'
+      - 'cmake/TestHelpers.cmake'
+      - 'modules/CMakeLists.txt'
+      # Every module the TinyGL test executables actually link. The list used to name only six;
+      # a fix in modules/content then pushed without starting this matrix at all, even though
+      # cna_content is in the link closure of all fifteen targets below.
+      - 'modules/audio/**'
+      - 'modules/content/**'
+      - 'modules/core/**'
+      - 'modules/devices/**'
+      - 'modules/devices-ext/**'
+      - 'modules/graphics/**'
+      - 'modules/graphics-ext/**'
+      - 'modules/input/**'
+      - 'modules/math/**'
+      - 'modules/media/**'
+      - 'modules/platform/**'
+      - 'modules/renderers/tinygl/**'
+      - 'modules/runtime/**'
+      - 'modules/storage/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tinygl-cross-platform-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    env:
+      CMAKE_GENERATOR: Ninja
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: GCC (Linux x86_64)
+            runner: ubuntu-24.04
+          - name: AppleClang (macOS arm64)
+            runner: macos-14
+          - name: MSVC (Windows x86_64)
+            runner: windows-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout CNA
+        uses: actions/checkout@v4
+        with:
+          path: cna
+          submodules: true
+
+      - name: Checkout pinned sharp-runtime sibling
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/sharp-runtime
+          ref: f23ded28c7b94a745cf82f8804b5b7104ca5780e
+          path: sharp-runtime
+
+      - name: Checkout pinned TinyGL
+        uses: actions/checkout@v4
+        with:
+          repository: C-Chads/tinygl
+          ref: 36a7987e7bebfda19615ea33341b1cc0ff9c3b13
+          path: tinygl
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build pkg-config \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+            libasound2-dev libpulse-dev libudev-dev libdbus-1-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
+            libxfixes-dev libxss-dev libxtst-dev libwayland-dev \
+            wayland-protocols libxkbcommon-dev
+
+      - name: Install macOS build dependencies
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg ninja pkg-config
+
+      - name: Set up MSVC developer environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Set up Ninja on Windows
+        if: runner.os == 'Windows'
+        uses: seanmiddleditch/gha-setup-ninja@v4
+
+      - name: Install Windows build dependencies
+        if: runner.os == 'Windows'
+        run: |
+          /c/vcpkg/vcpkg.exe install zlib:x64-windows
+          echo "CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" >> "${GITHUB_ENV}"
+
+      - name: Configure TinyGL
+        working-directory: cna
+        run: |
+          cmake -S . -B build-tinygl -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCNA_GRAPHICS_RENDERER=TINYGL \
+            -DCNA_BUILD_TESTS=ON \
+            -DCNA_BUILD_EXAMPLES=OFF \
+            -DCNA_ENABLE_NET=OFF \
+            -DCNA_USE_CCACHE=OFF \
+            -DCNA_MAX_VENDORED_BUILD_JOBS=2 \
+            -DFETCHCONTENT_SOURCE_DIR_TINYGL="${GITHUB_WORKSPACE}/tinygl"
+
+      - name: Build TinyGL and its focused test executables
+        working-directory: cna
+        run: |
+          cmake --build build-tinygl --parallel 2 --target \
+            cna_renderer_tinygl \
+            cna_test_tinygl_smoke \
+            cna_test_tinygl_texture_sprite \
+            cna_test_tinygl_3d \
+            cna_test_tinygl_state \
+            cna_test_tinygl_rejection \
+            cna_test_tinygl_contract \
+            cna_test_tinygl_draw_routes \
+            cna_test_tinygl_fixed_layouts \
+            cna_test_tinygl_lighting \
+            cna_test_tinygl_goldenimage_smoke \
+            cna_test_tinygl_basiceffect_golden \
+            cna_test_tinygl_spritebatch_rotation_golden \
+            cna_test_tinygl_depthstencilstate_write_enable_golden \
+            cna_test_tinygl_rasterizerstate_cullmode_golden
+
+      - name: Run all TinyGL contract and golden-image tests
+        working-directory: cna
+        run: ctest --test-dir build-tinygl -L TinyGL --output-on-failure --parallel 2
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tinygl-${{ runner.os }}-diagnostics
+          path: |
+            cna/build-tinygl/Testing/Temporary/**
+            cna/build-tinygl/CMakeFiles/CMakeConfigureLog.yaml
+          if-no-files-found: warn

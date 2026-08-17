@@ -1,0 +1,391 @@
+{
+  "id": "mode-triangle-strip-morph",
+  "description": "A TRIANGLE_STRIP quad carrying a morph target with a distinct delta per vertex. The strip-to-list conversion rewrites the index list; the vertex order it must not touch is exactly what the per-vertex deltas are addressed by.",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "meshes-overview",
+    "morph-targets"
+  ],
+  "inventory": {
+    "id": "mode-triangle-strip-morph",
+    "owningGroup": "topology",
+    "referencingGroups": [],
+    "validatedLayers": [
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "L5"
+    ],
+    "features": [
+      "primitive.mode = TRIANGLE_STRIP",
+      "morph target",
+      "strip -> list conversion",
+      "per-vertex delta addressing"
+    ],
+    "auditFixture": null
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 1,
+    "meshCount": 1,
+    "materialCount": 0,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
+    "skinCount": 0,
+    "animationCount": 0,
+    "accessorCount": 3,
+    "bufferViewCount": 3,
+    "bufferCount": 1,
+    "bufferByteLength": 104,
+    "extensionsUsed": [],
+    "extensionsRequired": [],
+    "punctualLightCount": 0
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 4,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 0,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      },
+      {
+        "index": 1,
+        "usage": "morph POSITION delta",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 4,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 48,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          2.0,
+          0.0,
+          0.0,
+          3.0,
+          0.0,
+          0.0,
+          4.0
+        ]
+      },
+      {
+        "index": 2,
+        "usage": "indices",
+        "type": "SCALAR",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 4,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 2,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 96,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          2,
+          3
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": [
+      {
+        "mesh": 0,
+        "meshName": "MorphedStripQuad",
+        "primitive": 0,
+        "mode": 5,
+        "modeName": "TRIANGLE_STRIP",
+        "indexed": true,
+        "vertexCount": 4,
+        "positions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            1.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "normals": [],
+        "tangents": [],
+        "texcoords": [],
+        "colors": [],
+        "joints": [],
+        "weights": [],
+        "indices": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "triangles": [
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            2,
+            1,
+            3
+          ]
+        ],
+        "importPolicy": {
+          "imported": true,
+          "topologyMode": 4,
+          "topologyName": "TRIANGLES",
+          "indices": [
+            0,
+            1,
+            2,
+            2,
+            1,
+            3
+          ],
+          "converted": true,
+          "primitiveCount": 2
+        },
+        "material": null
+      }
+    ]
+  },
+  "l4": {
+    "instances": [
+      {
+        "node": 0,
+        "nodeName": "MeshNode",
+        "mesh": 0,
+        "parentNodePath": [],
+        "worldMatrixColumnMajor": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "worldPositions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            1.0,
+            1.0,
+            0.0
+          ]
+        ]
+      }
+    ],
+    "worldBounds": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        1.0,
+        1.0,
+        0.0
+      ]
+    },
+    "topologyMorph": {
+      "sourceTopology": "TRIANGLE_STRIP",
+      "importedTopology": "TRIANGLES",
+      "authoredIndices": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "convertedIndices": [
+        0,
+        1,
+        2,
+        2,
+        1,
+        3
+      ],
+      "vertexCount": 4,
+      "vertexOrderUnchanged": true,
+      "morphDeltas": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          0.0,
+          2.0
+        ],
+        [
+          0.0,
+          0.0,
+          3.0
+        ],
+        [
+          0.0,
+          0.0,
+          4.0
+        ]
+      ],
+      "fullyMorphedPositions": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          1.0,
+          0.0,
+          2.0
+        ],
+        [
+          0.0,
+          1.0,
+          3.0
+        ],
+        [
+          1.0,
+          1.0,
+          4.0
+        ]
+      ],
+      "rule": "Converting a strip rewrites the INDEX list and must leave the VERTEX order alone, because morph deltas are addressed per vertex by position in the target accessor. De-duplicating the strip's shared corners -- vertices 1 and 2 appear in both triangles -- would still produce a mesh and a morph, with every delta on the wrong vertex: a plausible deformation of the wrong shape.",
+      "discriminationRule": "The four deltas are all different, so a permutation is a different staircase rather than a subtly different surface. Identical deltas would make a reordering indistinguishable from correctness."
+    }
+  },
+  "l5": {
+    "supported": true,
+    "parts": [
+      {
+        "mesh": 0,
+        "primitive": 0,
+        "stride": 48,
+        "vertexCount": 4,
+        "fields": [
+          {
+            "name": "Position",
+            "offset": 0,
+            "size": 12
+          },
+          {
+            "name": "Normal",
+            "offset": 12,
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
+            "size": 8
+          }
+        ],
+        "vertexBufferFile": "mode-triangle-strip-morph.vb.bin",
+        "vertexBufferBytes": 192,
+        "vertexBufferSha256": "d45c2a7b330952e43844558a80a8f860e3499d85b41d0a7111c1a964de25ee43",
+        "indexElementSize": 2,
+        "indexCount": 6,
+        "indexBufferFile": "mode-triangle-strip-morph.ib.bin",
+        "indexBufferBytes": 12,
+        "indexBufferSha256": "769df21c80974149d13f85ca9f01b8361bfe89e3fcadf7aac71e3c59c247ef7b",
+        "sourceTopology": "TRIANGLE_STRIP",
+        "topology": "TRIANGLES",
+        "primitiveCount": 2
+      }
+    ]
+  },
+  "rejection": null,
+  "defects": []
+}

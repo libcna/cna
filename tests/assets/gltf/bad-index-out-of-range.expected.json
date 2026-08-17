@@ -1,0 +1,160 @@
+{
+  "id": "bad-index-out-of-range",
+  "description": "A triangle whose third index is 7 while the primitive has three vertices. cgltf_validate bounds an index accessor against its own bufferView and never against the vertex count, so this file is structurally sound and semantically impossible -- and the 16-bit packing path would have truncated a larger value into a plausible one instead of failing.",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "meshes-overview",
+    "accessors"
+  ],
+  "inventory": {
+    "id": "bad-index-out-of-range",
+    "owningGroup": "robustness",
+    "referencingGroups": [],
+    "validatedLayers": [
+      "L1",
+      "L2"
+    ],
+    "features": [
+      "index beyond vertex count",
+      "index range validation",
+      "import rejection"
+    ],
+    "auditFixture": null,
+    "validatorExpectedErrorCodes": [
+      "ACCESSOR_INDEX_OOB"
+    ],
+    "validatorExceptionReason": "The primitive's out-of-range index is this bad-* fixture's subject."
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 1,
+    "meshCount": 1,
+    "materialCount": 0,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
+    "skinCount": 0,
+    "animationCount": 0,
+    "accessorCount": 3,
+    "bufferViewCount": 3,
+    "bufferCount": 1,
+    "bufferByteLength": 78,
+    "extensionsUsed": [],
+    "extensionsRequired": [],
+    "punctualLightCount": 0
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 0,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      {
+        "index": 1,
+        "usage": "NORMAL",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 36,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 2,
+        "usage": "indices",
+        "type": "SCALAR",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 3,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 2,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 72,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          7
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": []
+  },
+  "l4": {},
+  "l5": {
+    "supported": false,
+    "reason": "The primitive is refused at extraction, so no buffers are produced.",
+    "blockedBy": [
+      "GLTF-068"
+    ],
+    "parts": []
+  },
+  "rejection": {
+    "stage": "extraction",
+    "task": "GLTF-068",
+    "errorContains": [
+      "index 2 = 7",
+      "only 3 vertices"
+    ],
+    "offendingIndex": 7,
+    "offendingPosition": 2,
+    "vertexCount": 3,
+    "note": "Asserted at EXTRACTION, which is where CNA's own check lives: the constraint is between an index accessor and a primitive's POSITION count, and the diagnostic names the offending value, its position in the index list and the vertex count -- 'an index is out of range' in a 200k-triangle mesh is not actionable. A full load refuses the file one layer earlier, because cgltf's own validator happens to bound an index accessor against the first attribute's count; that is defence in depth rather than the same check twice, and it is why the CNA-side one is exercised through ExtractMesh directly -- the L3 oracle and the offline converter both reach it that way."
+  },
+  "defects": []
+}

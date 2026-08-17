@@ -1,0 +1,2766 @@
+// SPDX-License-Identifier: MS-PL
+
+#include "CNA/C/devices.h"
+#include "CnaCApiDetail.hpp"
+#include "CnaCApiRuntimeDetail.hpp"
+
+#include "Microsoft/Devices/Detail/IVibrateBackend.hpp"
+#include "Microsoft/Devices/VibrateController.hpp"
+#include "System/TimeSpan.hpp"
+
+#include <cstring>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <utility>
+#include <vector>
+
+#ifdef CNA_DEVICES
+#include "CNA/Devices/Camera.hpp"
+#include "CNA/Devices/CameraDeviceInfo.hpp"
+#include "CNA/Devices/CameraPosition.hpp"
+#include "CNA/Devices/CameraState.hpp"
+#include "CNA/Devices/Clipboard.hpp"
+#include "CnaCApiPlatformOverride.hpp"
+
+#include "CNA/Platform/IPlatformCamera.hpp"
+#include "CNA/Platform/IPlatformSystemServices.hpp"
+#include "CNA/Devices/DisplayInfo.hpp"
+#include "CNA/Devices/FileDialog.hpp"
+#include "CNA/Devices/FileDialogFilter.hpp"
+#include "CNA/Devices/Locale.hpp"
+#include "CNA/Devices/LocaleInfo.hpp"
+#include "CNA/Devices/MessageBox.hpp"
+#include "CNA/Devices/MessageBoxType.hpp"
+#include "CNA/Devices/PowerInfo.hpp"
+#include "CNA/Devices/PowerState.hpp"
+#include "CNA/Devices/SystemInfo.hpp"
+#include "CNA/Devices/SystemTray.hpp"
+#include "CNA/Devices/UrlLauncher.hpp"
+#include "CnaCApiGraphicsDetail.hpp"
+#include "Microsoft/Xna/Framework/GameWindow.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+
+#include <functional>
+#endif
+
+using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::ErrorCategoryForResult;
+using CNA::C::Detail::Fail;
+using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ValidateActiveGameHandle;
+
+namespace {
+
+using Microsoft::Devices::VibrateController;
+
+constexpr uint32_t StructureVersion = UINT32_C(1);
+
+[[nodiscard]] CNA_Result InvalidInput(const char* const message)
+{
+    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
+}
+
+#ifndef CNA_DEVICES
+[[nodiscard]] CNA_Result ExtensionUnavailable()
+{
+    return Fail(
+        CNA_RESULT_NOT_SUPPORTED,
+        CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+        "This CNA build does not contain the extended device layer.");
+}
+#endif
+
+[[nodiscard]] CNA_Result NoTestBackend()
+{
+    return Fail(
+        CNA_RESULT_INVALID_STATE,
+        CNA_ERROR_CATEGORY_STATE,
+        "No test backend is installed for this device.");
+}
+
+[[nodiscard]] CNA_Result CopyText(
+    const std::string& value,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
+        return InvalidInput("The device text output is invalid.");
+    }
+    *outBytes = value.size();
+    if (capacity < value.size()) {
+        return Fail(
+            CNA_RESULT_BUFFER_TOO_SMALL,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The destination capacity is smaller than the device text.");
+    }
+    if (!value.empty()) {
+        std::memcpy(destination, value.data(), value.size());
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result BorrowText(
+    const CNA_StringView view,
+    const char* const message,
+    std::string* const outText)
+{
+    if (const CNA_Result result = CNA::C::Detail::CopyStringView(view, false, outText);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(result, ErrorCategoryForResult(result), message);
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+// The canonical vibration hook takes a caller-implemented backend object; C cannot write one, so
+// this ABI supplies it and records what it was asked to do. The state lives beside the backend so a
+// query still works after the canonical controller has replaced or destroyed the backend itself.
+struct VibrationTestState final {
+    std::mutex mutex;
+    bool supported = false;
+    std::string deviceName;
+    uint32_t startCalls = 0U;
+    uint32_t stopCalls = 0U;
+    uint32_t leftRightCalls = 0U;
+    int64_t lastDurationTicks = 0;
+    float lastIntensity = 0.0F;
+    float lastLargeMotor = 0.0F;
+    float lastSmallMotor = 0.0F;
+};
+
+class TestVibrateBackend final : public Microsoft::Devices::Detail::IVibrateBackend {
+public:
+    explicit TestVibrateBackend(std::shared_ptr<VibrationTestState> state)
+        : state_(std::move(state))
+    {
+    }
+
+    void Start(const System::TimeSpan& duration, const float intensity) override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        ++state_->startCalls;
+        state_->lastDurationTicks = static_cast<int64_t>(duration.getTicksProperty());
+        state_->lastIntensity = intensity;
+    }
+
+    void Stop() override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        ++state_->stopCalls;
+    }
+
+    [[nodiscard]] bool IsSupported() override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        return state_->supported;
+    }
+
+    [[nodiscard]] std::string GetDeviceName() override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        return state_->deviceName;
+    }
+
+    void StartLeftRight(
+        const float largeMotor,
+        const float smallMotor,
+        const System::TimeSpan& duration) override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        ++state_->leftRightCalls;
+        state_->lastLargeMotor = largeMotor;
+        state_->lastSmallMotor = smallMotor;
+        state_->lastDurationTicks = static_cast<int64_t>(duration.getTicksProperty());
+    }
+
+private:
+    std::shared_ptr<VibrationTestState> state_;
+};
+
+std::mutex& VibrationTestMutex()
+{
+    static std::mutex mutex;
+    return mutex;
+}
+
+std::shared_ptr<VibrationTestState>& VibrationTestStorage()
+{
+    static std::shared_ptr<VibrationTestState> state;
+    return state;
+}
+
+[[nodiscard]] std::shared_ptr<VibrationTestState> InstalledVibrationTestState()
+{
+    const std::lock_guard<std::mutex> lock(VibrationTestMutex());
+    return VibrationTestStorage();
+}
+
+[[nodiscard]] System::TimeSpan ToDuration(const int64_t ticks)
+{
+    return System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks));
+}
+
+#ifdef CNA_DEVICES
+
+using CNA::Devices::Camera;
+using CNA::Devices::CameraDeviceInfo;
+using CNA::Devices::CameraPosition;
+using CNA::Devices::CameraState;
+using CNA::Devices::Clipboard;
+using CNA::Devices::DisplayInfo;
+using CNA::Devices::FileDialog;
+using CNA::Devices::FileDialogFilter;
+using CNA::Devices::Locale;
+using CNA::Devices::LocaleInfo;
+using CNA::Devices::MessageBox;
+using CNA::Devices::MessageBoxType;
+using CNA::Devices::PowerInfo;
+using CNA::Devices::SystemInfo;
+using CNA::Devices::SystemTray;
+using CNA::Devices::UrlLauncher;
+
+// A message box waits for a person, so no automated caller can complete a real one: the test backend
+// answers immediately and records the request instead.
+struct MessageBoxTestState final {
+    std::mutex mutex;
+    int chosenButton = 0;
+    uint32_t simpleCalls = 0U;
+    uint32_t choiceCalls = 0U;
+    MessageBoxType lastType = MessageBoxType::Error;
+    uint32_t lastButtonCount = 0U;
+};
+
+// The file dialog's recorded answer. Kept beside the message box's because the platform hands
+// out one dialogs service for both.
+struct FileDialogTestState final {
+    std::mutex mutex;
+    std::vector<std::string> results;
+};
+
+class TestDialogsService final : public CNA::Platform::IPlatformDialogs {
+public:
+    TestDialogsService(
+        std::shared_ptr<MessageBoxTestState> messageBoxState,
+        std::shared_ptr<FileDialogTestState> fileDialogState)
+        : messageBoxState_(std::move(messageBoxState))
+        , fileDialogState_(std::move(fileDialogState))
+    {
+    }
+
+    void SetMessageBoxState(std::shared_ptr<MessageBoxTestState> state)
+    {
+        messageBoxState_ = std::move(state);
+    }
+
+    void SetFileDialogState(std::shared_ptr<FileDialogTestState> state)
+    {
+        fileDialogState_ = std::move(state);
+    }
+
+    [[nodiscard]] bool HasAnyState() const
+    {
+        return messageBoxState_ != nullptr || fileDialogState_ != nullptr;
+    }
+
+    void ShowMessageBox(
+        const CNA::Platform::MessageBoxSeverity severity,
+        const std::string&,
+        const std::string&,
+        CNA::Platform::IPlatformWindow*) override
+    {
+        if (messageBoxState_ == nullptr) {
+            return;
+        }
+        const std::lock_guard<std::mutex> lock(messageBoxState_->mutex);
+        ++messageBoxState_->simpleCalls;
+        messageBoxState_->lastType = ToMessageBoxType(severity);
+    }
+
+    [[nodiscard]] int ShowMessageBoxWithButtons(
+        const CNA::Platform::MessageBoxSeverity severity,
+        const std::string&,
+        const std::string&,
+        const std::vector<std::string>& buttons,
+        CNA::Platform::IPlatformWindow*) override
+    {
+        if (messageBoxState_ == nullptr) {
+            return 0;
+        }
+        const std::lock_guard<std::mutex> lock(messageBoxState_->mutex);
+        ++messageBoxState_->choiceCalls;
+        messageBoxState_->lastType = ToMessageBoxType(severity);
+        messageBoxState_->lastButtonCount = static_cast<uint32_t>(buttons.size());
+        return messageBoxState_->chosenButton;
+    }
+
+    void ShowOpenFileDialog(
+        CNA::Platform::FileDialogCallback onResult,
+        const std::vector<CNA::Platform::FileDialogFilter>&,
+        const std::string&,
+        bool,
+        CNA::Platform::IPlatformWindow*) override
+    {
+        Answer(std::move(onResult));
+    }
+
+    void ShowSaveFileDialog(
+        CNA::Platform::FileDialogCallback onResult,
+        const std::vector<CNA::Platform::FileDialogFilter>&,
+        const std::string&,
+        CNA::Platform::IPlatformWindow*) override
+    {
+        Answer(std::move(onResult));
+    }
+
+    void ShowOpenFolderDialog(
+        CNA::Platform::FileDialogCallback onResult,
+        const std::string&,
+        bool,
+        CNA::Platform::IPlatformWindow*) override
+    {
+        Answer(std::move(onResult));
+    }
+
+private:
+    // The platform reports severity where the canonical device surface reports a type; the two
+    // enumerate the same three answers, so the mapping is total and needs no fallback.
+    [[nodiscard]] static MessageBoxType ToMessageBoxType(
+        const CNA::Platform::MessageBoxSeverity severity)
+    {
+        switch (severity) {
+        case CNA::Platform::MessageBoxSeverity::Information:
+            return MessageBoxType::Information;
+        case CNA::Platform::MessageBoxSeverity::Warning:
+            return MessageBoxType::Warning;
+        default:
+            return MessageBoxType::Error;
+        }
+    }
+
+    // A real file dialog is asynchronous and driven by a person; this answers the callback before
+    // returning, with whatever result the switch was given.
+    void Answer(CNA::Platform::FileDialogCallback onResult)
+    {
+        std::vector<std::string> results;
+        if (fileDialogState_ != nullptr) {
+            const std::lock_guard<std::mutex> lock(fileDialogState_->mutex);
+            results = fileDialogState_->results;
+        }
+        if (onResult) {
+            onResult(results);
+        }
+    }
+
+    std::shared_ptr<MessageBoxTestState> messageBoxState_;
+    std::shared_ptr<FileDialogTestState> fileDialogState_;
+};
+
+std::mutex& MessageBoxTestMutex()
+{
+    static std::mutex mutex;
+    return mutex;
+}
+
+std::shared_ptr<MessageBoxTestState>& MessageBoxTestStorage()
+{
+    static std::shared_ptr<MessageBoxTestState> state;
+    return state;
+}
+
+
+
+std::mutex& FileDialogTestMutex()
+{
+    static std::mutex mutex;
+    return mutex;
+}
+
+std::shared_ptr<FileDialogTestState>& FileDialogTestStorage()
+{
+    static std::shared_ptr<FileDialogTestState> state;
+    return state;
+}
+
+// The canonical tray takes its backend as a constructor argument rather than through a switch, so
+// this state belongs to one tray handle instead of the process.
+struct TrayTestEntry final {
+    std::string label;
+    bool checkable = false;
+    bool checked = false;
+    bool enabled = true;
+    CNA::Platform::TrayEntryClickCallback onClick;
+};
+
+struct TrayTestState final {
+    std::mutex mutex;
+    std::string tooltip;
+    bool created = false;
+    std::vector<TrayTestEntry> entries;
+};
+
+// The platform splits what used to be one tray backend in two: a service that creates an icon and
+// the icon itself. Destruction moved with it -- the old backend had an explicit Destroy(), the new
+// icon simply goes away -- so the recorded state is cleared from the icon's destructor.
+// One dialogs service backs both switches, because the platform hands out one. Each route sets or
+// clears its own half of the state; the service stays installed while either half is present.
+TestDialogsService& DialogsServiceInstance()
+{
+    static TestDialogsService instance(nullptr, nullptr);
+    return instance;
+}
+
+void RefreshDialogsOverride()
+{
+    if (DialogsServiceInstance().HasAnyState()) {
+        CNA::C::Detail::GetPlatformOverride().SetDialogs(&DialogsServiceInstance());
+        return;
+    }
+    CNA::C::Detail::GetPlatformOverride().SetDialogs(nullptr);
+    CNA::C::Detail::ReleasePlatformOverrideIfUnused();
+}
+
+class TestTrayIcon final : public CNA::Platform::IPlatformTrayIcon {
+public:
+    explicit TestTrayIcon(std::shared_ptr<TrayTestState> state)
+        : state_(std::move(state))
+    {
+    }
+
+    ~TestTrayIcon() override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        state_->created = false;
+        state_->entries.clear();
+    }
+
+    void SetTooltip(const std::string& tooltip) override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        state_->tooltip = tooltip;
+    }
+
+    [[nodiscard]] std::size_t AddEntry(
+        const std::string& label,
+        const bool checkable,
+        const bool initiallyChecked,
+        const bool initiallyEnabled,
+        CNA::Platform::TrayEntryClickCallback onClick) override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        TrayTestEntry entry;
+        entry.label = label;
+        entry.checkable = checkable;
+        entry.checked = initiallyChecked;
+        entry.enabled = initiallyEnabled;
+        entry.onClick = std::move(onClick);
+        state_->entries.push_back(std::move(entry));
+        return state_->entries.size() - 1U;
+    }
+
+    void SetEntryLabel(const std::size_t index, const std::string& label) override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        if (index < state_->entries.size()) {
+            state_->entries[index].label = label;
+        }
+    }
+
+    void SetEntryChecked(const std::size_t index, const bool checked) override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        if (index < state_->entries.size()) {
+            state_->entries[index].checked = checked;
+        }
+    }
+
+    [[nodiscard]] bool GetEntryChecked(const std::size_t index) const override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        return index < state_->entries.size() && state_->entries[index].checked;
+    }
+
+    void SetEntryEnabled(const std::size_t index, const bool enabled) override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        if (index < state_->entries.size()) {
+            state_->entries[index].enabled = enabled;
+        }
+    }
+
+    [[nodiscard]] bool GetEntryEnabled(const std::size_t index) const override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        return index < state_->entries.size() && state_->entries[index].enabled;
+    }
+
+private:
+    std::shared_ptr<TrayTestState> state_;
+};
+
+class TestTrayService final : public CNA::Platform::IPlatformTray {
+public:
+    explicit TestTrayService(std::shared_ptr<TrayTestState> state)
+        : state_(std::move(state))
+    {
+    }
+
+    [[nodiscard]] std::unique_ptr<CNA::Platform::IPlatformTrayIcon> CreateTray(
+        const std::string& tooltip) override
+    {
+        {
+            const std::lock_guard<std::mutex> lock(state_->mutex);
+            state_->created = true;
+            state_->tooltip = tooltip;
+        }
+        return std::make_unique<TestTrayIcon>(state_);
+    }
+
+private:
+    std::shared_ptr<TrayTestState> state_;
+};
+
+struct SystemTrayResource final {
+    std::unique_ptr<SystemTray> value;
+    std::shared_ptr<TrayTestState> testState;
+    // The fake service is installed on the platform override and must outlive the tray that reads
+    // it, so the handle owns it: destroying the tray resource is what takes it away.
+    std::unique_ptr<TestTrayService> testService;
+};
+
+[[nodiscard]] CNA_Result BorrowTray(
+    const CNA_Handle handle,
+    std::shared_ptr<SystemTrayResource>* const outTray)
+{
+    const CNA_Result result =
+        CNA::C::Detail::GetRuntimeHandles().Get(handle, ObjectKind::SystemTray, outTray);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The system tray handle is invalid for this call.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ToMessageBoxType(const CNA_MessageBoxType value, MessageBoxType* const out)
+{
+    if (value > CNA_MESSAGE_BOX_TYPE_MAXIMUM) {
+        return InvalidInput("The message box severity is not a defined identity.");
+    }
+    *out = static_cast<MessageBoxType>(value);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result CollectFilters(
+    const CNA_FileDialogFilter* const filters,
+    const uint64_t filterCount,
+    std::vector<FileDialogFilter>* const outFilters)
+{
+    if (filterCount != UINT64_C(0) && filters == nullptr) {
+        return InvalidInput("The file dialog filter array is null.");
+    }
+    for (uint64_t index = UINT64_C(0); index < filterCount; ++index) {
+        const CNA_FileDialogFilter& filter = filters[index];
+        if (filter.struct_size < sizeof(CNA_FileDialogFilter) ||
+            filter.struct_version != StructureVersion) {
+            return InvalidInput("A file dialog filter is not a valid structure.");
+        }
+        FileDialogFilter mapped;
+        if (const CNA_Result result =
+                BorrowText(filter.name, "A file dialog filter name is not valid UTF-8.", &mapped.Name);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = BorrowText(
+                filter.pattern,
+                "A file dialog filter pattern is not valid UTF-8.",
+                &mapped.Pattern);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        outFilters->push_back(std::move(mapped));
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+// The canonical result is a vector of owned strings and the C handler takes borrowed views, so the
+// views are built over the canonical strings and stay valid exactly for the duration of the call.
+void DeliverFileDialogResult(
+    const std::vector<std::string>& files,
+    const CNA_FileDialogResultCallback callback,
+    void* const context)
+{
+    std::vector<CNA_StringView> views;
+    views.reserve(files.size());
+    for (const std::string& file : files) {
+        CNA_StringView view = {};
+        view.data = file.data();
+        view.byte_length = file.size();
+        views.push_back(view);
+    }
+    callback(views.empty() ? nullptr : views.data(), static_cast<uint64_t>(views.size()), context);
+}
+
+[[nodiscard]] CNA_Result CollectLocales(std::vector<LocaleInfo>* const outLocales)
+{
+    *outLocales = Locale::getPreferredLocalesProperty();
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result BorrowLocale(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    LocaleInfo* const outLocale)
+{
+    if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<LocaleInfo> locales;
+    if (const CNA_Result result = CollectLocales(&locales); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (index >= static_cast<uint64_t>(locales.size())) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The locale index is at or past the reported count.");
+    }
+    *outLocale = locales[static_cast<std::size_t>(index)];
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result BorrowWindow(
+    const CNA_Handle gameHandle,
+    Microsoft::Xna::Framework::GameWindow** const outWindow)
+{
+    return CNA::C::Detail::GetGameWindow(gameHandle, outWindow);
+}
+
+// Nothing this ABI is verified on has a camera, and the canonical class takes its backend as a
+// constructor argument, so this is the only path to a frame.
+struct CameraTestState final {
+    std::mutex mutex;
+    // Opening, not Closed: since the platform separation an opened device reports
+    // permission-pending, and nothing can report closed any more.
+    CameraState state = CameraState::Opening;
+    int width = 0;
+    int height = 0;
+    std::vector<std::uint8_t> rgba;
+    bool hasFrame = false;
+};
+
+// The platform splits the camera in two as well: a provider that lists and opens devices, and the
+// opened device. Nothing this ABI is verified on has a real camera, so this is still the only path
+// to a frame -- it just arrives through the platform now rather than through a constructor.
+class TestCamera final : public CNA::Platform::IPlatformCamera {
+public:
+    explicit TestCamera(std::shared_ptr<CameraTestState> state)
+        : state_(std::move(state))
+    {
+    }
+
+    [[nodiscard]] CNA::Platform::PlatformCameraState GetState() override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        switch (state_->state) {
+        case CameraState::Ready:
+            return CNA::Platform::PlatformCameraState::Ready;
+        case CameraState::Denied:
+            return CNA::Platform::PlatformCameraState::Denied;
+        case CameraState::Opening:
+            return CNA::Platform::PlatformCameraState::Opening;
+        default:
+            // The platform enumerates no "closed": a device that is not open is not handed out at
+            // all. Lost is its answer for one that was opened and cannot be used.
+            return CNA::Platform::PlatformCameraState::Lost;
+        }
+    }
+
+    [[nodiscard]] int GetFrameWidth() override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        return state_->width;
+    }
+
+    [[nodiscard]] int GetFrameHeight() override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        return state_->height;
+    }
+
+    bool TryAcquireFrame(CNA::Platform::PlatformCameraFrame& outFrame) override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        if (!state_->hasFrame) {
+            return false;
+        }
+        outFrame.width = state_->width;
+        outFrame.height = state_->height;
+        outFrame.rgbaPixels = state_->rgba;
+        return true;
+    }
+
+private:
+    std::shared_ptr<CameraTestState> state_;
+};
+
+class TestCameraProvider final : public CNA::Platform::IPlatformCameraProvider {
+public:
+    explicit TestCameraProvider(std::shared_ptr<CameraTestState> state)
+        : state_(std::move(state))
+    {
+    }
+
+    [[nodiscard]] std::vector<CNA::Platform::PlatformCameraInfo> GetCameras() const override
+    {
+        CNA::Platform::PlatformCameraInfo info;
+        info.id = 1U;
+        info.name = "CNA C API test camera";
+        info.position = CNA::Platform::PlatformCameraPosition::Unknown;
+        return {info};
+    }
+
+    [[nodiscard]] std::unique_ptr<CNA::Platform::IPlatformCamera> OpenCamera(
+        const CNA::Platform::CameraId) override
+    {
+        return std::make_unique<TestCamera>(state_);
+    }
+
+private:
+    std::shared_ptr<CameraTestState> state_;
+};
+
+struct CameraResource final {
+    std::unique_ptr<Camera> value;
+    std::shared_ptr<CameraTestState> testState;
+    // Same ownership rule as the tray: the provider lives as long as the camera handle does.
+    std::unique_ptr<TestCameraProvider> testService;
+};
+
+[[nodiscard]] CNA_Result BorrowCamera(
+    const CNA_Handle handle,
+    std::shared_ptr<CameraResource>* const outCamera)
+{
+    const CNA_Result result =
+        CNA::C::Detail::GetRuntimeHandles().Get(handle, ObjectKind::Camera, outCamera);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The camera handle is invalid for this call.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result BorrowEnumeratedCamera(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    CameraDeviceInfo* const outInfo)
+{
+    if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<CameraDeviceInfo> cameras = Camera::getAvailableCamerasProperty();
+    if (index >= static_cast<uint64_t>(cameras.size())) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The camera index is at or past the reported count.");
+    }
+    *outInfo = cameras[static_cast<std::size_t>(index)];
+    return CNA_RESULT_SUCCESS;
+}
+
+#endif // CNA_DEVICES
+
+} // namespace
+
+CNA_Result cna_devices_ext_is_available(CNA_Bool* const outAvailable)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outAvailable == nullptr) {
+            return InvalidInput("The device extension availability output is null.");
+        }
+#ifdef CNA_DEVICES
+        *outAvailable = CNA_TRUE;
+#else
+        *outAvailable = CNA_FALSE;
+#endif
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_vibrate_controller_start(const CNA_Handle gameHandle, const int64_t durationTicks)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        VibrateController::getDefaultProperty()->Start(ToDuration(durationTicks));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_vibrate_controller_start_with_intensity_ext(
+    const CNA_Handle gameHandle,
+    const int64_t durationTicks,
+    const float intensity)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        VibrateController::getDefaultProperty()->Start(ToDuration(durationTicks), intensity);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_vibrate_controller_start_left_right_ext(
+    const CNA_Handle gameHandle,
+    const float largeMotor,
+    const float smallMotor,
+    const int64_t durationTicks)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        VibrateController::getDefaultProperty()->StartLeftRight(
+            largeMotor,
+            smallMotor,
+            ToDuration(durationTicks));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_vibrate_controller_stop(const CNA_Handle gameHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        VibrateController::getDefaultProperty()->Stop();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_vibrate_controller_get_is_supported_ext(
+    const CNA_Handle gameHandle,
+    CNA_Bool* const outSupported)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSupported == nullptr) {
+            return InvalidInput("The vibration support output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outSupported =
+            VibrateController::getDefaultProperty()->getIsSupportedProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_vibrate_controller_get_device_name_size_ext(
+    const CNA_Handle gameHandle,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The device name size output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = VibrateController::getDefaultProperty()->getDeviceNameProperty().size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_vibrate_controller_copy_device_name_ext(
+    const CNA_Handle gameHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(
+            VibrateController::getDefaultProperty()->getDeviceNameProperty(),
+            destination,
+            capacity,
+            outBytes);
+    });
+}
+
+CNA_Result cna_vibrate_controller_set_test_backend_ext(
+    const CNA_Handle gameHandle,
+    const CNA_Bool installed,
+    const CNA_Bool supported,
+    const CNA_StringView deviceName)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (installed == CNA_FALSE) {
+            VibrateController::getDefaultProperty()->SetBackendForTesting(nullptr);
+            const std::lock_guard<std::mutex> lock(VibrationTestMutex());
+            VibrationTestStorage().reset();
+            return CNA_RESULT_SUCCESS;
+        }
+        auto state = std::make_shared<VibrationTestState>();
+        state->supported = (supported != CNA_FALSE);
+        if (const CNA_Result result = BorrowText(
+                deviceName,
+                "The vibration device name is not valid UTF-8.",
+                &state->deviceName);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        VibrateController::getDefaultProperty()->SetBackendForTesting(
+            std::make_unique<TestVibrateBackend>(state));
+        const std::lock_guard<std::mutex> lock(VibrationTestMutex());
+        VibrationTestStorage() = std::move(state);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_vibrate_controller_get_test_log_ext(
+    const CNA_Handle gameHandle,
+    CNA_VibrationTestLog* const outLog)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outLog == nullptr) {
+            return InvalidInput("The vibration test log output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::shared_ptr<VibrationTestState> state = InstalledVibrationTestState();
+        if (!state) {
+            return NoTestBackend();
+        }
+        CNA_VibrationTestLog log = {};
+        log.struct_size = sizeof(CNA_VibrationTestLog);
+        log.struct_version = StructureVersion;
+        {
+            const std::lock_guard<std::mutex> lock(state->mutex);
+            log.start_calls = state->startCalls;
+            log.stop_calls = state->stopCalls;
+            log.left_right_calls = state->leftRightCalls;
+            log.last_duration_ticks = state->lastDurationTicks;
+            log.last_intensity = state->lastIntensity;
+            log.last_large_motor = state->lastLargeMotor;
+            log.last_small_motor = state->lastSmallMotor;
+        }
+        *outLog = log;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_device_info_init(CNA_CameraDeviceInfo* const outInfo)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outInfo == nullptr) {
+            return InvalidInput("The camera descriptor output is null.");
+        }
+        CNA_CameraDeviceInfo info = {};
+        info.struct_size = sizeof(CNA_CameraDeviceInfo);
+        info.struct_version = StructureVersion;
+        info.position = CNA_CAMERA_POSITION_UNKNOWN;
+        *outInfo = info;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+#ifdef CNA_DEVICES
+
+CNA_Result cna_power_get_state_ext(const CNA_Handle gameHandle, CNA_PowerState* const outState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outState == nullptr) {
+            return InvalidInput("The power state output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outState = static_cast<CNA_PowerState>(PowerInfo::getStateProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_power_get_battery_percent_ext(
+    const CNA_Handle gameHandle,
+    int32_t* const outPercent)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPercent == nullptr) {
+            return InvalidInput("The battery percentage output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outPercent = static_cast<int32_t>(PowerInfo::getBatteryPercentProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_power_get_seconds_remaining_ext(
+    const CNA_Handle gameHandle,
+    int32_t* const outSeconds)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSeconds == nullptr) {
+            return InvalidInput("The battery seconds output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outSeconds = static_cast<int32_t>(PowerInfo::getSecondsRemainingProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_system_info_get_logical_cpu_core_count_ext(
+    const CNA_Handle gameHandle,
+    int32_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidInput("The core count output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<int32_t>(SystemInfo::getLogicalCpuCoreCountProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_system_info_get_system_ram_megabytes_ext(
+    const CNA_Handle gameHandle,
+    int32_t* const outMegabytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outMegabytes == nullptr) {
+            return InvalidInput("The system memory output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outMegabytes = static_cast<int32_t>(SystemInfo::getSystemRamMegabytesProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_locale_get_preferred_count_ext(
+    const CNA_Handle gameHandle,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidInput("The locale count output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<LocaleInfo> locales;
+        if (const CNA_Result result = CollectLocales(&locales); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<uint64_t>(locales.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_locale_get_language_size_at_ext(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The locale language size output is null.");
+        }
+        LocaleInfo locale;
+        if (const CNA_Result result = BorrowLocale(gameHandle, index, &locale);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = locale.Language.size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_locale_copy_language_at_ext(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        LocaleInfo locale;
+        if (const CNA_Result result = BorrowLocale(gameHandle, index, &locale);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(locale.Language, destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_locale_get_country_size_at_ext(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The locale country size output is null.");
+        }
+        LocaleInfo locale;
+        if (const CNA_Result result = BorrowLocale(gameHandle, index, &locale);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = locale.Country.size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_locale_copy_country_at_ext(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        LocaleInfo locale;
+        if (const CNA_Result result = BorrowLocale(gameHandle, index, &locale);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(locale.Country, destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_display_info_get_content_scale_ext(
+    const CNA_Handle gameHandle,
+    float* const outScale)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outScale == nullptr) {
+            return InvalidInput("The content scale output is null.");
+        }
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outScale = DisplayInfo::getContentScaleProperty(*window);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_display_info_get_safe_area_ext(
+    const CNA_Handle gameHandle,
+    CNA_Rectangle* const outArea)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outArea == nullptr) {
+            return InvalidInput("The safe area output is null.");
+        }
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const Microsoft::Xna::Framework::Rectangle area = DisplayInfo::getSafeAreaProperty(*window);
+        CNA_Rectangle mapped = {};
+        mapped.x = area.X;
+        mapped.y = area.Y;
+        mapped.width = area.Width;
+        mapped.height = area.Height;
+        *outArea = mapped;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_devices_clipboard_set_text_ext(
+    const CNA_Handle gameHandle,
+    const CNA_StringView text,
+    CNA_Bool* const outAccepted)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outAccepted == nullptr) {
+            return InvalidInput("The clipboard acceptance output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string value;
+        if (const CNA_Result result =
+                BorrowText(text, "The clipboard text is not valid UTF-8.", &value);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outAccepted = Clipboard::setTextProperty(value) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_url_launcher_open_ext(
+    const CNA_Handle gameHandle,
+    const CNA_StringView url,
+    CNA_Bool* const outOpened)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outOpened == nullptr) {
+            return InvalidInput("The URL acceptance output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string value;
+        if (const CNA_Result result = BorrowText(url, "The URL is not valid UTF-8.", &value);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (value.empty()) {
+            return InvalidInput("The URL is empty.");
+        }
+        *outOpened = UrlLauncher::Open(value) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_message_box_get_is_supported_ext(
+    const CNA_Handle gameHandle,
+    CNA_Bool* const outSupported)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSupported == nullptr) {
+            return InvalidInput("The message box support output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outSupported = MessageBox::getIsSupportedProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_message_box_show_simple_ext(
+    const CNA_Handle gameHandle,
+    const CNA_MessageBoxType type,
+    const CNA_StringView title,
+    const CNA_StringView message)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        MessageBoxType severity = MessageBoxType::Error;
+        if (const CNA_Result result = ToMessageBoxType(type, &severity);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string titleText;
+        std::string messageText;
+        if (const CNA_Result result =
+                BorrowText(title, "The message box title is not valid UTF-8.", &titleText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result =
+                BorrowText(message, "The message box body is not valid UTF-8.", &messageText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        MessageBox::ShowSimple(severity, titleText, messageText);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_message_box_show_ext(
+    const CNA_Handle gameHandle,
+    const CNA_MessageBoxType type,
+    const CNA_StringView title,
+    const CNA_StringView message,
+    const CNA_StringView* const buttonLabels,
+    const uint64_t buttonCount,
+    int32_t* const outChosen)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outChosen == nullptr) {
+            return InvalidInput("The chosen button output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        MessageBoxType severity = MessageBoxType::Error;
+        if (const CNA_Result result = ToMessageBoxType(type, &severity);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (buttonCount == UINT64_C(0) || buttonLabels == nullptr) {
+            return InvalidInput("A message box with buttons needs at least one label.");
+        }
+        std::string titleText;
+        std::string messageText;
+        if (const CNA_Result result =
+                BorrowText(title, "The message box title is not valid UTF-8.", &titleText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result =
+                BorrowText(message, "The message box body is not valid UTF-8.", &messageText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<std::string> labels;
+        labels.reserve(static_cast<std::size_t>(buttonCount));
+        for (uint64_t index = UINT64_C(0); index < buttonCount; ++index) {
+            std::string label;
+            if (const CNA_Result result = BorrowText(
+                    buttonLabels[index],
+                    "A message box button label is not valid UTF-8.",
+                    &label);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            labels.push_back(std::move(label));
+        }
+        *outChosen = static_cast<int32_t>(MessageBox::Show(severity, titleText, messageText, labels));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_message_box_set_test_backend_ext(
+    const CNA_Handle gameHandle,
+    const CNA_Bool installed,
+    const int32_t chosenButton)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (installed == CNA_FALSE) {
+            DialogsServiceInstance().SetMessageBoxState(nullptr);
+            RefreshDialogsOverride();
+            const std::lock_guard<std::mutex> lock(MessageBoxTestMutex());
+            MessageBoxTestStorage().reset();
+            return CNA_RESULT_SUCCESS;
+        }
+        auto state = std::make_shared<MessageBoxTestState>();
+        state->chosenButton = static_cast<int>(chosenButton);
+        DialogsServiceInstance().SetMessageBoxState(state);
+        RefreshDialogsOverride();
+        const std::lock_guard<std::mutex> lock(MessageBoxTestMutex());
+        MessageBoxTestStorage() = std::move(state);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_message_box_get_test_log_ext(
+    const CNA_Handle gameHandle,
+    CNA_MessageBoxTestLog* const outLog)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outLog == nullptr) {
+            return InvalidInput("The message box test log output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<MessageBoxTestState> state;
+        {
+            const std::lock_guard<std::mutex> lock(MessageBoxTestMutex());
+            state = MessageBoxTestStorage();
+        }
+        if (!state) {
+            return NoTestBackend();
+        }
+        CNA_MessageBoxTestLog log = {};
+        log.struct_size = sizeof(CNA_MessageBoxTestLog);
+        log.struct_version = StructureVersion;
+        {
+            const std::lock_guard<std::mutex> lock(state->mutex);
+            log.simple_calls = state->simpleCalls;
+            log.choice_calls = state->choiceCalls;
+            log.last_type = static_cast<CNA_MessageBoxType>(state->lastType);
+            log.last_button_count = state->lastButtonCount;
+        }
+        *outLog = log;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_file_dialog_get_is_supported_ext(
+    const CNA_Handle gameHandle,
+    CNA_Bool* const outSupported)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSupported == nullptr) {
+            return InvalidInput("The file dialog support output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outSupported = FileDialog::getIsSupportedProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_file_dialog_show_open_file_ext(
+    const CNA_Handle gameHandle,
+    const CNA_FileDialogResultCallback onResult,
+    void* const context,
+    const CNA_FileDialogFilter* const filters,
+    const uint64_t filterCount,
+    const CNA_StringView defaultLocation,
+    const CNA_Bool allowMultiple)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (onResult == nullptr) {
+            return InvalidInput("The file dialog result handler is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<FileDialogFilter> mappedFilters;
+        if (const CNA_Result result = CollectFilters(filters, filterCount, &mappedFilters);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string location;
+        if (const CNA_Result result = BorrowText(
+                defaultLocation,
+                "The file dialog default location is not valid UTF-8.",
+                &location);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        FileDialog::ShowOpenFile(
+            [onResult, context](const std::vector<std::string>& files) {
+                DeliverFileDialogResult(files, onResult, context);
+            },
+            mappedFilters,
+            location,
+            allowMultiple != CNA_FALSE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_file_dialog_show_save_file_ext(
+    const CNA_Handle gameHandle,
+    const CNA_FileDialogResultCallback onResult,
+    void* const context,
+    const CNA_FileDialogFilter* const filters,
+    const uint64_t filterCount,
+    const CNA_StringView defaultLocation)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (onResult == nullptr) {
+            return InvalidInput("The file dialog result handler is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<FileDialogFilter> mappedFilters;
+        if (const CNA_Result result = CollectFilters(filters, filterCount, &mappedFilters);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string location;
+        if (const CNA_Result result = BorrowText(
+                defaultLocation,
+                "The file dialog default location is not valid UTF-8.",
+                &location);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        FileDialog::ShowSaveFile(
+            [onResult, context](const std::vector<std::string>& files) {
+                DeliverFileDialogResult(files, onResult, context);
+            },
+            mappedFilters,
+            location);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_file_dialog_show_open_folder_ext(
+    const CNA_Handle gameHandle,
+    const CNA_FileDialogResultCallback onResult,
+    void* const context,
+    const CNA_StringView defaultLocation,
+    const CNA_Bool allowMultiple)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (onResult == nullptr) {
+            return InvalidInput("The file dialog result handler is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string location;
+        if (const CNA_Result result = BorrowText(
+                defaultLocation,
+                "The file dialog default location is not valid UTF-8.",
+                &location);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        FileDialog::ShowOpenFolder(
+            [onResult, context](const std::vector<std::string>& files) {
+                DeliverFileDialogResult(files, onResult, context);
+            },
+            location,
+            allowMultiple != CNA_FALSE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_file_dialog_set_test_backend_ext(
+    const CNA_Handle gameHandle,
+    const CNA_Bool installed,
+    const CNA_StringView* const results,
+    const uint64_t resultCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (installed == CNA_FALSE) {
+            DialogsServiceInstance().SetFileDialogState(nullptr);
+            RefreshDialogsOverride();
+            const std::lock_guard<std::mutex> lock(FileDialogTestMutex());
+            FileDialogTestStorage().reset();
+            return CNA_RESULT_SUCCESS;
+        }
+        if (resultCount != UINT64_C(0) && results == nullptr) {
+            return InvalidInput("The file dialog result array is null.");
+        }
+        auto state = std::make_shared<FileDialogTestState>();
+        for (uint64_t index = UINT64_C(0); index < resultCount; ++index) {
+            std::string path;
+            if (const CNA_Result result =
+                    BorrowText(results[index], "A file dialog result is not valid UTF-8.", &path);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            state->results.push_back(std::move(path));
+        }
+        DialogsServiceInstance().SetFileDialogState(state);
+        RefreshDialogsOverride();
+        const std::lock_guard<std::mutex> lock(FileDialogTestMutex());
+        FileDialogTestStorage() = std::move(state);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_system_tray_get_is_supported_ext(
+    const CNA_Handle gameHandle,
+    CNA_Bool* const outSupported)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSupported == nullptr) {
+            return InvalidInput("The system tray support output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outSupported = SystemTray::getIsSupportedProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_system_tray_create(
+    const CNA_Handle gameHandle,
+    const CNA_StringView tooltip,
+    CNA_SystemTrayHandle* const outTray)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTray == nullptr) {
+            return InvalidInput("The system tray output is null.");
+        }
+        *outTray = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string tooltipText;
+        if (const CNA_Result result =
+                BorrowText(tooltip, "The system tray tooltip is not valid UTF-8.", &tooltipText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto resource = std::make_shared<SystemTrayResource>();
+        resource->value = std::make_unique<SystemTray>(tooltipText);
+        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
+            ObjectKind::SystemTray,
+            std::move(resource),
+            outTray);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The system tray handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_system_tray_create_with_test_backend_ext(
+    const CNA_Handle gameHandle,
+    const CNA_StringView tooltip,
+    CNA_SystemTrayHandle* const outTray)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTray == nullptr) {
+            return InvalidInput("The system tray output is null.");
+        }
+        *outTray = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string tooltipText;
+        if (const CNA_Result result =
+                BorrowText(tooltip, "The system tray tooltip is not valid UTF-8.", &tooltipText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto resource = std::make_shared<SystemTrayResource>();
+        resource->testState = std::make_shared<TrayTestState>();
+        // The tray service comes from the platform now, so the fake is installed there and the
+        // SystemTray is constructed the ordinary way -- which is also what makes this test exercise
+        // the real construction path rather than a special one.
+        resource->testService = std::make_unique<TestTrayService>(resource->testState);
+        CNA::C::Detail::GetPlatformOverride().SetTray(resource->testService.get());
+        resource->value = std::make_unique<SystemTray>(tooltipText);
+        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
+            ObjectKind::SystemTray,
+            std::move(resource),
+            outTray);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The system tray handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_system_tray_set_tooltip(
+    const CNA_SystemTrayHandle tray,
+    const CNA_StringView tooltip)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SystemTrayResource> resource;
+        if (const CNA_Result result = BorrowTray(tray, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string tooltipText;
+        if (const CNA_Result result =
+                BorrowText(tooltip, "The system tray tooltip is not valid UTF-8.", &tooltipText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->setTooltipProperty(tooltipText);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_system_tray_add_entry(
+    const CNA_SystemTrayHandle tray,
+    const CNA_StringView label,
+    const CNA_Bool checkable,
+    const CNA_Bool initiallyChecked,
+    const CNA_Bool initiallyEnabled,
+    const CNA_TrayEntryClickCallback onClick,
+    void* const context,
+    uint64_t* const outIndex)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outIndex == nullptr) {
+            return InvalidInput("The tray entry index output is null.");
+        }
+        std::shared_ptr<SystemTrayResource> resource;
+        if (const CNA_Result result = BorrowTray(tray, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string labelText;
+        if (const CNA_Result result =
+                BorrowText(label, "The tray entry label is not valid UTF-8.", &labelText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        CNA::Platform::TrayEntryClickCallback handler;
+        if (onClick != nullptr) {
+            handler = [onClick, context]() { onClick(context); };
+        }
+        *outIndex = static_cast<uint64_t>(resource->value->AddEntry(
+            labelText,
+            checkable != CNA_FALSE,
+            initiallyChecked != CNA_FALSE,
+            initiallyEnabled != CNA_FALSE,
+            std::move(handler)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_system_tray_set_entry_label(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    const CNA_StringView label)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SystemTrayResource> resource;
+        if (const CNA_Result result = BorrowTray(tray, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string labelText;
+        if (const CNA_Result result =
+                BorrowText(label, "The tray entry label is not valid UTF-8.", &labelText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->SetEntryLabel(static_cast<std::size_t>(index), labelText);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_system_tray_set_entry_checked(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    const CNA_Bool checked)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SystemTrayResource> resource;
+        if (const CNA_Result result = BorrowTray(tray, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->SetEntryChecked(static_cast<std::size_t>(index), checked != CNA_FALSE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_system_tray_get_entry_checked(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    CNA_Bool* const outChecked)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outChecked == nullptr) {
+            return InvalidInput("The tray entry check output is null.");
+        }
+        std::shared_ptr<SystemTrayResource> resource;
+        if (const CNA_Result result = BorrowTray(tray, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outChecked = resource->value->GetEntryChecked(static_cast<std::size_t>(index))
+            ? CNA_TRUE
+            : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_system_tray_set_entry_enabled(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    const CNA_Bool enabled)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SystemTrayResource> resource;
+        if (const CNA_Result result = BorrowTray(tray, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->SetEntryEnabled(static_cast<std::size_t>(index), enabled != CNA_FALSE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_system_tray_get_entry_enabled(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    CNA_Bool* const outEnabled)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEnabled == nullptr) {
+            return InvalidInput("The tray entry enabled output is null.");
+        }
+        std::shared_ptr<SystemTrayResource> resource;
+        if (const CNA_Result result = BorrowTray(tray, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outEnabled = resource->value->GetEntryEnabled(static_cast<std::size_t>(index))
+            ? CNA_TRUE
+            : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_system_tray_click_entry_for_tests_ext(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SystemTrayResource> resource;
+        if (const CNA_Result result = BorrowTray(tray, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (!resource->testState) {
+            return NoTestBackend();
+        }
+        CNA::Platform::TrayEntryClickCallback handler;
+        {
+            const std::lock_guard<std::mutex> lock(resource->testState->mutex);
+            if (index >= static_cast<uint64_t>(resource->testState->entries.size())) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "The tray entry index is at or past the entry count.");
+            }
+            handler = resource->testState->entries[static_cast<std::size_t>(index)].onClick;
+        }
+        if (handler) {
+            handler();
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_system_tray_destroy(const CNA_SystemTrayHandle tray)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SystemTrayResource> resource;
+        if (const CNA_Result result = BorrowTray(tray, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(tray);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The system tray handle could not be released.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_get_is_supported_ext(
+    const CNA_Handle gameHandle,
+    CNA_Bool* const outSupported)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSupported == nullptr) {
+            return InvalidInput("The camera support output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outSupported = Camera::getIsSupportedProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_get_count_ext(const CNA_Handle gameHandle, uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidInput("The camera count output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<uint64_t>(Camera::getAvailableCamerasProperty().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_get_info_at_ext(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    CNA_CameraDeviceInfo* const outInfo)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outInfo == nullptr) {
+            return InvalidInput("The camera descriptor output is null.");
+        }
+        CameraDeviceInfo info;
+        if (const CNA_Result result = BorrowEnumeratedCamera(gameHandle, index, &info);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        CNA_CameraDeviceInfo mapped = {};
+        mapped.struct_size = sizeof(CNA_CameraDeviceInfo);
+        mapped.struct_version = StructureVersion;
+        mapped.position = static_cast<CNA_CameraPosition>(info.Position);
+        *outInfo = mapped;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_get_name_size_at_ext(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The camera name size output is null.");
+        }
+        CameraDeviceInfo info;
+        if (const CNA_Result result = BorrowEnumeratedCamera(gameHandle, index, &info);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = info.Name.size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_copy_name_at_ext(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        CameraDeviceInfo info;
+        if (const CNA_Result result = BorrowEnumeratedCamera(gameHandle, index, &info);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(info.Name, destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_camera_create(const CNA_Handle gameHandle, CNA_CameraHandle* const outCamera)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCamera == nullptr) {
+            return InvalidInput("The camera output is null.");
+        }
+        *outCamera = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto resource = std::make_shared<CameraResource>();
+        resource->value = std::make_unique<Camera>();
+        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
+            ObjectKind::Camera,
+            std::move(resource),
+            outCamera);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The camera handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_create_with_test_backend_ext(
+    const CNA_Handle gameHandle,
+    CNA_CameraHandle* const outCamera)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCamera == nullptr) {
+            return InvalidInput("The camera output is null.");
+        }
+        *outCamera = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto resource = std::make_shared<CameraResource>();
+        resource->testState = std::make_shared<CameraTestState>();
+        resource->testService = std::make_unique<TestCameraProvider>(resource->testState);
+        CNA::C::Detail::GetPlatformOverride().SetCamera(resource->testService.get());
+        resource->value = std::make_unique<Camera>();
+        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
+            ObjectKind::Camera,
+            std::move(resource),
+            outCamera);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The camera handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_get_state_ext(
+    const CNA_CameraHandle camera,
+    CNA_CameraState* const outState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outState == nullptr) {
+            return InvalidInput("The camera state output is null.");
+        }
+        std::shared_ptr<CameraResource> resource;
+        if (const CNA_Result result = BorrowCamera(camera, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outState = static_cast<CNA_CameraState>(resource->value->getStateProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_get_frame_width_ext(
+    const CNA_CameraHandle camera,
+    int32_t* const outWidth)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outWidth == nullptr) {
+            return InvalidInput("The camera frame width output is null.");
+        }
+        std::shared_ptr<CameraResource> resource;
+        if (const CNA_Result result = BorrowCamera(camera, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outWidth = static_cast<int32_t>(resource->value->getFrameWidthProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_get_frame_height_ext(
+    const CNA_CameraHandle camera,
+    int32_t* const outHeight)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHeight == nullptr) {
+            return InvalidInput("The camera frame height output is null.");
+        }
+        std::shared_ptr<CameraResource> resource;
+        if (const CNA_Result result = BorrowCamera(camera, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outHeight = static_cast<int32_t>(resource->value->getFrameHeightProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_try_acquire_frame_ext(
+    const CNA_CameraHandle camera,
+    const CNA_Handle textureHandle,
+    CNA_Bool* const outAcquired)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outAcquired == nullptr) {
+            return InvalidInput("The camera frame output is null.");
+        }
+        std::shared_ptr<CameraResource> resource;
+        if (const CNA_Result result = BorrowCamera(camera, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<CNA::C::Detail::Texture2DResource> texture;
+        if (const CNA_Result result = CNA::C::Detail::GetOwnedTexture2D(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outAcquired = resource->value->TryAcquireFrame(*texture->value) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_set_test_state_ext(
+    const CNA_CameraHandle camera,
+    const CNA_CameraState state)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (state > CNA_CAMERA_STATE_MAXIMUM) {
+            return InvalidInput("The camera state is not a defined identity.");
+        }
+        // Two identities are defined but no longer reachable for a camera the platform opened: a
+        // device that is not open is not handed out at all, so nothing can report closed, and
+        // "not supported" is what an absent device answers rather than a state one can be put in.
+        // Refusing them keeps this route honest -- every state it accepts reads back unchanged.
+        if (state == CNA_CAMERA_STATE_CLOSED || state == CNA_CAMERA_STATE_NOT_SUPPORTED) {
+            return InvalidInput(
+                "The camera state cannot be set to closed or not-supported: the platform reports "
+                "neither for a device it opened.");
+        }
+        std::shared_ptr<CameraResource> resource;
+        if (const CNA_Result result = BorrowCamera(camera, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (!resource->testState) {
+            return NoTestBackend();
+        }
+        const std::lock_guard<std::mutex> lock(resource->testState->mutex);
+        resource->testState->state = static_cast<CameraState>(state);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_set_test_frame_ext(
+    const CNA_CameraHandle camera,
+    const int32_t width,
+    const int32_t height,
+    const CNA_Color* const pixels,
+    const uint64_t pixelCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CameraResource> resource;
+        if (const CNA_Result result = BorrowCamera(camera, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (!resource->testState) {
+            return NoTestBackend();
+        }
+        if (pixels == nullptr) {
+            const std::lock_guard<std::mutex> lock(resource->testState->mutex);
+            resource->testState->hasFrame = false;
+            resource->testState->rgba.clear();
+            resource->testState->width = 0;
+            resource->testState->height = 0;
+            resource->testState->state = CameraState::Opening;
+            return CNA_RESULT_SUCCESS;
+        }
+        if (width < 0 || height < 0) {
+            return InvalidInput("A camera frame dimension is negative.");
+        }
+        const uint64_t expected =
+            static_cast<uint64_t>(width) * static_cast<uint64_t>(height);
+        if (expected != pixelCount) {
+            return InvalidInput("The camera frame pixel count does not match its dimensions.");
+        }
+        std::vector<std::uint8_t> rgba;
+        rgba.reserve(static_cast<std::size_t>(pixelCount) * 4U);
+        for (uint64_t index = UINT64_C(0); index < pixelCount; ++index) {
+            rgba.push_back(pixels[index].r);
+            rgba.push_back(pixels[index].g);
+            rgba.push_back(pixels[index].b);
+            rgba.push_back(pixels[index].a);
+        }
+        const std::lock_guard<std::mutex> lock(resource->testState->mutex);
+        resource->testState->rgba = std::move(rgba);
+        resource->testState->width = static_cast<int>(width);
+        resource->testState->height = static_cast<int>(height);
+        resource->testState->hasFrame = true;
+        resource->testState->state = CameraState::Ready;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_destroy(const CNA_CameraHandle camera)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CameraResource> resource;
+        if (const CNA_Result result = BorrowCamera(camera, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(camera);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The camera handle could not be released.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+#else // CNA_DEVICES
+
+CNA_Result cna_power_get_state_ext(const CNA_Handle game, CNA_PowerState* const outState)
+{
+    (void)game;
+    (void)outState;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_power_get_battery_percent_ext(const CNA_Handle game, int32_t* const outPercent)
+{
+    (void)game;
+    (void)outPercent;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_power_get_seconds_remaining_ext(const CNA_Handle game, int32_t* const outSeconds)
+{
+    (void)game;
+    (void)outSeconds;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_system_info_get_logical_cpu_core_count_ext(
+    const CNA_Handle game,
+    int32_t* const outCount)
+{
+    (void)game;
+    (void)outCount;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_system_info_get_system_ram_megabytes_ext(
+    const CNA_Handle game,
+    int32_t* const outMegabytes)
+{
+    (void)game;
+    (void)outMegabytes;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_locale_get_preferred_count_ext(const CNA_Handle game, uint64_t* const outCount)
+{
+    (void)game;
+    (void)outCount;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_locale_get_language_size_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    uint64_t* const outBytes)
+{
+    (void)game;
+    (void)index;
+    (void)outBytes;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_locale_copy_language_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    (void)game;
+    (void)index;
+    (void)destination;
+    (void)capacity;
+    (void)outBytes;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_locale_get_country_size_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    uint64_t* const outBytes)
+{
+    (void)game;
+    (void)index;
+    (void)outBytes;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_locale_copy_country_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    (void)game;
+    (void)index;
+    (void)destination;
+    (void)capacity;
+    (void)outBytes;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_display_info_get_content_scale_ext(const CNA_Handle game, float* const outScale)
+{
+    (void)game;
+    (void)outScale;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_display_info_get_safe_area_ext(const CNA_Handle game, CNA_Rectangle* const outArea)
+{
+    (void)game;
+    (void)outArea;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_devices_clipboard_set_text_ext(
+    const CNA_Handle game,
+    const CNA_StringView text,
+    CNA_Bool* const outAccepted)
+{
+    (void)game;
+    (void)text;
+    (void)outAccepted;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_url_launcher_open_ext(
+    const CNA_Handle game,
+    const CNA_StringView url,
+    CNA_Bool* const outOpened)
+{
+    (void)game;
+    (void)url;
+    (void)outOpened;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_message_box_get_is_supported_ext(
+    const CNA_Handle game,
+    CNA_Bool* const outSupported)
+{
+    (void)game;
+    (void)outSupported;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_message_box_show_simple_ext(
+    const CNA_Handle game,
+    const CNA_MessageBoxType type,
+    const CNA_StringView title,
+    const CNA_StringView message)
+{
+    (void)game;
+    (void)type;
+    (void)title;
+    (void)message;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_message_box_show_ext(
+    const CNA_Handle game,
+    const CNA_MessageBoxType type,
+    const CNA_StringView title,
+    const CNA_StringView message,
+    const CNA_StringView* const buttonLabels,
+    const uint64_t buttonCount,
+    int32_t* const outChosen)
+{
+    (void)game;
+    (void)type;
+    (void)title;
+    (void)message;
+    (void)buttonLabels;
+    (void)buttonCount;
+    (void)outChosen;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_message_box_set_test_backend_ext(
+    const CNA_Handle game,
+    const CNA_Bool installed,
+    const int32_t chosenButton)
+{
+    (void)game;
+    (void)installed;
+    (void)chosenButton;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_message_box_get_test_log_ext(
+    const CNA_Handle game,
+    CNA_MessageBoxTestLog* const outLog)
+{
+    (void)game;
+    (void)outLog;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_file_dialog_get_is_supported_ext(
+    const CNA_Handle game,
+    CNA_Bool* const outSupported)
+{
+    (void)game;
+    (void)outSupported;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_file_dialog_show_open_file_ext(
+    const CNA_Handle game,
+    const CNA_FileDialogResultCallback onResult,
+    void* const context,
+    const CNA_FileDialogFilter* const filters,
+    const uint64_t filterCount,
+    const CNA_StringView defaultLocation,
+    const CNA_Bool allowMultiple)
+{
+    (void)game;
+    (void)onResult;
+    (void)context;
+    (void)filters;
+    (void)filterCount;
+    (void)defaultLocation;
+    (void)allowMultiple;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_file_dialog_show_save_file_ext(
+    const CNA_Handle game,
+    const CNA_FileDialogResultCallback onResult,
+    void* const context,
+    const CNA_FileDialogFilter* const filters,
+    const uint64_t filterCount,
+    const CNA_StringView defaultLocation)
+{
+    (void)game;
+    (void)onResult;
+    (void)context;
+    (void)filters;
+    (void)filterCount;
+    (void)defaultLocation;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_file_dialog_show_open_folder_ext(
+    const CNA_Handle game,
+    const CNA_FileDialogResultCallback onResult,
+    void* const context,
+    const CNA_StringView defaultLocation,
+    const CNA_Bool allowMultiple)
+{
+    (void)game;
+    (void)onResult;
+    (void)context;
+    (void)defaultLocation;
+    (void)allowMultiple;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_file_dialog_set_test_backend_ext(
+    const CNA_Handle game,
+    const CNA_Bool installed,
+    const CNA_StringView* const results,
+    const uint64_t resultCount)
+{
+    (void)game;
+    (void)installed;
+    (void)results;
+    (void)resultCount;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_system_tray_get_is_supported_ext(
+    const CNA_Handle game,
+    CNA_Bool* const outSupported)
+{
+    (void)game;
+    (void)outSupported;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_system_tray_create(
+    const CNA_Handle game,
+    const CNA_StringView tooltip,
+    CNA_SystemTrayHandle* const outTray)
+{
+    (void)game;
+    (void)tooltip;
+    if (outTray != nullptr) {
+        *outTray = CNA_INVALID_HANDLE;
+    }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_system_tray_create_with_test_backend_ext(
+    const CNA_Handle game,
+    const CNA_StringView tooltip,
+    CNA_SystemTrayHandle* const outTray)
+{
+    (void)game;
+    (void)tooltip;
+    if (outTray != nullptr) {
+        *outTray = CNA_INVALID_HANDLE;
+    }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_system_tray_set_tooltip(
+    const CNA_SystemTrayHandle tray,
+    const CNA_StringView tooltip)
+{
+    (void)tray;
+    (void)tooltip;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_system_tray_add_entry(
+    const CNA_SystemTrayHandle tray,
+    const CNA_StringView label,
+    const CNA_Bool checkable,
+    const CNA_Bool initiallyChecked,
+    const CNA_Bool initiallyEnabled,
+    const CNA_TrayEntryClickCallback onClick,
+    void* const context,
+    uint64_t* const outIndex)
+{
+    (void)tray;
+    (void)label;
+    (void)checkable;
+    (void)initiallyChecked;
+    (void)initiallyEnabled;
+    (void)onClick;
+    (void)context;
+    (void)outIndex;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_system_tray_set_entry_label(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    const CNA_StringView label)
+{
+    (void)tray;
+    (void)index;
+    (void)label;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_system_tray_set_entry_checked(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    const CNA_Bool checked)
+{
+    (void)tray;
+    (void)index;
+    (void)checked;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_system_tray_get_entry_checked(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    CNA_Bool* const outChecked)
+{
+    (void)tray;
+    (void)index;
+    (void)outChecked;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_system_tray_set_entry_enabled(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    const CNA_Bool enabled)
+{
+    (void)tray;
+    (void)index;
+    (void)enabled;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_system_tray_get_entry_enabled(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    CNA_Bool* const outEnabled)
+{
+    (void)tray;
+    (void)index;
+    (void)outEnabled;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_system_tray_click_entry_for_tests_ext(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index)
+{
+    (void)tray;
+    (void)index;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_system_tray_destroy(const CNA_SystemTrayHandle tray)
+{
+    (void)tray;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_get_is_supported_ext(const CNA_Handle game, CNA_Bool* const outSupported)
+{
+    (void)game;
+    (void)outSupported;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_get_count_ext(const CNA_Handle game, uint64_t* const outCount)
+{
+    (void)game;
+    (void)outCount;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_get_info_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    CNA_CameraDeviceInfo* const outInfo)
+{
+    (void)game;
+    (void)index;
+    (void)outInfo;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_get_name_size_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    uint64_t* const outBytes)
+{
+    (void)game;
+    (void)index;
+    (void)outBytes;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_copy_name_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    (void)game;
+    (void)index;
+    (void)destination;
+    (void)capacity;
+    (void)outBytes;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_create(const CNA_Handle game, CNA_CameraHandle* const outCamera)
+{
+    (void)game;
+    if (outCamera != nullptr) {
+        *outCamera = CNA_INVALID_HANDLE;
+    }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_create_with_test_backend_ext(
+    const CNA_Handle game,
+    CNA_CameraHandle* const outCamera)
+{
+    (void)game;
+    if (outCamera != nullptr) {
+        *outCamera = CNA_INVALID_HANDLE;
+    }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_get_state_ext(const CNA_CameraHandle camera, CNA_CameraState* const outState)
+{
+    (void)camera;
+    (void)outState;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_get_frame_width_ext(const CNA_CameraHandle camera, int32_t* const outWidth)
+{
+    (void)camera;
+    (void)outWidth;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_get_frame_height_ext(const CNA_CameraHandle camera, int32_t* const outHeight)
+{
+    (void)camera;
+    (void)outHeight;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_try_acquire_frame_ext(
+    const CNA_CameraHandle camera,
+    const CNA_Handle texture,
+    CNA_Bool* const outAcquired)
+{
+    (void)camera;
+    (void)texture;
+    (void)outAcquired;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_set_test_state_ext(
+    const CNA_CameraHandle camera,
+    const CNA_CameraState state)
+{
+    (void)camera;
+    (void)state;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_set_test_frame_ext(
+    const CNA_CameraHandle camera,
+    const int32_t width,
+    const int32_t height,
+    const CNA_Color* const pixels,
+    const uint64_t pixelCount)
+{
+    (void)camera;
+    (void)width;
+    (void)height;
+    (void)pixels;
+    (void)pixelCount;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_destroy(const CNA_CameraHandle camera)
+{
+    (void)camera;
+    return ExtensionUnavailable();
+}
+
+#endif // CNA_DEVICES

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
-#include "CNA/Internal/Input/InputManager.hpp"
 #include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -18,19 +17,7 @@ namespace
 {
     void ResetTouchState()
     {
-        const auto currentSnapshot = CNA::Internal::Input::InputManager::GetTouchState();
-        for (const auto& touchLocation : currentSnapshot)
-        {
-            CNA::Internal::Input::InputManager::SetTouchState(
-                touchLocation.getIdProperty(),
-                TouchLocationState::Released,
-                touchLocation.getPositionProperty()
-            );
-        }
-
-        // GetTouchState() is a pure read; AdvanceTouchFrame() is what actually retires the
-        // Released touches just set above.
-        CNA::Internal::Input::InputManager::AdvanceTouchFrame();
+        TouchPanel::ResetForTests();
     }
 }
 
@@ -38,7 +25,7 @@ TEST(TouchInputTest, GetStateReflectsCurrentTouchSnapshot)
 {
     ResetTouchState();
 
-    CNA::Internal::Input::InputManager::SetTouchState(11, TouchLocationState::Pressed, Vector2(100.5f, 200.25f));
+    TouchPanel::INTERNAL_setTouchState(11, TouchLocationState::Pressed, Vector2(100.5f, 200.25f));
 
     const auto state = TouchPanel::GetState();
     ASSERT_EQ(state.getCountProperty(), 1);
@@ -69,10 +56,10 @@ TEST(TouchInputTest, ReleasedTouchIsReturnedOnceAndThenRemoved)
 {
     ResetTouchState();
 
-    CNA::Internal::Input::InputManager::SetTouchState(21, TouchLocationState::Pressed, Vector2(30.0f, 40.0f));
+    TouchPanel::INTERNAL_setTouchState(21, TouchLocationState::Pressed, Vector2(30.0f, 40.0f));
     (void)TouchPanel::GetState();
 
-    CNA::Internal::Input::InputManager::SetTouchState(21, TouchLocationState::Released, Vector2(35.0f, 45.0f));
+    TouchPanel::INTERNAL_setTouchState(21, TouchLocationState::Released, Vector2(35.0f, 45.0f));
 
     const auto releasedState = TouchPanel::GetState();
     ASSERT_EQ(releasedState.getCountProperty(), 1);
@@ -96,8 +83,8 @@ TEST(TouchInputTest, GetStateHandlesMultipleTouchIdsAndKeepsDeterministicOrder)
 {
     ResetTouchState();
 
-    CNA::Internal::Input::InputManager::SetTouchState(42, TouchLocationState::Moved, Vector2(400.0f, 500.0f));
-    CNA::Internal::Input::InputManager::SetTouchState(7, TouchLocationState::Pressed, Vector2(70.0f, 80.0f));
+    TouchPanel::INTERNAL_setTouchState(42, TouchLocationState::Moved, Vector2(400.0f, 500.0f));
+    TouchPanel::INTERNAL_setTouchState(7, TouchLocationState::Pressed, Vector2(70.0f, 80.0f));
 
     const auto state = TouchPanel::GetState();
     ASSERT_EQ(state.getCountProperty(), 2);
@@ -117,9 +104,9 @@ TEST(TouchInputTest, GetStateOrdersMultipleTouchesByAscendingIdRegardlessOfInser
 {
     ResetTouchState();
 
-    CNA::Internal::Input::InputManager::SetTouchState(30, TouchLocationState::Pressed, Vector2(30.0f, 0.0f));
-    CNA::Internal::Input::InputManager::SetTouchState(5, TouchLocationState::Pressed, Vector2(5.0f, 0.0f));
-    CNA::Internal::Input::InputManager::SetTouchState(17, TouchLocationState::Pressed, Vector2(17.0f, 0.0f));
+    TouchPanel::INTERNAL_setTouchState(30, TouchLocationState::Pressed, Vector2(30.0f, 0.0f));
+    TouchPanel::INTERNAL_setTouchState(5, TouchLocationState::Pressed, Vector2(5.0f, 0.0f));
+    TouchPanel::INTERNAL_setTouchState(17, TouchLocationState::Pressed, Vector2(17.0f, 0.0f));
 
     const auto state = TouchPanel::GetState();
     ASSERT_EQ(state.getCountProperty(), 3);
@@ -195,7 +182,7 @@ TEST(TouchInputTest, GetCapabilitiesReportsConnectedWhenTouchDeviceExistsFlagIsS
     TouchPanel::setTouchDeviceExistsProperty(false);
 }
 
-TEST(TouchInputTest, GetCapabilitiesFallsBackToInputManagerTouchStateWhenFlagIsUnset)
+TEST(TouchInputTest, GetCapabilitiesFallsBackToPanelTouchStateWhenFlagIsUnset)
 {
     TouchPanel::setTouchDeviceExistsProperty(false);
     ResetTouchState();
@@ -204,7 +191,7 @@ TEST(TouchInputTest, GetCapabilitiesFallsBackToInputManagerTouchStateWhenFlagIsU
     EXPECT_FALSE(disconnected.getIsConnectedProperty());
     EXPECT_EQ(disconnected.getMaximumTouchCountProperty(), 0); // matches FNA: 0 when disconnected
 
-    CNA::Internal::Input::InputManager::SetTouchState(99, TouchLocationState::Pressed, Vector2(1.0f, 1.0f));
+    TouchPanel::INTERNAL_setTouchState(99, TouchLocationState::Pressed, Vector2(1.0f, 1.0f));
     const auto connected = TouchPanel::GetCapabilities();
     EXPECT_TRUE(connected.getIsConnectedProperty());
     EXPECT_EQ(connected.getMaximumTouchCountProperty(), 4); // DEC-09: XNA/FNA always report 4

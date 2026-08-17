@@ -25,7 +25,7 @@ namespace Microsoft::Devices::Sensors::Detail
     {
         // Minimal RAII scope-exit guard, local to this translation unit —
         // mirrors Detail::ScopeExit's established pattern in
-        // SdlSensorSubsystem.hpp for the identical reason (a cleanup step
+        // PlatformSensorSubsystem.hpp for the identical reason (a cleanup step
         // that must run on *every* exit from a function, including exit
         // paths added later, must not depend on every future author
         // remembering to repeat it manually). Defined locally here rather
@@ -648,7 +648,7 @@ namespace Microsoft::Devices::Sensors::Detail
                         // std::thread's entry point calls std::terminate()
                         // and crashes the whole process -- strictly worse
                         // than swallowing it. Mirrors
-                        // Detail::SdlSensorSubsystem<TSensor>::
+                        // Detail::PlatformSensorSubsystem<TSensor>::
                         // DispatchToInstances()'s policy (Task P8-5) for the
                         // SDL-backed sensors.
                         //

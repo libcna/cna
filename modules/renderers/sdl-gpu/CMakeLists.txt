@@ -3,6 +3,14 @@
 # or FetchContent is needed, unlike VULKAN/WEBGPU/BGFX.
 cna_add_renderer()
 target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3)
+set_property(TARGET ${RENDERER_TARGET} PROPERTY REQUIRES_PLATFORM SDL3)
+
+# plan_fx.md FX-061: compiled XNA effects go through MojoShader's own SDL_GPU adapter plus the
+# translation shared with every other compiled-effect backend. Opt-in, because MojoShader is a
+# fetched dependency this renderer does not otherwise need.
+if(CNA_SDL_GPU_COMPILED_EFFECTS)
+    target_link_libraries(${RENDERER_TARGET} PUBLIC cna_renderer_mojoshader_effect)
+endif()
 
 # plan_sdlgpu.md SDLGPU-42/43: SdlGpuEffectRenderer needs a REAL runtime GLSL->SPIR-V compile
 # for arbitrary user ShaderEffect source (SDL_gpu only accepts precompiled bytecode) -- unlike

@@ -1,0 +1,3913 @@
+{
+  "schemaVersion": 1,
+  "tasks": [
+    "GLTF-009",
+    "GLTF-390",
+    "GLTF-391"
+  ],
+  "capturedOn": "2026-08-15",
+  "corpusManifest": "tests/assets/gltf/manifest.json",
+  "corpusManifestSha256": "899b977e385efbff7b347ff926234243968aaeadc50e3ea05c208f3b2ca710b1",
+  "distinctAssetCount": 145,
+  "capturedAssetCount": 137,
+  "rejectedAssetCount": 8,
+  "renderer": "OPENGLES3/EasyGL",
+  "rendererEnvironment": [
+    "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1"
+  ],
+  "cnaCommit": "a585bdf00256fc84120f73a9550ac740ac962df7",
+  "viewerCommit": "3cd89e9deddf4903f0c766c75c75ba367a4d0749",
+  "viewerExecutableSha256": "bb9dc73d235b0c311aa59e4840a1d7ddd53c113e04ee52a3057181d4bce033b2",
+  "capture": {
+    "processesPerAsset": 2,
+    "resolution": [
+      512,
+      512
+    ],
+    "clearPixel": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "baseViewerArguments": [
+      "--direct",
+      "--capture",
+      "--reference-capture"
+    ],
+    "environment": {
+      "SDL_VIDEODRIVER": "x11",
+      "SDL_AUDIODRIVER": "dummy",
+      "LIBGL_ALWAYS_SOFTWARE": "1"
+    }
+  },
+  "goldenComparison": {
+    "rgbTolerance": 0,
+    "alphaTolerance": 0,
+    "justification": "Two independent Mesa llvmpipe/EasyGL processes produced byte-identical PNG files for all 137 renderable assets. The committed gate deliberately fixes LIBGL_ALWAYS_SOFTWARE=1, so no measured renderer variance exists to justify a non-zero threshold. Hardware-driver comparison is development evidence, not this oracle."
+  },
+  "classification": {
+    "scope": "Differences between this run and the committed same-renderer goldens. Reported/deferred glTF features remain owned by their L1-L6 diagnostics; the independent Khronos subset is docs/gltf-reference-comparison.json.",
+    "activeGoldenDivergences": [],
+    "resolvedDivergences": [
+      {
+        "id": "easygl-unlit-origin-nan",
+        "classification": "renderer-owned",
+        "ownerTask": "GLTF-411",
+        "asset": "mat-unlit",
+        "symptom": "The first pinned-reference run produced black at an origin vertex and RGB MAE 189.33 because the lit shader evaluated normalize(0) before applying the unlit branch.",
+        "resolution": "EasyGL now branches before lighting and specular normalization; the rerun measures RGB MAE below the fixed 80 reference threshold.",
+        "fixedByCommit": "a88b14220"
+      }
+    ],
+    "presentationRigExceptions": [
+      {
+        "asset": "mode-triangle-strip-morph",
+        "ownerTask": "GLTF-009",
+        "reason": "The generic positive-octant camera sees the back of this deliberately non-planar morphed strip. Disabling culling makes its pixel path observable; dedicated culling fixtures retain culling coverage."
+      },
+      {
+        "asset": "xf-rot-x90",
+        "ownerTask": "GLTF-009",
+        "reason": "The generic positive-octant camera sees the back of the +X-rotated one-sided triangle. Disabling culling makes the transformed geometry observable without changing the fixture."
+      }
+    ],
+    "intentionalClearCaptures": [
+      {
+        "asset": "skin-unnormalized",
+        "ownerTask": "GLTF-009",
+        "reason": "The fixture deliberately leaves one zero-weight vertex unweighted. Its zero skin matrix collapses that corner onto another corner, so the single triangle is degenerate and the clear framebuffer is the expected pixel result."
+      }
+    ],
+    "expectedSafeRejections": [
+      {
+        "asset": "accessor-count-mismatch",
+        "ownerTask": "GLTF-060"
+      },
+      {
+        "asset": "bad-accessor-count-overflow",
+        "ownerTask": "GLTF-039"
+      },
+      {
+        "asset": "bad-accessor-out-of-bounds",
+        "ownerTask": "GLTF-021"
+      },
+      {
+        "asset": "bad-animation-input-order",
+        "ownerTask": "GLTF-313"
+      },
+      {
+        "asset": "bad-index-out-of-range",
+        "ownerTask": "GLTF-068"
+      },
+      {
+        "asset": "gltf-required-extension-unsupported",
+        "ownerTask": "GLTF-023"
+      },
+      {
+        "asset": "skin-73-joints",
+        "ownerTask": "GLTF-261"
+      },
+      {
+        "asset": "skin-joint-index-out-of-range",
+        "ownerTask": "GLTF-254"
+      }
+    ]
+  },
+  "assets": [
+    {
+      "id": "glb-basic",
+      "source": "glb-basic.gltf",
+      "sourceSha256": "791105ca1ebda4518b8f85f8d2a23187ef6c9dca4f8a00b5886ca116dc5cec01",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/glb-basic.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "glb-bin-chunk-padding",
+      "source": "glb-bin-chunk-padding.gltf",
+      "sourceSha256": "46c9e66f6ee86e1d409b130cf726458ee0fe700b50c462561ecb214b6bc34d7f",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/glb-bin-chunk-padding.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "gltf-external-bin",
+      "source": "gltf-external-bin.gltf",
+      "sourceSha256": "7c13862f6319d5a7c727ecee96dfaca4ea6ae3b44b79c4f3258337055b367126",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/gltf-external-bin.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "gltf-data-uri-bin",
+      "source": "gltf-data-uri-bin.gltf",
+      "sourceSha256": "814437c9e3c1157f58100aabe5669cd1928e4dfd73c3ba56f236906d03564a96",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/gltf-data-uri-bin.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "gltf-external-image",
+      "source": "gltf-external-image.gltf",
+      "sourceSha256": "6571f27a81980a4dc94f525d248fe941ac9ddc67fca1fd6a23af9d62658ceaea",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/gltf-external-image.png",
+      "goldenPngSha256": "3a77ae0d62fca305f15748eb9c1f2af86d4e89739af9fc0da9352c26fd545a36",
+      "twoProcessPngSha256": "3a77ae0d62fca305f15748eb9c1f2af86d4e89739af9fc0da9352c26fd545a36",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "gltf-data-uri-image",
+      "source": "gltf-data-uri-image.gltf",
+      "sourceSha256": "2f390485b97a1ced5d0d0589e3cba8e7504deb0dbca542578fae770e736227d8",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/gltf-data-uri-image.png",
+      "goldenPngSha256": "3a77ae0d62fca305f15748eb9c1f2af86d4e89739af9fc0da9352c26fd545a36",
+      "twoProcessPngSha256": "3a77ae0d62fca305f15748eb9c1f2af86d4e89739af9fc0da9352c26fd545a36",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "gltf-uri-percent-encoded",
+      "source": "gltf-uri-percent-encoded.gltf",
+      "sourceSha256": "201dce60a37ec6634990e265399c5dbb7b0ae662196b2ac51e741cdddbd333f0",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/gltf-uri-percent-encoded.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "gltf-required-extension-unsupported",
+      "source": "gltf-required-extension-unsupported.gltf",
+      "sourceSha256": "256c2852a1a65dcd8ef08b9521bea79a91b6f7451bd89984c7c8a88b88c98475",
+      "disposition": "reject",
+      "viewerArguments": [],
+      "returnCode": 1,
+      "owningTask": "GLTF-023",
+      "errorContains": "lists 'KHR_materials_clearcoat' in extensionsRequired",
+      "terminalError": "cna-gltf-viewer: '/rv/data/development/github.com/openeggbert/cnagltf/tests/assets/gltf/gltf-required-extension-unsupported.gltf' lists 'KHR_materials_clearcoat' in extensionsRequired, which CNA does not implement. The file declares it cannot be interpreted correctly without that extension, so importing it would produce geometry or shading its author already said would be wrong.",
+      "twoProcessDispositionIdentical": true
+    },
+    {
+      "id": "accessor-offset",
+      "source": "accessor-offset.gltf",
+      "sourceSha256": "c422d73c373562e4ac4be639370011cb7a75779f7120c0a21ab892d858da0d4d",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/accessor-offset.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "bufferview-offset",
+      "source": "bufferview-offset.gltf",
+      "sourceSha256": "07a01618f3eb4c5332e957c901c84f19270220e3adb282765d4621ff0bde1e1b",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/bufferview-offset.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "bufferview-stride-tight",
+      "source": "bufferview-stride-tight.gltf",
+      "sourceSha256": "48302bd6a67be6ec0cd991e9a703acb2687781b79b8e748c3ceaaa1d5ad91367",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/bufferview-stride-tight.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "interleaved-position-normal",
+      "source": "interleaved-position-normal.gltf",
+      "sourceSha256": "3a3f951e63a7b9af458208e34b5304e2c0abc036a5020425d04aacec3f73edea",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/interleaved-position-normal.png",
+      "goldenPngSha256": "8909c71ed5460f43d280dcda7460be7a58599a4a41173cd6f07908625b4ff58c",
+      "twoProcessPngSha256": "8909c71ed5460f43d280dcda7460be7a58599a4a41173cd6f07908625b4ff58c",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 24255,
+      "nonClearBoundingBox": [
+        222,
+        61,
+        395,
+        424
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "interleaved-pos-nrm-uv",
+      "source": "interleaved-pos-nrm-uv.gltf",
+      "sourceSha256": "a3819c4b3383885878ba2cdafb01e217bec18c8fae70bb4d95d7cde972794ad7",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/interleaved-pos-nrm-uv.png",
+      "goldenPngSha256": "20e373996ab2a7111b96dfce4909819a2256f33b4620ca8fb201e9cbffc4591b",
+      "twoProcessPngSha256": "20e373996ab2a7111b96dfce4909819a2256f33b4620ca8fb201e9cbffc4591b",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "interleaved-mixed-widths",
+      "source": "interleaved-mixed-widths.gltf",
+      "sourceSha256": "3a74620b56ae7becc687d594b524e69d241dfcc661e4a6058150c3e8dacc97cc",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/interleaved-mixed-widths.png",
+      "goldenPngSha256": "90c2c5591d7f34ec9a6938839cfdaad65f17237751f57b3f3a1f13ac9729356b",
+      "twoProcessPngSha256": "90c2c5591d7f34ec9a6938839cfdaad65f17237751f57b3f3a1f13ac9729356b",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "stride-padded",
+      "source": "stride-padded.gltf",
+      "sourceSha256": "8424ea1a30891fe87357936fd34780e555f48524ad08ff8459ff591803902c30",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/stride-padded.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "two-primitives-one-buffer",
+      "source": "two-primitives-one-buffer.gltf",
+      "sourceSha256": "f9e766c68019081291930ff3319e50a2811d68dd7b255f10d81c52f15f831e4d",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/two-primitives-one-buffer.png",
+      "goldenPngSha256": "18a58d63fce5d13345cdbfef4f9ec3ae842fe93df7bd259e021ed33141ba175c",
+      "twoProcessPngSha256": "18a58d63fce5d13345cdbfef4f9ec3ae842fe93df7bd259e021ed33141ba175c",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 12768,
+      "nonClearBoundingBox": [
+        137,
+        125,
+        447,
+        323
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "sparse-position",
+      "source": "sparse-position.gltf",
+      "sourceSha256": "805959f472a2fcbaa1ceccb3cf71ad6e6c02b233e1f64703a7cc66efaa44ee22",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/sparse-position.png",
+      "goldenPngSha256": "494bc48d4810e215f554ea862c134adfadee24121309c7c1235ee4476df49184",
+      "twoProcessPngSha256": "494bc48d4810e215f554ea862c134adfadee24121309c7c1235ee4476df49184",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 24539,
+      "nonClearBoundingBox": [
+        219,
+        65,
+        399,
+        420
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "sparse-indices",
+      "source": "sparse-indices.gltf",
+      "sourceSha256": "ffebfe48fb5e11be4dbcbfa8189c3241eeab34089b56f6feb29cdabf1aeec145",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/sparse-indices.png",
+      "goldenPngSha256": "8db1b5046cfb275191beeaafd42d1dfd52ae737aa8ffbb979f3b6a7298d4f736",
+      "twoProcessPngSha256": "8db1b5046cfb275191beeaafd42d1dfd52ae737aa8ffbb979f3b6a7298d4f736",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 64437,
+      "nonClearBoundingBox": [
+        151,
+        97,
+        399,
+        436
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "sparse-interleaved-base",
+      "source": "sparse-interleaved-base.gltf",
+      "sourceSha256": "96330bdc4b65bba32c29178f713ff0029717d0af8e7cd649de17c9281b922bfb",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/sparse-interleaved-base.png",
+      "goldenPngSha256": "04e89e2be963ba3b676df586d1649f95b6729b4fea4a6ae7c2f8eba3a572f3bd",
+      "twoProcessPngSha256": "04e89e2be963ba3b676df586d1649f95b6729b4fea4a6ae7c2f8eba3a572f3bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 44505,
+      "nonClearBoundingBox": [
+        248,
+        50,
+        434,
+        442
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "accessor-minmax",
+      "source": "accessor-minmax.gltf",
+      "sourceSha256": "cc0283cecca2bf72798ab786e18cd493c419e9ca0886ac548d90df4fa861f688",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/accessor-minmax.png",
+      "goldenPngSha256": "da67837b47066e371884cf8a336b588508b0596aa2e5c691e817c4987b9037f6",
+      "twoProcessPngSha256": "da67837b47066e371884cf8a336b588508b0596aa2e5c691e817c4987b9037f6",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 3244,
+      "nonClearBoundingBox": [
+        181,
+        96,
+        330,
+        396
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mat3-padded",
+      "source": "mat3-padded.gltf",
+      "sourceSha256": "0271872d45cc1a39ddccec6b2cea32430689647c9359f5b1acca8ca3e269b0d8",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mat3-padded.png",
+      "goldenPngSha256": "8909c71ed5460f43d280dcda7460be7a58599a4a41173cd6f07908625b4ff58c",
+      "twoProcessPngSha256": "8909c71ed5460f43d280dcda7460be7a58599a4a41173cd6f07908625b4ff58c",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 24255,
+      "nonClearBoundingBox": [
+        222,
+        61,
+        395,
+        424
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "u8-idx",
+      "source": "u8-idx.gltf",
+      "sourceSha256": "518e32102376578c63ec457a78bd56d1bd50f9fa083c0b0e7db05563d0c8998a",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/u8-idx.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "u16-idx",
+      "source": "u16-idx.gltf",
+      "sourceSha256": "cae4b0785a8c4a62a70fe33919cf63f7f8f907b8b66419476ffddaac5448a541",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/u16-idx.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "u32-idx",
+      "source": "u32-idx.gltf",
+      "sourceSha256": "820a69a893a8878be949da9c247d0340538448ca3e1b0a71cec4d3a7063167fb",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/u32-idx.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "non-indexed-triangles",
+      "source": "non-indexed-triangles.gltf",
+      "sourceSha256": "475dc1e9b9c4995f48511285278278794c0f6685c349d906eab13297f2b6a1f4",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/non-indexed-triangles.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "normalized-u8-color",
+      "source": "normalized-u8-color.gltf",
+      "sourceSha256": "15b4b7ca164a16c8704d92fe084de922d93bcfcae03a5a281c928cdbe8459cb4",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/normalized-u8-color.png",
+      "goldenPngSha256": "67030ceeeca5d514891e8c46599b8042c7ecb6b9f38902f0b246bdac0da46da4",
+      "twoProcessPngSha256": "67030ceeeca5d514891e8c46599b8042c7ecb6b9f38902f0b246bdac0da46da4",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "normalized-u16-color",
+      "source": "normalized-u16-color.gltf",
+      "sourceSha256": "615711aa3b08e8eb6edc699d411f508db8c93053b98c104e37d0e6c367a21eba",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/normalized-u16-color.png",
+      "goldenPngSha256": "d24bd3b4c875e857fe269e753d04bf284f318b7a4a062740c49d127262e2c61a",
+      "twoProcessPngSha256": "d24bd3b4c875e857fe269e753d04bf284f318b7a4a062740c49d127262e2c61a",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        62,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "float-color",
+      "source": "float-color.gltf",
+      "sourceSha256": "abeb0bed5f4e2063dd736ec149c472274120b059d1e0be737792bdcaf69eb02d",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/float-color.png",
+      "goldenPngSha256": "b1a8979c5ddd7b65ea781a4594b77e01fd06f8db1e9a578c628e12d1e6a81a52",
+      "twoProcessPngSha256": "b1a8979c5ddd7b65ea781a4594b77e01fd06f8db1e9a578c628e12d1e6a81a52",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "normalized-i8-normal",
+      "source": "normalized-i8-normal.gltf",
+      "sourceSha256": "effa5525181c0d185de012fe21fba39e9039cc2f814395b5f132b9df78df7292",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/normalized-i8-normal.png",
+      "goldenPngSha256": "e83210e35d3c97e45c2b03b8e2b750ef58740a1679b858558692f9f5a8bc0fc1",
+      "twoProcessPngSha256": "e83210e35d3c97e45c2b03b8e2b750ef58740a1679b858558692f9f5a8bc0fc1",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mode-points",
+      "source": "mode-points.gltf",
+      "sourceSha256": "711fb757e52d663a5cd0ca8f4d12ce19420f4f59403fd165e1af55f621bcd01a",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mode-points.png",
+      "goldenPngSha256": "5ea68d8fea85ceeddf3cad9e03febcfb63dab855b68df3cb2cf0a355be948bf6",
+      "twoProcessPngSha256": "5ea68d8fea85ceeddf3cad9e03febcfb63dab855b68df3cb2cf0a355be948bf6",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 4,
+      "nonClearBoundingBox": [
+        183,
+        91,
+        390,
+        370
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mode-lines",
+      "source": "mode-lines.gltf",
+      "sourceSha256": "cc3845158ce106073e8c8bb5ac5cbebc701b93c44faf51ed067a34c058bc95b3",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mode-lines.png",
+      "goldenPngSha256": "9ae4f13efe3498ac09253f28879157340e15f11feb68cbf912e0a905863c5baa",
+      "twoProcessPngSha256": "9ae4f13efe3498ac09253f28879157340e15f11feb68cbf912e0a905863c5baa",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 525,
+      "nonClearBoundingBox": [
+        164,
+        122,
+        400,
+        437
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mode-line-loop",
+      "source": "mode-line-loop.gltf",
+      "sourceSha256": "37f9caac2c76c0fc7bb70674d47ac643d6208ab87ce401826f9f0c1bf06e956a",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mode-line-loop.png",
+      "goldenPngSha256": "9731d28b970bb61bb61eb699b879765d5533951f8d4afa49e7f45f625e4501a3",
+      "twoProcessPngSha256": "9731d28b970bb61bb61eb699b879765d5533951f8d4afa49e7f45f625e4501a3",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 759,
+      "nonClearBoundingBox": [
+        164,
+        121,
+        400,
+        437
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mode-line-strip",
+      "source": "mode-line-strip.gltf",
+      "sourceSha256": "740c3b963044c72bea2480dbeb6d14db1494b974bc145ead00810e64a7f432c6",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mode-line-strip.png",
+      "goldenPngSha256": "9ae4f13efe3498ac09253f28879157340e15f11feb68cbf912e0a905863c5baa",
+      "twoProcessPngSha256": "9ae4f13efe3498ac09253f28879157340e15f11feb68cbf912e0a905863c5baa",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 525,
+      "nonClearBoundingBox": [
+        164,
+        122,
+        400,
+        437
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mode-triangles",
+      "source": "mode-triangles.gltf",
+      "sourceSha256": "e265af9543b450e8a34758f2cc05b0c908f3eaa534042b9c6da674591b6830ea",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mode-triangles.png",
+      "goldenPngSha256": "b78d1fedd746c6c6271a54718a903111c52ea7dd59ed9a3c4cd17fc3be4c30c3",
+      "twoProcessPngSha256": "b78d1fedd746c6c6271a54718a903111c52ea7dd59ed9a3c4cd17fc3be4c30c3",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 45644,
+      "nonClearBoundingBox": [
+        183,
+        91,
+        389,
+        369
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mode-triangle-strip",
+      "source": "mode-triangle-strip.gltf",
+      "sourceSha256": "33010660904ef40bc2d1d58cdf6a56a2f12e1a93b85b2507a86f651269afe1dc",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mode-triangle-strip.png",
+      "goldenPngSha256": "b78d1fedd746c6c6271a54718a903111c52ea7dd59ed9a3c4cd17fc3be4c30c3",
+      "twoProcessPngSha256": "b78d1fedd746c6c6271a54718a903111c52ea7dd59ed9a3c4cd17fc3be4c30c3",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 45644,
+      "nonClearBoundingBox": [
+        183,
+        91,
+        389,
+        369
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mode-triangle-strip-morph",
+      "source": "mode-triangle-strip-morph.gltf",
+      "sourceSha256": "f33e1051843d394fa6523cc418d14b7250a02d8b790a48948ab9f9a431becb33",
+      "disposition": "capture",
+      "viewerArguments": [
+        "--no-cull"
+      ],
+      "golden": "tests/gltf-l7/easygl/mode-triangle-strip-morph.png",
+      "goldenPngSha256": "3e9347f2971e424bf3e6d5bd6b74af6ae4abe59b6ecc808cc76f5b95dd95c6f1",
+      "twoProcessPngSha256": "3e9347f2971e424bf3e6d5bd6b74af6ae4abe59b6ecc808cc76f5b95dd95c6f1",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 9814,
+      "nonClearBoundingBox": [
+        151,
+        198,
+        339,
+        309
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mode-triangle-fan",
+      "source": "mode-triangle-fan.gltf",
+      "sourceSha256": "16dda36b31ef49c6653aae4554c6ff258c6846e43755be2bb21c0a367dd0614e",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mode-triangle-fan.png",
+      "goldenPngSha256": "8db1b5046cfb275191beeaafd42d1dfd52ae737aa8ffbb979f3b6a7298d4f736",
+      "twoProcessPngSha256": "8db1b5046cfb275191beeaafd42d1dfd52ae737aa8ffbb979f3b6a7298d4f736",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 64437,
+      "nonClearBoundingBox": [
+        151,
+        97,
+        399,
+        436
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "normal-absent",
+      "source": "normal-absent.gltf",
+      "sourceSha256": "c0eb9d95e8463d6c1db2ce296346eaa209e3513d0c421e4578682a3c07848298",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/normal-absent.png",
+      "goldenPngSha256": "d2ff6e4eff570ac3352c31e6d4aa001ddfead9979ab62c87c07ce18e8c336790",
+      "twoProcessPngSha256": "d2ff6e4eff570ac3352c31e6d4aa001ddfead9979ab62c87c07ce18e8c336790",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 8225,
+      "nonClearBoundingBox": [
+        88,
+        127,
+        407,
+        334
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "normal-quantized",
+      "source": "normal-quantized.gltf",
+      "sourceSha256": "acaf4c95f2dc7fc4837db69c0cdfa8c1a988a21b4e07f4e955674daf6ab1571c",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/normal-quantized.png",
+      "goldenPngSha256": "10137de5b748f024430d28946b3fbd73233daf2509c9b1cf9bde540cc7eaaa4e",
+      "twoProcessPngSha256": "10137de5b748f024430d28946b3fbd73233daf2509c9b1cf9bde540cc7eaaa4e",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "tangent-handedness",
+      "source": "tangent-handedness.gltf",
+      "sourceSha256": "3c2ce1eeb0ea1e6517e8eba85353afbc8ed5ceb567e0d3258b1d760504ef549d",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/tangent-handedness.png",
+      "goldenPngSha256": "e4048a295e0c037fafdb861aae95d4ca752f7c9bfe24e03f270e6ee3acbd1eb9",
+      "twoProcessPngSha256": "e4048a295e0c037fafdb861aae95d4ca752f7c9bfe24e03f270e6ee3acbd1eb9",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 20122,
+      "nonClearBoundingBox": [
+        151,
+        119,
+        420,
+        335
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "tangent-absent-generated",
+      "source": "tangent-absent-generated.gltf",
+      "sourceSha256": "6effffc0e9d989d7c9f084c74efefb21c4a768838100b31b4b4b270b4ce4d87d",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/tangent-absent-generated.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "normal-nonuniform-scale",
+      "source": "normal-nonuniform-scale.gltf",
+      "sourceSha256": "d7e379b488c0e544446e686e371786c5fff20b018dfbcd2d027080ba1a5b77ed",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/normal-nonuniform-scale.png",
+      "goldenPngSha256": "2358525496486231d099e605686bf6cd8897c5443fcc88ce1dc459a35821d136",
+      "twoProcessPngSha256": "2358525496486231d099e605686bf6cd8897c5443fcc88ce1dc459a35821d136",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 8558,
+      "nonClearBoundingBox": [
+        166,
+        185,
+        301,
+        312
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "tangent-mirrored",
+      "source": "tangent-mirrored.gltf",
+      "sourceSha256": "2128cf2e40948467047c1fe8706ca795454e0819149ab5251ee082f1afb5422f",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/tangent-mirrored.png",
+      "goldenPngSha256": "f937a3c4a3fbcf3c51931af05de49eaa2e53ddd108f406346298f3097c19f0f8",
+      "twoProcessPngSha256": "f937a3c4a3fbcf3c51931af05de49eaa2e53ddd108f406346298f3097c19f0f8",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 8926,
+      "nonClearBoundingBox": [
+        147,
+        161,
+        407,
+        328
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "xf-identity",
+      "source": "xf-identity.gltf",
+      "sourceSha256": "77a46b402d5aa10e66d592d8882bd90a761a634d450eab1fe950af91a0845998",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/xf-identity.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "xf-translation",
+      "source": "xf-translation.gltf",
+      "sourceSha256": "f624f0b45052b60fb9fed475246ea3478651b8801ebca232da7bc3aec4c97fb0",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/xf-translation.png",
+      "goldenPngSha256": "0cca2eefe3901bab441b7ba3c7c6f722166a94d79ff792690f7379160467beaa",
+      "twoProcessPngSha256": "0cca2eefe3901bab441b7ba3c7c6f722166a94d79ff792690f7379160467beaa",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "xf-scale-uniform",
+      "source": "xf-scale-uniform.gltf",
+      "sourceSha256": "c0e6dfe816ac71ce50d4a742182269dd47b19a791f65831c65fc899724c5770c",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/xf-scale-uniform.png",
+      "goldenPngSha256": "421c599e3f23fdbd3b7bb84e5612521db4e6317ddc478b2ed36f4b4bd8ed34ca",
+      "twoProcessPngSha256": "421c599e3f23fdbd3b7bb84e5612521db4e6317ddc478b2ed36f4b4bd8ed34ca",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "xf-scale-nonuniform",
+      "source": "xf-scale-nonuniform.gltf",
+      "sourceSha256": "94892357d19373d037578ce0f6aa520b1415c8f5f7906d90e6ddc2525f0d7be6",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/xf-scale-nonuniform.png",
+      "goldenPngSha256": "99944dee862214ba694597f3cb4c0052e5926cdf4db326e9154317dde48632e4",
+      "twoProcessPngSha256": "99944dee862214ba694597f3cb4c0052e5926cdf4db326e9154317dde48632e4",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 8836,
+      "nonClearBoundingBox": [
+        220,
+        113,
+        321,
+        327
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "xf-rot-x90",
+      "source": "xf-rot-x90.gltf",
+      "sourceSha256": "15c2b5605d43e7228900fe5de34fc0a3562f83611cb7ab7468e19741d322a874",
+      "disposition": "capture",
+      "viewerArguments": [
+        "--no-cull"
+      ],
+      "golden": "tests/gltf-l7/easygl/xf-rot-x90.png",
+      "goldenPngSha256": "d658b4fae3f2196bfbac35e904c078063db25a3132f5c4b375f703d093944724",
+      "twoProcessPngSha256": "d658b4fae3f2196bfbac35e904c078063db25a3132f5c4b375f703d093944724",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 11738,
+      "nonClearBoundingBox": [
+        41,
+        223,
+        438,
+        288
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "xf-rot-y90",
+      "source": "xf-rot-y90.gltf",
+      "sourceSha256": "7fa3084552c5857d2bde4c720e2f7a77cb69d0b2e48dcf5c494e2f32c3278da1",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/xf-rot-y90.png",
+      "goldenPngSha256": "8a020bf5e604fe2b993a852545387699fe7ae6e6da54fd0266f9ad35901d0d6f",
+      "twoProcessPngSha256": "8a020bf5e604fe2b993a852545387699fe7ae6e6da54fd0266f9ad35901d0d6f",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 21687,
+      "nonClearBoundingBox": [
+        181,
+        68,
+        341,
+        353
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "xf-rot-z90",
+      "source": "xf-rot-z90.gltf",
+      "sourceSha256": "2f3fba74ec3e87d8cb7a6aa22698b299e70aa0ea69cfc080fce1677100fd7ff2",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/xf-rot-z90.png",
+      "goldenPngSha256": "458b46f51bc0daf98a1cea1b8cdd5df315caa2ee948a1137091ac86131709f0d",
+      "twoProcessPngSha256": "458b46f51bc0daf98a1cea1b8cdd5df315caa2ee948a1137091ac86131709f0d",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 22902,
+      "nonClearBoundingBox": [
+        142,
+        94,
+        320,
+        360
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "xf-trs-order",
+      "source": "xf-trs-order.gltf",
+      "sourceSha256": "541964d5f3f06e9dab5955ada0eae7be0a2ed8c3e65388f60a2fe6c6fc4bc73f",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/xf-trs-order.png",
+      "goldenPngSha256": "9a105c6490b940aa94449b6f46a50e9bb41c620cb9e4107f1c2c4d2492ec300d",
+      "twoProcessPngSha256": "9a105c6490b940aa94449b6f46a50e9bb41c620cb9e4107f1c2c4d2492ec300d",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 22902,
+      "nonClearBoundingBox": [
+        142,
+        94,
+        320,
+        360
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "xf-matrix-node",
+      "source": "xf-matrix-node.gltf",
+      "sourceSha256": "63c8fa2957cda6e94132430c53d2bb88ac2da97e9d202c83c40a0f53044d25bb",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/xf-matrix-node.png",
+      "goldenPngSha256": "fe76147b90c9949bd1ae170409880a3c4c861eaeac8c4ef735a0f97d5162f185",
+      "twoProcessPngSha256": "fe76147b90c9949bd1ae170409880a3c4c861eaeac8c4ef735a0f97d5162f185",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "xf-matrix-vs-trs",
+      "source": "xf-matrix-vs-trs.gltf",
+      "sourceSha256": "b70cb884ff58c321ac0f3190ad98a1de08a9a67459a4a1f3ac44a4c47d433bfc",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/xf-matrix-vs-trs.png",
+      "goldenPngSha256": "9a105c6490b940aa94449b6f46a50e9bb41c620cb9e4107f1c2c4d2492ec300d",
+      "twoProcessPngSha256": "9a105c6490b940aa94449b6f46a50e9bb41c620cb9e4107f1c2c4d2492ec300d",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 22902,
+      "nonClearBoundingBox": [
+        142,
+        94,
+        320,
+        360
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "xf-parent-child",
+      "source": "xf-parent-child.gltf",
+      "sourceSha256": "ffd4d33b04f1e8141f27c3144a951a9067cf238c977503c6567f76c3a1ead5e0",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/xf-parent-child.png",
+      "goldenPngSha256": "73b856294d769d1b9d0b1576ca4f253a7b17bc17f5a6da6fb3d90e92498b602e",
+      "twoProcessPngSha256": "73b856294d769d1b9d0b1576ca4f253a7b17bc17f5a6da6fb3d90e92498b602e",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "xf-deep-chain",
+      "source": "xf-deep-chain.gltf",
+      "sourceSha256": "1a905138ff36db046ed1e97d273b07ea0535f7258593af68c9026b0c494ee81a",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/xf-deep-chain.png",
+      "goldenPngSha256": "f76a5710f3abd24041ebb68c19511130f92353f5e9393585acf0ffdc681e48c2",
+      "twoProcessPngSha256": "f76a5710f3abd24041ebb68c19511130f92353f5e9393585acf0ffdc681e48c2",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "xf-negative-scale",
+      "source": "xf-negative-scale.gltf",
+      "sourceSha256": "48c43380d1b4f7be22584dd14d49a937f4fd39f6bdfcea67b46b47f66d3305fe",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/xf-negative-scale.png",
+      "goldenPngSha256": "6edd118719df1374c1a517975cedd91272021f3bfa06b9ad99ec9f031b69852f",
+      "twoProcessPngSha256": "6edd118719df1374c1a517975cedd91272021f3bfa06b9ad99ec9f031b69852f",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 25371,
+      "nonClearBoundingBox": [
+        153,
+        68,
+        343,
+        347
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "xf-mirror-child",
+      "source": "xf-mirror-child.gltf",
+      "sourceSha256": "9925639b1beadd55ce969730f0f9523da0dd2faa46c51d62f9432cbb967042ba",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/xf-mirror-child.png",
+      "goldenPngSha256": "22ca0932cd53f8ed1c20dd31d2fc7aea8c4774902c9709c08df18cbd7667a46f",
+      "twoProcessPngSha256": "22ca0932cd53f8ed1c20dd31d2fc7aea8c4774902c9709c08df18cbd7667a46f",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 3131,
+      "nonClearBoundingBox": [
+        215,
+        46,
+        298,
+        424
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "xf-shared-mesh",
+      "source": "xf-shared-mesh.gltf",
+      "sourceSha256": "70fe801df6b872e5ce0403c74ebf7f8939d54e5e30d68c7eed51f4204e52afa8",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/xf-shared-mesh.png",
+      "goldenPngSha256": "24aebf02652df107d2a7bc4b13eeffc3db35f216a91d88c8239e49cada6e2cbb",
+      "twoProcessPngSha256": "24aebf02652df107d2a7bc4b13eeffc3db35f216a91d88c8239e49cada6e2cbb",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 1084,
+      "nonClearBoundingBox": [
+        132,
+        201,
+        445,
+        322
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "xf-transform-only",
+      "source": "xf-transform-only.gltf",
+      "sourceSha256": "57da20b2f06d25ef22fa01fc4a820e02e3cae96522b454c36614d083a4d72de2",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/xf-transform-only.png",
+      "goldenPngSha256": "9edb1cd08ba3f3c0a7392fe952f718dd020de9ff6ef6975bb9858f1524c9626b",
+      "twoProcessPngSha256": "9edb1cd08ba3f3c0a7392fe952f718dd020de9ff6ef6975bb9858f1524c9626b",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "xf-multi-root",
+      "source": "xf-multi-root.gltf",
+      "sourceSha256": "8790a96ff7d31b3c8883e586d8d00e91017388222fdf5c4b34235b0289ed13e2",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/xf-multi-root.png",
+      "goldenPngSha256": "1ef7b0fdc9df12b3aa367df36ddb3b56e81c681cae5f7a56ba454385b3a8f811",
+      "twoProcessPngSha256": "1ef7b0fdc9df12b3aa367df36ddb3b56e81c681cae5f7a56ba454385b3a8f811",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 289,
+      "nonClearBoundingBox": [
+        215,
+        125,
+        361,
+        406
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mat-default",
+      "source": "mat-default.gltf",
+      "sourceSha256": "0703c9010adf137c4d531394c21eb5dd065a567e41a3b53affa6673deaa43389",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mat-default.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mat-factor-only-gold",
+      "source": "mat-factor-only-gold.gltf",
+      "sourceSha256": "74d0f59e7846f1096498a0e3aaa18e7c10b98bbd087b6c7525d5a92fda4a7d67",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mat-factor-only-gold.png",
+      "goldenPngSha256": "f9b375d51250d3550c0d710c07848cdc87448eebfa28085e149647ed98df429b",
+      "twoProcessPngSha256": "f9b375d51250d3550c0d710c07848cdc87448eebfa28085e149647ed98df429b",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mat-basecolor-factor-times-texture",
+      "source": "mat-basecolor-factor-times-texture.gltf",
+      "sourceSha256": "611e461857583fcf69deb574e2808ee621ab0e61abc68917ba2befd33a225bd4",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mat-basecolor-factor-times-texture.png",
+      "goldenPngSha256": "296f17568e08db4949be34f43699665f6599de0c19d9df4757a2da0959e366dc",
+      "twoProcessPngSha256": "296f17568e08db4949be34f43699665f6599de0c19d9df4757a2da0959e366dc",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mat-emissive-factor",
+      "source": "mat-emissive-factor.gltf",
+      "sourceSha256": "caaf4c06044f939fdd319595148ac6d45e260832b1e01df0ef68452e655aa092",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mat-emissive-factor.png",
+      "goldenPngSha256": "5d5ea575938021f5aa0e40d45ebc5af53f46ecf80516fc6f1f813eeabbe5be85",
+      "twoProcessPngSha256": "5d5ea575938021f5aa0e40d45ebc5af53f46ecf80516fc6f1f813eeabbe5be85",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mat-emissive-strength",
+      "source": "mat-emissive-strength.gltf",
+      "sourceSha256": "54a287a3e077333da4ae1dc950d0ea86374c5453ce79314cefa1e892c62d6300",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mat-emissive-strength.png",
+      "goldenPngSha256": "3439eb27f635674e47f722cf94466337e22fdcee94dd6de19c61ce2fee8d9539",
+      "twoProcessPngSha256": "3439eb27f635674e47f722cf94466337e22fdcee94dd6de19c61ce2fee8d9539",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mat-vertex-color-pbr",
+      "source": "mat-vertex-color-pbr.gltf",
+      "sourceSha256": "12ef25a44f62737f758ce2a663d75f14e935a4e35b1a0c91190cb66a9531523a",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mat-vertex-color-pbr.png",
+      "goldenPngSha256": "a3ef1641c552ac821698377f6d578f325bc97d9788ef94b48af1b4abbcb26743",
+      "twoProcessPngSha256": "a3ef1641c552ac821698377f6d578f325bc97d9788ef94b48af1b4abbcb26743",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mat-normal-occlusion-scale",
+      "source": "mat-normal-occlusion-scale.gltf",
+      "sourceSha256": "e064468974424066ce80c3e603da46d163e9940e3a9c5180049cdc72a1eb8b44",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mat-normal-occlusion-scale.png",
+      "goldenPngSha256": "4235758a0c1c9ccff6ed93bd7f98bc81f24b078b663c0ff82d37d169aa1c774f",
+      "twoProcessPngSha256": "4235758a0c1c9ccff6ed93bd7f98bc81f24b078b663c0ff82d37d169aa1c774f",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mat-alpha-mask-cutoff",
+      "source": "mat-alpha-mask-cutoff.gltf",
+      "sourceSha256": "161f87c232dbb5774efca109c61dc1000f0b59b741bf8a99db59560064867aa5",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mat-alpha-mask-cutoff.png",
+      "goldenPngSha256": "36cbe51c7dbdc6fb20caec22b6cdc0775efdd54e578caf84f9bfee7434e95493",
+      "twoProcessPngSha256": "36cbe51c7dbdc6fb20caec22b6cdc0775efdd54e578caf84f9bfee7434e95493",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mat-unimplemented-extensions",
+      "source": "mat-unimplemented-extensions.gltf",
+      "sourceSha256": "d1bc631acd576ccf7694f530cf368840fb2befdf7e2b14a8a1f22d54a5385372",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mat-unimplemented-extensions.png",
+      "goldenPngSha256": "eb82dc69851aa502341383a77b64af2e0dec5e340354701dc98af2975bb978ac",
+      "twoProcessPngSha256": "eb82dc69851aa502341383a77b64af2e0dec5e340354701dc98af2975bb978ac",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mat-material-variants",
+      "source": "mat-material-variants.gltf",
+      "sourceSha256": "138dff69bd104d71f6a22154898f0d73a66a39cd04bbbd7bc6ee8cc9693eecf1",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mat-material-variants.png",
+      "goldenPngSha256": "eb82dc69851aa502341383a77b64af2e0dec5e340354701dc98af2975bb978ac",
+      "twoProcessPngSha256": "eb82dc69851aa502341383a77b64af2e0dec5e340354701dc98af2975bb978ac",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mat-unlit",
+      "source": "mat-unlit.gltf",
+      "sourceSha256": "9ff62f69098e2807c5624d1aa312dfcc1926d44beec6feefab6706a594a16387",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mat-unlit.png",
+      "goldenPngSha256": "c3f5f2faceb609b335e43450fd211a9a401431ef5d2faf10948d1e12be88739d",
+      "twoProcessPngSha256": "c3f5f2faceb609b335e43450fd211a9a401431ef5d2faf10948d1e12be88739d",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mat-unlit-vertex-color-alpha",
+      "source": "mat-unlit-vertex-color-alpha.gltf",
+      "sourceSha256": "d2e86e0ecb089bb17cb4e4c552e5a47833e8fae7c928ddf5eefa05d09a503634",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mat-unlit-vertex-color-alpha.png",
+      "goldenPngSha256": "a14d867f3d5aa907526dd4d1e5d8dd09ec90f9935d49fea825225a13d3aa7afb",
+      "twoProcessPngSha256": "a14d867f3d5aa907526dd4d1e5d8dd09ec90f9935d49fea825225a13d3aa7afb",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mat-specular-glossiness",
+      "source": "mat-specular-glossiness.gltf",
+      "sourceSha256": "3837a028b46e04bb60319673e8bdf72e2c5ae0000f64c8ce01f83feeadc8785c",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mat-specular-glossiness.png",
+      "goldenPngSha256": "53202c8ec8d1d16bc83de690bd8406858a194a9580531f85244a83cb9b09884c",
+      "twoProcessPngSha256": "53202c8ec8d1d16bc83de690bd8406858a194a9580531f85244a83cb9b09884c",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "mat-authored-tangent",
+      "source": "mat-authored-tangent.gltf",
+      "sourceSha256": "a9b4ca6b0926f7425092adb9da49b3c4056bf5e91002116869481d475ffb58aa",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/mat-authored-tangent.png",
+      "goldenPngSha256": "b2e7ae2d9e77937fa0deba9b36b3f961c70f65eb19158e6a04203bab69c7caf2",
+      "twoProcessPngSha256": "b2e7ae2d9e77937fa0deba9b36b3f961c70f65eb19158e6a04203bab69c7caf2",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "tex-reference-checkerboard",
+      "source": "tex-reference-checkerboard.gltf",
+      "sourceSha256": "9f3a6b57fd31fab4ac0f52c7f9ddcb238e34f8576ab7433e41772dfb864dccf4",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/tex-reference-checkerboard.png",
+      "goldenPngSha256": "936c2ad35cde82872462f5a6723dfab2f9dce6e76971ed674c8f8b65e0609850",
+      "twoProcessPngSha256": "936c2ad35cde82872462f5a6723dfab2f9dce6e76971ed674c8f8b65e0609850",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 45644,
+      "nonClearBoundingBox": [
+        183,
+        91,
+        389,
+        369
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "uv1-material",
+      "source": "uv1-material.gltf",
+      "sourceSha256": "7616f15a5674a8923e143f7eb7c1f163f7f132eb35caf87c1fb1d6c7732a7019",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/uv1-material.png",
+      "goldenPngSha256": "f088ec7ad3f6b6c7ba401b822309ac6170069b2a1f77e3663892105192e45d25",
+      "twoProcessPngSha256": "f088ec7ad3f6b6c7ba401b822309ac6170069b2a1f77e3663892105192e45d25",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 45644,
+      "nonClearBoundingBox": [
+        183,
+        91,
+        389,
+        369
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "uv-out-of-range-clamp",
+      "source": "uv-out-of-range-clamp.gltf",
+      "sourceSha256": "ac0e64a989f878c1f8bc8260d0fd32133aa7cc8d7b7488f578e0f8f083cf0058",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/uv-out-of-range-clamp.png",
+      "goldenPngSha256": "98ad6a3410c8ad2b94225b8fdee80fcb076360bc463da846c4abdf35d19a6eed",
+      "twoProcessPngSha256": "98ad6a3410c8ad2b94225b8fdee80fcb076360bc463da846c4abdf35d19a6eed",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 45644,
+      "nonClearBoundingBox": [
+        183,
+        91,
+        389,
+        369
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "uv-out-of-range-wrap",
+      "source": "uv-out-of-range-wrap.gltf",
+      "sourceSha256": "fb86ca5d2d9402e1c2da168bc4eb6493ce157d08b54b33f5ea8e90f4323a6eed",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/uv-out-of-range-wrap.png",
+      "goldenPngSha256": "a2ab6be1cc82fefe8dad9aa1e55c9c33d3d4ec55084874f386f4d783bd5f3c59",
+      "twoProcessPngSha256": "a2ab6be1cc82fefe8dad9aa1e55c9c33d3d4ec55084874f386f4d783bd5f3c59",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 45644,
+      "nonClearBoundingBox": [
+        183,
+        91,
+        389,
+        369
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "uv-out-of-range-mirror",
+      "source": "uv-out-of-range-mirror.gltf",
+      "sourceSha256": "f7a05ac43f576b0d396fbcaad1fc56bf5c741cb8260eb699ed470ef5b87cd818",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/uv-out-of-range-mirror.png",
+      "goldenPngSha256": "b0bb11f3c399b02f8b976712aff5edc8310dc29d75a668f9346a59f4cb08f68e",
+      "twoProcessPngSha256": "b0bb11f3c399b02f8b976712aff5edc8310dc29d75a668f9346a59f4cb08f68e",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 45644,
+      "nonClearBoundingBox": [
+        183,
+        91,
+        389,
+        369
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "sampler-trilinear",
+      "source": "sampler-trilinear.gltf",
+      "sourceSha256": "8d0d427c66b9d3b7b947bae09e5af3ed10e9c2ccfedcb50e7f5ed6f57a88bf4b",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/sampler-trilinear.png",
+      "goldenPngSha256": "eacd323f8a85bb68376175ab5dac4f1fc6075f66e6b6a37fd2943b7af0f5dd46",
+      "twoProcessPngSha256": "eacd323f8a85bb68376175ab5dac4f1fc6075f66e6b6a37fd2943b7af0f5dd46",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 45644,
+      "nonClearBoundingBox": [
+        183,
+        91,
+        389,
+        369
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "tex-texture-transform",
+      "source": "tex-texture-transform.gltf",
+      "sourceSha256": "9b32672d1dc0b3005456aec510b89c27630185827cc477db8a8b39ae119392a9",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/tex-texture-transform.png",
+      "goldenPngSha256": "feb876b9377fdbbb14e57e25c59826698a328fe1d556268a0bb7efe3fd7da7a0",
+      "twoProcessPngSha256": "feb876b9377fdbbb14e57e25c59826698a328fe1d556268a0bb7efe3fd7da7a0",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 45644,
+      "nonClearBoundingBox": [
+        183,
+        91,
+        389,
+        369
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "texture-transform-per-map",
+      "source": "texture-transform-per-map.gltf",
+      "sourceSha256": "1ac4dbdff2e507251ad80ae5714de74b733871e400761f637188d822cafeca90",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/texture-transform-per-map.png",
+      "goldenPngSha256": "73fd84bd2317ba02480814fe749ad2f179c9bb0996f4b9e3e45e2ea9e586db4b",
+      "twoProcessPngSha256": "73fd84bd2317ba02480814fe749ad2f179c9bb0996f4b9e3e45e2ea9e586db4b",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 45644,
+      "nonClearBoundingBox": [
+        183,
+        91,
+        389,
+        369
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "texture-shared-two-samplers",
+      "source": "texture-shared-two-samplers.gltf",
+      "sourceSha256": "7ec73ae0e93455e3c058d1647acc4383dd9ce1e6b1c6354711fec5816149d7c2",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/texture-shared-two-samplers.png",
+      "goldenPngSha256": "945f40c758580f84d84814d256be4a5553349cbdb58fab7fb6f9eebdb3ff3efa",
+      "twoProcessPngSha256": "945f40c758580f84d84814d256be4a5553349cbdb58fab7fb6f9eebdb3ff3efa",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 45644,
+      "nonClearBoundingBox": [
+        183,
+        91,
+        389,
+        369
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "tex-dual-texture-stride",
+      "source": "tex-dual-texture-stride.gltf",
+      "sourceSha256": "a2739e7bace132ee7334a24fe67bcf5ee18b797ee9aa2617e62fea7954b2d919",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/tex-dual-texture-stride.png",
+      "goldenPngSha256": "70110eed284486d9bce27d7935480a70a43d1885c54dd13e837b19b24b679d15",
+      "twoProcessPngSha256": "70110eed284486d9bce27d7935480a70a43d1885c54dd13e837b19b24b679d15",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 45644,
+      "nonClearBoundingBox": [
+        183,
+        91,
+        389,
+        369
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "skin-armature-ancestor",
+      "source": "skin-armature-ancestor.gltf",
+      "sourceSha256": "76897639f2681df7cb7251b84bdfb02987ec95d0c52be9adef009bbbf39ccd7e",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/skin-armature-ancestor.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "skin-mesh-node-transform",
+      "source": "skin-mesh-node-transform.gltf",
+      "sourceSha256": "58886ce1cfd939a3aa91181dcaf812b2dc11e233f5751b54a9c9a953ddf49984",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/skin-mesh-node-transform.png",
+      "goldenPngSha256": "7e354ae8b7cd15d9e1e5ee3b51cb533f7e69c054c25a6ca672e14be81f61cd70",
+      "twoProcessPngSha256": "7e354ae8b7cd15d9e1e5ee3b51cb533f7e69c054c25a6ca672e14be81f61cd70",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23728,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "skin-plus-static-mesh",
+      "source": "skin-plus-static-mesh.gltf",
+      "sourceSha256": "082e14b492f70d6f6d8d94357b8505ce6714907e040cbc829666aa3ec7cfd02f",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/skin-plus-static-mesh.png",
+      "goldenPngSha256": "0253d82c76e0b8a915089dd1739ce2af894591a32a3e1898e0adba5ecac07880",
+      "twoProcessPngSha256": "0253d82c76e0b8a915089dd1739ce2af894591a32a3e1898e0adba5ecac07880",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 262,
+      "nonClearBoundingBox": [
+        91,
+        204,
+        365,
+        330
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "skin-unlit",
+      "source": "skin-unlit.gltf",
+      "sourceSha256": "6359f81c461540abba4df56edad0f402dd8955ea54ea43d74ce986fc6b079151",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/skin-unlit.png",
+      "goldenPngSha256": "3fbf9e5036a4c2b112ce9c1f213cfcdfbe88fb02c9319cce153f11cc5f61b4c9",
+      "twoProcessPngSha256": "3fbf9e5036a4c2b112ce9c1f213cfcdfbe88fb02c9319cce153f11cc5f61b4c9",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "skin-vertex-color",
+      "source": "skin-vertex-color.gltf",
+      "sourceSha256": "ff20b76a3f6b49acc5edae79c4c3f90c35bbc9ebce90f4f552163303faf55fb0",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/skin-vertex-color.png",
+      "goldenPngSha256": "fa810d2ef2889576e6772264fb7b48ae88d4fcf533274a167a56be56fb3394ae",
+      "twoProcessPngSha256": "fa810d2ef2889576e6772264fb7b48ae88d4fcf533274a167a56be56fb3394ae",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "skin-mesh-node-parent-transform",
+      "source": "skin-mesh-node-parent-transform.gltf",
+      "sourceSha256": "66cc9f42909be1b9e3066a4234276a61df04ef52c791f7a9f1b4f91aad6b2e16",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/skin-mesh-node-parent-transform.png",
+      "goldenPngSha256": "939f0333e9de5b28ab1ab24c207aca35bfa0b597caaec8dd530c35cfc8c61ba7",
+      "twoProcessPngSha256": "939f0333e9de5b28ab1ab24c207aca35bfa0b597caaec8dd530c35cfc8c61ba7",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "skin-skeleton-hint",
+      "source": "skin-skeleton-hint.gltf",
+      "sourceSha256": "1d9f32ca5abd58c03b6a48568b6149ec24cbc0a333e2da80e4968e7e0792ad49",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/skin-skeleton-hint.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "skin-unnormalized",
+      "source": "skin-unnormalized.gltf",
+      "sourceSha256": "ec34496eb8a6a4c5efb27b19bc9a743136d1f56d64f7c40cc1d15c74d87dd7f5",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/skin-unnormalized.png",
+      "goldenPngSha256": "259f55f694ed5adac92ffb18c608aa8772a1d9c851eb850113c347a4a8bac54a",
+      "twoProcessPngSha256": "259f55f694ed5adac92ffb18c608aa8772a1d9c851eb850113c347a4a8bac54a",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 0,
+      "nonClearBoundingBox": null,
+      "emptyForegroundAllowed": true,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "skin-73-joints",
+      "source": "skin-73-joints.gltf",
+      "sourceSha256": "f513bcee3697cfc5fefd300d0c8e4eef245b28a54943dd25bbf6a89824de463e",
+      "disposition": "reject",
+      "viewerArguments": [],
+      "returnCode": 1,
+      "owningTask": "GLTF-261",
+      "errorContains": "has 73 joints, but the GPU bone palette holds 72",
+      "terminalError": "cna-gltf-viewer: Skin 'BigRig' has 73 joints, but the GPU bone palette holds 72. Truncating would leave every vertex bound to a joint past the limit collapsed toward the origin, so the skin is refused instead (plan_gltf.md GLTF-261).",
+      "twoProcessDispositionIdentical": true
+    },
+    {
+      "id": "skin-eight-influences",
+      "source": "skin-eight-influences.gltf",
+      "sourceSha256": "5d3c69dc4bcf48063e77d7ed57c609b0619df1ce900b910602016cc19c6c92bb",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/skin-eight-influences.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "skin-two-weighted",
+      "source": "skin-two-weighted.gltf",
+      "sourceSha256": "c935ba39c5b58da8aadf6822cd69e7cf3eda7ca7053127a03c7841db9a9dc06e",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/skin-two-weighted.png",
+      "goldenPngSha256": "eabcb7817e5f0f5ca69fcb0d53906db8f6e98b9c9ead5b6ce947ccd087ba61a7",
+      "twoProcessPngSha256": "eabcb7817e5f0f5ca69fcb0d53906db8f6e98b9c9ead5b6ce947ccd087ba61a7",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 459,
+      "nonClearBoundingBox": [
+        246,
+        230,
+        273,
+        270
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "skin-four-weighted",
+      "source": "skin-four-weighted.gltf",
+      "sourceSha256": "dba377658ae66cc91a7fa9a96ccc3cd4a911f4ceb0dae513ae2e2e8f5050cb65",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/skin-four-weighted.png",
+      "goldenPngSha256": "d2029e77635da05881203f95feea6f5281b88dfd8d02a87638a326773dc8a1a2",
+      "twoProcessPngSha256": "d2029e77635da05881203f95feea6f5281b88dfd8d02a87638a326773dc8a1a2",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 6,
+      "nonClearBoundingBox": [
+        225,
+        252,
+        227,
+        256
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "skin-no-ibm",
+      "source": "skin-no-ibm.gltf",
+      "sourceSha256": "9c5d287e06596f4aa2899d5638bc4790549b5aec27ccb01467400e35cf149544",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/skin-no-ibm.png",
+      "goldenPngSha256": "85054ac1c7d76b5c7f3649b445386737963cfd066b1b91c409937a1822fd349a",
+      "twoProcessPngSha256": "85054ac1c7d76b5c7f3649b445386737963cfd066b1b91c409937a1822fd349a",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "skin-nonuniform-joint-scale",
+      "source": "skin-nonuniform-joint-scale.gltf",
+      "sourceSha256": "1657b21abcc76e2d9663c7e9d0ffc2ad47f529d5ff82269c9ecce9fa2693fb91",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/skin-nonuniform-joint-scale.png",
+      "goldenPngSha256": "aa56ca2ca892d051df4c3cddf6079d50b425a023695781143d86b9ef69c4a0a3",
+      "twoProcessPngSha256": "aa56ca2ca892d051df4c3cddf6079d50b425a023695781143d86b9ef69c4a0a3",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 11879,
+      "nonClearBoundingBox": [
+        219,
+        64,
+        321,
+        344
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "skin-parented-joints",
+      "source": "skin-parented-joints.gltf",
+      "sourceSha256": "8f0dee48fa9261262a9e84fd0ec74abbcd361d38e9550c38c5b8d246ad73bcf2",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/skin-parented-joints.png",
+      "goldenPngSha256": "95e0aa8ead6cd4d89666f46b135e63a13cfbf5905c086d6cf9b4fe8511c563ff",
+      "twoProcessPngSha256": "95e0aa8ead6cd4d89666f46b135e63a13cfbf5905c086d6cf9b4fe8511c563ff",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 14395,
+      "nonClearBoundingBox": [
+        155,
+        169,
+        427,
+        341
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "skin-ushort-joint-indices",
+      "source": "skin-ushort-joint-indices.gltf",
+      "sourceSha256": "7d6b69911947f00d5dc13db727eec296f808491cee7d66dc3620df7605599cdd",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/skin-ushort-joint-indices.png",
+      "goldenPngSha256": "c5c0936796e6e2811de36364367b2862dc774de45e47d683d6937ac34d3bc12f",
+      "twoProcessPngSha256": "c5c0936796e6e2811de36364367b2862dc774de45e47d683d6937ac34d3bc12f",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 311,
+      "nonClearBoundingBox": [
+        169,
+        212,
+        192,
+        247
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "morph-position-only",
+      "source": "morph-position-only.gltf",
+      "sourceSha256": "066600a2d26942242bc809208c61a611e8c8576b0a9fb020ecad91d1cf55b124",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/morph-position-only.png",
+      "goldenPngSha256": "2bcb1b413d362b28d262c2cfe33e4ad8673e51b998cae45795407d25c6929592",
+      "twoProcessPngSha256": "2bcb1b413d362b28d262c2cfe33e4ad8673e51b998cae45795407d25c6929592",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 33604,
+      "nonClearBoundingBox": [
+        63,
+        82,
+        382,
+        295
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "morph-position-normal",
+      "source": "morph-position-normal.gltf",
+      "sourceSha256": "b25fc5dcde520a50d21aefd845f565d7a8400914d5e6dca2b8e57c917202bf91",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/morph-position-normal.png",
+      "goldenPngSha256": "fcc0c4f2daf60dd05708b9a0ec7431899a5b3504ab04c752f29d0bfa25c7d356",
+      "twoProcessPngSha256": "fcc0c4f2daf60dd05708b9a0ec7431899a5b3504ab04c752f29d0bfa25c7d356",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "morph-position-normal-tangent",
+      "source": "morph-position-normal-tangent.gltf",
+      "sourceSha256": "3b60be6967a17cc2af6228178268d2c264ac2b4981f5ed69fea3bd49875d001e",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/morph-position-normal-tangent.png",
+      "goldenPngSha256": "2bb7822808f99a3fd9d610f7f34a6bf426a4a86d2ddf6795ce1dc1f738f193e9",
+      "twoProcessPngSha256": "2bb7822808f99a3fd9d610f7f34a6bf426a4a86d2ddf6795ce1dc1f738f193e9",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "morph-two-targets",
+      "source": "morph-two-targets.gltf",
+      "sourceSha256": "89e1683db68f72fb6c96acb5a92bcdf54c436b52e4de7599c66159436348c4f9",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/morph-two-targets.png",
+      "goldenPngSha256": "fd68384108a7dc9ce33aa45801a862e3e6f2e75cf04828b678bfc4166c2714d2",
+      "twoProcessPngSha256": "fd68384108a7dc9ce33aa45801a862e3e6f2e75cf04828b678bfc4166c2714d2",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "morph-eight-targets",
+      "source": "morph-eight-targets.gltf",
+      "sourceSha256": "81eb47e831f585d2f3a4818d076088982d0f7abc30a0d43d77a7ca068fd750e9",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/morph-eight-targets.png",
+      "goldenPngSha256": "75f62ab2c4054707013858c36ed586052558ee459ead24ba8354b912efe2933c",
+      "twoProcessPngSha256": "75f62ab2c4054707013858c36ed586052558ee459ead24ba8354b912efe2933c",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "morph-zero-weights",
+      "source": "morph-zero-weights.gltf",
+      "sourceSha256": "120bf544d38ff96d77a2852afac526596c8a352828442793c77f8496a823e3a3",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/morph-zero-weights.png",
+      "goldenPngSha256": "73d4c47ee4b49de1c8a018d124ea22ac1e0e2635453ee2f222b140f6e0bcb377",
+      "twoProcessPngSha256": "73d4c47ee4b49de1c8a018d124ea22ac1e0e2635453ee2f222b140f6e0bcb377",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "morph-overdriven-weight",
+      "source": "morph-overdriven-weight.gltf",
+      "sourceSha256": "89c42e76f0c0446f52516fb7a13a36c15ba850628eb3338e81acf7bd71f7587b",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/morph-overdriven-weight.png",
+      "goldenPngSha256": "34ca8309819e6d782e9b623c1a2e4f930afd8d634d04a640a716de4e913ac405",
+      "twoProcessPngSha256": "34ca8309819e6d782e9b623c1a2e4f930afd8d634d04a640a716de4e913ac405",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "morph-normal-only-target",
+      "source": "morph-normal-only-target.gltf",
+      "sourceSha256": "d4b1ff7497dc83734753a102db2dbbdb4289210228f4468c197c44b99c7255fd",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/morph-normal-only-target.png",
+      "goldenPngSha256": "33044468ea8121bd6559e5874b355686c72a7b0e38d797385e001172df688721",
+      "twoProcessPngSha256": "33044468ea8121bd6559e5874b355686c72a7b0e38d797385e001172df688721",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "morph-mesh-weights-only",
+      "source": "morph-mesh-weights-only.gltf",
+      "sourceSha256": "1f1c82db40dc932b3b4e13823502c059abd3f6c8228a81508e09f8572df737f0",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/morph-mesh-weights-only.png",
+      "goldenPngSha256": "63ace9e5e9d6ceb8bed46ef2048856a2682bdfb4452044f8471a397de15631e0",
+      "twoProcessPngSha256": "63ace9e5e9d6ceb8bed46ef2048856a2682bdfb4452044f8471a397de15631e0",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "morph-node-weights-zero",
+      "source": "morph-node-weights-zero.gltf",
+      "sourceSha256": "a01315a7511c5fd8c0c4c8c9113be1c901c29ef0ed1eeb0726e0d0a23ffd6f1c",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/morph-node-weights-zero.png",
+      "goldenPngSha256": "73d4c47ee4b49de1c8a018d124ea22ac1e0e2635453ee2f222b140f6e0bcb377",
+      "twoProcessPngSha256": "73d4c47ee4b49de1c8a018d124ea22ac1e0e2635453ee2f222b140f6e0bcb377",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "morph-asymmetric-deltas",
+      "source": "morph-asymmetric-deltas.gltf",
+      "sourceSha256": "fb5cf4777aa4ba907122ebf3c7beb3d30a63cd941ba82d6ce8f495fccf77f3aa",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/morph-asymmetric-deltas.png",
+      "goldenPngSha256": "f11ebbc130ae8fd71d7edb8b838d8051069692add11ca3a5a3485e8cb9b482f8",
+      "twoProcessPngSha256": "f11ebbc130ae8fd71d7edb8b838d8051069692add11ca3a5a3485e8cb9b482f8",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 29189,
+      "nonClearBoundingBox": [
+        62,
+        102,
+        379,
+        292
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "morph-no-base-normals",
+      "source": "morph-no-base-normals.gltf",
+      "sourceSha256": "2e82140d4f17124ca0591c620c745ec68815a2928dd718b1a61c804b9c7328e1",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/morph-no-base-normals.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "anim-rigid-node",
+      "source": "anim-rigid-node.gltf",
+      "sourceSha256": "df49c3cebd0b54771bffc2f936cf2019b11eb98e34efd93eab149711d9c5879e",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/anim-rigid-node.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "anim-nonzero-start",
+      "source": "anim-nonzero-start.gltf",
+      "sourceSha256": "1dbd5a735917766262097ca02ce377499bf1be6ad3c1e24b34aa3c1c78069db3",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/anim-nonzero-start.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "anim-translation-scale",
+      "source": "anim-translation-scale.gltf",
+      "sourceSha256": "b0c653c99962bb9029af53831d4b9e85cd5c4a315837cf09007bcedc673f2def",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/anim-translation-scale.png",
+      "goldenPngSha256": "458b46f51bc0daf98a1cea1b8cdd5df315caa2ee948a1137091ac86131709f0d",
+      "twoProcessPngSha256": "458b46f51bc0daf98a1cea1b8cdd5df315caa2ee948a1137091ac86131709f0d",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 22902,
+      "nonClearBoundingBox": [
+        142,
+        94,
+        320,
+        360
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "anim-step",
+      "source": "anim-step.gltf",
+      "sourceSha256": "947f9cffeef17ff86249ead0490d1bacde6bfda67f85359ba1d6d6b7f66c146c",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/anim-step.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "anim-cubicspline",
+      "source": "anim-cubicspline.gltf",
+      "sourceSha256": "1bf97a081cf8a27ea7e40d73cc75cb8bf2705e9744c92c0d0f9f3e5fc5df5232",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/anim-cubicspline.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "anim-two-clips",
+      "source": "anim-two-clips.gltf",
+      "sourceSha256": "80fd759796c07cbe0f76418ec274d80afdef9161238aa08283acf919c0de1b4c",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/anim-two-clips.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "anim-repeated-time",
+      "source": "anim-repeated-time.gltf",
+      "sourceSha256": "ad01ef4bb67840fdfdd14c2c0be68e740b40da47b113f8f4ef66c73393f5f999",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/anim-repeated-time.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "anim-parent-child",
+      "source": "anim-parent-child.gltf",
+      "sourceSha256": "4734731fc6a5e411e4370459e20c52221bd86525de4117285bfdf23e116b771f",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/anim-parent-child.png",
+      "goldenPngSha256": "0df097999f5100188046a3fd50ccdf9691a6b875604d0614573c241ec1510dfd",
+      "twoProcessPngSha256": "0df097999f5100188046a3fd50ccdf9691a6b875604d0614573c241ec1510dfd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "anim-weights-path",
+      "source": "anim-weights-path.gltf",
+      "sourceSha256": "f415a52569c23ba864e20fdf6c146835ca2a2f9139a6dd3b75afbdb011aa9192",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/anim-weights-path.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "anim-out-of-scene-target",
+      "source": "anim-out-of-scene-target.gltf",
+      "sourceSha256": "550899fb308b7a4bc27e4a63db937b322dd578ad2558c441f2b4226b407e7e0a",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/anim-out-of-scene-target.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "morph-node-weights-override",
+      "source": "morph-node-weights-override.gltf",
+      "sourceSha256": "200a47155018159400717189caa4088538dcaa3d045438b7d3bcd501baeebad3",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/morph-node-weights-override.png",
+      "goldenPngSha256": "4b63f603a2bd045149adef21602644ba6a18b25a91f0efc3d8f6d8e21db47a39",
+      "twoProcessPngSha256": "4b63f603a2bd045149adef21602644ba6a18b25a91f0efc3d8f6d8e21db47a39",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 266,
+      "nonClearBoundingBox": [
+        323,
+        198,
+        344,
+        226
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "camera-perspective",
+      "source": "camera-perspective.gltf",
+      "sourceSha256": "1861c5c161e77bfbefd21ea87bc2f3b4fc86fa04c6b9919c86550c39157a41ef",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/camera-perspective.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "camera-perspective-infinite",
+      "source": "camera-perspective-infinite.gltf",
+      "sourceSha256": "35d2aa01eab54a7ce88413ddf0facfa6f8fe3acd6b94dd5589de07a5dae22269",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/camera-perspective-infinite.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "camera-perspective-no-aspect",
+      "source": "camera-perspective-no-aspect.gltf",
+      "sourceSha256": "9b5d57ac63699ce44bf15e595d70bf7b0a9300a79bcfe531ba1b135912080023",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/camera-perspective-no-aspect.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "camera-orthographic",
+      "source": "camera-orthographic.gltf",
+      "sourceSha256": "3efdc51fa39036eb68047224b864ec34075e9b5332429278620dbd0f3675160f",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/camera-orthographic.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "camera-animated-node",
+      "source": "camera-animated-node.gltf",
+      "sourceSha256": "796ced556da24dbc7be401d0c7f8f1e036a13c35b2b699a8e24ceb17dac85451",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/camera-animated-node.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "lights-kinds-and-reach",
+      "source": "lights-kinds-and-reach.gltf",
+      "sourceSha256": "4359bd6f1bbf0b327323fbc16d5f1083b7408ea1344264f6e4d30fb0e5e1c1c4",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/lights-kinds-and-reach.png",
+      "goldenPngSha256": "d9863e78efcb46371fa1db8c777c67e0d83d684d89249cdcb026156d9bc4423e",
+      "twoProcessPngSha256": "d9863e78efcb46371fa1db8c777c67e0d83d684d89249cdcb026156d9bc4423e",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "lights-over-budget",
+      "source": "lights-over-budget.gltf",
+      "sourceSha256": "198252008c545f7b5c5fd47973593372fa60c7e030be0dbdb98528bc266bbda3",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/lights-over-budget.png",
+      "goldenPngSha256": "e910c6222311858fa39c68d032888b1ab160021cb2784635b05b591107a3d1d2",
+      "twoProcessPngSha256": "e910c6222311858fa39c68d032888b1ab160021cb2784635b05b591107a3d1d2",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "scene-default-selection",
+      "source": "scene-default-selection.gltf",
+      "sourceSha256": "07edcf818d08c84f51c94c2c53960ad07016753c9a9500bd285c88f8f1c1f943",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/scene-default-selection.png",
+      "goldenPngSha256": "1365b30000826dfa19112948f9b7e49d62449a59067dd1f47e4ec5ae922b21c2",
+      "twoProcessPngSha256": "1365b30000826dfa19112948f9b7e49d62449a59067dd1f47e4ec5ae922b21c2",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "scene-two-roots",
+      "source": "scene-two-roots.gltf",
+      "sourceSha256": "abf2bc2411a47a13f6d3076722fe4655065695a09b36a866af30de0dbaec660e",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/scene-two-roots.png",
+      "goldenPngSha256": "ab590b561c41a3678a925340c75231b787d369bfb85a0f2cd767ef716e5d579f",
+      "twoProcessPngSha256": "ab590b561c41a3678a925340c75231b787d369bfb85a0f2cd767ef716e5d579f",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 1372,
+      "nonClearBoundingBox": [
+        170,
+        124,
+        433,
+        366
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "scene-no-scenes",
+      "source": "scene-no-scenes.gltf",
+      "sourceSha256": "487e17a9159c160e662ce700489ff0d37ae86298b1c28837012a95b087c4aa58",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/scene-no-scenes.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "draco-triangle",
+      "source": "draco-triangle.gltf",
+      "sourceSha256": "1e67b38d85251bdcd0ef211b92990a4879cdc576fe905114d30ce6923f86f329",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/draco-triangle.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "draco-vs-uncompressed-pair",
+      "source": "draco-vs-uncompressed-pair.gltf",
+      "sourceSha256": "98664877458ee59a73df5ad5282dd80d4c8c70faebfbb3a61dfdebb08fe22e61",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/draco-vs-uncompressed-pair.png",
+      "goldenPngSha256": "0ff5aa58636689ffd720e7af1cb626c66fdfe91fee94a1b1142e01b0c7345910",
+      "twoProcessPngSha256": "0ff5aa58636689ffd720e7af1cb626c66fdfe91fee94a1b1142e01b0c7345910",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "draco-skinned",
+      "source": "draco-skinned.gltf",
+      "sourceSha256": "e0ba1421c0e2f6b018f6542102f99c4b484ec27a23be3c3165bfba830c65785f",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/draco-skinned.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "draco-morph",
+      "source": "draco-morph.gltf",
+      "sourceSha256": "09c88767e2bfa82f2b70bd123a2ae6075d5ceae74ea152d52bf4867114b30258",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/draco-morph.png",
+      "goldenPngSha256": "2a9827bc6eb7b8ed0240b1e32c531bb38ba4056ce8b8c86af32794f9e8419ddd",
+      "twoProcessPngSha256": "2a9827bc6eb7b8ed0240b1e32c531bb38ba4056ce8b8c86af32794f9e8419ddd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 21162,
+      "nonClearBoundingBox": [
+        112,
+        127,
+        412,
+        373
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "bad-accessor-out-of-bounds",
+      "source": "bad-accessor-out-of-bounds.gltf",
+      "sourceSha256": "f7fef746ceec3f5404a00dc6efd95ae964b88249ba8a9e73f1fe8ece4a6724fc",
+      "disposition": "reject",
+      "viewerArguments": [],
+      "returnCode": 1,
+      "owningTask": "GLTF-021",
+      "errorContains": "reads 36 bytes from a bufferView of 24 bytes",
+      "terminalError": "cna-gltf-viewer: Accessor '/rv/data/development/github.com/openeggbert/cnagltf/tests/assets/gltf/bad-accessor-out-of-bounds.gltf accessor 0 (base)' reads 36 bytes from a bufferView of 24 bytes.",
+      "twoProcessDispositionIdentical": true
+    },
+    {
+      "id": "bad-accessor-count-overflow",
+      "source": "bad-accessor-count-overflow.gltf",
+      "sourceSha256": "28793de9906c5480156d2401025f88da53c3ef3ce2146fe03934f28aedbdbc4a",
+      "disposition": "reject",
+      "viewerArguments": [],
+      "returnCode": 1,
+      "owningTask": "GLTF-039",
+      "errorContains": "declares a byte span that overflows",
+      "terminalError": "cna-gltf-viewer: Accessor '/rv/data/development/github.com/openeggbert/cnagltf/tests/assets/gltf/bad-accessor-count-overflow.gltf accessor 0 (base)' declares a byte span that overflows: count 4611686018427387905 at stride 12.",
+      "twoProcessDispositionIdentical": true
+    },
+    {
+      "id": "bad-index-out-of-range",
+      "source": "bad-index-out-of-range.gltf",
+      "sourceSha256": "0c256889e138a0e28ef3be7ae76bb875fd9c71c12eb96c77d2071a93ef2ece05",
+      "disposition": "reject",
+      "viewerArguments": [],
+      "returnCode": 1,
+      "owningTask": "GLTF-068",
+      "errorContains": "cgltf_validate code 1",
+      "terminalError": "cna-gltf-viewer: '/rv/data/development/github.com/openeggbert/cnagltf/tests/assets/gltf/bad-index-out-of-range.gltf' fails glTF structural validation: a buffer, bufferView or accessor range extends past the data backing it (cgltf_validate code 1). Decoding it could read outside the file's own buffers, so it is rejected rather than imported.",
+      "twoProcessDispositionIdentical": true
+    },
+    {
+      "id": "bad-matrix-and-trs",
+      "source": "bad-matrix-and-trs.gltf",
+      "sourceSha256": "641213b2217d6479818304339569ad357c709eb91a4999ed30b75c5f555ba23c",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/bad-matrix-and-trs.png",
+      "goldenPngSha256": "f76a5710f3abd24041ebb68c19511130f92353f5e9393585acf0ffdc681e48c2",
+      "twoProcessPngSha256": "f76a5710f3abd24041ebb68c19511130f92353f5e9393585acf0ffdc681e48c2",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "accessor-count-mismatch",
+      "source": "accessor-count-mismatch.gltf",
+      "sourceSha256": "962b43bad2d86c96bbaf424f2f563b0b96ace7e736ee51e0494022f0d769115d",
+      "disposition": "reject",
+      "viewerArguments": [],
+      "returnCode": 1,
+      "owningTask": "GLTF-060",
+      "errorContains": "cgltf_validate code 4",
+      "terminalError": "cna-gltf-viewer: '/rv/data/development/github.com/openeggbert/cnagltf/tests/assets/gltf/accessor-count-mismatch.gltf' fails glTF structural validation: a structural constraint of the glTF object model is violated (cgltf_validate code 4). Decoding it could read outside the file's own buffers, so it is rejected rather than imported.",
+      "twoProcessDispositionIdentical": true
+    },
+    {
+      "id": "skin-joint-index-out-of-range",
+      "source": "skin-joint-index-out-of-range.gltf",
+      "sourceSha256": "bcb99846100bade9647b318d57cb50a2d8c0ba2f68b6aa77148302a1869ec2c2",
+      "disposition": "reject",
+      "viewerArguments": [],
+      "returnCode": 1,
+      "owningTask": "GLTF-254",
+      "errorContains": "weighted 0.400000 to joint 5",
+      "terminalError": "cna-gltf-viewer: Primitive 'StrayJointTri': vertex 1 is weighted 0.400000 to joint 5, but the skin declares only 2 joints. Binding it to the root instead would drag the vertex there, so the file is refused (plan_gltf.md GLTF-254).",
+      "twoProcessDispositionIdentical": true
+    },
+    {
+      "id": "skin-joint-index-padding",
+      "source": "skin-joint-index-padding.gltf",
+      "sourceSha256": "428141822f2fb8713eb5fcdd3cc9314fc5877f4915e5ee4f2182235fd61fd942",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/skin-joint-index-padding.png",
+      "goldenPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "bad-animation-input-order",
+      "source": "bad-animation-input-order.gltf",
+      "sourceSha256": "862ae7ff6687ca9af32a6f4c7808aad32261f18c20865ff91991251c8481928c",
+      "disposition": "reject",
+      "viewerArguments": [],
+      "returnCode": 1,
+      "owningTask": "GLTF-313",
+      "errorContains": "is not ascending",
+      "terminalError": "cna-gltf-viewer: Animation sampler input of clip 'Backwards' channel 0 (translation) is not ascending: sample 2 is at t=1.000000, before sample 1 at t=2.000000. glTF requires sampler input to be strictly increasing.",
+      "twoProcessDispositionIdentical": true
+    }
+  ]
+}

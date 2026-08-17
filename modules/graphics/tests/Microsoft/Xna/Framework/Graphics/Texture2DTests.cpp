@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+
+#include "CNA/RendererTestGate.hpp"
+
+// Lets CNA_RENDERER_IS name identities bare, matching the compile-time guards it replaced.
+using namespace CNA::Testing::Renderers;
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -25,6 +30,7 @@
 #include "System/IO/MemoryStream.hpp"
 #include "System/Environment.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
@@ -47,7 +53,6 @@ namespace
 
         int GetWidth() const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         void UpdatePixels(const uint8_t*, int stride) override
         {
@@ -213,24 +218,44 @@ TEST_F(LevelCountTest, MipMapFalseIsAlwaysOneRegardlessOfSize)
     EXPECT_EQ(Texture2D(gd, 1, 1, false, SurfaceFormat::Color).getLevelCountProperty(), 1);
 }
 
+// TinyGL stores and samples level 0 only, so any request that would actually produce a mip chain
+// is refused at construction (TinyGLTextureRenderer's mipLevels != 1 guard) rather than silently
+// collapsed to one level. A single-level request is still an ordinary success, which is why the
+// 1x1 case below stays an equality assertion on every renderer.
 TEST_F(LevelCountTest, MipMapTrueSquarePowerOfTwo)
 {
     EXPECT_EQ(Texture2D(gd, 1, 1, true, SurfaceFormat::Color).getLevelCountProperty(), 1);
+#ifdef CNA_RENDERER_TINYGL
+    EXPECT_THROW(Texture2D(gd, 2, 2, true, SurfaceFormat::Color), System::NotSupportedException);
+    EXPECT_THROW(Texture2D(gd, 4, 4, true, SurfaceFormat::Color), System::NotSupportedException);
+    EXPECT_THROW(Texture2D(gd, 16, 16, true, SurfaceFormat::Color), System::NotSupportedException);
+#else
     EXPECT_EQ(Texture2D(gd, 2, 2, true, SurfaceFormat::Color).getLevelCountProperty(), 2);
     EXPECT_EQ(Texture2D(gd, 4, 4, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
     EXPECT_EQ(Texture2D(gd, 16, 16, true, SurfaceFormat::Color).getLevelCountProperty(), 5);
+#endif
 }
 
 TEST_F(LevelCountTest, MipMapTrueNonSquarePowerOfTwo)
 {
+#ifdef CNA_RENDERER_TINYGL
+    EXPECT_THROW(Texture2D(gd, 8, 4, true, SurfaceFormat::Color), System::NotSupportedException);
+    EXPECT_THROW(Texture2D(gd, 1, 8, true, SurfaceFormat::Color), System::NotSupportedException);
+#else
     EXPECT_EQ(Texture2D(gd, 8, 4, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
     EXPECT_EQ(Texture2D(gd, 1, 8, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
+#endif
 }
 
 TEST_F(LevelCountTest, MipMapTrueNonPowerOfTwo)
 {
+#ifdef CNA_RENDERER_TINYGL
+    EXPECT_THROW(Texture2D(gd, 3, 5, true, SurfaceFormat::Color), System::NotSupportedException);
+    EXPECT_THROW(Texture2D(gd, 7, 11, true, SurfaceFormat::Color), System::NotSupportedException);
+#else
     EXPECT_EQ(Texture2D(gd, 3, 5, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
     EXPECT_EQ(Texture2D(gd, 7, 11, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
+#endif
 }
 
 // -----------------------------------------------------------------------
@@ -244,14 +269,22 @@ TEST(Texture2DMipLevelValidationTest, EveryValidMipKeepsItsDimensionsContentsAnd
 {
     constexpr int kWidth = 13;
     constexpr int kHeight = 7;
-    constexpr int kLevelCount = 4;
     GraphicsDevice gd;
+#ifdef CNA_RENDERER_TINYGL
+    // TinyGL owns level 0 only, so the mipmapped texture this test needs cannot be constructed at
+    // all -- the refusal itself is the contract worth asserting here (see LevelCountTest above).
+    EXPECT_THROW(Texture2D(gd, kWidth, kHeight, true, SurfaceFormat::Color),
+                 System::NotSupportedException);
+    GTEST_SKIP() << "TINYGL stores level 0 only -- no mip chain exists to walk";
+#else
+    constexpr int kLevelCount = 4;
     Texture2D texture(gd, kWidth, kHeight, true, SurfaceFormat::Color);
     ASSERT_EQ(texture.getLevelCountProperty(), kLevelCount);
 
     const std::vector<std::vector<Color>> expected =
         PopulateEveryMip(texture, kWidth, kHeight);
     ExpectEveryMipExact(texture, kWidth, kHeight, expected);
+#endif
 }
 
 TEST(Texture2DMipLevelValidationTest, RejectedSetDataLeavesEveryValidMipAndItsSourceUnchanged)
@@ -358,110 +391,146 @@ protected:
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, SingleThrows)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, Vector2Throws)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, Vector4Throws)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, HalfSingleThrows)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, HalfVector2Throws)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, HalfVector4Throws)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, HdrBlendableThrows)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, Rgba1010102Throws)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, Rgba64Throws)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64), std::runtime_error);
+    }
 }
 
 // Task 290: exhaustive sweep over every SurfaceFormat value. This stays correct automatically if
@@ -500,8 +569,11 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
 
     for (SurfaceFormat format : kAllFormats)
     {
+        // plan_runtimerenderer.md RTR-P9-4: the Skia-promoted format list, evaluated at runtime so
+        // this assertion describes the ACTIVE renderer rather than the build default.
+        const bool skia = CNA_RENDERER_IS(Skia);
         const bool supported = format == SurfaceFormat::Color
-#ifdef CNA_RENDERER_SKIA
+            || (skia && (false
             || format == SurfaceFormat::Bgr565
             || format == SurfaceFormat::Bgra5551
             || format == SurfaceFormat::Bgra4444
@@ -522,7 +594,24 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             || format == SurfaceFormat::NormalizedByte2
             || format == SurfaceFormat::NormalizedByte4
             || format == SurfaceFormat::HdrBlendable
-#endif
+            // threeissues.md finding 5: the block-compressed formats belong here. This list used to
+            // omit them while SkiaRenderer accepted them, so the two halves of the contract
+            // contradicted each other and this loop failed on SKIA for as long as both had their
+            // current contents.
+            //
+            // The implementation is the half that is right, and that was checked rather than
+            // assumed: SkiaTextureRenderer.cpp carries IsCompressedTextureFormat, the correct block
+            // sizes (8 bytes for Dxt1, 16 for the rest) and real decoders -- DxtUtil::DecompressDxt1
+            // /Dxt3/Dxt5 and Bc7Util::DecompressBc7 -- decoding to RGBA for the CPU raster surface,
+            // and it throws NotSupportedException for a format it has no decoder for. That is
+            // genuine support, not silent acceptance, so a test demanding a throw was asserting the
+            // opposite of what the renderer does.
+            || format == SurfaceFormat::Dxt1
+            || format == SurfaceFormat::Dxt3
+            || format == SurfaceFormat::Dxt5
+            || format == SurfaceFormat::Bc7EXT
+            || format == SurfaceFormat::Bc7SrgbEXT
+            ))
             ;
         if (supported)
         {
@@ -743,6 +832,22 @@ TEST(Texture2DTest, SetDataSimpleWithZeroCountDoesNotThrow)
     Texture2D tex;
     Color buf[1] = { Color(0,0,0,0) };
     EXPECT_NO_THROW(tex.SetData(buf, 0));
+}
+
+TEST(Texture2DTest, TransfersAfterDisposeThrowObjectDisposedException)
+{
+    Texture2D tex;
+    tex.Dispose();
+    Color color(1, 2, 3, 4);
+    std::uint8_t rgba[4] = {1, 2, 3, 4};
+
+    EXPECT_THROW(tex.SetData(&color, 1), System::ObjectDisposedException);
+    EXPECT_THROW(tex.SetData(0, nullptr, &color, 0, 1),
+                 System::ObjectDisposedException);
+    EXPECT_THROW(tex.SetDataRGBA(rgba, 1), System::ObjectDisposedException);
+    EXPECT_THROW(tex.GetData(&color, 1), System::ObjectDisposedException);
+    EXPECT_THROW(tex.GetData(0, nullptr, &color, 0, 1),
+                 System::ObjectDisposedException);
 }
 
 // -----------------------------------------------------------------------
@@ -970,7 +1075,7 @@ TEST_F(ContextRecoveryTest, PartialUpdateNeverThrowsWithRecoveryEnabledByDefault
 //
 // Round-trips through Texture2D::SaveAsPng/SaveAsJpeg (PNG/JPEG) and a
 // hand-built minimal file (BMP) to empirically confirm which encoded
-// formats Texture2D::FromStream can decode via the linked SDL3_image build.
+// formats Texture2D::FromStream can decode via the vendored stb image backend.
 // -----------------------------------------------------------------------
 
 namespace
@@ -1148,6 +1253,35 @@ TEST_F(Texture2DFromStreamResizeTest, ZoomFillsExactRequestedSize)
     EXPECT_EQ(loaded.getHeightProperty(), 4);
 }
 
+TEST_F(Texture2DFromStreamResizeTest, ZoomCropsTheHorizontalCenterBeforeScaling)
+{
+    Texture2D striped(gd, 8, 4);
+    std::vector<Color> pixels;
+    pixels.reserve(32);
+    for (int y = 0; y < 4; ++y)
+    {
+        for (int x = 0; x < 8; ++x)
+        {
+            pixels.emplace_back(x < 2 ? Color(255, 0, 0, 255)
+                                      : x < 6 ? Color(0, 255, 0, 255)
+                                              : Color(0, 0, 255, 255));
+        }
+    }
+    striped.SetData(pixels.data(), static_cast<int>(pixels.size()));
+
+    MemoryStream encoded;
+    striped.SaveAsPng(&encoded, 8, 4);
+    const auto bytes = encoded.GetBuffer();
+    MemoryStream source(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, source, 4, 4, true);
+
+    std::vector<Color> result(16, Color(0, 0, 0, 0));
+    loaded.GetData(result.data(), 0, static_cast<int>(result.size()));
+    EXPECT_TRUE(std::all_of(result.begin(), result.end(), [](const Color& pixel) {
+        return pixel == Color(0, 255, 0, 255);
+    }));
+}
+
 // -----------------------------------------------------------------------
 // SaveAsPng — round-trip verification (Task 263)
 //
@@ -1285,7 +1419,7 @@ TEST_F(SaveAsPngTest, FilenameOverloadWritesReadableFile)
 //
 // Mirrors the SaveAsPngTest coverage above, adapted for JPEG: lossy colour
 // tolerance instead of exact match, and no alpha preservation (JPEG has no
-// alpha channel — FNA/SDL_image round-trips it back as fully opaque).
+// alpha channel — the reference image decoder round-trips it back as fully opaque).
 // Also verifies FNA_GRAPHICS_JPEG_SAVE_QUALITY is honoured (Task 261 audit
 // found CNA previously hardcoded quality=100, ignoring FNA's env var).
 // -----------------------------------------------------------------------

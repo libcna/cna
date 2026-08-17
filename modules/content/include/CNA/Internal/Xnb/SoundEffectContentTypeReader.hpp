@@ -17,13 +17,13 @@ namespace CNA::Internal::Xnb
      *
      * **Current coverage** (`plan_audio.md` AUD-06 support matrix, widened 2026-07-17 from the
      * original PCM16-only M3 baseline): 16-bit PCM uses CNA's own direct `SoundEffect` raw-buffer
-     * constructor (`SDL_AUDIO_S16LE`, unchanged fast path). 8-bit PCM, 32-bit IEEE float, and
-     * MS/IMA ADPCM are wrapped in a minimal synthetic in-memory WAV file
+     * constructor (signed 16-bit little-endian, unchanged fast path). 8-bit PCM, 32-bit IEEE
+     * float, and MS/IMA ADPCM are wrapped in a minimal synthetic in-memory WAV file
      * (`CNA::Internal::Audio::BuildWavFromWaveFormatEx`, forwarding the real captured
      * WAVEFORMATEX extension bytes verbatim) and decoded via `SoundEffect::FromStream`
-     * (`MIX_LoadAudio_IO`), reaching SDL3's own native WAV/ADPCM decoder instead of requiring CNA
-     * to implement a float/ADPCM decoder itself. XMA2 remains rejected -- no decode path exists
-     * anywhere in this stack (SDL3 doesn't decode XMA2 either) -- with a clear
+     * through the audio module's mixer facade instead of requiring the content module to own a
+     * decoder or a native stream. XMA2 remains rejected -- no decode path exists anywhere in this
+     * stack -- with a clear
      * `Microsoft::Xna::Framework::Content::ContentLoadException` naming the rejected format,
      * rather than silently constructing a `SoundEffect` that would play back as noise.
      */

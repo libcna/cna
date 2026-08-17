@@ -2,6 +2,7 @@
 // ID3D12Device + command queue + descriptor heaps + per-frame command allocators/command list +
 // fence-based synchronization. Clear()/Present()/draw calls are still honest "not yet implemented"
 // stubs -- see DirectX12Renderer.hpp's class doc comment for exactly why and what's next.
+#include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
@@ -11,8 +12,6 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12EffectRenderer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
-
-#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -77,12 +76,23 @@ namespace CNA::Internal::Renderers::DirectX12
         {
             switch (pt)
             {
-            case PrimitiveType::TriangleList:  return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-            case PrimitiveType::TriangleStrip: return D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
-            case PrimitiveType::LineList:      return D3D_PRIMITIVE_TOPOLOGY_LINELIST;
-            case PrimitiveType::LineStrip:     return D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
+                case PrimitiveType::TriangleList:  return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+                case PrimitiveType::TriangleStrip: return D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+                case PrimitiveType::LineList:
+                    throw std::runtime_error(
+                        "DirectX12 renderer does not support PrimitiveType::LineList: its "
+                        "pipeline-state cache is currently fixed to triangle topology");
+                case PrimitiveType::LineStrip:
+                    throw std::runtime_error(
+                        "DirectX12 renderer does not support PrimitiveType::LineStrip: its "
+                        "pipeline-state cache is currently fixed to triangle topology");
+                case PrimitiveType::PointListEXT:
+                    throw std::runtime_error(
+                        "DirectX12 renderer does not support PrimitiveType::PointListEXT: its "
+                    "pipeline-state cache is currently fixed to triangle topology");
             }
-            return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+            throw std::runtime_error(
+                "DirectX12 renderer does not support the requested PrimitiveType value");
         }
     }
 
@@ -94,10 +104,19 @@ namespace CNA::Internal::Renderers::DirectX12
     }
 
     DirectX12Renderer::DirectX12Renderer(const GraphicsRendererCreateArgs& args)
-        : window_(args.window)
-        , virtualWidth_(args.virtualWidth)
+        : virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
     {
+        if (args.surface.windowId != 0 || CNA::Platform::HasNativeWindow(args.surface.nativeHandle))
+        {
+            surface_ = std::make_unique<PlatformRendererSurfaceState>(args.surface,
+                                                                       "DirectX12Renderer");
+            CNA::Platform::Win32NativeWindow nativeWindow;
+            if (!CNA::Platform::TryGetWin32(surface_->GetNativeHandle(), nativeWindow))
+                throw std::runtime_error("DirectX12Renderer requires a Win32 native window.");
+            hwnd_ = static_cast<HWND>(nativeWindow.hwnd);
+        }
+
         // DX-116: mirrors DirectX11Renderer's own constructor exactly.
         vsyncEnabled_ = args.swapInterval > 0;
 
@@ -120,9 +139,9 @@ namespace CNA::Internal::Renderers::DirectX12
         CreateFenceResources();
 
         // DX-102: only attempted when a real window is supplied -- an off-screen construction
-        // (args.window == nullptr, what the primary D3D12 CTest suite always uses on this Wine dev
+        // (args.surface.windowId == 0, what the primary D3D12 CTest suite uses on this Wine dev
         // loop, see modules/renderers/directx12/examples/directx12_smoke_test.cpp) never touches CreateSwapChainForHwnd at all.
-        if (window_)
+        if (hwnd_)
         {
             CreateSwapChainResources();
             // DX-116: only when CreateSwapChainForHwnd actually succeeded -- swapChainAvailable_
@@ -132,12 +151,12 @@ namespace CNA::Internal::Renderers::DirectX12
                 CreateWindowSizeDependentViews();
         }
 
-        SDL_Log("[D3D12] Device-lifetime resources created (plan_dx.md DX-102/103/104/105) -- "
-                "feature level 0x%04x, debug layer %s, tearing %s, swap chain %s.",
-                static_cast<unsigned>(featureLevel_),
-                debugLayerEnabled_ ? "enabled" : "disabled",
-                allowTearingSupported_ ? "supported" : "unsupported",
-                swapChainAvailable_ ? "available" : "unavailable");
+        CNA::Logger::Info(
+            "D3D12 device resources created; feature level " + FormatHr(featureLevel_) +
+                ", debug layer " + (debugLayerEnabled_ ? "enabled" : "disabled") +
+                ", tearing " + (allowTearingSupported_ ? "supported" : "unsupported") +
+                ", swap chain " + (swapChainAvailable_ ? "available" : "unavailable"),
+            CNA::LogCategory::RENDER);
     }
 
     DirectX12Renderer::~DirectX12Renderer()
@@ -178,7 +197,8 @@ namespace CNA::Internal::Renderers::DirectX12
             }
             else
             {
-                SDL_Log("[D3D12] D3D12 debug layer unavailable; continuing without it.");
+                CNA::Logger::Warn("D3D12 debug layer unavailable; continuing without it.",
+                                  CNA::LogCategory::RENDER);
             }
         }
 
@@ -321,18 +341,20 @@ namespace CNA::Internal::Renderers::DirectX12
 
     void DirectX12Renderer::CreateSwapChainResources()
     {
-        HWND hwnd = static_cast<HWND>(SDL_GetPointerProperty(
-            SDL_GetWindowProperties(window_), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
-        if (!hwnd)
+        if (!hwnd_)
         {
-            SDL_Log("[D3D12] Could not obtain HWND from SDL window; swap chain unavailable.");
             swapChainAvailable_ = false;
             return;
         }
 
         width_ = virtualWidth_ > 0 ? virtualWidth_ : 1024;
         height_ = virtualHeight_ > 0 ? virtualHeight_ : 768;
-        SDL_GetWindowSizeInPixels(window_, &width_, &height_);
+        if (surface_)
+        {
+            const auto drawableSize = surface_->GetDrawableSize();
+            if (drawableSize.width > 0) width_ = drawableSize.width;
+            if (drawableSize.height > 0) height_ = drawableSize.height;
+        }
 
         DXGI_SWAP_CHAIN_DESC1 desc{};
         desc.Width = static_cast<UINT>(width_);
@@ -351,13 +373,13 @@ namespace CNA::Internal::Renderers::DirectX12
 
         ComPtr<IDXGISwapChain1> swapChain1;
         HRESULT hr = factory_->CreateSwapChainForHwnd(
-            commandQueue_.Get(), hwnd, &desc, nullptr, nullptr, swapChain1.ReleaseAndGetAddressOf());
+            commandQueue_.Get(), hwnd_, &desc, nullptr, nullptr, swapChain1.ReleaseAndGetAddressOf());
         if (FAILED(hr))
         {
-            SDL_Log("[D3D12] CreateSwapChainForHwnd failed, hr=%s; continuing off-screen "
-                    "(plan_dx.md DX-102's own documented Wine limitation -- real verification is "
-                    "DX-114's job, on real Windows hardware).",
-                    FormatHr(hr).c_str());
+            CNA::Logger::Warn(
+                "D3D12 CreateSwapChainForHwnd failed, hr=" + FormatHr(hr) +
+                    "; continuing off-screen (documented Wine limitation)",
+                CNA::LogCategory::RENDER);
             swapChainAvailable_ = false;
             return;
         }
@@ -365,8 +387,10 @@ namespace CNA::Internal::Renderers::DirectX12
         hr = swapChain1.As(&swapChain_);
         if (FAILED(hr))
         {
-            SDL_Log("[D3D12] IDXGISwapChain1 -> IDXGISwapChain3 QueryInterface failed, hr=%s; "
-                    "continuing off-screen.", FormatHr(hr).c_str());
+            CNA::Logger::Warn(
+                "D3D12 IDXGISwapChain1 -> IDXGISwapChain3 failed, hr=" + FormatHr(hr) +
+                    "; continuing off-screen",
+                CNA::LogCategory::RENDER);
             swapChainAvailable_ = false;
             return;
         }
@@ -571,7 +595,8 @@ namespace CNA::Internal::Renderers::DirectX12
         if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
         {
             const HRESULT reason = device_ ? device_->GetDeviceRemovedReason() : hr;
-            SDL_Log("[D3D12] Device removed/reset! reason=%s (plan_dx.md DX-110)", FormatHr(reason).c_str());
+            CNA::Logger::Error("D3D12 device removed/reset; reason=" + FormatHr(reason),
+                               CNA::LogCategory::RENDER);
         }
     }
 
@@ -687,20 +712,20 @@ namespace CNA::Internal::Renderers::DirectX12
         CreateDescriptorHeapResources();
         CreateCommandListResources();
         CreateFenceResources();
-        if (window_)
+        if (hwnd_)
         {
             CreateSwapChainResources();
             if (swapChainAvailable_)
                 CreateWindowSizeDependentViews();
         }
 
-        SDL_Log("[D3D12] RecreateDeviceEXT(): device-lifetime resources fully recreated after a "
-                "(real or forced) device-removed event (plan_dx.md DX-110) -- feature level 0x%04x, "
-                "debug layer %s, tearing %s, swap chain %s.",
-                static_cast<unsigned>(featureLevel_),
-                debugLayerEnabled_ ? "enabled" : "disabled",
-                allowTearingSupported_ ? "supported" : "unsupported",
-                swapChainAvailable_ ? "available" : "unavailable");
+        CNA::Logger::Info(
+            "D3D12 device resources recreated after device removal; feature level " +
+                FormatHr(featureLevel_) + ", debug layer " +
+                (debugLayerEnabled_ ? "enabled" : "disabled") + ", tearing " +
+                (allowTearingSupported_ ? "supported" : "unsupported") + ", swap chain " +
+                (swapChainAvailable_ ? "available" : "unavailable"),
+            CNA::LogCategory::RENDER);
     }
 
     void DirectX12Renderer::BindOffscreenColorTargetEXT(ID3D12Resource* resource,
@@ -1180,6 +1205,21 @@ namespace CNA::Internal::Renderers::DirectX12
         height = virtualHeight_;
     }
 
+    void DirectX12Renderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        if (surface_)
+        {
+            surface_->Update(surface);
+            return;
+        }
+
+        surface_ = std::make_unique<PlatformRendererSurfaceState>(surface, "DirectX12Renderer");
+        CNA::Platform::Win32NativeWindow nativeWindow;
+        if (!CNA::Platform::TryGetWin32(surface_->GetNativeHandle(), nativeWindow))
+            throw std::runtime_error("DirectX12Renderer requires a Win32 native window.");
+        hwnd_ = static_cast<HWND>(nativeWindow.hwnd);
+    }
+
     void DirectX12Renderer::SetVirtualResolution(int width, int height)
     {
         virtualWidth_ = width;
@@ -1396,6 +1436,8 @@ namespace CNA::Internal::Renderers::DirectX12
         const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount)
     {
+        // GLTF-394: reject line/point topology before target/layout/PSO work can mask the reason.
+        const D3D12_PRIMITIVE_TOPOLOGY nativeTopology = ToD3D12Topology(primitive);
         // DX-111: colored3d (stride 16, unlit vertex-color) is the only real D3D12 draw pipeline so
         // far -- mirrors D3D11's own DX-61 scope exactly (same shader variant, same DXBC bytecode,
         // design decision 5). Other strides/variants are a follow-up (D3D11's own Phase DIRECTX8 took
@@ -1484,7 +1526,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
         cmdList->SetGraphicsRootSignature(rootSig.Get());
         cmdList->SetPipelineState(pso.Get());
-        cmdList->IASetPrimitiveTopology(ToD3D12Topology(primitive));
+        cmdList->IASetPrimitiveTopology(nativeTopology);
 
         D3D12_VERTEX_BUFFER_VIEW vbView = d3dVb.GetViewEXT();
         cmdList->IASetVertexBuffers(0, 1, &vbView);
@@ -1507,6 +1549,8 @@ namespace CNA::Internal::Renderers::DirectX12
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount)
     {
+        // GLTF-394: reject line/point topology before target/layout/PSO work can mask the reason.
+        const D3D12_PRIMITIVE_TOPOLOGY nativeTopology = ToD3D12Topology(primitive);
         // DX-111: indexed counterpart of DrawColoredPrimitives above -- same colored3d-only scope.
         if (!boundColorResource_)
         {
@@ -1583,7 +1627,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
         cmdList->SetGraphicsRootSignature(rootSig.Get());
         cmdList->SetPipelineState(pso.Get());
-        cmdList->IASetPrimitiveTopology(ToD3D12Topology(primitive));
+        cmdList->IASetPrimitiveTopology(nativeTopology);
 
         D3D12_VERTEX_BUFFER_VIEW vbView = d3dVb.GetViewEXT();
         cmdList->IASetVertexBuffers(0, 1, &vbView);
@@ -1615,6 +1659,8 @@ namespace CNA::Internal::Renderers::DirectX12
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
+        // GLTF-394: reject line/point topology before declaration/target/PSO work can mask the reason.
+        const D3D12_PRIMITIVE_TOPOLOGY nativeTopology = ToD3D12Topology(primitive);
         // REMED-GFX-DECL-GUARD: before any D3D12_INPUT_LAYOUT_DESC is built and before any draw is
         // issued. This renderer selects that layout from the shared D3DCommon stride table
         // (REMED-GFX-217), so a declaration the table's entry cannot represent is refused rather
@@ -1630,17 +1676,19 @@ namespace CNA::Internal::Renderers::DirectX12
         const auto& d3dVb = static_cast<const D3D12VertexBufferRenderer&>(vb);
         const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
 
-        const bool needsAlphaTest = (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
+        // A PBR MASK draw keeps the PBR shader and evaluates alpha coverage there. The standalone
+        // AlphaTestEffect path only accepts stride 20/24 and cannot carry a tangent-space basis.
+        const bool needsPbr = params.pbr;
+        const bool needsAlphaTest = !needsPbr &&
+                                    (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
         // DX-111 (closing env_map3d): dual_texture3d, skinned3d, and now env_map3d are all real.
         const bool needsDualTex = params.dualTexture && !needsAlphaTest;
         const bool needsEnvMap  = params.envMapping  && !needsAlphaTest && !needsDualTex;
         // D3D12 PBR/skinned-vertex-color reconciliation follow-up: PbrEffect/SkinnedPbrEffect --
         // params.skinned further selects Pbr3d vs. PbrSkinned3d below. Priority matches
-        // DirectX11Renderer::DrawPrimitivesExImpl exactly (alpha-test/dual-tex/env-map still
-        // take precedence over PBR here, unlike EasyGLRenderer.cpp's own SelectProgram()
-        // priority -- the canonical D3D11 dispatch order, verified via real GPU-rendered
-        // pixel-exact tests, is what this renderer mirrors rather than re-deriving its own order).
-        const bool needsPbr = params.pbr && !needsAlphaTest && !needsDualTex && !needsEnvMap;
+        // DirectX11Renderer::DrawPrimitivesExImpl exactly. PBR takes priority over the standalone
+        // alpha-test program because the PBR fragment shader now evaluates MASK coverage itself;
+        // dual-texture/env-map remain mutually exclusive effect families chosen afterwards.
         const bool needsSkinned = params.skinned && !needsPbr
                                  && !needsAlphaTest && !needsDualTex && !needsEnvMap;
         // stride==32 always uses lit_textured3d (BasicEffect's VertexPositionNormalTexture path, lit
@@ -1678,18 +1726,17 @@ namespace CNA::Internal::Renderers::DirectX12
                 "DirectX12Renderer::DrawPrimitivesEx: AlphaTestEffect (alpha_test3d) only "
                 "supports stride 20 (VertexPositionTexture) or 24 "
                 "(VertexPositionColorTexture, plan_dx.md DX-136)");
-        // plan_cnj.md CNB-58 follow-up: pbr3d.vert.hlsl (unskinned) is stride 48
-        // (VertexPositionNormalTangentTexture); pbr_skinned3d.vert.hlsl (SkinnedPbrEffect) is
-        // stride 68 (VertexPositionNormalTangentTextureSkinned), mirrors D3D11's own
-        // DrawPrimitivesExImpl exactly.
-        if (needsPbr && !params.skinned && stride != 48)
+        // plan_cnj.md CNB-58/GLTF-386 follow-up: PBR accepts the canonical single-UV layouts and
+        // their TEXCOORD_1 suffix variants, mirroring D3D11's DrawPrimitivesExImpl exactly.
+        if (needsPbr && !params.skinned && stride != 48 && stride != 60)
             throw std::runtime_error(
-                "DirectX12Renderer::DrawPrimitivesEx: PbrEffect (pbr3d) requires stride 48 "
-                "(VertexPositionNormalTangentTexture)");
-        if (needsPbr && params.skinned && stride != 68)
+                "DirectX12Renderer::DrawPrimitivesEx: PbrEffect (pbr3d) requires stride 48 or 60 "
+                "(VertexPositionNormalTangentTexture with optional TEXCOORD_1)");
+        if (needsPbr && params.skinned && stride != 68 && stride != 76)
             throw std::runtime_error(
                 "DirectX12Renderer::DrawPrimitivesEx: SkinnedPbrEffect (pbr_skinned3d) requires "
-                "stride 68 (VertexPositionNormalTangentTextureSkinned)");
+                "stride 68 or 76 (VertexPositionNormalTangentTextureSkinned with optional "
+                "TEXCOORD_1)");
 
         D3DShaderVariant variant;
         bool hasTexture;
@@ -1729,13 +1776,17 @@ namespace CNA::Internal::Renderers::DirectX12
         else if (needsPbr)
         {
             // Mirrors DirectX11Renderer::DrawPrimitivesExImpl's own needsPbr branch exactly.
-            variant = params.skinned ? D3DShaderVariant::PbrSkinned3d : D3DShaderVariant::Pbr3d;
+            variant = params.skinned
+                ? ((stride == 76) ? D3DShaderVariant::PbrSkinned3dDualUv
+                                  : D3DShaderVariant::PbrSkinned3d)
+                : ((stride == 60) ? D3DShaderVariant::Pbr3dDualUv
+                                  : D3DShaderVariant::Pbr3d);
             hasTexture = true;
             // PerDraw (b0, D3DPbrPerDrawConstants) [+ BoneBlock (b1) for the skinned variant] +
             // PbrLights (b1 unskinned / b2 skinned, D3DPbrLightConstants).
             numCbvs = params.skinned ? 3 : 2;
-            // t0 base color + t1 normal + t2 metallic-roughness + t3 emissive + t4 occlusion.
-            numSrvs = 5;
+            // Five core maps plus KHR_materials_specular strength/colour at t5/t6.
+            numSrvs = 7;
         }
         else if (needsSkinned)
         {
@@ -1818,11 +1869,10 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12_GPU_VIRTUAL_ADDRESS cbAddresses[3] = {0, 0, 0};
         // params.texture0/texture1 for the (up to 2) SRVs most variants bind -- dual_texture3d uses
         // the 2nd slot for a 2nd Texture2D; env_map3d uses it for a TextureCube instead
-        // (srvCubeTexture below), which is why it isn't part of this Texture2D-only array. Sized 5
-        // (not 2) for needsPbr's own 5 texture slots (base color + normal + metallic-roughness +
-        // emissive + occlusion) -- every other variant only ever populates indices 0/1, mirrors
-        // DirectX11Renderer::DrawPrimitivesExImpl's own srvs[5] sizing.
-        const ITextureRenderer* srvTextures[5] = {params.texture0, nullptr, nullptr, nullptr, nullptr};
+        // (srvCubeTexture below), which is why it isn't part of this Texture2D-only array. Sized 7
+        // for PBR's five core maps plus KHR_materials_specular strength/colour at t5/t6.
+        const ITextureRenderer* srvTextures[7] = {
+            params.texture0, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
         const ITextureCubeRenderer* srvCubeTexture = nullptr; // only set by the needsEnvMap branch
 
         if (needsAlphaTest)
@@ -1981,6 +2031,31 @@ namespace CNA::Internal::Renderers::DirectX12
             perDraw.EmissiveRoughness[1] = params.emissiveColor[1];
             perDraw.EmissiveRoughness[2] = params.emissiveColor[2];
             perDraw.EmissiveRoughness[3] = params.pbrRoughnessFactor;
+            perDraw.AlphaTest[0] = params.alphaTest[0];
+            perDraw.AlphaTest[1] = params.alphaTest[1];
+            perDraw.AlphaTest[2] = params.alphaTest[2];
+            perDraw.AlphaTest[3] = params.alphaTest[3];
+            perDraw.PbrMapScales[0] = params.pbrNormalScale;
+            perDraw.PbrMapScales[1] = params.pbrOcclusionStrength;
+            perDraw.PbrMapScales[2] = params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f;
+            perDraw.PbrMapScales[3] = params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f;
+            perDraw.DielectricFresnel[0] = params.pbrDielectricF0[0];
+            perDraw.DielectricFresnel[1] = params.pbrDielectricF0[1];
+            perDraw.DielectricFresnel[2] = params.pbrDielectricF0[2];
+            perDraw.DielectricFresnel[3] = params.pbrDielectricF90;
+            std::memcpy(perDraw.TextureTransformRows, params.pbrTextureTransformRows,
+                        sizeof(perDraw.TextureTransformRows));
+            perDraw.TextureCoordinateSets[0] =
+                static_cast<float>(params.pbrTextureCoordinateSetMask & 0x7fu);
+            perDraw.SpecularFresnelInputs[0] = params.pbrDielectricF0Unclamped[0];
+            perDraw.SpecularFresnelInputs[1] = params.pbrDielectricF0Unclamped[1];
+            perDraw.SpecularFresnelInputs[2] = params.pbrDielectricF0Unclamped[2];
+            perDraw.SpecularFresnelInputs[3] = params.pbrSpecularFactor;
+            perDraw.SpecularMapFlags[0] =
+                params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f;
+            std::memcpy(perDraw.SpecularTextureTransformRows,
+                        params.pbrSpecularTextureTransformRows,
+                        sizeof(perDraw.SpecularTextureTransformRows));
 
             D3DPbrLightConstants lights{};
             lights.EyePosWeights[0] = params.eyePositionWorld[0];
@@ -2010,6 +2085,7 @@ namespace CNA::Internal::Renderers::DirectX12
             lights.FogColor[0] = params.fogColor[0];
             lights.FogColor[1] = params.fogColor[1];
             lights.FogColor[2] = params.fogColor[2];
+            lights.FogColor[3] = params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f;
             // REMED-GFX-005/010/061: upload the authoritative FNA view-space fog vector; the
             // shader dots it with the object or post-skin position.
             lights.FogVector[0] = params.fogVector[0];
@@ -2055,6 +2131,8 @@ namespace CNA::Internal::Renderers::DirectX12
             srvTextures[2] = params.pbrMetallicRoughnessMap ? params.pbrMetallicRoughnessMap : GetOrCreateDefaultWhiteTextureEXT();
             srvTextures[3] = params.pbrEmissiveMap ? params.pbrEmissiveMap : GetOrCreateDefaultWhiteTextureEXT();
             srvTextures[4] = params.pbrOcclusionMap ? params.pbrOcclusionMap : GetOrCreateDefaultWhiteTextureEXT();
+            srvTextures[5] = params.pbrSpecularMap ? params.pbrSpecularMap : GetOrCreateDefaultWhiteTextureEXT();
+            srvTextures[6] = params.pbrSpecularColorMap ? params.pbrSpecularColorMap : GetOrCreateDefaultWhiteTextureEXT();
         }
         else if (needsSkinned)
         {
@@ -2260,9 +2338,8 @@ namespace CNA::Internal::Renderers::DirectX12
         // vkd3d-proton dev loop even though the CPU-side descriptor writes were independently
         // verified correct). Every texture's own SRV -- created once, at texture-construction time --
         // is bound directly, exactly like the original single-SRV path; no per-draw descriptor copy
-        // is needed for any variant, dual_texture3d included. Sized 5 (not 2), matching
-        // srvTextures[5]'s own sizing above for needsPbr's 5 texture slots.
-        D3D12_GPU_DESCRIPTOR_HANDLE srvHandles[5]{};
+        // is needed for any variant, dual_texture3d included. Sized 7 for the complete PBR range.
+        D3D12_GPU_DESCRIPTOR_HANDLE srvHandles[7]{};
         for (int i = 0; i < numSrvs; ++i)
         {
             // env_map3d's 2nd slot (t1) is a TextureCube, not a Texture2D -- srvCubeTexture is only
@@ -2291,7 +2368,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
         cmdList->SetGraphicsRootSignature(rootSig.Get());
         cmdList->SetPipelineState(pso.Get());
-        cmdList->IASetPrimitiveTopology(ToD3D12Topology(primitive));
+        cmdList->IASetPrimitiveTopology(nativeTopology);
 
         D3D12_VERTEX_BUFFER_VIEW vbView = d3dVb.GetViewEXT();
         cmdList->IASetVertexBuffers(0, 1, &vbView);
@@ -2446,6 +2523,8 @@ namespace CNA::Internal::Renderers::DirectX12
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, int instanceCount, const GpuDrawParams& params)
     {
+        // GLTF-394: reject line/point topology before fallback/stream/target work can mask the reason.
+        const D3D12_PRIMITIVE_TOPOLOGY nativeTopology = ToD3D12Topology(primitive);
         // Matches DirectX11Renderer::DrawInstancedPrimitivesEx's own fallback -- no per-instance
         // VB means this isn't really an instanced draw at all.
         // REMED-GFX-202: the per-instance stream is the lowest-slot entry of the shared
@@ -2516,7 +2595,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
         cmdList->SetGraphicsRootSignature(rootSig.Get());
         cmdList->SetPipelineState(pso);
-        cmdList->IASetPrimitiveTopology(ToD3D12Topology(primitive));
+        cmdList->IASetPrimitiveTopology(nativeTopology);
 
         // REMED-GFX-123: a D3D12 vertex-buffer view has no separate offset field, so the public
         // VertexBufferBinding.VertexOffset -- an ELEMENT offset -- has to move BufferLocation and
@@ -2554,7 +2633,12 @@ namespace CNA::Internal::Renderers::DirectX12
 
 namespace CNA::Internal::Renderers
 {
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace DirectX12 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> DirectX12::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<DirectX12::DirectX12Renderer>(args);
     }

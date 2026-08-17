@@ -1,0 +1,183 @@
+# C Model and Animation Contract
+
+## Model bones and collections
+
+`CNA_ModelBoneHandle` owns a stable model-bone node. Default creation preserves an empty name,
+index zero, identity transform, no parent and no children. Named creation copies validated UTF-8
+and preserves the signed native index. Names use exact byte-count/copy operations, and transforms
+cross the ABI as copied row-major `CNA_Matrix` values.
+
+Adding a child invokes the native relationship operation and retains the child node. Parent
+queries return a new owned stable view; absence is a successful false result with an invalid
+handle. The C boundary rejects self-parenting and ancestor cycles because raw-pointer cycles would
+otherwise defeat deterministic ownership. Parent metadata is weak: when no parent or child-view
+handle retains the parent, an independently retained child safely reports no parent instead of
+exposing the native dangling pointer that standalone C++ misuse could create.
+
+`CNA_ModelBoneCollectionHandle` owns either an empty standalone collection or a live child view.
+Count and indexed access replace native iteration; exact UTF-8 find replaces the throwing name
+indexer and `TryGetValue`, returning a successful false result when absent. Returned bone views
+share mutation and remain valid after their source collection handle is released. Contains uses
+native object identity rather than matching names or indices.
+
+`ModelBoneSmoke.c` covers both constructors, exact UTF-8 names, capacity atomicity, indices,
+identity and mutated transforms, optional parents, live collection growth, index/name/contains
+operations, multiple aliases, transitive hierarchy lifetime, expired parents, cycle refusal and
+invalid, stale, wrong-kind and wrong-thread calls. The same strict-C source runs under HEADLESS and
+SDL_RENDERER plus focused ASan+UBSan; C17/C++23 assertions freeze both handle widths.
+
+## Model mesh parts and collections
+
+`CNA_ModelMeshPartHandle` owns stable mutable mesh-part state. Both the default and parameterized
+native constructors are represented; the four geometry fields preserve signed 32-bit values
+verbatim. Effect, VertexBuffer and IndexBuffer assignments are optional and must share one game
+and graphics device. Each non-null assignment retains the C resource and blocks both its typed
+destroy operation and generic graphics-resource disposal until every referencing part is cleared
+or released.
+
+The native `System::Object*` tag does not cross the ABI. A part instead carries a C-owned opaque
+`CNA_ModelMeshPartTag` value with fixed 64-bit storage. This sidecar value is shared by all handles
+that refer to the same part.
+
+`CNA_ModelMeshPartCollectionHandle` can own a snapshot created from caller handles. The snapshot
+retains the shared part objects, so indexed handles remain valid and share mutation even after an
+original part handle or the collection is released. Count/index operations replace all native
+iterator types; the same representation is reserved for ModelMesh-owned live views added by the
+next model slice.
+
+`ModelMeshPartSmoke.c` covers both constructors, all scalar getters/setters, opaque tags,
+optional resource state, snapshot count/index and alias lifetime, invalid arrays, stale,
+wrong-kind and wrong-thread handles. It also proves that retained effects and supported buffers
+cannot be disposed or destroyed early. HEADLESS and SDL_RENDERER run the same strict-C source;
+backend buffer refusal remains an explicit `NOT_SUPPORTED` result.
+
+## Model meshes and aggregate collections
+
+`CNA_ModelMeshHandle` is an owned game child created from a callback-scoped graphics device and
+an array of retained mesh parts. Unnamed and copied UTF-8 named constructors are distinct. A part
+can belong to only one live mesh; its assigned graphics resources must match that mesh's device.
+Bounding spheres cross as copied `CNA_BoundingSphere` values, parent bones are optional retained
+stable nodes, and the native `System::Object*` tag is replaced by an opaque 64-bit C tag.
+
+Part and effect properties return owned live collection views that retain the mesh. Part aliases
+share mutation. If all mesh handles/views are released while an independent part handle remains,
+the adapter switches that part to a synchronized detached native value before destroying the
+mesh, so later part mutation never follows the native dangling parent pointer. Meshes count as
+game children until their last direct or collection alias is released.
+
+The live `CNA_ModelEffectCollectionHandle` mirrors native identity behavior. Part effect changes
+maintain the unique automatic set; explicit Add preserves duplicates and Remove erases the first
+match. Every entry retains its same-device Effect and blocks destroy/dispose. Count/index replace
+native iterators. `CNA_ModelMeshCollectionHandle` owns a retained snapshot with count/index,
+exact UTF-8 find and object-identity contains operations; its returned handles share mesh state.
+
+`cna_model_mesh_draw` calls native `ModelMesh::Draw` only when the device reports 3D support and
+otherwise returns `CNA_RESULT_NOT_SUPPORTED` before native mutation. `ModelMeshSmoke.c` covers
+both constructors, all properties, both collections, duplicate effects, transitive lifetime,
+safe surviving parts, draw capability behavior and error/thread paths under HEADLESS and
+SDL_RENDERER, plus a focused ASan+UBSan run.
+
+## Top-level models
+
+`CNA_ModelHandle` owns either an empty standalone model or a device-associated aggregate that
+retains its stable bone nodes and same-device meshes. The simple constructor selects the first
+bone as root. The extended constructor accepts an arbitrary root index plus either no mesh-parent
+array or one nullable parent per mesh. Bone and mesh properties return owned immutable collection
+views whose aliases keep their elements alive after the original handles or model are released.
+
+The native `System::Object*` tag becomes a fixed 64-bit C tag. The CNA extension taking
+`std::shared_ptr<void>` is represented without a C++ ABI leak by an opaque C context and required
+release callback. Replacement, explicit clearing and final model destruction synchronously
+release exactly one retained context.
+
+Bulk transform APIs first report the bone count. Local and absolute copies are atomic on
+insufficient capacity, and local input is fully copied before mutating native bones. Absolute
+composition delegates to the native parent/index algorithm. Draw accepts copied world/view/
+projection matrices and returns `CNA_RESULT_NOT_SUPPORTED` before native mutation when a non-empty
+model targets a renderer without 3D support.
+
+`ModelSmoke.c` covers all constructors and properties, nullable root/parents, retained collections,
+owned-context releases, all transform routes and capacity failures, transitive lifetime, renderer
+draw behavior and thread/handle errors under HEADLESS and SDL_RENDERER plus ASan+UBSan.
+
+## Morph-target extensions
+
+Morph keyframes, tracks and per-target deltas cross the ABI as fixed descriptors containing only
+borrowed pointer/count pairs, seconds, and fixed-width booleans. Every create, track-set and
+evaluation call validates all nested arrays and immediately deep-copies them before native code
+runs. The descriptors therefore expose no `std::vector`, `System::TimeSpan` or C++ object layout.
+
+`CNA_MorphTargetDataEXTHandle` owns copied base vertex bytes, a documented 32/52/56-byte stride,
+rectangular per-target position deltas, optional rectangular normal deltas, current weights and an
+optional animation track. Count/copy operations provide atomic access to every nested field. The C
+boundary rejects mismatched target/weight/vertex counts, incomplete vertices, inconsistent
+keyframe vectors, invalid flags and descending keyframe times before the native blend/evaluation
+algorithms can index malformed storage.
+
+`cna_morph_target_data_ext_blend` delegates additive position and renormalized-normal blending to
+the native implementation and copies the complete byte result only when capacity is sufficient.
+Standalone track evaluation preserves endpoint clamping, LINEAR interpolation, true STEP hold and
+CUBICSPLINE Hermite tangents. A model mesh part can retain attached morph data through explicit
+set/get operations; this safely occupies its native object tag while the unrelated opaque C tag
+remains a separate sidecar. Re-upload requires an attached VertexBuffer with sufficient capacity.
+
+`MorphTargetSmoke.c` covers descriptor ABI and deep copying, all fields, mutable weights/tracks,
+LINEAR/STEP/Hermite evaluation, blend math, normal normalization, untouched UV bytes, output
+atomicity, malformed inputs, part attachment/upload, transitive lifetime and invalid, stale,
+wrong-kind and wrong-thread paths under HEADLESS and SDL_RENDERER plus ASan+UBSan.
+
+## GPU-skinned model extensions
+
+`CNA_SkinnedModelEXTHandle` owns an independent GPU-skinned skeleton, animation-clip map and
+ordered render-part list. Skeleton creation and replacement copy one parent index, local bind
+matrix and inverse global bind matrix per bone. Parent indices must be `-1` or refer to an earlier
+bone, preserving the native topological-order requirement before transform computation can index
+the hierarchy.
+
+Keyframes, bone tracks, clips and named construction clips cross the ABI through fixed descriptors.
+All nested pointer/count arrays and UTF-8 names are validated and deeply copied. Clip enumeration
+is lexicographically sorted so the native unordered map does not leak nondeterministic iteration
+order. Count/copy operations expose complete tracks and skeleton arrays without a C++ container or
+`System::TimeSpan`; seconds are range-checked and converted internally. Transform computation
+delegates interpolation, endpoint clamping, constant-time loop wrapping and inverse-bind
+composition to `SkinnedModelEXT::ComputeBoneTransformsEXT`, copying output only after capacity is
+sufficient.
+
+The native part method consumes `unique_ptr` resources, which cannot safely consume independently
+owned stable C handles. The C adapter therefore uses an equivalent lifetime sidecar: each added
+part retains its same-device VertexBuffer, IndexBuffer, ModelMeshPart and optional Texture2D,
+blocks premature destroy/dispose, and rebuilds the native non-owning `PartEXT` views. A part cannot
+simultaneously belong to ModelMesh or another SkinnedModelEXT. Attach transfers sidecar entries,
+removes all same-named destination entries first, and leaves the source with no parts; remove
+releases every matching bundle. Indexed part aliases remain owned C handles, while returned
+texture handles remain retained by the model until removal or destruction.
+
+`SkinnedModelSmoke.c` covers all descriptor layouts, deep copying, skeleton/clip access and
+mutation, exact interpolation/clamp/loop transforms, move construction/assignment, capacity
+atomicity, malformed hierarchy/time/boolean input, attach mismatch and replace-by-name transfer,
+optional texture and resource-count behavior, disposal protection and release, plus stale,
+wrong-kind and wrong-thread calls. The strict-C test runs under HEADLESS and SDL_RENDERER using
+SDL's dummy virtual video driver, with a focused ASan+UBSan run.
+
+## SkinningData and AnimationPlayer
+
+`CNA_SkinningDataHandle` owns the model-facing skeletal animation data used by the native
+AnimationPlayer path. `CNA_SkinningDataDescriptor` deeply copies the topologically ordered parent
+indices, bind and inverse-bind matrices, an optional all-bone root-prefix array, and named clips
+using the same fixed keyframe/track descriptors as SkinnedModelEXT. A root-prefix array is either
+empty or exactly BoneCount long, making the native all-identity fallback explicit. Sorted clip
+names and atomic count/copy functions expose every public field and exact type identity.
+
+`CNA_AnimationPlayerHandle` retains its SkinningData, so the original data handle may be destroyed
+without invalidating playback. StartClip selects a retained clip by exact UTF-8 name instead of
+accepting a dangling native reference. Update accepts finite seconds and canonical C booleans for
+relative/absolute positioning and loop/clamp behavior. Current position and clip state are copied,
+and local, model-space and inverse-bind-composed skin matrices use the standard atomic capacity
+protocol.
+
+`AnimationPlayerSmoke.c` covers all SkinningData fields, descriptor deep copying, type identity,
+clip lookup/track copies, initial bind pose, root-prefix composition, StartClip, relative and
+absolute updates, loop/clamp behavior, all three transform arrays, retained data lifetime,
+capacity atomicity and handle/thread/input failures. It runs unchanged under HEADLESS and
+SDL_RENDERER, with a focused ASan+UBSan run. This completes the CBIND-035E model and animation
+slice.

@@ -16,9 +16,9 @@ using CNA::toStringView;
 static_assert(getCurrentGraphicsBackendMaturity() == getCurrentGraphicsBackendMaturity());
 static_assert(!toStringView(getCurrentGraphicsBackendMaturity()).empty());
 constexpr GraphicsBackendMaturity kCompileTimeMaturity = getCurrentGraphicsBackendMaturity();
-constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::PortableGL) + 1;
-static_assert(kPublicRendererCount == 46,
-              "GraphicsRendererType must expose all 46 genuine renderer identities");
+constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::TinyGL) + 1;
+static_assert(kPublicRendererCount == 47,
+              "GraphicsRendererType must expose all 47 genuine renderer identities");
 
 TEST(GraphicsBackendMaturityTest, GetCurrentGraphicsBackendMaturityDoesNotThrow)
 {
@@ -86,6 +86,7 @@ namespace
             case GraphicsRendererType::SvgDom:
             case GraphicsRendererType::OpenVg:
             case GraphicsRendererType::PortableGL:
+            case GraphicsRendererType::TinyGL:
                 return GraphicsBackendMaturity::Experimental;
 
             case GraphicsRendererType::DirectX1:

@@ -16,7 +16,31 @@ struct SDL_Window;
 
 namespace CNA::Internal::Renderers::Fna3d
 {
+    class Fna3dCompiledEffect;
     class Fna3dRenderer;
+
+    /**
+     * @brief Shared lifetime/identity token for one FNA3D device.
+     *
+     * Resource wrappers may outlive the renderer that created them. Keeping a raw
+     * `FNA3D_Device*` in every wrapper made their destructors and methods enter a destroyed
+     * native device in that ordering. The renderer invalidates this token before the native
+     * device disappears; wrappers then reject use and make destruction a no-op. Token identity
+     * also distinguishes two simultaneously live FNA3D devices, which a type-only dynamic_cast
+     * cannot do.
+     */
+    struct Fna3dDeviceState
+    {
+        /** @brief Live native device, or null after renderer teardown. */
+        FNA3D_Device* device = nullptr;
+        /** @brief Live owning renderer, or null once its teardown begins. */
+        Fna3dRenderer* renderer = nullptr;
+
+        /** @brief Returns the live device or raises a deterministic post-device-use error. */
+        [[nodiscard]] FNA3D_Device* RequireDevice(const char* operation) const;
+        /** @brief Returns the live renderer or raises a deterministic post-device-use error. */
+        [[nodiscard]] Fna3dRenderer& RequireRenderer(const char* operation) const;
+    };
 
     /**
      * @brief CNAEXT. Anything this renderer owns that can be bound to a sampler slot.
@@ -36,6 +60,9 @@ namespace CNA::Internal::Renderers::Fna3d
 
         /** @brief The FNA3D texture object to bind to a sampler slot. */
         [[nodiscard]] virtual FNA3D_Texture* GetFna3dTextureEXT() const = 0;
+        /** @brief Device identity/liveness token that owns the texture. */
+        [[nodiscard]] virtual const std::shared_ptr<Fna3dDeviceState>&
+        GetFna3dDeviceStateEXT() const = 0;
     };
 
     /**
@@ -52,7 +79,7 @@ namespace CNA::Internal::Renderers::Fna3d
         /**
          * @brief Wraps an already-created FNA3D texture.
          *
-         * @param device       Device that owns @p texture.
+         * @param deviceState  Shared owner identity and liveness state for @p texture.
          * @param texture      The FNA3D texture object.
          * @param width        Level-0 width in texels.
          * @param height       Level-0 height in texels.
@@ -61,8 +88,9 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param compressedReadback Whether the running driver reads block-compressed textures
          *                     back; only consulted for a block-compressed @p surfaceFormat.
          */
-        Fna3dTextureRenderer(FNA3D_Device* device, FNA3D_Texture* texture, int width, int height,
-                             int levelCount, int surfaceFormat, bool compressedReadback = true);
+        Fna3dTextureRenderer(std::shared_ptr<Fna3dDeviceState> deviceState,
+                             FNA3D_Texture* texture, int width, int height, int levelCount,
+                             int surfaceFormat, bool compressedReadback = true);
         ~Fna3dTextureRenderer() override;
 
         Fna3dTextureRenderer(const Fna3dTextureRenderer&) = delete;
@@ -72,9 +100,6 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] int GetWidth() const override { return width_; }
         /** @brief Level-0 height in texels. */
         [[nodiscard]] int GetHeight() const override { return height_; }
-        /** @brief Always null: FNA3D owns no SDL_Texture. */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
-
         /**
          * @brief Replaces the whole of level 0 with tightly packed RGBA8 rows.
          * @param rgba   Source pixels, top row first.
@@ -114,7 +139,12 @@ namespace CNA::Internal::Renderers::Fna3d
                                    int dataLength) const override;
 
         /** @brief CNAEXT. The underlying FNA3D texture, for binding by the renderer. */
-        [[nodiscard]] FNA3D_Texture* GetFna3dTextureEXT() const override { return texture_; }
+        [[nodiscard]] FNA3D_Texture* GetFna3dTextureEXT() const override
+        {
+            return deviceState_ != nullptr && deviceState_->device != nullptr ? texture_ : nullptr;
+        }
+        [[nodiscard]] const std::shared_ptr<Fna3dDeviceState>&
+        GetFna3dDeviceStateEXT() const override { return deviceState_; }
         /** @brief CNAEXT. Raw XNA `SurfaceFormat` ordinal this texture was created with. */
         [[nodiscard]] int GetSurfaceFormatEXT() const { return surfaceFormat_; }
         /** @brief CNAEXT. Allocated mip level count. */
@@ -124,8 +154,8 @@ namespace CNA::Internal::Renderers::Fna3d
         /** @brief Records that @p level now holds caller-written bytes. */
         void MarkLevelDefinedEXT(int level);
 
-        /** @brief Device that owns this texture. */
-        FNA3D_Device* device_ = nullptr;
+        /** @brief Shared device identity and liveness guard. */
+        std::shared_ptr<Fna3dDeviceState> deviceState_;
         /** @brief The FNA3D texture object. */
         FNA3D_Texture* texture_ = nullptr;
         /** @brief Level-0 width in texels. */
@@ -157,8 +187,7 @@ namespace CNA::Internal::Renderers::Fna3d
         /**
          * @brief Creates the target's texture and, as needed, its colour/depth renderbuffers.
          *
-         * @param renderer            Owning renderer (used to route bind/unbind).
-         * @param device              Device the resources are created on.
+         * @param deviceState         Shared owner identity and liveness state.
          * @param width               Target width in pixels.
          * @param height              Target height in pixels.
          * @param depthFormat         Raw XNA `DepthFormat` ordinal.
@@ -167,7 +196,7 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param multiSampleCount    Requested MSAA sample count, clamped to the device maximum.
          * @param surfaceFormat       Raw XNA `SurfaceFormat` ordinal.
          */
-        Fna3dRenderTargetRenderer(Fna3dRenderer* renderer, FNA3D_Device* device, int width,
+        Fna3dRenderTargetRenderer(std::shared_ptr<Fna3dDeviceState> deviceState, int width,
                                   int height, int depthFormat, bool preserveContents, bool mipMap,
                                   int multiSampleCount, int surfaceFormat);
         ~Fna3dRenderTargetRenderer() override;
@@ -179,9 +208,6 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] int GetWidth() const override { return width_; }
         /** @brief Target height in pixels. */
         [[nodiscard]] int GetHeight() const override { return height_; }
-        /** @brief Always null: FNA3D owns no SDL_Texture. */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
-
         /** @brief Binds this target as the sole draw destination. */
         void BindAsRenderTarget() override;
         /** @brief Restores the back buffer, resolving this target first. */
@@ -227,9 +253,18 @@ namespace CNA::Internal::Renderers::Fna3d
                                    int dataLength) const override;
 
         /** @brief CNAEXT. The destination texture this target resolves into. */
-        [[nodiscard]] FNA3D_Texture* GetFna3dTextureEXT() const override { return texture_; }
+        [[nodiscard]] FNA3D_Texture* GetFna3dTextureEXT() const override
+        {
+            return deviceState_ != nullptr && deviceState_->device != nullptr ? texture_ : nullptr;
+        }
+        [[nodiscard]] const std::shared_ptr<Fna3dDeviceState>&
+        GetFna3dDeviceStateEXT() const override { return deviceState_; }
         /** @brief CNAEXT. The depth/stencil renderbuffer, or null when DepthFormat::None. */
-        [[nodiscard]] FNA3D_Renderbuffer* GetDepthBufferEXT() const { return depthBuffer_; }
+        [[nodiscard]] FNA3D_Renderbuffer* GetDepthBufferEXT() const
+        {
+            return deviceState_ != nullptr && deviceState_->device != nullptr ? depthBuffer_
+                                                                              : nullptr;
+        }
         /** @brief CNAEXT. Raw XNA `DepthFormat` ordinal actually allocated. */
         [[nodiscard]] int GetDepthFormatEXT() const { return depthFormat_; }
         /** @brief CNAEXT. Whether previously rendered colour must survive a re-bind. */
@@ -238,8 +273,7 @@ namespace CNA::Internal::Renderers::Fna3d
         void FillBindingEXT(FNA3D_RenderTargetBinding& binding) const;
 
     private:
-        Fna3dRenderer* renderer_ = nullptr;
-        FNA3D_Device* device_ = nullptr;
+        std::shared_ptr<Fna3dDeviceState> deviceState_;
         FNA3D_Texture* texture_ = nullptr;
         FNA3D_Renderbuffer* colorBuffer_ = nullptr;
         FNA3D_Renderbuffer* depthBuffer_ = nullptr;
@@ -262,14 +296,15 @@ namespace CNA::Internal::Renderers::Fna3d
         /**
          * @brief Wraps an already-created FNA3D cube texture.
          *
-         * @param device        Device that owns the texture.
+         * @param deviceState   Shared owner identity and liveness state for the texture.
          * @param texture       The FNA3D texture object.
          * @param size          Edge length of one face in texels.
          * @param levelCount    Allocated mip level count.
          * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.
          */
-        Fna3dTextureCubeRenderer(FNA3D_Device* device, FNA3D_Texture* texture, int size,
-                                 int levelCount, int surfaceFormat);
+        Fna3dTextureCubeRenderer(std::shared_ptr<Fna3dDeviceState> deviceState,
+                                 FNA3D_Texture* texture, int size, int levelCount,
+                                 int surfaceFormat);
         ~Fna3dTextureCubeRenderer() override;
 
         Fna3dTextureCubeRenderer(const Fna3dTextureCubeRenderer&) = delete;
@@ -308,11 +343,16 @@ namespace CNA::Internal::Renderers::Fna3d
         /** @brief Edge length of one face in texels. */
         [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
         /** @brief CNAEXT. The underlying FNA3D texture, for binding by the renderer. */
-        [[nodiscard]] FNA3D_Texture* GetFna3dTextureEXT() const override { return texture_; }
+        [[nodiscard]] FNA3D_Texture* GetFna3dTextureEXT() const override
+        {
+            return deviceState_ != nullptr && deviceState_->device != nullptr ? texture_ : nullptr;
+        }
+        [[nodiscard]] const std::shared_ptr<Fna3dDeviceState>&
+        GetFna3dDeviceStateEXT() const override { return deviceState_; }
 
     protected:
-        /** @brief Device that owns this texture. */
-        FNA3D_Device* device_ = nullptr;
+        /** @brief Shared device identity and liveness guard. */
+        std::shared_ptr<Fna3dDeviceState> deviceState_;
         /** @brief The FNA3D texture object. */
         FNA3D_Texture* texture_ = nullptr;
         /** @brief Edge length of one face in texels. */
@@ -333,15 +373,14 @@ namespace CNA::Internal::Renderers::Fna3d
         /**
          * @brief Creates the cube target's texture and, as needed, its renderbuffers.
          *
-         * @param renderer         Owning renderer (used to route bind/unbind).
-         * @param device           Device the resources are created on.
+         * @param deviceState      Shared owner identity and liveness state.
          * @param size             Edge length of one face in pixels.
          * @param depthFormat      Raw XNA `DepthFormat` ordinal.
          * @param preserveContents Whether previously rendered colour must survive a re-bind.
          * @param mipMap           Whether a full mip chain is allocated and generated.
          * @param multiSampleCount Requested MSAA sample count, clamped to the device maximum.
          */
-        Fna3dRenderTargetCubeRenderer(Fna3dRenderer* renderer, FNA3D_Device* device, int size,
+        Fna3dRenderTargetCubeRenderer(std::shared_ptr<Fna3dDeviceState> deviceState, int size,
                                       int depthFormat, bool preserveContents, bool mipMap,
                                       int multiSampleCount);
         ~Fna3dRenderTargetCubeRenderer() override;
@@ -388,9 +427,18 @@ namespace CNA::Internal::Renderers::Fna3d
                                    int dataLength) const override;
 
         /** @brief CNAEXT. The destination cube texture this target resolves into. */
-        [[nodiscard]] FNA3D_Texture* GetFna3dTextureEXT() const override { return texture_; }
+        [[nodiscard]] FNA3D_Texture* GetFna3dTextureEXT() const override
+        {
+            return deviceState_ != nullptr && deviceState_->device != nullptr ? texture_ : nullptr;
+        }
+        [[nodiscard]] const std::shared_ptr<Fna3dDeviceState>&
+        GetFna3dDeviceStateEXT() const override { return deviceState_; }
         /** @brief CNAEXT. The depth/stencil renderbuffer, or null when DepthFormat::None. */
-        [[nodiscard]] FNA3D_Renderbuffer* GetDepthBufferEXT() const { return depthBuffer_; }
+        [[nodiscard]] FNA3D_Renderbuffer* GetDepthBufferEXT() const
+        {
+            return deviceState_ != nullptr && deviceState_->device != nullptr ? depthBuffer_
+                                                                              : nullptr;
+        }
         /** @brief CNAEXT. Raw XNA `DepthFormat` ordinal actually allocated. */
         [[nodiscard]] int GetDepthFormatEXT() const { return depthFormat_; }
         /** @brief CNAEXT. Whether previously rendered colour must survive a re-bind. */
@@ -403,8 +451,7 @@ namespace CNA::Internal::Renderers::Fna3d
         void FillBindingEXT(FNA3D_RenderTargetBinding& binding, int face) const;
 
     private:
-        Fna3dRenderer* renderer_ = nullptr;
-        FNA3D_Device* device_ = nullptr;
+        std::shared_ptr<Fna3dDeviceState> deviceState_;
         FNA3D_Texture* texture_ = nullptr;
         FNA3D_Renderbuffer* colorBuffer_ = nullptr;
         FNA3D_Renderbuffer* depthBuffer_ = nullptr;
@@ -425,7 +472,7 @@ namespace CNA::Internal::Renderers::Fna3d
         /**
          * @brief Wraps an already-created FNA3D volume texture.
          *
-         * @param device        Device that owns the texture.
+         * @param deviceState   Shared owner identity and liveness state for the texture.
          * @param texture       The FNA3D texture object.
          * @param width         Width in voxels.
          * @param height        Height in voxels.
@@ -435,15 +482,16 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param keepUploadMirror Whether to mirror uploads on the CPU so `GetData` can be served
          *                         when the selected FNA3D driver cannot read a volume texture back.
          */
-        Fna3dTexture3DRenderer(FNA3D_Device* device, FNA3D_Texture* texture, int width, int height,
-                               int depth, int levelCount, int surfaceFormat, bool keepUploadMirror);
+        Fna3dTexture3DRenderer(std::shared_ptr<Fna3dDeviceState> deviceState,
+                               FNA3D_Texture* texture, int width, int height, int depth,
+                               int levelCount, int surfaceFormat, bool keepUploadMirror);
         ~Fna3dTexture3DRenderer() override;
 
         Fna3dTexture3DRenderer(const Fna3dTexture3DRenderer&) = delete;
         Fna3dTexture3DRenderer& operator=(const Fna3dTexture3DRenderer&) = delete;
 
         /**
-         * @brief Uploads RGBA8 voxels into a sub-volume.
+         * @brief Uploads tightly packed voxels in the texture's declared surface format.
          * @param level      Mip level to write.
          * @param x          Left edge of the box, in voxels.
          * @param y          Top edge of the box, in voxels.
@@ -451,7 +499,7 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param w          Box width in voxels.
          * @param h          Box height in voxels.
          * @param depth      Box depth in voxels.
-         * @param data       Source voxels, tightly packed RGBA8.
+         * @param data       Source voxels, tightly packed in the declared surface format.
          * @param dataLength Size of @p data in bytes.
          * @return True when the whole box was stored.
          */
@@ -459,7 +507,7 @@ namespace CNA::Internal::Renderers::Fna3d
                                    const void* data, int dataLength) override;
 
         /**
-         * @brief Reads RGBA8 voxels back from a sub-volume.
+         * @brief Reads tightly packed voxels in the texture's declared surface format.
          * @param level      Mip level to read.
          * @param x          Left edge of the box, in voxels.
          * @param y          Top edge of the box, in voxels.
@@ -467,7 +515,7 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param w          Box width in voxels.
          * @param h          Box height in voxels.
          * @param depth      Box depth in voxels.
-         * @param data       Destination for the tightly packed RGBA8 box.
+         * @param data       Destination for the tightly packed declared-format box.
          * @param dataLength Size of @p data in bytes.
          * @return True when the whole box was read back.
          */
@@ -483,10 +531,15 @@ namespace CNA::Internal::Renderers::Fna3d
         void GetDimensionsEXT(int& width, int& height, int& depth) const noexcept override;
 
         /** @brief CNAEXT. The underlying FNA3D texture, for binding by the renderer. */
-        [[nodiscard]] FNA3D_Texture* GetFna3dTextureEXT() const override { return texture_; }
+        [[nodiscard]] FNA3D_Texture* GetFna3dTextureEXT() const override
+        {
+            return deviceState_ != nullptr && deviceState_->device != nullptr ? texture_ : nullptr;
+        }
+        [[nodiscard]] const std::shared_ptr<Fna3dDeviceState>&
+        GetFna3dDeviceStateEXT() const override { return deviceState_; }
 
     private:
-        FNA3D_Device* device_ = nullptr;
+        std::shared_ptr<Fna3dDeviceState> deviceState_;
         FNA3D_Texture* texture_ = nullptr;
         int width_ = 0;
         int height_ = 0;
@@ -496,11 +549,12 @@ namespace CNA::Internal::Renderers::Fna3d
         // FNA3D's OpenGL driver implements no GetTextureData3D at all (it logs
         // "GetTextureData3D is unsupported!" and writes nothing), while its SDL_GPU and Direct3D
         // 11 drivers do. A volume texture in XNA has no GPU write path -- its content can only
-        // come from SetData -- so mirroring the uploads is an exact answer rather than invented
-        // content, and it is kept only when the running driver was measured not to support the
-        // readback (Fna3dRenderer's own probe at device creation).
+        // come from SetData -- so mirroring the uploads is exact only if every requested voxel is
+        // known to have been supplied. `uploadMirrorDefined_` tracks that coverage and makes a
+        // read touching an uninitialised voxel fail rather than return resize-created zeroes.
         bool keepUploadMirror_ = false;
         std::vector<std::vector<std::uint8_t>> uploadMirror_;
+        std::vector<std::vector<std::uint8_t>> uploadMirrorDefined_;
     };
 
     /**
@@ -517,11 +571,12 @@ namespace CNA::Internal::Renderers::Fna3d
         /**
          * @brief Allocates a dynamic FNA3D vertex buffer.
          *
-         * @param device         Device the buffer is created on.
+         * @param deviceState    Shared owner identity and liveness state for the buffer.
          * @param vertexCapacity Number of vertices the buffer must hold.
          * @param maxStride      Largest vertex stride the buffer must accommodate.
          */
-        Fna3dVertexBufferRenderer(FNA3D_Device* device, int vertexCapacity, int maxStride);
+        Fna3dVertexBufferRenderer(std::shared_ptr<Fna3dDeviceState> deviceState,
+                                  int vertexCapacity, int maxStride);
         ~Fna3dVertexBufferRenderer() override;
 
         Fna3dVertexBufferRenderer(const Fna3dVertexBufferRenderer&) = delete;
@@ -555,7 +610,13 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
 
         /** @brief CNAEXT. The underlying FNA3D buffer. */
-        [[nodiscard]] FNA3D_Buffer* GetFna3dBufferEXT() const { return buffer_; }
+        [[nodiscard]] FNA3D_Buffer* GetFna3dBufferEXT() const
+        {
+            return deviceState_ != nullptr && deviceState_->device != nullptr ? buffer_ : nullptr;
+        }
+        /** @brief CNAEXT. Device identity/liveness token that owns this buffer. */
+        [[nodiscard]] const std::shared_ptr<Fna3dDeviceState>&
+        GetFna3dDeviceStateEXT() const { return deviceState_; }
         /** @brief CNAEXT. Stride of the most recent upload, in bytes. */
         [[nodiscard]] int GetStrideEXT() const { return stride_; }
         /** @brief CNAEXT. Whether a caller-supplied declaration is available. */
@@ -571,7 +632,7 @@ namespace CNA::Internal::Renderers::Fna3d
     private:
         void EnsureCapacity(int byteCount);
 
-        FNA3D_Device* device_ = nullptr;
+        std::shared_ptr<Fna3dDeviceState> deviceState_;
         FNA3D_Buffer* buffer_ = nullptr;
         int capacityBytes_ = 0;
         int vertexCount_ = 0;
@@ -589,11 +650,12 @@ namespace CNA::Internal::Renderers::Fna3d
     public:
         /**
          * @brief Allocates a dynamic FNA3D index buffer.
-         * @param device        Device the buffer is created on.
+         * @param deviceState   Shared owner identity and liveness state for the buffer.
          * @param indexCapacity Number of indices the buffer must hold.
          * @param thirtyTwoBit  Whether indices are 32-bit.
          */
-        Fna3dIndexBufferRenderer(FNA3D_Device* device, int indexCapacity, bool thirtyTwoBit);
+        Fna3dIndexBufferRenderer(std::shared_ptr<Fna3dDeviceState> deviceState,
+                                 int indexCapacity, bool thirtyTwoBit);
         ~Fna3dIndexBufferRenderer() override;
 
         Fna3dIndexBufferRenderer(const Fna3dIndexBufferRenderer&) = delete;
@@ -637,7 +699,13 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] bool IsThirtyTwoBit() const override { return thirtyTwoBit_; }
 
         /** @brief CNAEXT. The underlying FNA3D buffer. */
-        [[nodiscard]] FNA3D_Buffer* GetFna3dBufferEXT() const { return buffer_; }
+        [[nodiscard]] FNA3D_Buffer* GetFna3dBufferEXT() const
+        {
+            return deviceState_ != nullptr && deviceState_->device != nullptr ? buffer_ : nullptr;
+        }
+        /** @brief CNAEXT. Device identity/liveness token that owns this buffer. */
+        [[nodiscard]] const std::shared_ptr<Fna3dDeviceState>&
+        GetFna3dDeviceStateEXT() const { return deviceState_; }
         /** @brief CNAEXT. The FNA3D index element size matching this buffer. */
         [[nodiscard]] FNA3D_IndexElementSize GetElementSizeEXT() const
         {
@@ -649,7 +717,7 @@ namespace CNA::Internal::Renderers::Fna3d
                     FNA3D_SetDataOptions options);
         void EnsureCapacity(int byteCount);
 
-        FNA3D_Device* device_ = nullptr;
+        std::shared_ptr<Fna3dDeviceState> deviceState_;
         FNA3D_Buffer* buffer_ = nullptr;
         int capacityBytes_ = 0;
         int indexCount_ = 0;
@@ -664,9 +732,9 @@ namespace CNA::Internal::Renderers::Fna3d
     public:
         /**
          * @brief Creates an FNA3D query object.
-         * @param device Device the query is created on.
+         * @param deviceState Shared owner identity and liveness state for the query.
          */
-        explicit Fna3dOcclusionQueryRenderer(FNA3D_Device* device);
+        explicit Fna3dOcclusionQueryRenderer(std::shared_ptr<Fna3dDeviceState> deviceState);
         ~Fna3dOcclusionQueryRenderer() override;
 
         Fna3dOcclusionQueryRenderer(const Fna3dOcclusionQueryRenderer&) = delete;
@@ -682,7 +750,7 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] int PixelCount() const override;
 
     private:
-        FNA3D_Device* device_ = nullptr;
+        std::shared_ptr<Fna3dDeviceState> deviceState_;
         FNA3D_Query* query_ = nullptr;
     };
 
@@ -699,9 +767,9 @@ namespace CNA::Internal::Renderers::Fna3d
     public:
         /**
          * @brief Binds this sprite batch to its renderer.
-         * @param renderer Owning renderer; supplies the device, the sprite effect and the viewport.
+         * @param deviceState Shared owner identity and liveness state; routes live submissions.
          */
-        explicit Fna3dSpriteBatchRenderer(Fna3dRenderer& renderer);
+        explicit Fna3dSpriteBatchRenderer(std::shared_ptr<Fna3dDeviceState> deviceState);
         ~Fna3dSpriteBatchRenderer() override;
 
         Fna3dSpriteBatchRenderer(const Fna3dSpriteBatchRenderer&) = delete;
@@ -711,6 +779,9 @@ namespace CNA::Internal::Renderers::Fna3d
         void Begin() override;
         /** @brief Flushes every queued sprite. */
         void End() override;
+
+        /** @brief Selects a compiled Effect Framework effect for subsequent sprite runs. */
+        void SetCustomEffect(Effect* effect) override;
 
         /**
          * @brief Sets the transform applied on top of the 2D orthographic projection.
@@ -783,9 +854,10 @@ namespace CNA::Internal::Renderers::Fna3d
                    const Rectangle& sourceRectangle, const Color& color, float rotation,
                    const Vector2& origin, SpriteEffects effects, float layerDepth);
 
-        Fna3dRenderer& renderer_;
+        std::shared_ptr<Fna3dDeviceState> deviceState_;
         std::vector<SpriteVertex> vertices_;
         const ITextureRenderer* batchTexture_ = nullptr;
+        Effect* customEffect_ = nullptr;
         Matrix transform_;
         int samplerFilter_ = 0;
         int addressU_ = 1;
@@ -922,11 +994,6 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] bool TransformLogicalToWindow(float logX, float logY, float& windowX,
                                                     float& windowY) const override;
 
-        /** @brief The SDL window FNA3D presents into. */
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-        /** @brief Always null: FNA3D owns no SDL_Renderer. */
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
-
         /**
          * @brief Reads the back buffer's rendered pixels for a region.
          * @param x      Left edge in logical pixels.
@@ -1031,6 +1098,10 @@ namespace CNA::Internal::Renderers::Fna3d
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                               const std::string& fragSrc) override;
 
+        /** @brief Creates a MojoShader/FNA3D runtime for compiled XNA Effect bytecode. */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeLength) override;
+
         /**
          * @brief Binds a single 2D render target, or the back buffer when null.
          * @param rt Target to bind, or null.
@@ -1117,6 +1188,13 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param lodBias     Mip level-of-detail bias.
          */
         void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
+
+        /**
+         * @brief Applies the third addressing axis of a SamplerState to one texture slot.
+         * @param slot     Texture unit index.
+         * @param addressW Raw `TextureAddressMode` ordinal for W.
+         */
+        void ApplySamplerAddressW(int slot, int addressW) override;
 
         /**
          * @brief Sets the constant blend colour used by the BlendFactor blend modes.
@@ -1313,6 +1391,7 @@ namespace CNA::Internal::Renderers::Fna3d
          * @return True only when FNA3D and the selected runtime driver actually provide it.
          */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+        [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
 
         /** @brief The largest single-axis texture dimension FNA3D guarantees. */
         [[nodiscard]] int GetMaxTextureDimension() const override;
@@ -1328,6 +1407,12 @@ namespace CNA::Internal::Renderers::Fna3d
         /** @brief CNAEXT. The FNA3D device this renderer owns. */
         [[nodiscard]] FNA3D_Device* GetDeviceEXT() const { return device_; }
 
+        /** @brief CNAEXT. Shared identity/liveness token for resources owned by this device. */
+        [[nodiscard]] const std::shared_ptr<Fna3dDeviceState>& GetDeviceStateEXT() const
+        {
+            return deviceState_;
+        }
+
         /** @brief CNAEXT. The presentation geometry currently in effect. */
         [[nodiscard]] const PresentationLayout& GetPresentationLayoutEXT() const
         {
@@ -1335,7 +1420,7 @@ namespace CNA::Internal::Renderers::Fna3d
         }
 
         /**
-         * @brief CNAEXT. Draws one queued sprite run through the stock SpriteEffect.
+         * @brief CNAEXT. Draws one queued sprite run through the stock or supplied effect.
          * @param texture     FNA3D texture bound to sampler 0.
          * @param vertices    Interleaved position/colour/texcoord vertices, 24 bytes each.
          * @param vertexCount Number of vertices; must be a multiple of four.
@@ -1345,7 +1430,8 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param addressV    Raw `TextureAddressMode` ordinal for V.
          */
         void DrawSpriteRunEXT(FNA3D_Texture* texture, const void* vertices, int vertexCount,
-                              const Matrix& transform, int filter, int addressU, int addressV);
+                              const Matrix& transform, int filter, int addressU, int addressV,
+                              Effect* customEffect);
 
         /**
          * @brief CNAEXT. Re-applies the currently bound render-target set to FNA3D.
@@ -1409,6 +1495,17 @@ namespace CNA::Internal::Renderers::Fna3d
         }
 
         /**
+         * @brief CNAEXT. Whether this driver returned an exact probe result for volume readback.
+         *
+         * When false, each `Fna3dTexture3DRenderer` uses its checked upload mirror instead of
+         * asking the native driver to write an uninitialised output buffer.
+         */
+        [[nodiscard]] bool SupportsTexture3DReadbackEXT() const
+        {
+            return texture3DReadbackSupported_;
+        }
+
+        /**
          * @brief CNAEXT. Selects and applies the stock effect a draw's parameters describe.
          * @param world      World matrix.
          * @param view       View matrix.
@@ -1459,7 +1556,18 @@ namespace CNA::Internal::Renderers::Fna3d
                                     const Matrix& view, const GpuDrawParams& params,
                                     bool withSpecular);
 
+        /**
+         * @brief CNAEXT. Reads back the native sampler state this renderer holds for one slot.
+         *
+         * The renderer accumulates a slot's sampler state from several independent contract calls
+         * before handing it to FNA3D, so this is the only place the assembled result is visible.
+         * @param slot Sampler slot index; out-of-range slots return a default-constructed state.
+         * @return The FNA3D sampler state currently held for that slot.
+         */
+        [[nodiscard]] FNA3D_SamplerState GetSamplerStateEXT(int slot) const;
+
     private:
+        friend class Fna3dCompiledEffect;
         struct BoundTarget
         {
             FNA3D_RenderTargetBinding binding{};
@@ -1478,6 +1586,7 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] int ClampMultiSampleCount(int requested, int format) const;
 
         SDL_Window* window_ = nullptr;
+        std::shared_ptr<Fna3dDeviceState> deviceState_ = std::make_shared<Fna3dDeviceState>();
         FNA3D_Device* device_ = nullptr;
         FNA3D_PresentationParameters presentation_{};
         PresentationLayout layout_{};
@@ -1487,6 +1596,12 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_DepthStencilState depthStencilState_{};
         FNA3D_RasterizerState rasterizerState_{};
         std::array<FNA3D_SamplerState, 16> samplerStates_{};
+        std::array<FNA3D_SamplerState, 4> vertexSamplerStates_{};
+        // Native textures currently verified at each stage. Compiled Effect parameters follow
+        // FNA semantics: a null texture parameter leaves the slot unchanged while still allowing
+        // the pass to update that slot's sampler state.
+        std::array<FNA3D_Texture*, 16> boundPixelTextures_{};
+        std::array<FNA3D_Texture*, 4> boundVertexTextures_{};
 
         std::array<Fna3dStockEffect, static_cast<std::size_t>(StockEffectKind::Count)> effects_{};
 

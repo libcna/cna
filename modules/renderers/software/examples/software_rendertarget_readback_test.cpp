@@ -949,17 +949,29 @@ protected:
             check(Same(AtBackbuffer(ReadBackbuffer(dev), 8, 4), Color(70, 180, 40, 255)),
                   "H2 a multisample-requested target samples as ordinary single-sample colour");
 
-            // Software rasterizes one sample per pixel and stores no per-sample data, so there is
-            // nothing to resolve and GetData/sampling above are already the final colour. It does,
-            // however, still REPORT the requested (power-of-two-rounded) count rather than 0. That
-            // reporting inaccuracy is independent of this task's readback/sampling defects and is
-            // recorded as its own finding; pinning the observed value here keeps the boundary
-            // honest rather than silently blessed.
+            // Software implements a real four-sample colour plane and resolves it when the target
+            // is unbound (or snapshots it for an active level-zero GetData). The public property
+            // therefore reports the same actual sample count used by rasterization.
             check(msaa.getMultiSampleCountProperty() == 4,
-                  "H3 Software reports the requested MultiSampleCount (" +
+                  "H3 Software reports the implemented MultiSampleCount (" +
                       std::to_string(msaa.getMultiSampleCountProperty()) +
-                      ") although it rasterizes single-sample -- recorded boundary, independent "
-                      "finding");
+                      ")");
+
+            // A clear updates both planes, but rasterization updates only the live samples. Reading
+            // before unbind therefore distinguishes a real active-pass resolve from stale `color`.
+            dev.SetRenderTarget(&msaa);
+            ResetState(dev);
+            dev.Clear(Color(0, 0, 0, 255));
+            // Primary channels are exact through the byte->float->byte tint path, keeping this an
+            // MSAA/readback assertion rather than a floating-point colour-rounding assertion.
+            FillRect(dev, Rectangle(0, 0, 16, 8), Color(255, 0, 255, 255));
+            const bool activeSnapshotExact =
+                WholeTargetIs(msaa, Color(255, 0, 255, 255), detail);
+            check(activeSnapshotExact,
+                  "H4 GetData snapshots live four-sample raster output while the target remains "
+                  "bound" + detail);
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            ResetState(dev);
         }
 
         // ---- I: depth/stencil isolation ---------------------------------------------------------

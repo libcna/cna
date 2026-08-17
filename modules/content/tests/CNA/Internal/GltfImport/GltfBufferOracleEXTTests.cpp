@@ -36,9 +36,15 @@ using CNA::Internal::JsonValue;
 
 namespace
 {
-    /// A fixture whose golden is a stride-32 vertex buffer, used by the self-proving half below.
-    /// Any importable fixture would do; naming one keeps the offsets in those tests concrete.
-    constexpr const char* kStride32Fixture = "u8-idx";
+    /// A fixture with a Position+Normal layout, used by the self-proving half below. Any
+    /// importable fixture would do; naming one keeps the offsets in those tests concrete.
+    ///
+    /// Its stride is 48, not 32: GLTF-215 made metallic-roughness the selection rule, and a
+    /// primitive with no material at all still gets glTF's default material, which is
+    /// metallic-roughness. Stride 32 no longer occurs anywhere in the corpus.
+    constexpr const char* kPositionNormalFixture = "u8-idx";
+    /// Position(12) + Normal(12) + Tangent(16) + TextureCoordinate(8).
+    constexpr int kPositionNormalStride = 48;
 
     const GoldenBufferPart* FirstPart(const GoldenBuffers& golden)
     {
@@ -95,7 +101,7 @@ namespace
 
 TEST(GltfBufferOracle, IdenticalBuffersCompareEqual)
 {
-    const LoadedFixture fixture(kStride32Fixture);
+    const LoadedFixture fixture(kPositionNormalFixture);
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
     const GoldenBuffers golden = LoadGoldenBuffersEXT(fixture);
     ASSERT_TRUE(golden.ok) << golden.error;
@@ -116,18 +122,18 @@ TEST(GltfBufferOracle, IdenticalBuffersCompareEqual)
 TEST(GltfBufferOracle, AOneByteVertexPerturbationIsReportedAtTheRightOffsetFieldAndVertex)
 {
     // The acceptance criterion of GLTF-007, stated directly. Vertex 1's Normal begins at byte
-    // 32 + 12 = 44 in a stride-32 layout, so perturbing byte 45 must be reported as vertex 1,
-    // Normal, one byte in.
-    const LoadedFixture fixture(kStride32Fixture);
+    // 48 + 12 = 60 in this layout, so perturbing byte 61 must be reported as vertex 1, Normal,
+    // one byte in.
+    const LoadedFixture fixture(kPositionNormalFixture);
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
     const GoldenBuffers golden = LoadGoldenBuffersEXT(fixture);
     ASSERT_TRUE(golden.ok) << golden.error;
     const GoldenBufferPart* part = FirstPart(golden);
     ASSERT_NE(nullptr, part);
-    ASSERT_EQ(32, part->stride);
-    ASSERT_GE(part->vertexBytes.size(), 46u);
+    ASSERT_EQ(kPositionNormalStride, part->stride);
+    ASSERT_GE(part->vertexBytes.size(), 62u);
 
-    constexpr std::size_t kPerturbed = 45;
+    constexpr std::size_t kPerturbed = 61;
     std::vector<std::uint8_t> mutated = part->vertexBytes;
     mutated[kPerturbed] = static_cast<std::uint8_t>(mutated[kPerturbed] ^ 0xFF);
 
@@ -149,14 +155,14 @@ TEST(GltfBufferOracle, AOneByteVertexPerturbationIsReportedAtTheRightOffsetField
     EXPECT_NE(std::string::npos, diff.report.find("VB"));
     EXPECT_NE(std::string::npos, diff.report.find("vertex 1"));
     EXPECT_NE(std::string::npos, diff.report.find("Normal"));
-    EXPECT_NE(std::string::npos, diff.report.find("45"));
+    EXPECT_NE(std::string::npos, diff.report.find(std::to_string(kPerturbed)));
 }
 
 TEST(GltfBufferOracle, EveryByteOfAVertexIsAttributedToTheFieldThatOwnsIt)
 {
     // Sweeping every offset of one vertex proves the attribution is a real mapping rather than a
     // lucky case: each byte must name the field whose span contains it, and no other.
-    const LoadedFixture fixture(kStride32Fixture);
+    const LoadedFixture fixture(kPositionNormalFixture);
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
     const GoldenBuffers golden = LoadGoldenBuffersEXT(fixture);
     ASSERT_TRUE(golden.ok) << golden.error;
@@ -189,7 +195,7 @@ TEST(GltfBufferOracle, EveryByteOfAVertexIsAttributedToTheFieldThatOwnsIt)
 
 TEST(GltfBufferOracle, AOneByteIndexPerturbationNamesTheIndexItBelongsTo)
 {
-    const LoadedFixture fixture(kStride32Fixture);
+    const LoadedFixture fixture(kPositionNormalFixture);
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
     const GoldenBuffers golden = LoadGoldenBuffersEXT(fixture);
     ASSERT_TRUE(golden.ok) << golden.error;
@@ -215,7 +221,7 @@ TEST(GltfBufferOracle, AOneByteIndexPerturbationNamesTheIndexItBelongsTo)
 
 TEST(GltfBufferOracle, ATruncatedBufferIsReportedAsASizeDifferenceAtTheFirstMissingByte)
 {
-    const LoadedFixture fixture(kStride32Fixture);
+    const LoadedFixture fixture(kPositionNormalFixture);
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
     const GoldenBuffers golden = LoadGoldenBuffersEXT(fixture);
     ASSERT_TRUE(golden.ok) << golden.error;
@@ -296,6 +302,11 @@ TEST(GltfConformanceL5, GeneratedBuffersMatchTheGoldenBytesExactly)
         const LoadedFixture fixture(id);
         ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
+        // The same committed goldens are exercised by the decoder-enabled build. In the explicit
+        // decoder-free configuration, required-extension refusal is the correct outcome and is
+        // asserted by GltfContainerValidation rather than misreported here as an L5 byte defect.
+        if (RequiresUnavailableDraco(fixture.Expected())) { continue; }
+
         const GoldenBuffers golden = LoadGoldenBuffersEXT(fixture);
         ASSERT_TRUE(golden.declared) << "the fixture's manifest carries no l5 block at all";
         ASSERT_TRUE(golden.ok) << golden.error;
@@ -336,13 +347,17 @@ TEST(GltfConformanceL5, GeneratedBuffersMatchTheGoldenBytesExactly)
                 CompareIndexBytesEXT(id, part.indexElementSize, part.indexBytes, mesh.indexBytes);
             EXPECT_TRUE(ib.equal) << ib.report;
 
-            // The draw-call count the packing layer derives from this buffer. Every loader
-            // computes numIndices / 3 today, which is only right because the only topology that
-            // reaches L5 is TRIANGLES (GLTF-071); GLTF-078 replaces it with a topology-aware
-            // helper, and this assertion is what will hold that replacement to the same answer.
-            EXPECT_EQ("TRIANGLES", part.topology);
-            EXPECT_EQ(CNA::Internal::GltfImport::PrimitiveTopology::Triangles, mesh.topology);
-            EXPECT_EQ(part.primitiveCount, part.indexCount / 3);
+            // The topology the buffer is actually in, and the draw-call count derived from it
+            // (§12.3, GLTF-078). Both are read from the manifest rather than assumed, which is the
+            // whole point: every loader used to compute numIndices / 3 unconditionally, and that is
+            // right for exactly one of the seven topologies.
+            EXPECT_EQ(part.topology, std::string(CNA::Internal::GltfImport::PrimitiveTopologyName(
+                                          mesh.topology)))
+                << "the buffer is not in the topology the manifest says it is";
+            EXPECT_EQ(part.primitiveCount,
+                      CNA::Internal::GltfImport::PrimitiveCountForTopology(
+                          mesh.topology, static_cast<std::size_t>(part.indexCount)))
+                << "the primitive count no longer follows the part's own topology";
         }
     }
 }
@@ -372,20 +387,65 @@ TEST(GltfConformanceL5, SparseIndicesProducesTheGoldenIndexBuffer)
         << "the index buffer is all zeros again -- D4 has come back at the byte level";
 }
 
-TEST(GltfConformanceL5, ARejectedTopologyHasNoGoldenAndSaysWhichTaskWouldGiveItOne)
+TEST(GltfConformanceL5, EveryTopologyProducesAGoldenAndItsOwnPrimitiveCount)
 {
-    for (const std::string& id : {"mode-triangle-strip", "mode-points"})
+    // Replaces the "a rejected topology has no golden" case: since GLTF-073/GLTF-076/GLTF-078 all
+    // seven modes import, so all seven have goldens. What is asserted instead is the property that
+    // makes those goldens meaningful -- each carries its own topology and its own §12.3 count,
+    // rather than every buffer being described as a triangle list.
+    const struct { const char* id; const char* topology; int primitiveCount; } kCases[] = {
+        {"mode-triangles",      "TRIANGLES",  2},
+        {"mode-triangle-strip", "TRIANGLES",  2},   // converted (GLTF-072)
+        {"mode-triangle-fan",   "TRIANGLES",  2},   // converted (GLTF-072)
+        {"mode-lines",          "LINES",      2},   // 4 indices -> 2 segments
+        {"mode-line-strip",     "LINE_STRIP", 2},   // 3 indices -> 2 segments
+        {"mode-line-loop",      "LINE_STRIP", 3},   // 3 + closing index -> 3 segments (GLTF-076)
+        {"mode-points",         "POINTS",     4},   // 4 indices -> 4 points
+    };
+
+    for (const auto& testCase : kCases)
     {
-        SCOPED_TRACE(id);
-        const LoadedFixture fixture(id);
+        SCOPED_TRACE(testCase.id);
+        const LoadedFixture fixture(testCase.id);
         ASSERT_TRUE(fixture.Ok()) << fixture.Error();
         const GoldenBuffers golden = LoadGoldenBuffersEXT(fixture);
         ASSERT_TRUE(golden.declared);
         ASSERT_TRUE(golden.ok) << golden.error;
-        EXPECT_FALSE(golden.supported)
-            << "this fixture now has an L5 golden -- if GLTF-072 landed, that is where it belongs";
-        EXPECT_NE(golden.blockedBy.end(),
-                  std::find(golden.blockedBy.begin(), golden.blockedBy.end(), "GLTF-072"))
-            << "the missing golden does not name GLTF-072 as what would produce it";
+        ASSERT_TRUE(golden.supported) << "this topology no longer imports";
+        ASSERT_EQ(1u, golden.parts.size());
+
+        EXPECT_EQ(testCase.topology, golden.parts[0].topology);
+        EXPECT_EQ(testCase.primitiveCount, golden.parts[0].primitiveCount);
     }
+}
+
+TEST(GltfConformanceL5, AConvertedTopologyProducesTheSameBufferAsAnExplicitTriangleList)
+{
+    // GLTF-072's byte-level statement. mode-triangle-strip and mode-triangles author the same quad
+    // by different routes -- a four-index strip and an explicit six-index list -- so a correct
+    // conversion makes their index buffers identical byte for byte. mode-triangle-fan authors the
+    // same four indices as the strip under the other rule, and must NOT match, which is what stops
+    // this passing under a conversion that ignored the mode.
+    const auto indexBytesOf = [](const std::string& id) {
+        const LoadedFixture fixture(id);
+        EXPECT_TRUE(fixture.Ok()) << fixture.Error();
+        const GoldenBuffers golden = LoadGoldenBuffersEXT(fixture);
+        EXPECT_TRUE(golden.supported) << id << " has no golden -- its conversion did not land";
+        CNA::Internal::GltfImport::MeshOut mesh;
+        std::string error;
+        EXPECT_TRUE(golden.parts.size() == 1u) << id << " has " << golden.parts.size() << " parts";
+        EXPECT_TRUE(ExtractMeshOut(fixture.Data(), golden.parts[0].mesh, golden.parts[0].primitive,
+                                   mesh, error)) << error;
+        return mesh.indexBytes;
+    };
+
+    const std::vector<std::uint8_t> fromStrip = indexBytesOf("mode-triangle-strip");
+    const std::vector<std::uint8_t> fromList = indexBytesOf("mode-triangles");
+    const std::vector<std::uint8_t> fromFan = indexBytesOf("mode-triangle-fan");
+
+    EXPECT_EQ(fromList, fromStrip)
+        << "a converted strip must be byte-identical to the triangle list a file could author "
+           "directly -- that equivalence is the whole justification for converting at import";
+    EXPECT_NE(fromList, fromFan)
+        << "the fan rule produced the strip's triangles, so the mode is not actually being read";
 }

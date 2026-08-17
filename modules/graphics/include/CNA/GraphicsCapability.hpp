@@ -15,7 +15,7 @@ namespace CNA
     {
         /**
          * @brief The 3D pipeline as a whole (vertex/index buffers, 3D draw calls, depth/stencil
-         * clears and state). Several renderers, including SDL_Renderer, Canvas, GDI, and the
+         * clears and state). Several renderers, including the native 2D renderer, Canvas, GDI, and the
          * Skia raster renderer, are intentionally 2D-only and lack this entirely. Query the selected
          * renderer rather than inferring support from its name. GDI's separate 2D stencil-mask
          * extension does not imply a 3D pipeline.
@@ -110,6 +110,16 @@ namespace CNA
          * compositing. Each renderer reports the fidelity of its CNA implementation, not merely
          * whether its underlying graphics API could theoretically express additive blending.
          */
-        AdditiveBlending
+        AdditiveBlending,
+
+        /**
+         * @brief XNA/FNA Direct3D 9 Effect Framework bytecode, including reflected parameters,
+         * techniques, passes, shaders, samplers, and pass state.
+         *
+         * This is intentionally separate from CustomEffects, which describes CNAEXT
+         * ShaderEffect's caller-supplied source-pair contract. A renderer may support either
+         * format independently. Appended to preserve every existing numeric capability value.
+         */
+        CompiledEffects
     };
 } // CNA

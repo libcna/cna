@@ -8,8 +8,12 @@
 
 #include "CNA/Devices/CameraDeviceInfo.hpp"
 #include "CNA/Devices/CameraState.hpp"
-#include "CNA/Devices/Detail/ICameraBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+
+namespace CNA::Platform
+{
+    class IPlatformCamera;
+}
 
 namespace CNA::Devices
 {
@@ -17,23 +21,15 @@ namespace CNA::Devices
      * @brief Captures video frames from a camera device into a
      * `Microsoft::Xna::Framework::Graphics::Texture2D`.
      *
-     * CNA extension — no XNA/WP7 equivalent exists. Calls through
-     * `Detail::ICameraBackend` (default: `Detail::SdlCameraBackend`, backed by SDL3's
-     * `SDL_OpenCamera()`/`SDL_AcquireCameraFrame()` family,
-     * `third_party/SDL/include/SDL3/SDL_camera.h`) rather than calling SDL3 directly —
-     * see the constructor overload taking a backend for why this matters more here
-     * than for most other `CNA::Devices` classes.
+     * CNA extension — no XNA/WP7 equivalent exists. Enumeration, permission polling and capture
+     * all use the selected platform's capability-gated camera provider.
      *
-     * @note Poll-based, not callback-based, unlike `Microsoft::Devices::Sensors`'
-     * push-callback model: `SDL_AcquireCameraFrame()` itself is poll-based, so
-     * `TryAcquireFrame()` matches that shape directly instead of forcing an
-     * artificial event model on top of it. Call it once per `Game::Update()`/`Draw()`.
+     * @note Poll-based, not callback-based, unlike `Microsoft::Devices::Sensors`' push-callback
+     * model. Call `TryAcquireFrame()` once per `Game::Update()`/`Draw()`.
      *
      * @note First-implementation scope (see `docs/cna-devices-camera-design.md`):
      * a single camera device (the first one the platform reports — no device
-     * selection yet), synchronous permission polling (no SDL event-queue
-     * integration), RGBA8-only frame delivery. `CameraState::Lost` is never reached
-     * by the current backend.
+     * selection yet), synchronous permission polling and RGBA8-only frame delivery.
      */
     class Camera
     {
@@ -44,7 +40,7 @@ namespace CNA::Devices
          * currently present or permission has been granted; see `getStateProperty()`
          * for that).
          *
-         * @return true if at least one SDL3 camera driver is compiled in.
+         * @return true if the selected platform exposes a camera provider.
          */
         [[nodiscard]] static bool getIsSupportedProperty();
 
@@ -58,24 +54,9 @@ namespace CNA::Devices
         [[nodiscard]] static std::vector<CameraDeviceInfo> getAvailableCamerasProperty();
 
         /**
-         * @brief Opens the first available camera device using the real SDL3
-         * backend.
+         * @brief Opens the first camera reported by the selected platform, when one is available.
          */
         Camera();
-
-        /**
-         * @brief Test-only constructor: opens with a caller-supplied backend instead
-         * of the real `Detail::SdlCameraBackend`.
-         *
-         * Unlike `FileDialog`'s process-wide `SetBackendForTesting()`, the backend is
-         * injected here, at construction — mirroring `SystemTray`'s pattern — because
-         * the real backend's device-opening call runs immediately when constructed,
-         * not deferred to a later call; a post-construction swap would be too late to
-         * prevent the real backend from ever running.
-         *
-         * @param backend Backend to use instead of `Detail::SdlCameraBackend`.
-         */
-        explicit Camera(std::unique_ptr<Detail::ICameraBackend> backend);
 
         /** @brief Closes the underlying camera device, if open. */
         ~Camera();
@@ -123,7 +104,7 @@ namespace CNA::Devices
         bool TryAcquireFrame(Microsoft::Xna::Framework::Graphics::Texture2D& outTexture);
 
     private:
-        std::unique_ptr<Detail::ICameraBackend> backend_;
+        std::unique_ptr<CNA::Platform::IPlatformCamera> camera_;
     };
 } // namespace CNA::Devices
 

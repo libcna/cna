@@ -2,12 +2,12 @@
 #include <gtest/gtest.h>
 #include <stdexcept>
 
-#include "Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp"
+#include "Microsoft/Devices/Sensors/Detail/PlatformSensorSubsystem.hpp"
 
 using Microsoft::Devices::Sensors::Detail::MakeScopeExit;
 
 // Task P7-5: ScopeExit is a small enough utility that it was previously only
-// ever exercised indirectly, through SdlSensorSubsystem's own dispatch
+// ever exercised indirectly, through PlatformSensorSubsystem's own dispatch
 // cleanup — these tests exercise it directly, independent of any sensor
 // class.
 

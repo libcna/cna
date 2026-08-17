@@ -59,6 +59,7 @@ void main() {
     vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
     gl_Position = pc.mvp * skinnedPos;
     gl_Position.y = -gl_Position.y; // Vulkan NDC Y is inverted vs OpenGL (matches textured3d.vert.glsl)
+    gl_PointSize = 1.0;
     vUV = aUV;
     vec3 worldPos = (fog.world * skinnedPos).xyz;
     vFogFactor = 1.0 - clamp(dot(vec4(skinnedPos.xyz, 1.0), fog.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector

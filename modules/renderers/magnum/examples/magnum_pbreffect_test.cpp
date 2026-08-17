@@ -145,17 +145,18 @@ protected:
         buffer.SetDataRaw(quad, 6, static_cast<int>(sizeof(PbrVertex)));
 
         // Fully rough, non-metallic, white albedo, no ambient. With every dot product at 1 the
-        // BRDF reduces to kd*albedo/pi + specular = 0.96/pi + 0.003183 = 0.308761 -> byte 79.
+        // BRDF reduces to kd*albedo/pi + specular = 0.96/pi + 0.003183 = 0.308761.
+        // Encoding that linear result for the UNORM backbuffer gives byte 151.
         const Color rough =
             Render(device, buffer, &whiteTexture_, nullptr, 1.0f, 0.0f, Vector3::Zero);
-        Check("rough=1.0 metallic=0.0 white: direct light only", rough, Color(79, 79, 79, 255));
+        Check("rough=1.0 metallic=0.0 white: direct light only", rough, Color(151, 151, 151, 255));
 
-        // Halving the roughness sharpens the specular lobe: 0.356507 -> byte 91. Strictly brighter
+        // Halving the roughness sharpens the specular lobe: 0.356507 linear -> byte 161 sRGB. Strictly brighter
         // than the case above, which is what proves RoughnessFactor is read at all rather than
         // being a constant baked into the shader.
         const Color sharper =
             Render(device, buffer, &whiteTexture_, nullptr, 0.5f, 0.0f, Vector3::Zero);
-        Check("rough=0.5 metallic=0.0 white: sharper lobe", sharper, Color(91, 91, 91, 255));
+        Check("rough=0.5 metallic=0.0 white: sharper lobe", sharper, Color(161, 161, 161, 255));
         if (sharper.getRProperty() > rough.getRProperty())
         {
             std::printf("[PASS] RoughnessFactor changes the BRDF: %d > %d\n",
@@ -170,16 +171,16 @@ protected:
         }
 
         // Fully metallic red: the diffuse lobe vanishes with albedo*(1-metallic), leaving only a
-        // red-tinted specular one whose F0 IS the albedo. 0.079577 -> byte 20.
+        // red-tinted specular one whose F0 IS the albedo. 0.079577 linear -> byte 80 sRGB.
         const Color metal =
             Render(device, buffer, &redTexture_, nullptr, 1.0f, 1.0f, Vector3::Zero);
-        Check("metallic=1.0 red: diffuse gone, tinted specular only", metal, Color(20, 0, 0, 255));
+        Check("metallic=1.0 red: diffuse gone, tinted specular only", metal, Color(80, 0, 0, 255));
 
         // The same albedo non-metallic: full Lambertian diffuse plus a thin achromatic F0=0.04
         // specular, so the green and blue channels carry that specular alone.
         const Color dielectric =
             Render(device, buffer, &redTexture_, nullptr, 1.0f, 0.0f, Vector3::Zero);
-        Check("metallic=0.0 red: full diffuse plus thin specular", dielectric, Color(79, 1, 1, 255));
+        Check("metallic=0.0 red: full diffuse plus thin specular", dielectric, Color(151, 10, 10, 255));
 
         // A tangent-space normal tilted 90 degrees turns the surface edge-on to both the light and
         // the eye, zeroing the direct term entirely -- so what is left is the ambient term alone,
@@ -188,7 +189,7 @@ protected:
         const Color perturbed = Render(device, buffer, &whiteTexture_, &tiltedNormalMap_,
                                        1.0f, 0.0f, Vector3(0.2f, 0.3f, 0.4f));
         Check("tilted normal map: direct light zeroed, ambient only",
-              perturbed, Color(51, 77, 102, 255));
+              perturbed, Color(124, 149, 170, 255));
 
         std::printf("\nResult: %d/%d PASS\n", passed_, passed_ + failed_);
         Exit();

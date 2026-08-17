@@ -9,7 +9,13 @@
 #include "CNA/CNAHelper.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
-namespace CNA::Internal::Renderers { struct GpuDrawParams; class IEffectRenderer; }
+namespace CNA::Internal::Renderers
+{
+    struct GpuDrawParams;
+    struct CompiledEffectParameterDescription;
+    class IEffectRenderer;
+    class ICompiledEffectRuntime;
+}
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -37,13 +43,12 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param effectCode The compiled effect bytecode, as produced by the XNA Content
          *                   Pipeline's EffectProcessor.
          *
-         * @throws System::NotImplementedException Always. CNA has no MojoShader-equivalent
-         *         bytecode parser/translator yet — full support for compiled `.fx` bytecode
-         *         is tracked as Phase 74 (see docs/fx-bytecode-support-plan.md). Until that
-         *         lands, use a hand-authored ShaderEffect (custom GLSL/SPIR-V source) or one
-         *         of the built-in stock effects (BasicEffect, AlphaTestEffect,
-         *         DualTextureEffect, EnvironmentMapEffect, SkinnedEffect, SpriteEffect)
-         *         instead.
+         * @throws System::ArgumentException If the bytecode is empty, oversized, malformed, or
+         *         not an XNA/FNA Direct3D 9 Effect Framework binary.
+         * @throws System::NotSupportedException If the active renderer does not advertise
+         *         CNA::GraphicsCapability::CompiledEffects, or if @p effectCode is an MGFX
+         *         container. FNA3D is the first supported backend; other renderers reject the
+         *         format explicitly instead of substituting a stock or source-based shader.
          */
         Effect(GraphicsDevice& device, const std::vector<SharpRuntime::bytecs>& effectCode);
 
@@ -123,7 +128,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * via a raw owning pointer instead, matching this codebase's established pattern for
          * factory-shaped methods that hand off a new heap object.
          */
-        [[nodiscard]] virtual Effect* Clone() = 0;
+        [[nodiscard]] virtual Effect* Clone();
 
         /**
          * @brief Returns the fully-qualified .NET type name of this object.
@@ -166,6 +171,23 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT [[nodiscard]] virtual CNA::Internal::Renderers::IEffectRenderer* GetEffectRendererPtr() const;
 
         /**
+         * @brief Returns this effect's compiled XNA Effect Framework runtime, or nullptr if this is
+         * not a compiled effect.
+         *
+         * plan_fx.md FX-071: lets a renderer's SpriteBatch integration recognize and bind a
+         * compiled effect the same way GpuDrawParams::compiledEffectRuntime already does for
+         * ordinary 3D draws, without every SpriteBatch renderer needing its own friend access to
+         * the private compiledRuntime_ member. Not virtual: every compiled effect shares this exact
+         * base-class storage regardless of which renderer created its runtime.
+         *
+         * @return The compiled runtime, or nullptr.
+         */
+        CNAEXT [[nodiscard]] CNA::Internal::Renderers::ICompiledEffectRuntime* GetCompiledRuntimePtr() const
+        {
+            return compiledRuntime_.get();
+        }
+
+        /**
          * @brief Returns true only for an exact stock SpriteEffect instance.
          *
          * Renderer code can recognize the stock sprite alias without linking directly against the
@@ -193,7 +215,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Derived classes override this to upload shader parameters to the GPU before drawing.
          */
-        virtual void OnApply() = 0;
+        virtual void OnApply();
 
         /**
          * @brief Releases managed and unmanaged resources held by this effect.
@@ -206,8 +228,22 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsDevice* device_;
 
     private:
+        Effect(GraphicsDevice& device,
+               std::unique_ptr<CNA::Internal::Renderers::ICompiledEffectRuntime> runtime,
+               const Effect* cloneSource);
+
+        void BuildCompiledObjectGraph();
+        [[nodiscard]] EffectParameter BuildCompiledParameter(
+            const CNA::Internal::Renderers::CompiledEffectParameterDescription& description);
+        void ApplyPassInternal(std::uint32_t passIndex);
+        void ApplyCompiledPassState(std::uint32_t passIndex);
+        void SyncCompiledParameters();
+
         EffectParameterCollection parameters_;
         EffectTechniqueCollection techniques_;
         EffectTechnique* currentTechnique_ = nullptr;
+        std::unique_ptr<CNA::Internal::Renderers::ICompiledEffectRuntime> compiledRuntime_;
+
+        friend class EffectPass;
     };
 }

@@ -78,3 +78,36 @@ FNA3D_SPIKE_FXB=~/deps/FNA/src/Graphics/Effect/StockEffects/FXB/SpriteEffect.fxb
 
 Exit code 0 = every check passed. Built binaries and the `fna3d-build/` tree are gitignored; the
 `.c` source and this record are committed.
+
+---
+
+## `fx_shader_object_spike.c` — FX-023 sampler existence gate
+
+Compiled sampler-state conformance needs an Effect Framework fixture whose passes bind a real
+shader, because MojoShader derives every `MOJOSHADER_samplerStateRegister` from a shader object's
+Direct3D 9 constant table (CTAB) rather than from the effect container. This probe settles whether
+CNA can assemble such a program itself instead of redistributing compiler output.
+
+It builds a Shader Model 2.0 pixel shader byte by byte — version token, a `CTAB` comment holding a
+`float4` constant and a `sampler2D` symbol, `mov oC0, c0`, end token — and parses it with the
+pinned MojoShader.
+
+| Check | Result |
+|---|---|
+| The assembled program parses without a MojoShader error | PASS |
+| Both CTAB symbols are reported, with the sampler at `register_set = SAMPLER` | PASS |
+| Translation succeeds on the `spirv` profile (FNA3D's SDL_GPU driver) | PASS, 7984 bytes |
+| Translation succeeds on the `glsl120` profile (FNA3D's OpenGL driver) | PASS, 144 bytes |
+
+The finding is what `Fna3dCompiledEffectTests.cpp` now relies on: `BuildSyntheticPixelShader()`
+emits the same program, so the synthetic conformance fixture covers samplers and textures with no
+proprietary compiler dependency and no runtime-driver assumption.
+
+```sh
+SDLROOT=$PWD/../.sdl-prebuilt-Linux-x86_64
+cc -O0 -g -DMOJOSHADER_EFFECT_SUPPORT -DMOJOSHADER_NO_VERSION_INCLUDE \
+   -DMOJOSHADER_USE_SDL_STDLIB -DUSE_SDL3 \
+   -I$SDLROOT/SDL/include -I<build>/_deps/fna3d-src/MojoShader \
+   fx_shader_object_spike.c <build>/_deps/fna3d-build/libmojoshader.a \
+   -L$SDLROOT/SDL/build -lSDL3 -Wl,-rpath,$SDLROOT/SDL/build -lm -o fx_shader_object_spike
+```

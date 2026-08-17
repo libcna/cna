@@ -5,20 +5,25 @@
 // See SkinnedPbrEffect.hpp's own doc comment for the design rationale.
 
 #include <gtest/gtest.h>
+#include <memory>
 #include <stdexcept>
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureTransformEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
 using Microsoft::Xna::Framework::Matrix;
+using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::TextureTransformEXT;
 using CNA::Internal::Renderers::GpuDrawParams;
 
 namespace
@@ -62,6 +67,50 @@ TEST_F(SkinnedPbrEffectDefaultsTest, AlphaDefaultsToOne)
 TEST_F(SkinnedPbrEffectDefaultsTest, AmbientLightColorDefaultsToZero)
 {
     EXPECT_EQ(fx.getAmbientLightColorProperty(), Vector3::Zero);
+}
+
+TEST_F(SkinnedPbrEffectDefaultsTest, TextureCoordinateSelectorsDefaultValidateAndReachDrawParams)
+{
+    EXPECT_EQ(fx.getTextureCoordinateSetsEXTProperty(), (std::array<int, 5>{0, 0, 0, 0, 0}));
+
+    fx.setTextureCoordinateSetEXTProperty(1, 1);
+    fx.setTextureCoordinateSetEXTProperty(3, 1);
+    EXPECT_EQ(fx.getTextureCoordinateSetsEXTProperty(), (std::array<int, 5>{0, 1, 0, 1, 0}));
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_EQ(params.pbrTextureCoordinateSetMask, 0b01010u);
+
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(-1, 0), std::out_of_range);
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(5, 0), std::out_of_range);
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(0, -1), std::out_of_range);
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(0, 2), std::out_of_range);
+}
+
+TEST_F(SkinnedPbrEffectDefaultsTest, TextureTransformsDefaultValidateAndReachAffineDrawParams)
+{
+    const TextureTransformEXT identity;
+    EXPECT_EQ(fx.getTextureTransformsEXTProperty(),
+              (std::array<TextureTransformEXT, 5>{identity, identity, identity, identity, identity}));
+
+    const TextureTransformEXT transform{
+        Vector2{-0.25f, 0.75f}, Vector2{4.0f, 0.5f}, 1.5707963267948966f};
+    fx.setTextureTransformEXTProperty(4, transform);
+    EXPECT_EQ(fx.getTextureTransformsEXTProperty()[4], transform);
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_NEAR(params.pbrTextureTransformRows[8][0], 0.0f, 1e-6f);
+    EXPECT_NEAR(params.pbrTextureTransformRows[8][1], -0.5f, 1e-6f);
+    EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[8][2], -0.25f);
+    EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[8][3], 0.0f);
+    EXPECT_NEAR(params.pbrTextureTransformRows[9][0], 4.0f, 1e-6f);
+    EXPECT_NEAR(params.pbrTextureTransformRows[9][1], 0.0f, 1e-6f);
+    EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[9][2], 0.75f);
+    EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[9][3], 0.0f);
+
+    EXPECT_THROW(fx.setTextureTransformEXTProperty(-1, identity), std::out_of_range);
+    EXPECT_THROW(fx.setTextureTransformEXTProperty(5, identity), std::out_of_range);
 }
 
 TEST_F(SkinnedPbrEffectDefaultsTest, LightingEnabledIsAlwaysTrue)
@@ -129,6 +178,42 @@ TEST_F(SkinnedPbrEffectDefaultsTest, RoughnessFactorDefaultsToOne)
     EXPECT_FLOAT_EQ(fx.getRoughnessFactorProperty(), 1.0f);
 }
 
+TEST_F(SkinnedPbrEffectDefaultsTest, DielectricFresnelFactorsDefaultToCoreGltf)
+{
+    EXPECT_FLOAT_EQ(fx.getIorEXTProperty(), 1.5f);
+    EXPECT_FLOAT_EQ(fx.getSpecularFactorEXTProperty(), 1.0f);
+    EXPECT_EQ(fx.getSpecularColorFactorEXTProperty(), Vector3(1.0f, 1.0f, 1.0f));
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_FLOAT_EQ(params.pbrDielectricF0[0], 0.04f);
+    EXPECT_FLOAT_EQ(params.pbrDielectricF0[1], 0.04f);
+    EXPECT_FLOAT_EQ(params.pbrDielectricF0[2], 0.04f);
+    EXPECT_FLOAT_EQ(params.pbrDielectricF90, 1.0f);
+}
+
+TEST_F(SkinnedPbrEffectDefaultsTest, SpecularTextureInputsHaveNoOpDefaults)
+{
+    EXPECT_EQ(fx.getSpecularMapEXTProperty(), nullptr);
+    EXPECT_EQ(fx.getSpecularColorMapEXTProperty(), nullptr);
+    EXPECT_EQ(fx.getSpecularTextureCoordinateSetEXTProperty(), 0);
+    EXPECT_EQ(fx.getSpecularColorTextureCoordinateSetEXTProperty(), 0);
+    EXPECT_EQ(fx.getSpecularTextureTransformEXTProperty(), TextureTransformEXT{});
+    EXPECT_EQ(fx.getSpecularColorTextureTransformEXTProperty(), TextureTransformEXT{});
+    EXPECT_TRUE(fx.getSpecularColorTextureIsSrgbEXTProperty());
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_EQ(params.pbrSpecularMap, nullptr);
+    EXPECT_EQ(params.pbrSpecularColorMap, nullptr);
+    EXPECT_EQ(params.pbrTextureCoordinateSetMask & 0b1100000u, 0u);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[0][0], 1.0f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[1][1], 1.0f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[2][0], 1.0f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[3][1], 1.0f);
+    EXPECT_TRUE(params.pbrSpecularColorTextureIsSrgb);
+}
+
 TEST_F(SkinnedPbrEffectDefaultsTest, EmissiveFactorDefaultsToZero)
 {
     EXPECT_EQ(fx.getEmissiveFactorProperty(), Vector3::Zero);
@@ -165,6 +250,73 @@ TEST_F(SkinnedPbrEffectDefaultsTest, SetRoughnessFactorRoundTrips)
 {
     fx.setRoughnessFactorProperty(0.75f);
     EXPECT_FLOAT_EQ(fx.getRoughnessFactorProperty(), 0.75f);
+}
+
+TEST_F(SkinnedPbrEffectDefaultsTest, IorAndSpecularFactorsRoundTripAndReachDrawParams)
+{
+    fx.setIorEXTProperty(2.0f);
+    fx.setSpecularFactorEXTProperty(0.3f);
+    fx.setSpecularColorFactorEXTProperty(Vector3(0.25f, 1.0f, 12.0f));
+
+    EXPECT_FLOAT_EQ(fx.getIorEXTProperty(), 2.0f);
+    EXPECT_FLOAT_EQ(fx.getSpecularFactorEXTProperty(), 0.3f);
+    EXPECT_EQ(fx.getSpecularColorFactorEXTProperty(), Vector3(0.25f, 1.0f, 12.0f));
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_NEAR(params.pbrDielectricF0[0], 1.0f / 120.0f, 1e-7f);
+    EXPECT_NEAR(params.pbrDielectricF0[1], 1.0f / 30.0f, 1e-7f);
+    EXPECT_NEAR(params.pbrDielectricF0[2], 0.3f, 1e-7f)
+        << "the colour product must clamp before specularFactor is applied";
+    EXPECT_FLOAT_EQ(params.pbrDielectricF90, 0.3f);
+    EXPECT_NEAR(params.pbrDielectricF0Unclamped[0], 1.0f / 36.0f, 1e-7f);
+    EXPECT_NEAR(params.pbrDielectricF0Unclamped[1], 1.0f / 9.0f, 1e-7f);
+    EXPECT_NEAR(params.pbrDielectricF0Unclamped[2], 4.0f / 3.0f, 1e-6f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularFactor, 0.3f);
+}
+
+TEST_F(SkinnedPbrEffectDefaultsTest, SpecularTextureInputsRoundTripAndReachDrawParams)
+{
+    auto strength = std::make_shared<Texture2D>(gd, 2, 2);
+    auto color = std::make_shared<Texture2D>(gd, 2, 2);
+    const TextureTransformEXT strengthTransform{
+        Vector2{0.25f, -0.5f}, Vector2{2.0f, 3.0f}, 1.5707963267948966f};
+    const TextureTransformEXT colorTransform{
+        Vector2{-0.75f, 0.5f}, Vector2{0.5f, 4.0f}, 0.0f};
+
+    fx.SetOwnedSpecularMapEXT(strength);
+    fx.SetOwnedSpecularColorMapEXT(color);
+    fx.setSpecularTextureCoordinateSetEXTProperty(1);
+    fx.setSpecularColorTextureCoordinateSetEXTProperty(1);
+    fx.setSpecularTextureTransformEXTProperty(strengthTransform);
+    fx.setSpecularColorTextureTransformEXTProperty(colorTransform);
+    fx.setSpecularColorTextureIsSrgbEXTProperty(false);
+
+    EXPECT_EQ(fx.getSpecularMapEXTProperty(), strength.get());
+    EXPECT_EQ(fx.getSpecularColorMapEXTProperty(), color.get());
+    EXPECT_EQ(fx.getSpecularTextureCoordinateSetEXTProperty(), 1);
+    EXPECT_EQ(fx.getSpecularColorTextureCoordinateSetEXTProperty(), 1);
+    EXPECT_EQ(fx.getSpecularTextureTransformEXTProperty(), strengthTransform);
+    EXPECT_EQ(fx.getSpecularColorTextureTransformEXTProperty(), colorTransform);
+    EXPECT_FALSE(fx.getSpecularColorTextureIsSrgbEXTProperty());
+    EXPECT_THROW(fx.setSpecularTextureCoordinateSetEXTProperty(-1), std::out_of_range);
+    EXPECT_THROW(fx.setSpecularColorTextureCoordinateSetEXTProperty(2), std::out_of_range);
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_EQ(params.pbrSpecularMap, &strength->GetRenderer());
+    EXPECT_EQ(params.pbrSpecularColorMap, &color->GetRenderer());
+    EXPECT_EQ(params.pbrTextureCoordinateSetMask & 0b1100000u, 0b1100000u);
+    EXPECT_NEAR(params.pbrSpecularTextureTransformRows[0][0], 0.0f, 1e-6f);
+    EXPECT_NEAR(params.pbrSpecularTextureTransformRows[0][1], -3.0f, 1e-6f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[0][2], 0.25f);
+    EXPECT_NEAR(params.pbrSpecularTextureTransformRows[1][0], 2.0f, 1e-6f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[1][2], -0.5f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[2][0], 0.5f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[2][2], -0.75f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[3][1], 4.0f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[3][2], 0.5f);
+    EXPECT_FALSE(params.pbrSpecularColorTextureIsSrgb);
 }
 
 TEST_F(SkinnedPbrEffectDefaultsTest, SetEmissiveFactorRoundTrips)
@@ -298,6 +450,18 @@ TEST_F(SkinnedPbrEffectDefaultsTest, CloneCopiesMaterialAndBoneState)
     fx.setMetallicFactorProperty(0.3f);
     fx.setRoughnessFactorProperty(0.6f);
     fx.setEmissiveFactorProperty(Vector3(0.5f, 0.5f, 0.5f));
+    fx.setIorEXTProperty(1.8f);
+    fx.setSpecularFactorEXTProperty(0.4f);
+    fx.setSpecularColorFactorEXTProperty(Vector3(0.2f, 0.3f, 0.4f));
+    fx.setTextureCoordinateSetEXTProperty(1, 1);
+    const TextureTransformEXT transform{
+        Vector2{0.1f, 0.2f}, Vector2{0.3f, 0.4f}, -0.5f};
+    fx.setTextureTransformEXTProperty(1, transform);
+    auto specularColor = std::make_shared<Texture2D>(gd, 2, 2);
+    fx.SetOwnedSpecularColorMapEXT(specularColor);
+    fx.setSpecularColorTextureCoordinateSetEXTProperty(1);
+    fx.setSpecularColorTextureTransformEXTProperty(transform);
+    fx.setSpecularColorTextureIsSrgbEXTProperty(false);
     std::vector<Matrix> bones(SkinnedPbrEffect::MaxBones, Matrix::getIdentityProperty());
     bones[1] = Matrix::CreateTranslation(Vector3(4, 5, 6));
     fx.SetBoneTransforms(bones);
@@ -307,6 +471,16 @@ TEST_F(SkinnedPbrEffectDefaultsTest, CloneCopiesMaterialAndBoneState)
     EXPECT_FLOAT_EQ(cloned->getMetallicFactorProperty(), 0.3f);
     EXPECT_FLOAT_EQ(cloned->getRoughnessFactorProperty(), 0.6f);
     EXPECT_EQ(cloned->getEmissiveFactorProperty(), Vector3(0.5f, 0.5f, 0.5f));
+    EXPECT_FLOAT_EQ(cloned->getIorEXTProperty(), 1.8f);
+    EXPECT_FLOAT_EQ(cloned->getSpecularFactorEXTProperty(), 0.4f);
+    EXPECT_EQ(cloned->getSpecularColorFactorEXTProperty(), Vector3(0.2f, 0.3f, 0.4f));
+    EXPECT_EQ(cloned->getTextureCoordinateSetsEXTProperty(),
+              (std::array<int, 5>{0, 1, 0, 0, 0}));
+    EXPECT_EQ(cloned->getTextureTransformsEXTProperty()[1], transform);
+    EXPECT_EQ(cloned->getSpecularColorMapEXTProperty(), specularColor.get());
+    EXPECT_EQ(cloned->getSpecularColorTextureCoordinateSetEXTProperty(), 1);
+    EXPECT_EQ(cloned->getSpecularColorTextureTransformEXTProperty(), transform);
+    EXPECT_FALSE(cloned->getSpecularColorTextureIsSrgbEXTProperty());
     const std::vector<Matrix> clonedBones = cloned->GetBoneTransforms(SkinnedPbrEffect::MaxBones);
     EXPECT_EQ(clonedBones[1], Matrix::CreateTranslation(Vector3(4, 5, 6)));
     delete cloned;

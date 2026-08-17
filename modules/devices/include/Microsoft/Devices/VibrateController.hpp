@@ -12,6 +12,11 @@
 
 namespace Microsoft::Devices
 {
+    namespace Detail
+    {
+        class DevicesShutdownCoordinator;
+    }
+
     /**
      * @brief Provides control over the device's vibration motor.
      *
@@ -65,7 +70,7 @@ namespace Microsoft::Devices
         /**
          * @brief Starts device vibration for the specified duration and intensity.
          *
-         * CNA-specific extension beyond the WP7 API surface: exposes SDL3's
+         * CNA-specific extension beyond the WP7 API surface: exposes the platform's
          * rumble-strength parameter directly, since CNA targets more capable
          * hardware than 2010-era WP7 phones (whose vibration motors were
          * single-intensity on/off buzzers, hence the plain WP7
@@ -79,20 +84,14 @@ namespace Microsoft::Devices
          * capability, this call is a silent no-op.
          * @param intensity Rumble strength, clamped to [0.0f, 1.0f].
          * Note: intensity 0.0f is not special-cased into an implicit Stop()
-         * — it still uploads and plays a zero-strength SDL rumble effect for
+         * — it still uploads and plays a zero-strength platform rumble effect for
          * the full duration. In practice this is inert (zero strength has no
          * physical effect), but it is not equivalent to skipping the call
          * entirely; call Stop() directly if that distinction matters to a
          * caller (Task DEVICES-0030). Task VIB2-006 (2026-07-18, external
          * audit `audit_devices_2026-07-17.md`) re-confirmed this choice is
-         * well-founded, not merely convenient: `SDL_PlayHapticRumble()`'s
-         * own documented contract (`third_party/SDL/include/SDL3/SDL_haptic.h`)
-         * states its `strength` parameter is "a 0-1 float value" — `0` is
-         * explicitly inside that documented valid range, not a special or
-         * invalid case SDL itself treats differently — and its actual
-         * implementation (`third_party/SDL/src/haptic/SDL_haptic.c`)
-         * confirms a repeated call while an effect is already playing simply
-         * updates and restarts it (no "already playing" rejection), so this
+         * well-founded, not merely convenient: the platform contract explicitly includes zero
+         * in the valid strength range, and repeated calls update/restart the effect, so this
          * intensity-zero policy composes correctly with repeated/overlapping
          * `Start()` calls too. `VibrateControllerTests.
          * StartWithIntensityZeroForwardsAsAnActiveZeroStrengthStartNotAnImplicitStop`
@@ -150,17 +149,10 @@ namespace Microsoft::Devices
          * call is a silent no-op. Stop() also stops any effect started this
          * way.
          *
-         * @note On Android (Task VIB-003, re-verified 2026-07-06 against
-         * SDL3's actual Android haptic backend source), the phone's own
-         * built-in vibrator does not receive two independent motor
-         * intensities: SDL3's Android `SDL_Haptic` backend blends
-         * largeMotor/smallMotor into a single intensity
-         * (`large*0.6 + small*0.4`) before handing it to
-         * `Context.VIBRATOR_SERVICE`. True independent dual-motor output is
-         * only reachable via SDL3's separate gamepad-rumble path
-         * (`Microsoft::Xna::Framework::Input::GamePad::SetVibration()`), not
-         * this one. See `docs/devices-android.md`'s "Vibration" section for
-         * the full source-level trail.
+         * @note Phone platforms may blend these values into one built-in vibrator intensity.
+         * True independent gamepad-motor output remains available through
+         * `Microsoft::Xna::Framework::Input::GamePad::SetVibration()` instead. See
+         * `docs/devices-android.md`'s "Vibration" section.
          *
          * @param largeMotor Low-frequency motor strength, clamped to [0.0f, 1.0f].
          * @param smallMotor High-frequency motor strength, clamped to [0.0f, 1.0f].
@@ -185,10 +177,8 @@ namespace Microsoft::Devices
          * directly.
          *
          * Runs at process-exit static teardown, a point this codebase does
-         * not control relative to the application's own SDL_Quit() call —
-         * see Detail::DevicesShutdownCoordinator's own doc comment (Task
-         * SDLCORE-011) for why that matters and what the application must
-         * do about it.
+         * not control relative to the host platform's native shutdown. See
+         * Detail::DevicesShutdownCoordinator.
          */
         ~VibrateController();
 
@@ -207,13 +197,18 @@ namespace Microsoft::Devices
          * here.
          *
          * @param backend Replacement backend; pass nullptr to restore the
-         * platform-default (`Detail::SdlHapticVibrateBackend`) behavior.
+         * platform-default (`Detail::PlatformVibrateBackend`) behavior.
          */
         CNAEXT void SetBackendForTesting(std::unique_ptr<Detail::IVibrateBackend> backend);
 
     private:
+        friend class Detail::DevicesShutdownCoordinator;
+
         /** @brief Private constructor; use getDefaultProperty() to obtain the singleton instance. */
         VibrateController();
+
+        /** @brief Releases the selected platform before the host tears native services down. */
+        void ShutdownBackendForPlatform();
 
         /** @brief Guards backend_ against concurrent replacement via SetBackendForTesting() while another thread is mid-call. */
         std::mutex backendMutex_;
@@ -221,7 +216,7 @@ namespace Microsoft::Devices
         /**
          * @brief Active backend, selected at construction time.
          *
-         * Defaults to `Detail::SdlHapticVibrateBackend`; replaceable via
+         * Defaults to `Detail::PlatformVibrateBackend`; replaceable via
          * `SetBackendForTesting()`.
          */
         std::unique_ptr<Detail::IVibrateBackend> backend_;

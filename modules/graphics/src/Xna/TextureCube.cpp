@@ -16,11 +16,8 @@
 #include <vector>
 
 // plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach/HiDef cube-texture-size
-// ceilings, real on this renderer only -- matches Texture2D.cpp's own #ifdef CNA_RENDERER_DIRECTX9
+// ceilings. plan_runtimerenderer.md design decision 9: asked of the active renderer rather than
 // convention exactly.
-#ifdef CNA_RENDERER_DIRECTX9
-#include "CNA/Internal/Renderers/DirectX9/D3D9ProfileCapabilities.hpp"
-#endif
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -38,13 +35,13 @@ namespace Microsoft::Xna::Framework::Graphics
         return std::max(1, base >> level);
     }
 
-#ifdef CNA_RENDERER_DIRECTX9
     // D9-103 follow-up: same profile-CEILING enforcement Texture2D.cpp already established
-    // (D9-100's own table: Reach=512, HiDef=4096), checked BEFORE the renderer is created.
+    // (D9-100's own table: Reach=512, HiDef=4096). Renderers with no profile distinction report
+    // no ceiling, which is exactly what they did when this was an #ifdef block.
     static void ValidateCubeSizeForProfileEXT(const GraphicsDevice& device, int size)
     {
         const int profile = static_cast<int>(device.getGraphicsProfileProperty());
-        const int maxSize = CNA::Internal::Renderers::DirectX9::MaxCubeSizeForProfileEXT(profile);
+        const int maxSize = device.GetRenderer().GetMaxCubeSizeForProfileEXT(profile);
         if (size > maxSize)
         {
             throw System::NotSupportedException(
@@ -53,7 +50,6 @@ namespace Microsoft::Xna::Framework::Graphics
                 "'s own maximum cube size of " + std::to_string(maxSize));
         }
     }
-#endif
 
     TextureCube::~TextureCube() = default;
 
@@ -62,9 +58,7 @@ namespace Microsoft::Xna::Framework::Graphics
         , size_(size)
         , renderer_(nullptr)
     {
-#ifdef CNA_RENDERER_DIRECTX9
         ValidateCubeSizeForProfileEXT(device, size);
-#endif
         Texture::ValidateFormat(format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(size, size) : 1;
@@ -169,7 +163,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // REMED-GFX-135 (REMED-GFX-127/130's contract, applied to the WRITE direction). Every check
         // above runs BEFORE anything is converted or handed to a renderer, so a rejected call cannot
-        // have changed one texel. A renderer that was never created at all (SDL_Renderer, ASCII,
+        // have changed one texel. A renderer that was never created at all (ASCII,
         // Canvas, DIRECTX3 keep IGraphicsRenderer::CreateTextureCube's nullptr default) used to be skipped
         // by a bare `if (renderer_)`, which turned "no storage exists" into a successful-looking
         // upload -- it is the same answer as an unimplemented write, reached one step earlier.
@@ -258,7 +252,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // fabricates a complete transparent-black cube face. Conversion happens only when the
         // renderer reports it wrote the whole region; otherwise the caller's `data` is left
         // byte-for-byte as it was and the missing capability is raised instead of being answered
-        // with invented content. A renderer that was never created at all (SDL_Renderer, ASCII,
+        // with invented content. A renderer that was never created at all (ASCII,
         // Canvas, DIRECTX3 keep IGraphicsRenderer::CreateTextureCube's nullptr default) is the same
         // answer reached one step earlier: no storage exists, so there is nothing to return.
         if (!renderer_)

@@ -7,4 +7,6 @@ file(GLOB_RECURSE CNA_DEVICES_EXT_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 cna_add_module(cna_devices_ext DevicesExt ${CNA_DEVICES_EXT_SOURCES})
 target_link_libraries(cna_devices_ext PUBLIC cna_runtime cna_graphics_core cna_core cna_math)
 cna_link_sharp_runtime(cna_devices_ext PUBLIC Core.Base)
-target_link_libraries(cna_devices_ext PRIVATE SDL3::SDL3)
+# Every native system surface reaches the host through the platform contract. This module has no
+# native-library link of its own; the selected platform implementation owns one when it needs it.
+target_link_libraries(cna_devices_ext PUBLIC cna_platform)

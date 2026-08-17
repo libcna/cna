@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "task": "GLTF-015",
+  "name": "Khronos glTF Validator",
+  "repository": "https://github.com/KhronosGroup/glTF-Validator",
+  "releaseVersion": "2.0.0-dev.3.10",
+  "releasedAt": "2024-10-22",
+  "runtimeDependency": false,
+  "ciDependency": true,
+  "license": {
+    "spdx": "Apache-2.0",
+    "summary": "Apache License 2.0. The validator is downloaded only into the CI tool directory; no validator code or binary is redistributed by CNA."
+  },
+  "ciArtifact": {
+    "platform": "linux-x86_64",
+    "archive": "gltf_validator-2.0.0-dev.3.10-linux64.tar.xz",
+    "url": "https://github.com/KhronosGroup/glTF-Validator/releases/download/2.0.0-dev.3.10/gltf_validator-2.0.0-dev.3.10-linux64.tar.xz",
+    "sha256": "168eba887964125abe17ae97899b38d0b3cfd73c266c78424c194929ddcbc522",
+    "executable": "gltf_validator"
+  }
+}

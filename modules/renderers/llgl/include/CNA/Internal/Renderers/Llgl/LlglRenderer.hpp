@@ -3,7 +3,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Renderers/Llgl/LlglRendererSelection.hpp"
-#include "CNA/Internal/Renderers/Llgl/LlglSdlSurface.hpp"
+#include "CNA/Internal/Renderers/Llgl/LlglPlatformSurface.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <LLGL/LLGL.h>
@@ -64,16 +64,6 @@ namespace CNA::Internal::Renderers::Llgl
 
         /** @brief Returns the height in pixels of mip level 0. */
         [[nodiscard]] int GetHeight() const override { return height_; }
-
-        /**
-         * @brief Returns null: this renderer owns no SDL texture.
-         *
-         * `ITextureRenderer::GetNativeTexture` exists for the SDL_Renderer renderer's benefit; every
-         * GPU-API renderer in this project answers null.
-         *
-         * @return Always null.
-         */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         /**
          * @brief Replaces the whole of mip level 0.
@@ -525,9 +515,6 @@ namespace CNA::Internal::Renderers::Llgl
         /** @brief Returns the height in pixels. */
         [[nodiscard]] int GetHeight() const override { return height_; }
 
-        /** @brief Returns null: this renderer owns no SDL texture. */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
-
         /**
          * @brief Reads pixels back from the colour attachment.
          *
@@ -937,8 +924,8 @@ namespace CNA::Internal::Renderers::Llgl
      * this renderer picks its module at runtime, so the game has no reliable way to know in
      * advance whether it needs to hand over GLSL or SPIR-V. `CompileProgram()` compiles the GLSL
      * directly when the loaded module accepts it (OpenGL), or through a real runtime
-     * GLSL-\>SPIR-V compile via `libshaderc` when it does not (Vulkan) -- the same problem this
-     * project's `SDL_GPU` renderer already solved the same way.
+     * GLSL-\>SPIR-V compile via `libshaderc` when it does not (Vulkan) -- the same problem another
+     * runtime-selected renderer already solved the same way.
      *
      * Named-uniform setters (`SetUniformMat4`/`Vec4`/... ) do not do real name-based reflection --
      * LLGL exposes none for a raw GLSL/SPIR-V module, and adding one would need a new dependency
@@ -1238,6 +1225,9 @@ namespace CNA::Internal::Renderers::Llgl
          */
         void GetViewportSize(int& width, int& height) override;
 
+        /** @brief Refreshes size/density and resizes the swap chain when the drawable changed. */
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
+
         /**
          * @brief Changes the logical resolution at runtime.
          *
@@ -1286,12 +1276,6 @@ namespace CNA::Internal::Renderers::Llgl
          */
         bool TransformLogicalToWindow(float logX, float logY,
                                       float& windowX, float& windowY) const override;
-
-        /** @brief Returns the SDL window this renderer presents to. */
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-
-        /** @brief Returns null: this renderer does not use SDL_Renderer. */
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         /**
          * @brief Creates a 2D texture from RGBA8 pixels.
@@ -2054,8 +2038,8 @@ namespace CNA::Internal::Renderers::Llgl
             /** @brief Primitives only: true when this draw is `PbrEffect`, in which case
              *  `pbrUniformIndex` (not `transformIndex`) names this draw's own uniform buffer, from
              *  its own differently-shaped pool. `texture`/`sampler` (set by the generic `textured`
-             *  handling above) carry the base colour map; the 4 fields below carry PbrEffect's
-             *  remaining optional maps, each resolved to a 1x1 default (white, or flat-normal for
+             *  handling above) carry the base colour map; the fields below carry PbrEffect's
+             *  remaining six optional maps, each resolved to a 1x1 default (white, or flat-normal for
              *  `pbrNormalTexture`) when the game left it null -- see `EnsureDefaultPbrTexturesEXT()`. */
             bool             pbr          = false;
             /** @brief Primitives only, when `pbr`: index into the frame's per-draw PbrEffect
@@ -2066,17 +2050,16 @@ namespace CNA::Internal::Renderers::Llgl
             LLGL::Texture*   pbrNormalTexture = nullptr;
             /** @brief Primitives only, when `pbr`: this draw's own slot-1 sampler (LLGL-49) --
              *  see `pbrMetallicRoughnessSampler`'s own doc comment for why each PBR map gets its
-             *  own sampler now instead of all five sharing `sampler`. */
+             *  own sampler now instead of all seven sharing `sampler`. */
             LLGL::Sampler*   pbrNormalSampler = nullptr;
             /** @brief Primitives only, when `pbr`: glTF-packed (G=roughness, B=metallic)
              *  metallic-roughness map, or the 1x1 default white texture when null. */
             LLGL::Texture*   pbrMetallicRoughnessTexture = nullptr;
             /** @brief Primitives only, when `pbr`: this draw's own slot-2 sampler (LLGL-49).
-             *  PbrEffect's 5 maps occupy `GraphicsDevice.SamplerStates[0..4]` (matching the
-             *  Vulkan renderer's own `PbrSlotSamplersRawEXT()` convention), so each needs its own
+             *  PbrEffect's 7 maps occupy `GraphicsDevice.SamplerStates[0..6]`, so each needs its own
              *  captured sampler rather than all reusing slot 0's -- previously every one of these
              *  4 fields (see the 3 siblings below) was absent and `ReplayFrameCommandsList` bound
-             *  `sampler` (slot 0) at every one of the 5 texture units instead. */
+             *  `sampler` (slot 0) at every texture unit instead. */
             LLGL::Sampler*   pbrMetallicRoughnessSampler = nullptr;
             /** @brief Primitives only, when `pbr`: emissive map, or the 1x1 default white texture
              *  when null. */
@@ -2088,6 +2071,16 @@ namespace CNA::Internal::Renderers::Llgl
             LLGL::Texture*   pbrOcclusionTexture = nullptr;
             /** @brief Primitives only, when `pbr`: this draw's own slot-4 sampler (LLGL-49). */
             LLGL::Sampler*   pbrOcclusionSampler = nullptr;
+            /** @brief Primitives only, when `pbr`: KHR_materials_specular strength map (A), or
+             *  the 1x1 default white texture when null. */
+            LLGL::Texture*   pbrSpecularTexture = nullptr;
+            /** @brief Primitives only, when `pbr`: this draw's own slot-5 sampler. */
+            LLGL::Sampler*   pbrSpecularSampler = nullptr;
+            /** @brief Primitives only, when `pbr`: KHR_materials_specular colour map (RGB), or
+             *  the 1x1 default white texture when null. */
+            LLGL::Texture*   pbrSpecularColorTexture = nullptr;
+            /** @brief Primitives only, when `pbr`: this draw's own slot-6 sampler. */
+            LLGL::Sampler*   pbrSpecularColorSampler = nullptr;
             /** @brief Primitives only: first index of an indexed draw; ignored otherwise. */
             std::uint32_t    firstIndex   = 0;
             /** @brief Primitives only: value added to each index before vertex fetch. */
@@ -2170,10 +2163,10 @@ namespace CNA::Internal::Renderers::Llgl
         /// only `params.boneCount` entries (the rest stay zeroed, matching a disabled/unused bone
         /// slot the shader never indexes into since `boneCount` bounds every real index).
         static void FillSkinnedBoneData(float (&bones)[72 * 16], const GpuDrawParams& params);
-        /// Fills one PbrEffect draw's own 336-byte uniform block (84 floats -- see
+        /// Fills one PbrEffect draw's own 608-byte uniform block (152 floats -- see
         /// shaders/pbr3d.vert.glsl's PbrParams for the byte layout). `params` is never null here
         /// (only called when `pbr` is set).
-        static void FillPbrUniforms(float (&uniforms)[84], const float matrix[16],
+        static void FillPbrUniforms(float (&uniforms)[152], const float matrix[16],
                                     const GpuDrawParams& params);
         /// Creates the 1x1 default white texture and 1x1 default flat-normal texture
         /// (RGBA (128,128,255,255), decoding to tangent-space (0,0,1)) PbrEffect draws sample
@@ -2284,10 +2277,9 @@ namespace CNA::Internal::Renderers::Llgl
         /// CPU like sprites are.
         void CaptureFrameCommandViewportEXT(FrameCommand& command) const;
 
-        SDL_Window*                 window_        = nullptr;
         Detail::RendererModule      module_        = Detail::RendererModule::OpenGL;
         LLGL::RenderSystemPtr       renderer_;
-        std::shared_ptr<LlglSdlSurface> surface_;
+        std::shared_ptr<LlglPlatformSurface> surface_;
         LLGL::SwapChain*            swapChain_     = nullptr;
         LLGL::CommandBuffer*        commands_      = nullptr;
         LLGL::CommandQueue*         queue_         = nullptr;
@@ -2500,16 +2492,16 @@ namespace CNA::Internal::Renderers::Llgl
         /// actually consume -- slot 0 (every family's own base/primary texture), slot 1
         /// (DualTextureEffect's second texture OR EnvironmentMapEffect's cube map -- the two are
         /// mutually exclusive per draw, matching the Vulkan renderer's own `slotSamplers_[1]`
-        /// convention), and slots 2-4 (PbrEffect's metallic-roughness/emissive/occlusion maps,
-        /// matching the Vulkan renderer's own `PbrSlotSamplersRawEXT()` slot-0..4 convention --
-        /// "EasyGL binds the same five to Texture0..4"). Previously a single, un-indexed set of
+        /// convention), and slots 2-6 (PbrEffect's metallic-roughness/emissive/occlusion/specular/
+        /// specular-colour maps, matching the seven-slot glTF PBR ABI). Previously a single,
+        /// un-indexed set of
         /// scalars that `ApplySamplerState()` only ever wrote for slot 0, so every OTHER slot
         /// always sampled with whatever slot 0's current state was.
-        static constexpr int kTrackedSamplerSlotCount = 5;
-        int   samplerFilter_[kTrackedSamplerSlotCount]        = {0, 0, 0, 0, 0};
-        int   samplerAddressU_[kTrackedSamplerSlotCount]      = {1, 1, 1, 1, 1};
-        int   samplerAddressV_[kTrackedSamplerSlotCount]      = {1, 1, 1, 1, 1};
-        int   samplerMaxAnisotropy_[kTrackedSamplerSlotCount] = {1, 1, 1, 1, 1};
+        static constexpr int kTrackedSamplerSlotCount = 7;
+        int   samplerFilter_[kTrackedSamplerSlotCount]        = {0, 0, 0, 0, 0, 0, 0};
+        int   samplerAddressU_[kTrackedSamplerSlotCount]      = {1, 1, 1, 1, 1, 1, 1};
+        int   samplerAddressV_[kTrackedSamplerSlotCount]      = {1, 1, 1, 1, 1, 1, 1};
+        int   samplerMaxAnisotropy_[kTrackedSamplerSlotCount] = {1, 1, 1, 1, 1, 1, 1};
 
         bool  scissorTestEnabled_ = false;
         bool  scissorRectSet_     = false;

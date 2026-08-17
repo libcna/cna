@@ -37,12 +37,8 @@ namespace Microsoft::Xna::Framework::Content
 
     void RegisterKnownUnsupportedXnbReaders()
     {
-        ContentTypeReaderManager::AddTypeCreator(
-            "Microsoft.Xna.Framework.Content.EffectReader",
-            [] {
-                return std::make_unique<KnownUnsupportedContentTypeReader>(
-                    "Microsoft.Xna.Framework.Graphics.Effect",
-                    UnsupportedContentReaderReason::CompiledPlatformShaderBytecode);
-            });
+        // No built-in reader is currently in this category. The general EffectReader moved to
+        // CNA::Internal::Xnb::RegisterEffectXnbReader when compiled Effect Framework support
+        // landed; keep this idempotent hook as the registry's extension point for future formats.
     }
 }

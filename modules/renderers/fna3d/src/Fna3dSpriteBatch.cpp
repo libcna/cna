@@ -2,7 +2,9 @@
 #include "CNA/Internal/Renderers/Fna3d/Fna3dEnumMapping.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dVertexLayouts.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <cstring>
@@ -13,6 +15,9 @@ namespace CNA::Internal::Renderers::Fna3d
     namespace
     {
         constexpr int kSpriteVertexStride = 24;
+        // Six 16-bit indices address four vertices per sprite. Quad 16383 ends at vertex 65535;
+        // one more quad would wrap the generated base index back to zero.
+        constexpr std::size_t kMaxQuadsPerDraw = 16384;
 
         std::uint32_t PackColor(const Color& color)
         {
@@ -25,8 +30,9 @@ namespace CNA::Internal::Renderers::Fna3d
         }
     }
 
-    Fna3dSpriteBatchRenderer::Fna3dSpriteBatchRenderer(Fna3dRenderer& renderer)
-        : renderer_(renderer)
+    Fna3dSpriteBatchRenderer::Fna3dSpriteBatchRenderer(
+        std::shared_ptr<Fna3dDeviceState> deviceState)
+        : deviceState_(deviceState)
         , transform_(Matrix::getIdentityProperty())
     {
     }
@@ -35,29 +41,52 @@ namespace CNA::Internal::Renderers::Fna3d
 
     void Fna3dSpriteBatchRenderer::Begin()
     {
+        (void) deviceState_->RequireRenderer("SpriteBatch.Begin");
         vertices_.clear();
         batchTexture_ = nullptr;
     }
 
     void Fna3dSpriteBatchRenderer::End()
     {
+        (void) deviceState_->RequireRenderer("SpriteBatch.End");
         Flush();
+    }
+
+    void Fna3dSpriteBatchRenderer::SetCustomEffect(Effect* effect)
+    {
+        if (customEffect_ == effect) return;
+        Flush();
+        if (effect != nullptr)
+        {
+            GpuDrawParams params{};
+            effect->FillGpuDrawParams(params);
+            if (params.compiledEffectRuntime == nullptr)
+            {
+                throw std::runtime_error(
+                    "FNA3D renderer: SpriteBatch custom effects must be compiled XNA Effect "
+                    "Framework bytecode; source-pair ShaderEffect is not supported by FNA3D.");
+            }
+        }
+        customEffect_ = effect;
     }
 
     void Fna3dSpriteBatchRenderer::SetTransformMatrix(const Matrix& m)
     {
+        (void) deviceState_->RequireRenderer("SpriteBatch transform change");
         Flush();
         transform_ = m;
     }
 
     void Fna3dSpriteBatchRenderer::SetSamplerFilter(int textureFilter)
     {
+        (void) deviceState_->RequireRenderer("SpriteBatch sampler change");
         Flush();
         samplerFilter_ = textureFilter;
     }
 
     void Fna3dSpriteBatchRenderer::SetSamplerAddressMode(int addressU, int addressV)
     {
+        (void) deviceState_->RequireRenderer("SpriteBatch sampler change");
         Flush();
         addressU_ = addressU;
         addressV_ = addressV;
@@ -65,6 +94,7 @@ namespace CNA::Internal::Renderers::Fna3d
 
     void Fna3dSpriteBatchRenderer::SetImmediateMode(bool immediate)
     {
+        (void) deviceState_->RequireRenderer("SpriteBatch state change");
         immediate_ = immediate;
     }
 
@@ -101,13 +131,16 @@ namespace CNA::Internal::Renderers::Fna3d
                                          float rotation, const Vector2& origin,
                                          SpriteEffects effects, float layerDepth)
     {
-        if (dynamic_cast<const Fna3dSampledTexture*>(&texture) == nullptr)
+        (void) deviceState_->RequireRenderer("SpriteBatch.Draw");
+        const auto* sampled = dynamic_cast<const Fna3dSampledTexture*>(&texture);
+        if (sampled == nullptr || sampled->GetFna3dDeviceStateEXT() != deviceState_ ||
+            sampled->GetFna3dTextureEXT() == nullptr)
         {
             // A texture from another renderer cannot be sampled by this device. Dropping it
             // silently would render an invisible sprite that looks like a content bug.
             throw std::runtime_error(
                 "FNA3D renderer: SpriteBatch received a texture that was not created by this "
-                "renderer.");
+                "graphics device or is no longer live.");
         }
 
         if (batchTexture_ != nullptr && batchTexture_ != &texture)
@@ -205,25 +238,46 @@ namespace CNA::Internal::Renderers::Fna3d
                       "the sprite vertex must match the stride-24 VertexPositionColorTexture "
                       "layout the SpriteEffect vertex shader reads");
 
+        Fna3dRenderer& renderer = deviceState_->RequireRenderer("SpriteBatch flush");
         const auto* sampled = dynamic_cast<const Fna3dSampledTexture*>(batchTexture_);
-        renderer_.DrawSpriteRunEXT(sampled->GetFna3dTextureEXT(), vertices_.data(),
-                                   static_cast<int>(vertices_.size()), transform_, samplerFilter_,
-                                   addressU_, addressV_);
+        if (sampled == nullptr || sampled->GetFna3dDeviceStateEXT() != deviceState_ ||
+            sampled->GetFna3dTextureEXT() == nullptr)
+        {
+            throw std::runtime_error(
+                "FNA3D renderer: SpriteBatch's queued texture is no longer live on this graphics "
+                "device.");
+        }
+
+        const std::size_t maxVerticesPerDraw = kMaxQuadsPerDraw * 4;
+        for (std::size_t first = 0; first < vertices_.size(); first += maxVerticesPerDraw)
+        {
+            const std::size_t remaining = vertices_.size() - first;
+            const std::size_t vertexCount = std::min(remaining, maxVerticesPerDraw);
+            renderer.DrawSpriteRunEXT(sampled->GetFna3dTextureEXT(), vertices_.data() + first,
+                                      static_cast<int>(vertexCount), transform_, samplerFilter_,
+                                      addressU_, addressV_, customEffect_);
+        }
         vertices_.clear();
     }
 
     std::unique_ptr<ISpriteBatchRenderer> Fna3dRenderer::CreateSpriteBatch()
     {
-        return std::make_unique<Fna3dSpriteBatchRenderer>(*this);
+        return std::make_unique<Fna3dSpriteBatchRenderer>(deviceState_);
     }
 
     void Fna3dRenderer::DrawSpriteRunEXT(FNA3D_Texture* texture, const void* vertices,
                                          int vertexCount, const Matrix& transform, int filter,
-                                         int addressU, int addressV)
+                                         int addressU, int addressV, Effect* customEffect)
     {
         if (texture == nullptr || vertices == nullptr || vertexCount < 4)
         {
             return;
+        }
+        if (vertexCount % 4 != 0 || vertexCount > static_cast<int>(kMaxQuadsPerDraw * 4))
+        {
+            throw std::runtime_error(
+                "FNA3D renderer: a SpriteBatch draw must contain whole quads and fit the 16-bit "
+                "index range.");
         }
         const int quadCount = vertexCount / 4;
         if (quadCount <= 0)
@@ -234,7 +288,7 @@ namespace CNA::Internal::Renderers::Fna3d
         if (spriteVertexBuffer_ == nullptr)
         {
             spriteVertexBuffer_ =
-                std::make_unique<Fna3dVertexBufferRenderer>(device_, vertexCount,
+                std::make_unique<Fna3dVertexBufferRenderer>(deviceState_, vertexCount,
                                                             kSpriteVertexStride);
         }
         spriteVertexBuffer_->SetDataWithOptions(vertices, vertexCount, kSpriteVertexStride,
@@ -259,7 +313,7 @@ namespace CNA::Internal::Renderers::Fna3d
                 indices[offset + 5] = static_cast<std::uint16_t>(base + 3);
             }
             spriteIndexBuffer_ = std::make_unique<Fna3dIndexBufferRenderer>(
-                device_, static_cast<int>(indices.size()), false);
+                deviceState_, static_cast<int>(indices.size()), false);
             spriteIndexBuffer_->SetData16(indices.data(), static_cast<int>(indices.size()));
         }
 
@@ -290,7 +344,11 @@ namespace CNA::Internal::Renderers::Fna3d
         sampler.addressU = ToFna3dTextureAddressMode(addressU);
         sampler.addressV = ToFna3dTextureAddressMode(addressV);
         sampler.addressW = sampler.addressU;
-        FNA3D_VerifySampler(device_, 0, texture, &sampler);
+        if (customEffect == nullptr)
+        {
+            FNA3D_VerifySampler(device_, 0, texture, &sampler);
+            boundPixelTextures_[0] = texture;
+        }
 
         // Sprite quads are emitted in a fixed winding that a game's own RasterizerState.CullMode
         // has no reason to agree with, and XNA's 2D pipeline is not culled in practice. Culling is
@@ -300,7 +358,7 @@ namespace CNA::Internal::Renderers::Fna3d
         spriteRasterizer.cullMode = FNA3D_CULLMODE_NONE;
         FNA3D_ApplyRasterizerState(device_, &spriteRasterizer);
 
-        const std::vector<FNA3D_VertexElement> elements = ElementsForStride(kSpriteVertexStride);
+        const auto elements = ElementsForStride(kSpriteVertexStride);
         FNA3D_VertexBufferBinding binding{};
         binding.vertexBuffer = spriteVertexBuffer_->GetFna3dBufferEXT();
         binding.vertexOffset = 0;
@@ -308,11 +366,54 @@ namespace CNA::Internal::Renderers::Fna3d
         binding.vertexDeclaration.vertexStride = kSpriteVertexStride;
         binding.vertexDeclaration.elementCount = static_cast<int32_t>(elements.size());
         binding.vertexDeclaration.elements = const_cast<FNA3D_VertexElement*>(elements.data());
-        FNA3D_ApplyVertexBufferBindings(device_, &binding, 1, 1, 0);
+        // FNA3D resolves a vertex declaration against the currently applied vertex shader.
+        // A custom effect can select a different shader for every pass, so its binding must be
+        // applied after that pass (the ordinary draw path follows the same shader-then-binding
+        // order). Applying it only once before EffectPass.Apply leaves the declaration associated
+        // with the stock SpriteEffect and produces no vertices on OpenGL.
+        const auto bindVertices = [&]() {
+            FNA3D_ApplyVertexBufferBindings(device_, &binding, 1, 1, 0);
+        };
 
-        FNA3D_DrawIndexedPrimitives(device_, FNA3D_PRIMITIVETYPE_TRIANGLELIST, 0, 0, vertexCount, 0,
-                                    quadCount * 2, spriteIndexBuffer_->GetFna3dBufferEXT(),
-                                    FNA3D_INDEXELEMENTSIZE_16BIT);
+        const auto draw = [&]() {
+            FNA3D_DrawIndexedPrimitives(device_, FNA3D_PRIMITIVETYPE_TRIANGLELIST, 0, 0,
+                                        vertexCount, 0, quadCount * 2,
+                                        spriteIndexBuffer_->GetFna3dBufferEXT(),
+                                        FNA3D_INDEXELEMENTSIZE_16BIT);
+        };
+        try
+        {
+            if (customEffect != nullptr)
+            {
+                auto* technique = customEffect->getCurrentTechniqueProperty();
+                if (technique == nullptr || technique->getPassesProperty().getCountProperty() == 0)
+                {
+                    throw std::runtime_error(
+                        "FNA3D renderer: SpriteBatch custom effect has no current pass.");
+                }
+                for (int passIndex = 0;
+                     passIndex < technique->getPassesProperty().getCountProperty(); ++passIndex)
+                {
+                    technique->getPassesProperty()[passIndex].Apply();
+                    // XNA deliberately sets SpriteBatch's texture after EffectPass.Apply so a
+                    // texture parameter inside the effect cannot steal slot zero from the sprite.
+                    FNA3D_VerifySampler(device_, 0, texture, &samplerStates_[0]);
+                    boundPixelTextures_[0] = texture;
+                    bindVertices();
+                    draw();
+                }
+            }
+            else
+            {
+                bindVertices();
+                draw();
+            }
+        }
+        catch (...)
+        {
+            FNA3D_ApplyRasterizerState(device_, &rasterizerState_);
+            throw;
+        }
 
         FNA3D_ApplyRasterizerState(device_, &rasterizerState_);
     }

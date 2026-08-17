@@ -13,7 +13,7 @@ It is a framework/runtime and abstraction layer—not a game—designed to prese
 ```bash
 git submodule update --init --recursive
 cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3
-cmake --build build --target CNA CnaTests
+cmake --build build --target CnaTests
 ctest --test-dir build --output-on-failure
 ```
 
@@ -24,7 +24,12 @@ ctest --test-dir build --output-on-failure
 
 - **`Microsoft::Xna::Framework::Graphics` milestone:** qualified **~90% XNA/FNA compatibility, test-execution-verified** (not estimated) — every one of the ~26 major Graphics classes is present, implemented, and tested. **As of 2026-07-11, all 5 confirmed bugs behind the original 2026-07-09 milestone declaration are fixed** (Vulkan `BlendState`, EasyGL anisotropic filtering, `IndexElementSize`'s numeric values, `Model`'s root-bone override, `SpriteBatch::Draw`'s optional source rectangle), and Vulkan `OcclusionQuery` (previously architecturally blocked) is fixed too. `docs/graphics-compatibility-report.md` is a dated snapshot from that declaration, kept for its methodology, not current status — see `NEXT.md` §5 for the actively-maintained bug list. What's left to 100% is a smaller set of individually-tracked issues plus a handful of project-owner architecture decisions (e.g. SDL_Renderer `TextureAddressMode::Wrap`/`Mirror`, `Texture3D`/`TextureCube` sampler-bind architecture) — none silent or undocumented.
 - **Overall XNA 4.0 API surface:** 227 of 245 public FNA types are present in CNA (**92.7%**, computed 2026-07-11 by diffing FNA's public type list against CNA's headers) — 100% for `Graphics`/`Audio`/`Input`(+`Touch`)/`Storage`; the real gap is `.Content` (4/12 — no `.xnb` reader, by design) and `.Media` (25/25 present, but 14 are shells). See `docs/xna-4-api-coverage.md`. **Note this is a different metric from the Graphics bullet above** — this one counts whether a type/class exists at all across every XNA namespace (a raw presence count), while the Graphics "~90%" figure is a narrower, bug-weighted quality gate scoped to just the ~26 major Graphics classes (it also counts behavioral correctness, not just presence — Graphics itself is 91/91 = 100% present). The two numbers measuring different things is expected, not a typo or a contradiction.
-- **The two gaps that matter most to a real port:** no `.xnb` content pipeline (CNA loads raw assets + JSON descriptors instead) and no compiled `.fx` shader bytecode support (`Effect(GraphicsDevice&, byte[])`) — the latter is the single biggest real gap, blocking 23 of the 86 official XNA samples in `../cna-samples`. See `docs/migration-guide.md`.
+- **Compiled XNA effects:** `Effect(GraphicsDevice&, byte[])` and the canonical XNB `EffectReader`
+  execute XNA/FNA Direct3D 9 Effect Framework bytecode on the `FNA3D` renderer, including public
+  reflection, parameter mutation, techniques/passes, pass states, cloning, 3D draws, and
+  `SpriteBatch`. Other renderers currently report `GraphicsCapability::CompiledEffects == false`
+  and reject the constructor explicitly; MGFX and runtime `.fx` source compilation remain separate
+  formats/projects. See [`docs/shader-effect-vs-fx-bytecode.md`](docs/shader-effect-vs-fx-bytecode.md).
 - **`SDL_RENDERER` renderer:** Implemented path focused on practical 2D rendering workflows; 2D-only by design (3D calls throw).
 - **`OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` renderers:** the most mature GL-family public renderers overall — one shared internal implementation (`EasyGL`, on top of `easy-gl`) driven by a GL profile choice, not five separate implementations. `OPENGLES3` (desktop/mobile GLES 3.0) and `WEBGL2` (Emscripten, GLES 3.0 → WebGL 2.0) have full 2D+3D pixel-verified coverage — this is what was previously the single `EASYGL` public renderer, split into its real public identities. `OPENGL33` (desktop GL 3.3 core) and `WEBGL1` (Emscripten, GLES 2.0 → WebGL 1.0) are newer and still landing — see `plan_glbackends.md` for current per-profile status. `OPENGLES2` (native GLES 2.0, GLSL ES 1.00, Phase-2 expansion) carries a deliberately narrower ES 2.0 capability boundary — see [`docs/opengles2-renderer.md`](docs/opengles2-renderer.md).
 - **`VULKAN` renderer:** Real, working 3D rendering (all 5 stock effects, render targets, depth/stencil state, `BlendState`, `OcclusionQuery`) — second-most mature renderer; the one remaining named gap is an isolated `RasterizerState.DepthBias` sub-case. See `docs/xna-4-api-coverage.md`'s per-renderer table for current detail.
@@ -84,15 +89,32 @@ ctest --test-dir build --output-on-failure
 - CNAEXT extensions beyond stock XNA: `TextInputEXT` (IME composition), rumble/trigger-rumble/light-bar/
   gyro/accelerometer on `GamePad`, raw `CNA::Input::Joysticks` (distinct from `GamePad`'s mapped view),
   device-level `CNA::Input::Sensors`/`Power`, and `CNA::Input::Haptics` for standalone haptic devices.
-- Single SDL event funnel (`SdlInputBridge::ProcessEvent`), renderer-agnostic — Input behavior is
-  identical across all 4 graphics renderers (EasyGL/Vulkan/bgfx/SDL_RENDERER), verified by the
-  `CnaTests` input suite.
+- Single platform-event funnel (`IPlatform::PollEvents` → `PlatformInputBridge::ProcessEvent`),
+  renderer-agnostic and independent of the selected native event source. SDL3 translation stays
+  inside its platform implementation; the `CnaTests` input suite verifies the shared state path.
 
 ### Rendering
 
 - `GraphicsDevice` abstraction with renderer delegation.
 - `SpriteBatch` API with `Begin(...)` / `Draw(...)` / `End()` workflow.
 - `Texture2D` abstraction with renderer-owned texture resources.
+
+### Content pipeline — `.gltf` / `.glb` / `.cnj`
+
+- **glTF 2.0 loads directly**: `Content.Load<Model>("character.glb")` — no offline step. An offline
+  converter (`tools/gltf_to_cnj`) produces `.cnj` + binary sidecars for the same asset, and the two
+  loaders are held to identical output by a per-fixture parity sweep.
+- Geometry, PBR materials, skinning, animation (LINEAR/STEP/CUBICSPLINE), morph targets, cameras and
+  punctual lights all import. What that costs is stated rather than implied: XNA's model is four
+  joint influences and three directional lights, two sampled UV channels, and one colour channel — glTF data
+  beyond those is **counted and reported**, never silently dropped.
+- Correctness is held by a **generated 145-asset conformance corpus**: the exact L0–L6 numerical
+  ladder covers container, accessor, semantic mesh, world geometry, packed GPU bytes and bound
+  effect parameters per commit (including ASan + UBSan), then the production OPENGLES3 viewer
+  supplies the final deterministic L7 image/disposition gate.
+- **Read `docs/gltf-limitations.md` before choosing CNA for a glTF pipeline.** It lists every
+  approximation and every unsupported feature next to the report field that names the loss at run
+  time. `CNAEXT.md` §3.2 carries the same information as a per-capability status table.
 
 ### Cross-Platform Direction
 
@@ -104,6 +126,11 @@ ctest --test-dir build --output-on-failure
 - **Web (Emscripten) and Android (NDK) targets are implemented and verified**, not just
   architecturally planned — see section 7 (Networking, Services & Avatar) below for real
   cross-platform `Net` verification on both.
+- **macOS** has a native CI build/test gate; **iOS/iPadOS** is experimental platform support.
+  The Apple workflow final-links an actual `.app` for device and simulator and launches a
+  one-frame `Game` smoke application in the simulator. There is still no physical-device,
+  pixel, touch, audio, storage or performance evidence. The boundary is stated per claim in
+  [`docs/apple-platforms.md`](docs/apple-platforms.md).
 
 ### Performance / C++ Advantages
 
@@ -166,6 +193,19 @@ EasyGL, Vulkan, Skia, and the other selected paths.
 ## 6. 🔌 Renderer System
 
 CNA exposes **46 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
+
+Renderers are normally chosen at **compile time**, one per build. CNA can also be built with
+several renderers and the concrete one chosen at **runtime**, before the game starts:
+
+```cpp
+#include "CNA/GraphicsRendererSelection.hpp"
+
+CNA::GraphicsRendererSelection::SetPreferred(CNA::GraphicsRendererType::Vulkan);
+```
+
+A renderer that is unavailable or fails to start is an **error** by default — CNA never silently
+substitutes another. An opt-in fallback chain is available when a game wants one. See
+[docs/runtime-renderer-selection.md](docs/runtime-renderer-selection.md).
 configuration). The canonical registration, implementation-sharing, capability, and platform-gate
 inventory is [`docs/renderer-registry.md`](docs/renderer-registry.md).
 
@@ -363,7 +403,7 @@ After that, no system SDL packages are required.
 ```bash
 git submodule update --init --recursive
 cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3
-cmake --build build --target CNA CnaTests
+cmake --build build --target CnaTests
 ```
 
 ### Build (Linux — SDL_RENDERER renderer)
@@ -371,7 +411,7 @@ cmake --build build --target CNA CnaTests
 ```bash
 git submodule update --init --recursive
 cmake -S . -B build-sdlrenderer -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
-cmake --build build-sdlrenderer --target CNA CnaTests
+cmake --build build-sdlrenderer --target CnaTests
 ```
 
 ### Build (Windows — SDL_RENDERER renderer, vendored SDL)
@@ -383,7 +423,7 @@ binaries or `CMAKE_PREFIX_PATH` needed.
 ```bash
 git submodule update --init --recursive
 cmake -S . -B build-win -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
-cmake --build build-win --target CNA CnaTests
+cmake --build build-win --target CnaTests
 ```
 
 ### Build (Linux → Windows cross-compilation with MinGW-w64)
@@ -396,7 +436,39 @@ git submodule update --init --recursive
 cmake -S . -B build-windows \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
       -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
-cmake --build build-windows --target CNA CnaTests
+cmake --build build-windows --target CnaTests
+```
+
+### Build (macOS)
+
+```bash
+brew install ccache ffmpeg
+git submodule update --init
+
+cmake -S . -B cmake-build-macos -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
+cmake --build cmake-build-macos --target CnaTests --parallel 4
+```
+
+`METAL` is available here as well (`-DCNA_GRAPHICS_RENDERER=METAL`); its own supported contract is
+narrower than "it builds" — see [`docs/metal-renderer.md`](docs/metal-renderer.md).
+
+### Build (macOS → iOS / iPadOS cross-compilation)
+
+Requires a macOS host with Xcode. This produces a final-linked `cna_ios_smoke.app` for a device
+or simulator; the Apple workflow also launches its one-frame `Game` path in the simulator. This
+is not evidence for a physical device or correct pixels/input/audio/storage — see
+[`docs/apple-platforms.md`](docs/apple-platforms.md) for the exact boundary.
+
+```bash
+cmake -S . -B cmake-build-ios \
+      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
+      -DCNA_GRAPHICS_RENDERER=SDL_RENDERER \
+      -DCNA_BUILD_TESTS=OFF -DCNA_BUILD_EXAMPLES=OFF
+cmake --build cmake-build-ios --parallel 4
+
+# Simulator: add -DCNA_IOS_SIMULATOR=ON (use a separate build directory).
+# Device deployment needs the Xcode generator and a team id:
+#   -G Xcode -DCNA_APPLE_DEVELOPMENT_TEAM=<TEAMID>
 ```
 
 ### Optional: use system-installed SDL
@@ -406,7 +478,7 @@ vendored submodules, pass `-DCNA_USE_SYSTEM_SDL=ON`:
 
 ```bash
 cmake -S . -B build -DCNA_USE_SYSTEM_SDL=ON -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
-cmake --build build --target CNA CnaTests
+cmake --build build --target CnaTests
 ```
 
 This calls `find_package(SDL3 REQUIRED)`, `find_package(SDL3_image REQUIRED)`,
@@ -457,7 +529,7 @@ cmake -S . -B cmake-build-d3d9 \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
       -DCNA_GRAPHICS_RENDERER=D3D9 \
       -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-d3d9 --target CNA
+cmake --build cmake-build-d3d9 --target CnaTests --parallel 4
 ```
 
 Running the resulting `.exe`s needs a Wine + DXVK dev-loop, in a prefix separate from D3D11's own
@@ -484,7 +556,7 @@ cmake -S . -B cmake-build-d3d11 \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
       -DCNA_GRAPHICS_RENDERER=D3D11 \
       -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-d3d11 --target CNA
+cmake --build cmake-build-d3d11 --target CnaTests --parallel 4
 ```
 
 Running the resulting `.exe`s needs a Wine + DXVK dev-loop (`docs/directx11-renderer.md` has full setup
@@ -513,7 +585,7 @@ cmake -S . -B cmake-build-d3d12 \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
       -DCNA_GRAPHICS_RENDERER=D3D12 \
       -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-d3d12 --target CNA
+cmake --build cmake-build-d3d12 --target CnaTests --parallel 4
 ```
 
 Running the resulting `.exe`s needs a Wine + vkd3d-proton dev-loop, in a prefix separate from
@@ -624,7 +696,10 @@ int main()
 ## 12. 🛣 Roadmap
 
 - Continue expanding XNA API coverage and behavior parity (incremental, class-by-class).
-- Implement compiled `.fx` shader bytecode support (`Effect(GraphicsDevice&, byte[])`) — the single biggest real gap; it blocks 23 of the 86 official XNA samples in `../cna-samples`.
+- Extend compiled XNA Effect Framework bytecode beyond the completed `FNA3D` implementation. Each
+  additional renderer remains gated off until it passes the shared reflection, state, lifecycle,
+  3D, and SpriteBatch conformance contract; fixed-function/2D-only renderers stay explicitly
+  unsupported.
 - Consider a real `.xnb` content-pipeline reader (currently a deliberate design choice, not a bug — CNA loads raw assets + JSON descriptors instead).
 - Close the remaining named architecture-decision gaps (SDL_Renderer `TextureAddressMode::Wrap`/`Mirror`, SDL_Renderer `Texture3D`/`TextureCube` construction, EasyGL non-`Color` `SurfaceFormat` GPU forwarding, `Texture3D`/`TextureCube` sampler-bind architecture) — see `NEXT.md` §5 and `docs/graphics-renderer-feature-matrix.md`.
 - Strengthen cross-platform execution targets and validation coverage.

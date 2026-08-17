@@ -11,6 +11,7 @@
 // This source only compiles its real assertions in a GANESH-mode build (CNA_SKIA_MODE_GANESH).
 
 #include "CNA/Internal/Renderers/Skia/SkiaGaneshSurface.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -18,6 +19,8 @@
 #include <cstdint>
 
 using CNA::Internal::Renderers::Skia::SkiaGaneshSurface;
+using CNA::Examples::SdlTestGlContext;
+using CNA::Examples::SdlTestRendererArgs;
 
 namespace
 {
@@ -82,6 +85,10 @@ int main()
         SDL_Quit();
         return 1;
     }
+    SdlTestGlContext glContext(window);
+    auto args = SdlTestRendererArgs(
+        window, &glContext, nullptr, 0, 0,
+        CNA::Internal::Renderers::CnaPresentationMode::NativeBackBuffer);
 
     // Phase 1: kCycles full construct-draw-verify-destroy cycles. Each cycle is completely
     // independent -- proving repeated SkiaGaneshSurface construction/destruction on the same
@@ -92,7 +99,7 @@ int main()
     bool allCyclesOk = true;
     for (int cycle = 0; cycle < kCycles; ++cycle)
     {
-        SkiaGaneshSurface surface(window);
+        SkiaGaneshSurface surface(args);
         SkCanvas* canvas = surface.Canvas();
         // A per-cycle distinct colour (cycling through three primaries) -- not load-bearing for
         // correctness, just makes a real draw/readback part of every single cycle rather than
@@ -116,7 +123,7 @@ int main()
     // precedent, on a single instance rather than 64 independent ones.
     bool allLossCyclesOk = true;
     {
-        SkiaGaneshSurface surface(window);
+        SkiaGaneshSurface surface(args);
         for (int cycle = 0; cycle < kCycles; ++cycle)
         {
             surface.DebugSimulateContextLossEXT();

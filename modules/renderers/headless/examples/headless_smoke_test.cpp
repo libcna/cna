@@ -5,7 +5,7 @@
 //
 // Check A -- SDL's video subsystem was never initialized (SDL_WasInit(SDL_INIT_VIDEO) == 0) --
 //   proves this renderer genuinely needs no display server at all, not just a hidden window.
-// Check B -- GetWindowInternal() returns nullptr -- no window object exists anywhere.
+// Check B -- GameWindow handle returns nullptr -- no window object exists anywhere.
 // Check C -- draw-call/primitive/state-change counters after N frames match the exact expected
 //   values for the fixed sequence of calls this test issues -- proves the counters are real
 //   bookkeeping, not just present.
@@ -95,7 +95,7 @@ protected:
             // Check A/B: no real window/video subsystem anywhere.
             check(SDL_WasInit(SDL_INIT_VIDEO) == 0,
                   "SDL_INIT_VIDEO was never initialized under the Headless renderer");
-            check(renderer.GetWindowInternal() == nullptr, "GraphicsDevice has no real window under the Headless renderer");
+            check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) == nullptr, "GraphicsDevice has no real window under the Headless renderer");
         }
 
         dev.Clear(Color::Black);

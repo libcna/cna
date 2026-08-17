@@ -36,13 +36,23 @@ namespace CNA::Internal::Renderers::Stub
 
     std::unique_ptr<IIndexBufferRenderer> StubRenderer::CreateIndexBuffer16(int index_capacity)
     {
-        return std::make_unique<StubIndexBufferRenderer>(index_capacity);
+        return std::make_unique<StubIndexBufferRenderer>(index_capacity, false);
+    }
+
+    std::unique_ptr<IIndexBufferRenderer> StubRenderer::CreateIndexBuffer32(int index_capacity)
+    {
+        return std::make_unique<StubIndexBufferRenderer>(index_capacity, true);
     }
 }
 
 namespace CNA::Internal::Renderers
 {
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace Stub { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> Stub::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<Stub::StubRenderer>(args.virtualWidth, args.virtualHeight);
     }

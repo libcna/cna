@@ -46,7 +46,11 @@
 // suite's own.
 // ============================================================================
 
-#ifdef CNA_RENDERER_WEBGPU
+// plan_runtimerenderer.md RTR-P9-9: a compile-time guard, because this suite needs the WebGPU
+// renderer's own headers. Widened from the DEFAULT-renderer macro to "compiled into this build",
+// so a multi-renderer build holding WebGPU without selecting it still compiles these tests; each
+// test then checks at runtime that WebGPU is the ACTIVE renderer.
+#if defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_PRESENT_WEBGPU)
 
 #include <array>
 #include <cstddef>
@@ -59,6 +63,8 @@
 #include <stdexcept>
 #include <string>
 #include <gtest/gtest.h>
+
+#include "CNA/RendererTestGate.hpp"
 
 #include "CNA/GraphicsCapability.hpp"
 #include "System/NotSupportedException.hpp"
@@ -258,6 +264,8 @@ namespace
 // ---------------------------------------------------------------------------
 TEST(WebGpuWireFrameContract, CapabilityQueryAnswersForWireFrame)
 {
+    // plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     GraphicsDevice gd;
     EXPECT_NO_THROW({ (void)gd.SupportsCapability(GraphicsCapability::WireFrame); });
     const bool reported = gd.SupportsCapability(GraphicsCapability::WireFrame);
@@ -288,6 +296,8 @@ TEST(WebGpuWireFrameContract, CapabilityQueryAnswersForWireFrame)
 // ---------------------------------------------------------------------------
 TEST(WebGpuWireFrameContract, WireFrameDrawIsRefusedBeforeAnythingIsQueued)
 {
+    // plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     GraphicsDevice gd;
     const RouteRun run = RunOrdinaryRoute(gd, FillMode::WireFrame);
     PrintRun("ordinary-nonindexed wireframe", run);
@@ -322,6 +332,8 @@ TEST(WebGpuWireFrameContract, WireFrameDrawIsRefusedBeforeAnythingIsQueued)
 // ---------------------------------------------------------------------------
 TEST(WebGpuWireFrameContract, SolidRendersExactlyAfterARefusedWireFrameDraw)
 {
+    // plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     GraphicsDevice gd;
     const RouteRun solid = RunOrdinaryRoute(gd, FillMode::Solid);
     PrintRun("ordinary-nonindexed solid", solid);
@@ -357,6 +369,8 @@ TEST(WebGpuWireFrameContract, SolidRendersExactlyAfterARefusedWireFrameDraw)
 // ---------------------------------------------------------------------------
 TEST(WebGpuWireFrameContract, RefusalIsACatchableNotSupportedException)
 {
+    // plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     GraphicsDevice gd;
     RenderTarget2D target(gd, kSize, kSize, false, SurfaceFormat::Color,
                           DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
@@ -773,6 +787,8 @@ namespace
 
 TEST(WebGpuWireFrameContract, EveryPublicDrawRouteRefusesWireFrameAndAcceptsSolid)
 {
+    // plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     std::vector<std::unique_ptr<Route>> routes;
     routes.emplace_back(std::make_unique<OrdinaryNonIndexed>(0));
     routes.emplace_back(std::make_unique<OrdinaryNonIndexed>(3));           // vertexStart > 0
@@ -833,6 +849,8 @@ TEST(WebGpuWireFrameContract, EveryPublicDrawRouteRefusesWireFrameAndAcceptsSoli
 // ---------------------------------------------------------------------------
 TEST(WebGpuWireFrameContract, AlternatingFillModesNeverLeaveStaleState)
 {
+    // plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     GraphicsDevice gd;
     OrdinaryNonIndexed route(0);
 
@@ -877,6 +895,8 @@ TEST(WebGpuWireFrameContract, AlternatingFillModesNeverLeaveStaleState)
 // ---------------------------------------------------------------------------
 TEST(WebGpuWireFrameContract, RefusalRetainsNothingAndSurvivesResourceReplacement)
 {
+    // plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     GraphicsDevice gd;
     {
         // Refuse a draw whose vertex buffer then goes out of scope while the device lives on.
@@ -958,6 +978,8 @@ namespace
 
 TEST(WebGpuWireFrameContract, RefusalAndRecoveryAreNativelyClean)
 {
+    // plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     GraphicsDevice gd;
     WebGPURenderer& renderer = RendererOf(gd);
     const std::size_t uncapturedBefore = renderer.GetUncapturedErrorCountEXT();
@@ -1057,6 +1079,8 @@ namespace
 
 TEST(WebGpuWireFrameContract, OnlyPolygonTopologiesAreRefused)
 {
+    // plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     const std::array<TopologyCase, 5> cases{
         TopologyCase{"TriangleList", PrimitiveType::TriangleList, 1, true},
         TopologyCase{"TriangleStrip", PrimitiveType::TriangleStrip, 1, true},

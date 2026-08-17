@@ -5,7 +5,7 @@
 //
 // Check A -- SDL's video subsystem was never initialized (SDL_WasInit(SDL_INIT_VIDEO) == 0) --
 //   proves this renderer genuinely needs no display server at all, not just a hidden window.
-// Check B -- GetWindowInternal() returns nullptr -- no window object exists anywhere.
+// Check B -- GameWindow handle returns nullptr -- no window object exists anywhere.
 // Check C -- a plain 3D DrawPrimitives call (VertexBuffer + BasicEffect) does not throw.
 // Check D -- an indexed 3D DrawIndexedPrimitives call (VertexBuffer + IndexBuffer + BasicEffect)
 //   does not throw.
@@ -92,7 +92,7 @@ protected:
             // Check A/B: no real window/video subsystem anywhere.
             check(SDL_WasInit(SDL_INIT_VIDEO) == 0,
                   "SDL_INIT_VIDEO was never initialized under the Stub renderer");
-            check(renderer.GetWindowInternal() == nullptr, "GraphicsDevice has no real window under the Stub renderer");
+            check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) == nullptr, "GraphicsDevice has no real window under the Stub renderer");
         }
 
         dev.Clear(Color::Black);

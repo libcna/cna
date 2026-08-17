@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 
 #include "CNA/Internal/Renderers/Fna3d/Fna3dEnumMapping.hpp"
+#include "CNA/Internal/Renderers/Fna3d/Fna3dCompiledEffect.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dSurfaceFormats.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dWindowFlags.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -52,11 +54,36 @@ namespace CNA::Internal::Renderers::Fna3d
         }
     }
 
+    FNA3D_Device* Fna3dDeviceState::RequireDevice(const char* operation) const
+    {
+        if (device == nullptr)
+        {
+            throw std::runtime_error(
+                std::string("FNA3D renderer: ") +
+                (operation != nullptr ? operation : "resource operation") +
+                " was requested after the owning graphics device was destroyed.");
+        }
+        return device;
+    }
+
+    Fna3dRenderer& Fna3dDeviceState::RequireRenderer(const char* operation) const
+    {
+        if (renderer == nullptr || device == nullptr)
+        {
+            throw std::runtime_error(
+                std::string("FNA3D renderer: ") +
+                (operation != nullptr ? operation : "renderer operation") +
+                " was requested after the owning graphics device was destroyed.");
+        }
+        return *renderer;
+    }
+
     namespace Detail
     {
-        std::uint64_t PrepareWindowFlags()
+        bool PrepareWindowNeedsOpenGl()
         {
-            return static_cast<std::uint64_t>(FNA3D_PrepareWindowAttributes());
+            const std::uint32_t flags = FNA3D_PrepareWindowAttributes();
+            return (flags & SDL_WINDOW_OPENGL) != 0;
         }
     }
 
@@ -65,7 +92,7 @@ namespace CNA::Internal::Renderers::Fna3d
     // ---------------------------------------------------------------------------------------
 
     Fna3dRenderer::Fna3dRenderer(const GraphicsRendererCreateArgs& args)
-        : window_(args.window)
+        : window_(CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId))
         , presentationMode_(args.presentationMode)
     {
         FNA3D_HookLogFunctions(ForwardInfo, ForwardWarn, ForwardError);
@@ -93,7 +120,7 @@ namespace CNA::Internal::Renderers::Fna3d
         }
 
         // GraphicsDevice already called FNA3D_PrepareWindowAttributes() before creating the
-        // window (Detail::PrepareWindowFlags), which is also what selected the driver. Calling it
+        // window (Detail::PrepareWindowNeedsOpenGl), which is also what selected the driver. Calling it
         // again here would re-run driver selection after the window's visual is fixed.
         int windowWidth = 0;
         int windowHeight = 0;
@@ -136,6 +163,11 @@ namespace CNA::Internal::Renderers::Fna3d
                 "hint to pin a specific driver.");
         }
 
+        deviceState_->device = device_;
+        deviceState_->renderer = this;
+
+        try
+        {
         RecomputeLayout();
 
         // XNA's device defaults: BlendState.Opaque, DepthStencilState.Default,
@@ -188,6 +220,16 @@ namespace CNA::Internal::Renderers::Fna3d
             sampler.maxAnisotropy = 4;
             sampler.maxMipLevel = 0;
         }
+        for (FNA3D_SamplerState& sampler : vertexSamplerStates_)
+        {
+            sampler.filter = FNA3D_TEXTUREFILTER_LINEAR;
+            sampler.addressU = FNA3D_TEXTUREADDRESSMODE_WRAP;
+            sampler.addressV = FNA3D_TEXTUREADDRESSMODE_WRAP;
+            sampler.addressW = FNA3D_TEXTUREADDRESSMODE_WRAP;
+            sampler.mipMapLevelOfDetailBias = 0.0f;
+            sampler.maxAnisotropy = 4;
+            sampler.maxMipLevel = 0;
+        }
 
         FNA3D_SetBlendState(device_, &blendState_);
         FNA3D_SetDepthStencilState(device_, &depthStencilState_);
@@ -222,7 +264,20 @@ namespace CNA::Internal::Renderers::Fna3d
         QueryDriverLimits();
         ProbeCompressedReadbackSupport();
 
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
+        }
+        catch (...)
+        {
+            deviceState_->renderer = nullptr;
+            for (Fna3dStockEffect& effect : effects_)
+            {
+                effect.Destroy(device_);
+            }
+            FNA3D_DestroyDevice(device_);
+            device_ = nullptr;
+            deviceState_->device = nullptr;
+            throw;
+        }
     }
 
     void Fna3dRenderer::QueryDriverLimits()
@@ -399,12 +454,17 @@ namespace CNA::Internal::Renderers::Fna3d
 
     Fna3dRenderer::~Fna3dRenderer()
     {
+        // From this point resource and SpriteBatch wrappers must no longer route back into this
+        // object, even though the native device remains alive briefly for orderly internal
+        // teardown below.
+        deviceState_->renderer = nullptr;
         if (window_ != nullptr)
         {
-            IGraphicsRenderer::UnregisterForWindow(window_);
+            IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
         }
         if (device_ == nullptr)
         {
+            deviceState_->device = nullptr;
             return;
         }
 
@@ -416,6 +476,7 @@ namespace CNA::Internal::Renderers::Fna3d
         }
         FNA3D_DestroyDevice(device_);
         device_ = nullptr;
+        deviceState_->device = nullptr;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -792,8 +853,26 @@ namespace CNA::Internal::Renderers::Fna3d
         sampler.filter = ToFna3dTextureFilter(filter);
         sampler.addressU = ToFna3dTextureAddressMode(addressU);
         sampler.addressV = ToFna3dTextureAddressMode(addressV);
-        sampler.addressW = sampler.addressU;
         sampler.maxAnisotropy = maxAnisotropy > 0 ? maxAnisotropy : 1;
+    }
+
+    FNA3D_SamplerState Fna3dRenderer::GetSamplerStateEXT(int slot) const
+    {
+        if (slot < 0 || slot >= static_cast<int>(samplerStates_.size()))
+        {
+            return FNA3D_SamplerState{};
+        }
+        return samplerStates_[static_cast<std::size_t>(slot)];
+    }
+
+    void Fna3dRenderer::ApplySamplerAddressW(int slot, int addressW)
+    {
+        if (slot < 0 || slot >= static_cast<int>(samplerStates_.size()))
+        {
+            return;
+        }
+        samplerStates_[static_cast<std::size_t>(slot)].addressW =
+            ToFna3dTextureAddressMode(addressW);
     }
 
     void Fna3dRenderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
@@ -888,14 +967,14 @@ namespace CNA::Internal::Renderers::Fna3d
             case CNA::GraphicsCapability::CustomEffects:
                 return false;
 
-            // FNA3D_SupportsHardwareInstancing is true on the drivers CNA reaches, and FNA3D's
-            // own instanced draw and per-stream InstanceFrequency are both real -- but this
-            // renderer's shaders are XNA's compiled stock effects, and none of them declares a
-            // per-instance vertex input, so a per-instance stream could not reach a shader that
-            // reads it. Reporting true would promise instancing that renders every instance from
-            // record 0; DrawInstancedPrimitivesEx refuses with the same reason spelled out.
+            case CNA::GraphicsCapability::CompiledEffects:
+                return SupportsCompiledEffects();
+
+            // Hardware instancing becomes usable with a compiled Effect that declares the
+            // per-instance semantics. DrawInstancedPrimitivesEx still rejects the stock-effect
+            // path because none of XNA's stock shaders consumes such a stream.
             case CNA::GraphicsCapability::Instancing:
-                return false;
+                return FNA3D_SupportsHardwareInstancing(device_) != 0;
 
             // FNA3D_ApplyVertexBufferBindings takes an array of bindings, each carrying its own
             // declaration, vertex offset and instance frequency -- multi-stream input is the
@@ -936,11 +1015,23 @@ namespace CNA::Internal::Renderers::Fna3d
     {
         return nullptr;
     }
+
+    std::unique_ptr<ICompiledEffectRuntime> Fna3dRenderer::CreateCompiledEffect(
+        const std::uint8_t* effectCode, std::size_t effectCodeLength)
+    {
+        return std::make_unique<Fna3dCompiledEffect>(*this, effectCode, effectCodeLength);
+    }
 }
 
 namespace CNA::Internal::Renderers
 {
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace Fna3d { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(
+        const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> Fna3d::CreateGraphicsRenderer(
         const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<Fna3d::Fna3dRenderer>(args);

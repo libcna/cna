@@ -148,6 +148,9 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
 
         SkinnedPbrEffect fx(dev);
+        fx.setBaseColorTextureIsSrgbEXTProperty(false);
+        fx.setEmissiveTextureIsSrgbEXTProperty(false);
+        fx.setEncodeOutputToSrgbEXTProperty(false);
         fx.setWorldProperty(Matrix::getIdentityProperty());
         fx.setViewProperty(Matrix::getIdentityProperty());
         fx.setProjectionProperty(Matrix::getIdentityProperty());

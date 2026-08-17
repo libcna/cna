@@ -81,8 +81,9 @@ namespace CNA::Internal::Renderers::PortableGL
          *
          * @param pglContext See `PortableGLVertexBufferRenderer`'s identical parameter.
          * @param indexCapacity Initial index capacity.
+         * @param thirtyTwoBit  Declared element width; uploads must use the same width.
          */
-        PortableGLIndexBufferRenderer(void* pglContext, int indexCapacity);
+        PortableGLIndexBufferRenderer(void* pglContext, int indexCapacity, bool thirtyTwoBit);
         /** @brief Deletes the underlying PortableGL buffer object. */
         ~PortableGLIndexBufferRenderer() override;
 
@@ -115,9 +116,8 @@ namespace CNA::Internal::Renderers::PortableGL
 
     /**
      * Renderer handle for a texture, backed by a real PortableGL texture object created through
-     * `glGenTextures`/`glTexImage2D`. There is no native SDL texture behind this handle -- this
-     * renderer is CPU-only, so `GetNativeTexture()` always returns null, matching the Software
-     * renderer's own texture handle shape.
+     * `glGenTextures`/`glTexImage2D`. There is no native SDL texture behind this handle; the
+     * renderer is CPU-only and keeps its PortableGL object private.
      */
     class PortableGLTextureRenderer final : public ITextureRenderer
     {
@@ -135,9 +135,6 @@ namespace CNA::Internal::Renderers::PortableGL
         [[nodiscard]] int GetWidth() const override { return width_; }
         /** @brief Texture height in texels. */
         [[nodiscard]] int GetHeight() const override { return height_; }
-        /** @brief Always null: this renderer owns no SDL texture. */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
-
         /**
          * @brief Replaces the whole level-0 image in place.
          * @param rgba   Source pixels, tightly packed RGBA8 rows, top row first.
@@ -299,7 +296,7 @@ namespace CNA::Internal::Renderers::PortableGL
      * PortableGL graphics renderer -- a genuine CPU software OpenGL 3.x-ish renderer built on
      * `rswinkle/PortableGL` (https://github.com/rswinkle/PortableGL, MIT licensed, single C99
      * header). Same architectural shape as the Headless/Software renderers -- no window, no GPU
-     * library, `Present()` is a no-op, `GetWindowInternal()`/`GetRendererInternal()` return null,
+     * library, `Present()` is a no-op, no native window or SDL renderer exists,
      * and pixel truth is exposed via `ReadBackbuffer()` -- but unlike Software's hand-rolled
      * rasterizer, the actual rasterization/shading pipeline is delegated to real PortableGL API
      * calls (`glGenBuffers`/`glBufferData`/`glVertexAttribPointer`, `pglCreateProgram` with real C
@@ -388,11 +385,6 @@ namespace CNA::Internal::Renderers::PortableGL
          * @return `DepthFormat::Depth24Stencil8`'s ordinal, always.
          */
         [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int requestedFormat) const override;
-
-        /** @brief Always null: this renderer needs no window. */
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return nullptr; }
-        /** @brief Always null: this renderer needs no SDL_Renderer. */
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         /**
          * @brief Creates a real PortableGL texture object from @p data.
@@ -639,6 +631,8 @@ namespace CNA::Internal::Renderers::PortableGL
          * @return The new index-buffer handle.
          */
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int index_capacity) override;
+        /** Creates a real PortableGL buffer object declared for 32-bit index data. */
+        std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int index_capacity) override;
 
         /**
          * @brief Draws vertex-colored primitives with the built-in unlit program.

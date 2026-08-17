@@ -1,9 +1,15 @@
 #pragma once
 
+#include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
+
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
-#include <SDL3/SDL.h>
+#include "CNA/Platform/IPlatformGlContext.hpp"
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "mojoshader.h"
+#endif
 #include <easygl/easygl.hpp>
 #include <array>
 #include <cstdint>
@@ -16,6 +22,49 @@ namespace CNA::Internal::Renderers::EasyGL
     class EasyGLRenderer;
     class EasyGLRenderTargetRenderer;
     class EasyGLRenderTargetCubeRenderer;
+    class EasyGLPlatformContext;
+
+    /**
+     * @brief Platform-neutral presentation metrics consumed by the EasyGL family.
+     *
+     * The platform publishes physical drawable pixels plus a logical-to-physical display scale.
+     * This value object derives the client-coordinate dimensions and owns EasyGL's virtual
+     * resolution transform, so resize/DPI behavior can be tested without a native window or GL.
+     */
+    class EasyGLSurfaceState
+    {
+    public:
+        EasyGLSurfaceState(const RendererSurfaceInfo& surface, int virtualWidth,
+                           int virtualHeight, CnaPresentationMode presentationMode);
+
+        /** @brief Replaces the platform snapshot after resize or density change. */
+        void Update(const RendererSurfaceInfo& surface);
+        /** @brief Replaces the virtual game resolution. */
+        void SetVirtualResolution(int width, int height);
+        /** @brief Replaces the presentation policy. */
+        void SetPresentationMode(CnaPresentationMode mode);
+
+        /** @brief Gets the physical drawable extent used by GL framebuffer operations. */
+        void GetDrawableSize(int& width, int& height) const;
+        /** @brief Gets the renderer's logical game extent. */
+        void GetLogicalSize(int& width, int& height) const;
+        /** @brief Converts logical client units into renderer game units. */
+        bool WindowToLogical(float windowX, float windowY,
+                             float& logicalX, float& logicalY) const;
+        /** @brief Converts renderer game units into logical client units. */
+        bool LogicalToWindow(float logicalX, float logicalY,
+                             float& windowX, float& windowY) const;
+        /** @brief Gets the stable platform window identity. */
+        [[nodiscard]] CNA::Platform::WindowId GetWindowId() const { return surface_.windowId; }
+
+    private:
+        void GetClientSize(int& width, int& height) const;
+
+        RendererSurfaceInfo surface_;
+        int virtualWidth_ = 0;
+        int virtualHeight_ = 0;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+    };
 
     /**
      * @brief REMED-GFX-168: the one record of which EasyGL render target is currently bound.
@@ -88,7 +137,7 @@ namespace CNA::Internal::Renderers::EasyGL
         ~EasyGLTextureRenderer() override;
         int GetWidth() const override { return width; }
         int GetHeight() const override { return height; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void BindGL(int unit) const override;
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
@@ -144,7 +193,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
         int GetWidth()  const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void BindGL(int unit) const override;
 
         void BindAsRenderTarget()   override;
@@ -585,8 +634,16 @@ namespace CNA::Internal::Renderers::EasyGL
     class EasyGLRenderer : public IGraphicsRenderer
     {
     private:
-        SDL_Window* window = nullptr;
-        SDL_GLContext gl_context = nullptr;
+        // Declared first so it is destroyed last: all GL resources below release while the
+        // platform context is still current and alive.
+        std::unique_ptr<EasyGLPlatformContext> platformContext_;
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        // plan_fx.md FX-062: one MojoShader GL context per this renderer's whole lifetime, created
+        // lazily on first CreateCompiledEffect() call (see GetMojoShaderContextEXT() in
+        // EasyGLCompiledEffect.cpp).
+        MOJOSHADER_glContext* mojoShaderContext_ = nullptr;
+#endif
+        EasyGLSurfaceState surfaceState_;
         ::easygl::Device device;
         ::easygl::ResourceRegistry registry_;
 
@@ -599,13 +656,12 @@ namespace CNA::Internal::Renderers::EasyGL
         void ForceAllColorWriteMasks();
         [[nodiscard]] bool HasRestrictedActiveColorWriteMask() const;
 
-        int virtualWidth_ = 0;
-        int virtualHeight_ = 0;
         static constexpr int kMaxSamplerSlots = 16;
         ::easygl::Sampler samplers_[kMaxSamplerSlots];
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
         bool contextRecoveryEnabled_ = true;
         int swapInterval_ = 1;
+        /// plan_runtimerenderer.md P11: which of EasyGL's five GL identities this instance serves.
+        GlProfile profile_ = kCompileTimeGlProfile;
 
         // MSAA — multisampled render buffer resolved to FBO 0 on Present().
         int sampleCount_ = 1;
@@ -632,6 +688,7 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_world         = -1;  ///< mat4 full world matrix (env map shader)
             int loc_diffuse       = -1;
             int loc_ambient       = -1;
+            int loc_lighting_enabled = -1;  ///< BasicEffect unlit-vs-lit shader branch
             int loc_l0dir         = -1;
             int loc_l0diff        = -1;
             int loc_l1dir         = -1;  ///< BasicEffect.DirectionalLight1 (lit shader only)
@@ -662,10 +719,36 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_pbr_mr         = -1;  ///< sampler2D metallic-roughness map (PbrEffect only, G=roughness/B=metallic)
             int loc_pbr_emissivemap = -1; ///< sampler2D emissive map (PbrEffect only)
             int loc_pbr_occlusionmap = -1; ///< sampler2D occlusion map (PbrEffect only, R channel)
+            int loc_pbr_specularmap = -1; ///< KHR_materials_specular strength map (A channel)
+            int loc_pbr_specularcolormap = -1; ///< KHR_materials_specular colour map (RGB)
             int loc_pbr_metallic    = -1;  ///< float metallic factor (PbrEffect only)
             int loc_pbr_roughness   = -1;  ///< float roughness factor (PbrEffect only)
+            /// plan_gltf.md GLTF-343/344: xyz = dielectric F0, w = dielectric F90.
+            int loc_pbr_dielectric_fresnel = -1;
+            /// GLTF-344: xyz = unclamped IOR F0 * specularColorFactor, w = specularFactor.
+            int loc_pbr_specular_fresnel_inputs = -1;
+            /// plan_gltf.md GLTF-210/GLTF-212: vec3 colour-management gate (PbrEffect only).
+            /// x = decode the base-colour sample from sRGB, y = decode the emissive sample,
+            /// z = encode the fragment's RGB back to sRGB. Each is 0 or 1 and multiplies a
+            /// `mix()` rather than driving a branch, so every fragment costs the same.
+            int loc_pbr_srgb        = -1;
+            /// plan_gltf.md GLTF-224: float normalTexture.scale (PbrEffect only).
+            int loc_pbr_normalscale = -1;
+            /// plan_gltf.md GLTF-225: float occlusionTexture.strength (PbrEffect only).
+            int loc_pbr_occlstrength = -1;
+            /// plan_gltf.md GLTF-182/183: vec4 UV1 selectors for PBR slots 0-3.
+            int loc_pbr_texcoordsets = -1;
+            /// plan_gltf.md GLTF-182/183: UV1 selector for PBR occlusion slot 4.
+            int loc_pbr_occlusiontexcoordset = -1;
+            /// GLTF-344: UV1 selectors for specular strength/colour slots 5 and 6.
+            int loc_pbr_specular_texcoordsets = -1;
+            /// plan_gltf.md GLTF-184: ten vec4 affine rows, two for each PBR texture slot.
+            std::array<int, 10> loc_pbr_texture_transform_rows{
+                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+            /// GLTF-344: two affine rows for each specular texture, kept ABI-separate from slots 0-4.
+            std::array<int, 4> loc_pbr_specular_texture_transform_rows{-1, -1, -1, -1};
             int loc_rt_flip_v       = -1;  ///< REMED-GFX-147: vec4 render-target V-flip flags for texture units 0-3
-            int loc_rt_flip_v_hi    = -1;  ///< REMED-GFX-147: vec4 whose x is texture unit 4's flag (PbrEffect only)
+            int loc_rt_flip_v_hi    = -1;  ///< REMED-GFX-147: units 4-6 in xyz (PbrEffect only)
             int loc_instanced       = -1;  ///< REMED-GFX-122: stock-program per-instance matrix gate
             void reset_no_gl() { prog.reset_handle_no_gl(); ready = false; }
         };
@@ -680,8 +763,10 @@ namespace CNA::Internal::Renderers::EasyGL
         Prog3D prog_env_mapped_;     ///< stride=32: aPos + aNormal + aUV, cube map (EnvironmentMapEffect)
         Prog3D prog_skinned_;        ///< stride=52: aPos + aNormal + aUV + weights + indices (SkinnedEffect, PreferPerPixelLighting=true: per-pixel Blinn-Phong)
         Prog3D prog_skinned_vertexlit_;  ///< stride=52: aPos + aNormal + aUV + weights + indices (SkinnedEffect, PreferPerPixelLighting=false, XNA's own default: per-vertex/Gouraud-shaded Blinn-Phong, Task 1102b)
-        Prog3D prog_pbr_;            ///< stride=48: aPos + aNormal + aTangent + aUV, real glTF metallic-roughness BRDF (PbrEffect, plan_cnj.md CNB-58)
-        Prog3D prog_pbr_skinned_;    ///< stride=68: aPos + aNormal + aTangent + aUV + weights + indices, PBR BRDF + skinning (SkinnedPbrEffect, PBR+skinning combo)
+        Prog3D prog_pbr_;            ///< stride=48: legacy single-UV PBR program
+        Prog3D prog_pbr_dual_uv_;    ///< stride=60: PBR program with aUV1 and per-map selection
+        Prog3D prog_pbr_skinned_;    ///< stride=68: legacy single-UV skinned PBR program
+        Prog3D prog_pbr_skinned_dual_uv_;  ///< stride=76: skinned PBR with aUV1 selection
 
         ::easygl::Texture default_white_texture_;
         bool default_white_texture_ready_ = false;
@@ -736,8 +821,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void EnsureEnvMapped3DProgram();
         void EnsureSkinnedProgram();
         void EnsureSkinnedVertexLitProgram();
-        void EnsurePbrProgram();
-        void EnsurePbrSkinnedProgram();
+        void EnsurePbrProgram(bool dualUv);
+        void EnsurePbrSkinnedProgram(bool dualUv);
         void EnsureDefaultWhiteTexture();
         void EnsureDefaultFlatNormalTexture();
         /// REMED-GFX-218: which stock program a draw gets. SelectProgram() and
@@ -765,13 +850,103 @@ namespace CNA::Internal::Renderers::EasyGL
         static void ResolveRenderTargetOrientationUniforms(Prog3D& p);
 
     public:
-        explicit EasyGLRenderer(SDL_Window* window,
-                                       int virtualWidth = 0, int virtualHeight = 0,
-                                       CnaPresentationMode mode = CnaPresentationMode::FixedHeightDynamicWidth,
-                                       bool contextRecoveryEnabled = true,
-                                       int multiSampleCount = 1,
-                                       int swapInterval = 1);
+        /**
+         * @brief Constructs the renderer for one of EasyGL's five GL profiles.
+         *
+         * plan_runtimerenderer.md phase P11: the profile is a constructor argument rather than a
+         * compile definition, which is what lets two GL identities coexist in one binary. It
+         * defaults to the profile this build was configured for, so a single-renderer build is
+         * unaffected.
+         *
+         * @param surface The platform surface to present into.
+         * @param glContext The platform GL context service this renderer drives.
+         * @param virtualWidth Logical presentation width; 0 means unset.
+         * @param virtualHeight Logical presentation height; 0 means unset.
+         * @param mode Presentation/scaling policy.
+         * @param contextRecoveryEnabled Whether to keep CPU-side copies for context-loss recovery.
+         * @param multiSampleCount Requested MSAA sample count.
+         * @param swapInterval Swap interval (0 immediate, 1 VSync, 2 half-rate).
+         * @param profile Which GL profile to create the context and shaders for.
+         */
+
+        /**
+         * @brief The GL profile this renderer instance was created for.
+         *
+         * @return The profile.
+         */
+        [[nodiscard]] GlProfile Profile() const { return profile_; }
+        explicit EasyGLRenderer(
+            const RendererSurfaceInfo& surface, CNA::Platform::IPlatformGlContext& glContext,
+            int virtualWidth = 0, int virtualHeight = 0,
+            CnaPresentationMode mode = CnaPresentationMode::FixedHeightDynamicWidth,
+            bool contextRecoveryEnabled = true, int multiSampleCount = 1,
+            int swapInterval = 1, GlProfile profile = kCompileTimeGlProfile);
         ~EasyGLRenderer() override;
+
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        /**
+         * @brief Parses a compiled XNA effect for this device (plan_fx.md FX-062).
+         * @param effectCode Compiled effect bytes.
+         * @param effectCodeBytes Number of bytes at @p effectCode.
+         * @return The runtime, or null if MojoShader has no context for this device.
+         */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
+
+        /**
+         * @brief True: this renderer executes compiled XNA Effect Framework bytecode
+         * (plan_fx.md FX-062). Ordinary 3D draws have a working compiled-effect route, verified by
+         * a real golden-pixel test and the FX-060 shared conformance suite. Still refused
+         * explicitly rather than silently mishandled: a compiled effect's vertex shader sampling a
+         * texture, a 3D/cube (not 2D) sampler binding, sampler state translation (a bound texture's
+         * own GL creation-time filter/wrap parameters apply instead of the effect's declared
+         * sampler_state block), and instanced/multi-stream compiled-effect draws.
+         * @return true.
+         */
+        [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
+
+        /**
+         * @brief CNAEXT. Returns this device's MojoShader context, creating it on first use.
+         *
+         * MojoShader allows one context per GL context, so it is owned here rather than by each
+         * effect. Unlike SDL_GPU, EasyGL's GL context can be recreated (context-loss recovery);
+         * this initial implementation does not yet recreate the MojoShader context to follow --
+         * a documented, narrower scope than the ordinary (non-compiled-effect) draw path's own
+         * recovery support.
+         * @return The context, or null if it could not be created.
+         */
+        CNAEXT [[nodiscard]] MOJOSHADER_glContext* GetMojoShaderContextEXT();
+
+        /**
+         * @brief CNAEXT. Returns the raw GL function-pointer loader this renderer's platform
+         * context resolves every native GL call through, so MojoShader's OpenGL adapter can look
+         * its own functions up the same way (EasyGLCompiledEffect.cpp, a different translation
+         * unit from where EasyGLPlatformContext is defined).
+         */
+        CNAEXT [[nodiscard]] CNA::Platform::GlProcAddressLoader GetProcAddressLoaderEXT() const;
+
+        /**
+         * @brief CNAEXT. Binds a compiled effect's currently-applied-pass shader program, vertex
+         * attributes and pixel-stage sampler textures, and pushes its uniforms -- everything a
+         * compiled-effect draw needs immediately before issuing the actual GL draw call.
+         *
+         * plan_fx.md FX-062: EasyGL draws immediately (no `Present()`-deferred queue), so this is
+         * called directly from `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`'s own compiled-effect
+         * branch rather than captured for later replay the way SDL_GPU's draw route has to.
+         *
+         * @param declaredElements The caller's `VertexDeclaration` elements for this draw.
+         * @param stride The vertex buffer's byte stride (`glVertexAttribPointer`'s own stride).
+         * @param runtime The applied compiled effect.
+         * @throws std::runtime_error if the applied pass bound no shader pair, or @p runtime was
+         *         not created by this renderer.
+         * @throws System::NotSupportedException if @p declaredElements does not supply an input
+         *         the vertex shader consumes, the vertex shader itself samples a texture, or a
+         *         reflected pixel-stage sampler has no texture bound.
+         */
+        CNAEXT void BindCompiledEffectForDrawEXT(
+            const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
+            std::size_t stride, ICompiledEffectRuntime& runtime);
+#endif
         // AnisotropicFiltering/MultiSampleAntiAliasing re-query the same live GL state the
         // startup capability dump (EnsureGL()) already prints, since they're cheap, idempotent GL
         // queries -- no need to cache them. WireFrame is implemented through measured triangle
@@ -782,6 +957,7 @@ namespace CNA::Internal::Renderers::EasyGL
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void SetSwapInterval(int interval) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         void GetViewportSize(int& width, int& height) override;
         void getLogicalSize(int& width, int& height) const;
         void getPhysicalSize(int& width, int& height) const;
@@ -803,8 +979,6 @@ namespace CNA::Internal::Renderers::EasyGL
         // already-applied value, ignoring the request). GetMultiSampleCount() reports that real
         // value honestly instead of falling back to the interface default of 0.
         [[nodiscard]] int GetMultiSampleCount() const override { return sampleCount_ > 1 ? sampleCount_ : 0; }
-        SDL_Window* GetWindowInternal() const override { return window; }
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
@@ -881,4 +1055,32 @@ namespace CNA::Internal::Renderers::EasyGL
                                        int instanceCount,
                                        const GpuDrawParams& params) override;
     };
+
+    /**
+     * @brief Creates an EasyGL renderer for the build's default GL profile.
+     *
+     * plan_runtimerenderer.md design decision 4: declared in the FAMILY's namespace so several
+     * renderer archives can link into one binary. Declared here, alongside the class, for the same
+     * reason the GDI family declares its own (GdiRenderer.hpp): this family's device-free suites
+     * and contract programs construct a renderer directly, without going through GraphicsDevice,
+     * and since RTR-P9-9 they compile whenever the family is PRESENT rather than only when it is
+     * the default.
+     *
+     * @param args Construction arguments.
+     * @return The new renderer; never nullptr on success. Throws on failure.
+     */
+    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args);
+
+    /**
+     * @brief Creates an EasyGL renderer for an explicit GL profile.
+     *
+     * plan_runtimerenderer.md P11: each of the five public GL identities this family serves reaches
+     * this with its own profile, which is what lets all five be compiled into one binary.
+     *
+     * @param args Construction arguments.
+     * @param profile The GL profile to create the context and shaders for.
+     * @return The new renderer; never nullptr on success. Throws on failure.
+     */
+    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRendererForProfile(
+        const GraphicsRendererCreateArgs& args, GlProfile profile);
 }

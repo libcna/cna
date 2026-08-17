@@ -13,9 +13,6 @@
 #include <type_traits>
 #include <vector>
 
-#include <SDL3/SDL.h>
-#include <SDL3_image/SDL_image.h>
-
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
@@ -33,18 +30,13 @@
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba1010102.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "System/ObjectDisposedException.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/IO/Stream.hpp"
 #include "System/FormatException.hpp"
 #include "System/NotSupportedException.hpp"
 
-// plan_dx9.md Phase D9-10 (D9-103): GraphicsProfile.Reach/HiDef texture-size ceilings are real,
-// enforced-at-creation-time, ONLY on this renderer -- the other 9 CNA renderers have no profile
-// distinction to enforce (matches GraphicsAdapter.cpp's own #ifdef CNA_RENDERER_DIRECTX9 convention).
-#ifdef CNA_RENDERER_DIRECTX9
-#include "CNA/Internal/Renderers/DirectX9/D3D9ProfileCapabilities.hpp"
-#endif
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -55,26 +47,26 @@ namespace Microsoft::Xna::Framework::Graphics
     // Private helpers
     // -----------------------------------------------------------------------
 
-#ifdef CNA_RENDERER_DIRECTX9
-    // D9-103: a HiDef-only size requested on a Reach device (or a size exceeding even HiDef's own
-    // 4096 ceiling) throws the XNA-correct exception (System::NotSupportedException, matching
-    // this file's own established convention for other unsupported-request cases) -- D9-100's own
-    // table, checked as a profile CEILING, not a hardware query: even if this dev environment's
-    // real device could technically allocate a larger texture, a Reach-profile game is restricted
-    // to 2048 and a HiDef-profile game to 4096, matching real XNA's own portability guarantee.
+    // plan_runtimerenderer.md design decision 9 / plan_dx9.md D9-103: GraphicsProfile.Reach/HiDef
+    // texture-size ceilings. Only a renderer with a real capability structure to consult (D3D9)
+    // enforces one; every other renderer reports no ceiling, which is exactly what it did when this
+    // was a compile-time renderer branch. Checked as a profile CEILING, not a hardware
+    // query: even where the device could allocate more, a Reach-profile game is restricted to the
+    // profile's own limit, which is what XNA's portability guarantee means.
     static void ValidateTextureSizeForProfileEXT(const GraphicsDevice& device, int w, int h)
     {
         const int profile = static_cast<int>(device.getGraphicsProfileProperty());
-        const int maxSize = CNA::Internal::Renderers::DirectX9::MaxTextureSizeForProfileEXT(profile);
+        const int maxSize = device.GetRenderer().GetMaxTextureSizeForProfileEXT(profile);
         if (w > maxSize || h > maxSize)
         {
             throw System::NotSupportedException(
-                "Texture2D: " + std::to_string(w) + "x" + std::to_string(h) +
-                " exceeds GraphicsProfile." + (profile == 1 ? std::string("HiDef") : std::string("Reach")) +
-                "'s own maximum texture size of " + std::to_string(maxSize));
+                "Texture size " + std::to_string(w) + "x" + std::to_string(h) +
+                " exceeds GraphicsProfile." +
+                (profile == 1 ? std::string("HiDef") : std::string("Reach")) +
+                "'s own maximum of " + std::to_string(maxSize) + "x" + std::to_string(maxSize));
         }
     }
-#endif
+
 
     // REMED-CONTENT-001: the native graphics APIs' own validation does not substitute for this --
     // Vulkan's validation layer is advisory (RADV proceeds anyway), and wgpu-native validates
@@ -92,82 +84,57 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    static void ValidateTexture2DFormatEXT(SurfaceFormat format)
+    static void ValidateTexture2DFormatEXT(const GraphicsDevice* device, SurfaceFormat format)
     {
-#ifdef CNA_RENDERER_SKIA
-        if (format == SurfaceFormat::Color
-            || format == SurfaceFormat::Bgr565
-            || format == SurfaceFormat::Bgra5551
-            || format == SurfaceFormat::Bgra4444
-            || format == SurfaceFormat::Rgba1010102
-            || format == SurfaceFormat::Rg32
-            || format == SurfaceFormat::Rgba64
-            || format == SurfaceFormat::Alpha8
-            || format == SurfaceFormat::ColorBgraEXT
-            || format == SurfaceFormat::ColorSrgbEXT
-            || format == SurfaceFormat::ByteEXT
-            || format == SurfaceFormat::UShortEXT
-            || format == SurfaceFormat::Single
-            || format == SurfaceFormat::Vector2
-            || format == SurfaceFormat::Vector4
-            || format == SurfaceFormat::HalfSingle
-            || format == SurfaceFormat::HalfVector2
-            || format == SurfaceFormat::HalfVector4
-            || format == SurfaceFormat::NormalizedByte2
-            || format == SurfaceFormat::NormalizedByte4
-            || format == SurfaceFormat::HdrBlendable
-            || format == SurfaceFormat::Dxt1
-            || format == SurfaceFormat::Dxt3
-            || format == SurfaceFormat::Dxt5
-            || format == SurfaceFormat::Bc7EXT
-            || format == SurfaceFormat::Bc7SrgbEXT)
+        // plan_runtimerenderer.md design decision 9: a renderer that stores each format in its own
+        // native layout (SKIA) answers this itself; every other renderer defers to the framework's
+        // own rule, which is what the #else branch of the former #ifdef did.
+        if (device == nullptr)
         {
+            Texture::ValidateFormat(format);
             return;
         }
-        throw std::runtime_error(
-            "Skia Texture2D SurfaceFormat has not passed its promotion gate.");
-#else
-        Texture::ValidateFormat(format);
-#endif
+        switch (device->GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)))
+        {
+            case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
+                return;
+            case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported:
+                throw std::runtime_error(
+                    "Texture2D SurfaceFormat has not passed the renderer's promotion gate.");
+            case CNA::Internal::Renderers::RendererFormatVerdict::Defer:
+                Texture::ValidateFormat(format);
+                return;
+        }
     }
 
-    [[nodiscard]] static bool IsColorTransferFormatEXT(SurfaceFormat format) noexcept
+    [[nodiscard]] static bool IsColorTransferFormatEXT(const GraphicsDevice* device,
+                                                        SurfaceFormat format) noexcept
     {
-        if (format == SurfaceFormat::Color)
-            return true;
-#ifdef CNA_RENDERER_SKIA
-        // Skia stores each promoted format in its own native layout, so a `Color*` transfer is
-        // only meaningful for the two that are genuinely 32-bit RGBA-shaped. Every other promoted
-        // format has a typed overload that reads its real bits instead.
-        return format == SurfaceFormat::ColorBgraEXT
-            || format == SurfaceFormat::ColorSrgbEXT;
-#else
-        // Every other renderer keeps exactly the contract it had before this gate existed: the
-        // `Color*` overloads accept any format whose texel is a multiple of four bytes, which is
-        // the rule Texture::ValidateGetDataFormat(format, 4) applies on the next line. Returning a
-        // flat false here would withdraw a public route those renderers genuinely serve --
-        // MouseCursor::FromTexture2D reads a ColorSrgbEXT texture through it -- from renderers this
-        // lane does not otherwise touch.
+        // The framework rule is "any format whose texel is a multiple of four bytes", which is the
+        // rule Texture::ValidateGetDataFormat(format, 4) applies alongside it. It is a route real
+        // code depends on -- MouseCursor::FromTexture2D reads a ColorSrgbEXT texture through it --
+        // so a renderer has to opt out of it explicitly rather than have it withdrawn by default.
+        if (device != nullptr)
+        {
+            switch (device->GetRenderer().ClassifyColorTransferFormatEXT(static_cast<int>(format)))
+            {
+                case CNA::Internal::Renderers::RendererFormatVerdict::Supported:   return true;
+                case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported: return false;
+                case CNA::Internal::Renderers::RendererFormatVerdict::Defer:       break;
+            }
+        }
         return Texture::GetFormatSizeEXT(format) % 4 == 0;
-#endif
     }
 
     /// SKIA-140/141: Dxt1/Dxt3/Dxt5/Bc7EXT/Bc7SrgbEXT transfer raw compressed blocks through the
     /// same CNAEXT byte-array overloads ByteEXT uses, matching how real XNA/FNA upload compressed
     /// content through the generic SetData<byte>/GetData<byte> overload rather than a dedicated
-    /// method.
-    [[nodiscard]] static bool IsCompressedTransferFormatEXT(SurfaceFormat format) noexcept
+    /// method. Renderers that do not store compressed textures natively never take this path.
+    [[nodiscard]] static bool IsCompressedTransferFormatEXT(const GraphicsDevice* device,
+                                                             SurfaceFormat format) noexcept
     {
-#ifdef CNA_RENDERER_SKIA
-        return format == SurfaceFormat::Dxt1
-            || format == SurfaceFormat::Dxt3
-            || format == SurfaceFormat::Dxt5
-            || format == SurfaceFormat::Bc7EXT
-            || format == SurfaceFormat::Bc7SrgbEXT;
-#else
-        (void)format;
-        return false;
-#endif
+        return device != nullptr
+            && device->GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format));
     }
 
     static int mipDim(int base, int level)
@@ -275,9 +242,7 @@ namespace Microsoft::Xna::Framework::Graphics
     Texture2D::Texture2D(GraphicsDevice& graphicsDevice, int w, int h)
         : Texture(&graphicsDevice), width(w), height(h)
     {
-#ifdef CNA_RENDERER_DIRECTX9
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
-#endif
         ValidateTextureDimensionEXT(graphicsDevice, w, h);
         ImageData data;
         data.width  = w;
@@ -300,11 +265,9 @@ namespace Microsoft::Xna::Framework::Graphics
                          bool mipMap, SurfaceFormat format)
         : Texture(&graphicsDevice), width(w), height(h)
     {
-#ifdef CNA_RENDERER_DIRECTX9
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
-#endif
         ValidateTextureDimensionEXT(graphicsDevice, w, h);
-        ValidateTexture2DFormatEXT(format);
+        ValidateTexture2DFormatEXT(&graphicsDevice, format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(w, h) : 1;
         ImageData data;
@@ -385,7 +348,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::SetData(const Color* data, int elementCount)
     {
-        if (!IsColorTransferFormatEXT(format_))
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Texture2D");
+        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
             throw std::invalid_argument(
                 "Texture2D::SetData: Color data requires a Color-compatible 32-bit format");
         if (!graphicsDevice_ || !data || elementCount <= 0) return;
@@ -434,7 +399,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect,
                             const Color* data, int startIndex, int elementCount)
     {
-        if (!IsColorTransferFormatEXT(format_))
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Texture2D");
+        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
             throw std::invalid_argument(
                 "Texture2D::SetData: Color data requires a Color-compatible 32-bit format");
         if (!data || elementCount <= 0)
@@ -569,6 +536,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetDataBytes(int level, const Rectangle* rect, const std::uint8_t* data,
                                  int startIndex, int elementCount, int elementBytes)
     {
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Texture2D");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::SetData: data must not be null");
         if (startIndex < 0)
@@ -690,6 +659,8 @@ namespace Microsoft::Xna::Framework::Graphics
                                            const std::uint8_t* data, int startIndex,
                                            int elementCount)
     {
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Texture2D");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::SetData: data must not be null");
         if (startIndex < 0)
@@ -1258,7 +1229,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const std::uint8_t* data,
                             int startIndex, int elementCount)
     {
-        if (IsCompressedTransferFormatEXT(format_))
+        if (IsCompressedTransferFormatEXT(graphicsDevice_, format_))
         {
             SetCompressedDataBytes(level, rect, data, startIndex, elementCount);
             return;
@@ -1292,6 +1263,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::SetDataRGBA(const uint8_t* data, int pixelCount)
     {
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Texture2D");
         if (format_ != SurfaceFormat::Color)
             throw std::invalid_argument(
                 "Texture2D::SetDataRGBA: raw RGBA requires SurfaceFormat::Color");
@@ -1364,7 +1337,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::GetData(Color* data, int startIndex, int elementCount) const
     {
-        if (!IsColorTransferFormatEXT(format_))
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Texture2D");
+        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
             throw std::invalid_argument(
                 "Texture2D::GetData: Color data requires a Color-compatible 32-bit format");
         if (!data || elementCount <= 0)
@@ -1453,7 +1428,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect,
                             Color* data, int startIndex, int elementCount) const
     {
-        if (!IsColorTransferFormatEXT(format_))
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Texture2D");
+        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
             throw std::invalid_argument(
                 "Texture2D::GetData: Color data requires a Color-compatible 32-bit format");
         if (!data || elementCount <= 0)
@@ -1556,6 +1533,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetDataBytes(int level, const Rectangle* rect, std::uint8_t* data,
                                  int startIndex, int elementCount, int elementBytes) const
     {
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Texture2D");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::GetData: data must not be null");
         if (startIndex < 0)
@@ -1629,6 +1608,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetCompressedDataBytes(int level, const Rectangle* rect, std::uint8_t* data,
                                            int startIndex, int elementCount) const
     {
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Texture2D");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::GetData: data must not be null");
         if (startIndex < 0)
@@ -2091,7 +2072,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, std::uint8_t* data,
                             int startIndex, int elementCount) const
     {
-        if (IsCompressedTransferFormatEXT(format_))
+        if (IsCompressedTransferFormatEXT(graphicsDevice_, format_))
         {
             GetCompressedDataBytes(level, rect, data, startIndex, elementCount);
             return;
@@ -2167,7 +2148,7 @@ namespace Microsoft::Xna::Framework::Graphics
         return blockWidth * blockHeight * bytesPerBlock;
     }
 
-    // SKIA-130: distinguish a non-DDS image (which SDL_image may decode) from a malformed DDS.
+    // SKIA-130: distinguish an ordinary non-DDS image from a malformed DDS.
     // Once the DDS magic is present, every declared field and level is validated here and errors
     // are reported as DDS errors instead of falling through to an unrelated image decoder.
     static bool TryDecodeDds(const uint8_t* buf, std::size_t len, int maximumTextureDimension,
@@ -2269,8 +2250,8 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     // Reads the entire stream and decodes it into RGBA8 pixel data — DDS/DXT1/3/5 via
-    // DxtUtil, everything else via SDL_image (PNG/JPG/BMP/GIF/... — whatever SDL3_image was
-    // built with; see docs/texture-stream-formats.md for the formats verified by CI).
+    // DxtUtil, everything else through ImageLoader (see docs/texture-stream-formats.md for
+    // the formats verified by CI).
     static DecodedTexture2D DecodeStreamToImageData(
         System::IO::Stream& stream, int maximumTextureDimension)
     {
@@ -2316,9 +2297,7 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsDevice& device, int w, int h,
         std::vector<std::vector<std::uint8_t>>&& rgbaLevels)
     {
-#ifdef CNA_RENDERER_DIRECTX9
         ValidateTextureSizeForProfileEXT(device, w, h);
-#endif
         ValidateTextureDimensionEXT(device, w, h);
         const int maximumLevels = CalculateMipLevels(w, h);
         if (rgbaLevels.empty()
@@ -2392,71 +2371,11 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         DecodedTexture2D decoded = DecodeStreamToImageData(
             stream, graphicsDevice.GetMaxTextureDimension());
-        std::vector<uint8_t>& levelZero = decoded.rgbaLevels.front();
-
-        SDL_Surface* surface = SDL_CreateSurfaceFrom(
-            decoded.width, decoded.height, SDL_PIXELFORMAT_RGBA32,
-            levelZero.data(), decoded.width * 4);
-        if (!surface)
-            throw std::runtime_error(std::string("SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
-
-        // Mirrors FNA3D_Image_Load's forceW/forceH/zoom resize-and-crop logic.
-        const bool scaleWidth = zoom ? (surface->w < surface->h) : (surface->w > surface->h);
-        const float scale = scaleWidth ? (static_cast<float>(width)  / static_cast<float>(surface->w))
-                                       : (static_cast<float>(height) / static_cast<float>(surface->h));
-
-        int finalW, finalH;
-        SDL_Rect crop{0, 0, surface->w, surface->h};
-        if (zoom)
-        {
-            finalW = width;
-            finalH = height;
-            if (scaleWidth)
-            {
-                crop.x = 0;
-                crop.y = surface->h / 2 - static_cast<int>((height / scale) / 2);
-                crop.w = surface->w;
-                crop.h = static_cast<int>(height / scale);
-            }
-            else
-            {
-                crop.x = surface->w / 2 - static_cast<int>((width / scale) / 2);
-                crop.y = 0;
-                crop.w = static_cast<int>(width / scale);
-                crop.h = surface->h;
-            }
-        }
-        else
-        {
-            finalW = static_cast<int>(surface->w * scale);
-            finalH = static_cast<int>(surface->h * scale);
-        }
-
-        SDL_Surface* scaled = SDL_CreateSurface(finalW, finalH, SDL_PIXELFORMAT_RGBA32);
-        if (!scaled)
-        {
-            SDL_DestroySurface(surface);
-            throw std::runtime_error(std::string("SDL_CreateSurface failed: ") + SDL_GetError());
-        }
-        SDL_SetSurfaceBlendMode(surface, SDL_BLENDMODE_NONE);
-        const bool blitOk = zoom
-            ? SDL_BlitSurfaceScaled(surface, &crop, scaled, nullptr, SDL_SCALEMODE_LINEAR)
-            : SDL_BlitSurfaceScaled(surface, nullptr, scaled, nullptr, SDL_SCALEMODE_LINEAR);
-        if (!blitOk)
-        {
-            SDL_DestroySurface(scaled);
-            SDL_DestroySurface(surface);
-            throw std::runtime_error(std::string("SDL_BlitSurfaceScaled failed: ") + SDL_GetError());
-        }
-
-        std::vector<uint8_t> finalPixels(
-            static_cast<uint8_t*>(scaled->pixels),
-            static_cast<uint8_t*>(scaled->pixels) + static_cast<std::size_t>(finalW) * finalH * 4);
-
-        SDL_DestroySurface(scaled);
-        SDL_DestroySurface(surface);
-
-        return MakeTextureFromPixels(graphicsDevice, finalW, finalH, std::move(finalPixels));
+        const std::vector<uint8_t>& levelZero = decoded.rgbaLevels.front();
+        ImageData resized = ImageLoader::ResizeRgba(
+            levelZero.data(), decoded.width, decoded.height, width, height, zoom);
+        return MakeTextureFromPixels(
+            graphicsDevice, resized.width, resized.height, std::move(resized.pixels));
     }
 
     // -----------------------------------------------------------------------
@@ -2470,55 +2389,10 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!cpuPixels_ || cpuPixels_->empty())
             throw std::runtime_error("Texture2D::SaveAsPng: no CPU-side pixel data available");
 
-        SDL_Surface* surface = SDL_CreateSurfaceFrom(
-            width, height, SDL_PIXELFORMAT_RGBA32,
-            const_cast<uint8_t*>(cpuPixels_->data()), width * 4);
-        if (!surface)
-            throw std::runtime_error(std::string("SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
-
-        SDL_Surface* src = surface;
-        SDL_Surface* scaled = nullptr;
-        if (targetWidth != width || targetHeight != height)
-        {
-            scaled = SDL_ScaleSurface(surface, targetWidth, targetHeight, SDL_SCALEMODE_LINEAR);
-            if (!scaled)
-            {
-                SDL_DestroySurface(surface);
-                throw std::runtime_error(std::string("SDL_ScaleSurface failed: ") + SDL_GetError());
-            }
-            src = scaled;
-        }
-
-        SDL_IOStream* dst = SDL_IOFromDynamicMem();
-        if (!dst)
-        {
-            SDL_DestroySurface(surface);
-            if (scaled) SDL_DestroySurface(scaled);
-            throw std::runtime_error(std::string("SDL_IOFromDynamicMem failed: ") + SDL_GetError());
-        }
-
-        if (!IMG_SavePNG_IO(src, dst, false))
-        {
-            SDL_CloseIO(dst);
-            SDL_DestroySurface(surface);
-            if (scaled) SDL_DestroySurface(scaled);
-            throw std::runtime_error(std::string("IMG_SavePNG_IO failed: ") + SDL_GetError());
-        }
-
-        const Sint64 size = SDL_TellIO(dst);
-        if (size > 0)
-        {
-            auto* buf = static_cast<uint8_t*>(
-                SDL_GetPointerProperty(SDL_GetIOProperties(dst),
-                                       SDL_PROP_IOSTREAM_DYNAMIC_MEMORY_POINTER, nullptr));
-            if (buf)
-                stream->Write(reinterpret_cast<const System::IO::bytecs*>(buf), 0,
-                              static_cast<System::IO::intcs>(size));
-        }
-
-        SDL_CloseIO(dst);
-        if (scaled) SDL_DestroySurface(scaled);
-        SDL_DestroySurface(surface);
+        const std::vector<uint8_t> encoded = ImageLoader::EncodePng(
+            cpuPixels_->data(), width, height, targetWidth, targetHeight);
+        stream->Write(reinterpret_cast<const System::IO::bytecs*>(encoded.data()), 0,
+                      static_cast<System::IO::intcs>(encoded.size()));
     }
 
     void Texture2D::SaveAsPng(const std::string& filename) const
@@ -2526,19 +2400,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!cpuPixels_ || cpuPixels_->empty())
             throw std::runtime_error("Texture2D::SaveAsPng: no CPU-side pixel data available");
 
-        SDL_Surface* surface = SDL_CreateSurfaceFrom(
-            width, height, SDL_PIXELFORMAT_RGBA32,
-            const_cast<uint8_t*>(cpuPixels_->data()), width * 4);
-
-        if (!surface)
-            throw std::runtime_error(std::string("SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
-
-        if (!IMG_SavePNG(surface, filename.c_str()))
-        {
-            SDL_DestroySurface(surface);
-            throw std::runtime_error(std::string("IMG_SavePNG failed: ") + SDL_GetError());
-        }
-        SDL_DestroySurface(surface);
+        ImageLoader::SavePng(cpuPixels_->data(), width, height, filename);
     }
 
     // -----------------------------------------------------------------------
@@ -2565,55 +2427,10 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!cpuPixels_ || cpuPixels_->empty())
             throw std::runtime_error("Texture2D::SaveAsJpeg: no CPU-side pixel data available");
 
-        SDL_Surface* surface = SDL_CreateSurfaceFrom(
-            width, height, SDL_PIXELFORMAT_RGBA32,
-            const_cast<uint8_t*>(cpuPixels_->data()), width * 4);
-        if (!surface)
-            throw std::runtime_error(std::string("SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
-
-        SDL_Surface* src = surface;
-        SDL_Surface* scaled = nullptr;
-        if (targetWidth != width || targetHeight != height)
-        {
-            scaled = SDL_ScaleSurface(surface, targetWidth, targetHeight, SDL_SCALEMODE_LINEAR);
-            if (!scaled)
-            {
-                SDL_DestroySurface(surface);
-                throw std::runtime_error(std::string("SDL_ScaleSurface failed: ") + SDL_GetError());
-            }
-            src = scaled;
-        }
-
-        SDL_IOStream* dst = SDL_IOFromDynamicMem();
-        if (!dst)
-        {
-            SDL_DestroySurface(surface);
-            if (scaled) SDL_DestroySurface(scaled);
-            throw std::runtime_error(std::string("SDL_IOFromDynamicMem failed: ") + SDL_GetError());
-        }
-
-        if (!IMG_SaveJPG_IO(src, dst, false, GetJpegSaveQuality()))
-        {
-            SDL_CloseIO(dst);
-            SDL_DestroySurface(surface);
-            if (scaled) SDL_DestroySurface(scaled);
-            throw std::runtime_error(std::string("IMG_SaveJPG_IO failed: ") + SDL_GetError());
-        }
-
-        const Sint64 size = SDL_TellIO(dst);
-        if (size > 0)
-        {
-            auto* buf = static_cast<uint8_t*>(
-                SDL_GetPointerProperty(SDL_GetIOProperties(dst),
-                                       SDL_PROP_IOSTREAM_DYNAMIC_MEMORY_POINTER, nullptr));
-            if (buf)
-                stream->Write(reinterpret_cast<const System::IO::bytecs*>(buf), 0,
-                              static_cast<System::IO::intcs>(size));
-        }
-
-        SDL_CloseIO(dst);
-        if (scaled) SDL_DestroySurface(scaled);
-        SDL_DestroySurface(surface);
+        const std::vector<uint8_t> encoded = ImageLoader::EncodeJpeg(
+            cpuPixels_->data(), width, height, targetWidth, targetHeight, GetJpegSaveQuality());
+        stream->Write(reinterpret_cast<const System::IO::bytecs*>(encoded.data()), 0,
+                      static_cast<System::IO::intcs>(encoded.size()));
     }
 
     void Texture2D::SaveAsJpeg(const std::string& filename) const
@@ -2621,27 +2438,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!cpuPixels_ || cpuPixels_->empty())
             throw std::runtime_error("Texture2D::SaveAsJpeg: no CPU-side pixel data available");
 
-        SDL_Surface* surface = SDL_CreateSurfaceFrom(
-            width, height, SDL_PIXELFORMAT_RGBA32,
-            const_cast<uint8_t*>(cpuPixels_->data()), width * 4);
-        if (!surface)
-            throw std::runtime_error(std::string("SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
-
-        if (!IMG_SaveJPG(surface, filename.c_str(), GetJpegSaveQuality()))
-        {
-            SDL_DestroySurface(surface);
-            throw std::runtime_error(std::string("IMG_SaveJPG failed: ") + SDL_GetError());
-        }
-        SDL_DestroySurface(surface);
-    }
-
-    // -----------------------------------------------------------------------
-    // CNAEXT helpers
-    // -----------------------------------------------------------------------
-
-    SDL_Texture* Texture2D::GetNativeTextureInternal() const
-    {
-        return renderer_ ? renderer_->GetNativeTexture() : nullptr;
+        ImageLoader::SaveJpeg(
+            cpuPixels_->data(), width, height, filename, GetJpegSaveQuality());
     }
 
     Texture2D Texture2D::CreateFromPixels(GraphicsDevice& device,

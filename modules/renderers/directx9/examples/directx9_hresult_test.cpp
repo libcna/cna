@@ -267,7 +267,7 @@ int main()
     try
     {
         GraphicsRendererCreateArgs args;
-        args.window = window;
+        args.surface.windowId = SDL_GetWindowID(window);
         args.virtualWidth = 64;
         args.virtualHeight = 64;
         args.depthStencilFormat = static_cast<int>(DepthFormat::Depth24Stencil8);

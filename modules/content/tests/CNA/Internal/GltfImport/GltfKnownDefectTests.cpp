@@ -18,14 +18,12 @@
 // itself is never deleted: a remediated defect stays in the corpus as the regression witness, and
 // the ledger test at the end of this file asserts both directions of that bookkeeping.
 //
-// Current state: D1, D2, D3 and D4 are FIXED (GLTF-113/114/115 and GLTF-063 respectively). D5 is
-// PARTIALLY REMEDIATED -- GLTF-071 landed, GLTF-072 still owns the topology conversion itself --
-// so its tests assert the new, explicitly rejected behaviour rather than the old silent
-// reinterpretation, and the audit's original measurement stays on record under priorActual.
-// D8 is FIXED too (GLTF-245/247/248/260), in a separate batch from D1-D3 and deliberately so:
-// the node-transform work only parked a skinned mesh on the identity root, and the joint
-// ancestry and mesh-space cancellation were resolved afterwards on their own fixtures.
-// D6 and D7 are untouched.
+// Current state: ALL EIGHT audit defects are FIXED, so this file contains no known-defect tests at
+// all -- only the ledger test at the end, which asserts the bookkeeping in both directions and is
+// what will catch the next defect being recorded without one. Each remediated defect's record stays
+// in the corpus as its regression witness, with the audit's original measurement under priorActual,
+// and its behaviour is asserted by ordinary green tests in the GltfConformance, GltfPrimitiveTopology,
+// GltfSkinSpaces, GltfRigidAnimation, GltfMaterialState and GltfDrawTopology suites.
 
 #include <algorithm>
 #include <cmath>
@@ -152,75 +150,6 @@ namespace
                      "currentActual.worldBounds.max");
     }
 
-    /// Shared body for the two D5 fixtures, as they stand after GLTF-071 and before GLTF-072.
-    ///
-    /// The claim being asserted has moved on with the code: it is no longer "the topology is
-    /// silently reinterpreted" but "the topology is read, classified and explicitly rejected, and
-    /// nothing reaches the triangle-list path". The fixture and its spec-derived expectation are
-    /// untouched -- what a conforming importer must eventually produce has not changed.
-    void ExpectTopologyClassifiedAndRejected(const std::string& fixtureId)
-    {
-        using CNA::Internal::GltfImport::ClassifyPrimitiveTopology;
-        using CNA::Internal::GltfImport::IsPrimitiveTopologySupported;
-        using CNA::Internal::GltfImport::PrimitiveTopologyMode;
-        using CNA::Internal::GltfImport::PrimitiveTopologyName;
-
-        const LoadedFixture fixture(fixtureId);
-        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
-        const JsonValue& defect = DefectRecord(fixture, "D5");
-        ASSERT_NO_FATAL_FAILURE(RequireStillOpen(defect, "D5"));
-        const JsonValue& actualRecord = CurrentActual(defect);
-
-        // (0) The file really does declare a non-TRIANGLES mode, and GLTF-072 is still what owns
-        // finishing it. If that task closes, this test is what must be revisited.
-        const JsonValue& expectedPrimitive = Path(fixture.Expected(), "l3.primitives").arrayValue.at(0);
-        const int expectedMode = static_cast<int>(NumberOr(expectedPrimitive, "mode", -1));
-        EXPECT_NE(4, expectedMode) << "this fixture is supposed to declare a non-TRIANGLES mode";
-        const std::vector<std::string> remaining = Strings(Member(defect, "remainingTasks"));
-        EXPECT_NE(remaining.end(), std::find(remaining.begin(), remaining.end(), "GLTF-072"))
-            << "D5 no longer names GLTF-072 as outstanding; if the conversion landed, this test "
-               "and the fixture's defect record both need to move to fixed";
-
-        // (1) prim.type is genuinely read: the classifier returns the file's own mode, by number
-        // and by specification name, and reports it as one CNA cannot yet honour.
-        ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().meshes_count));
-        ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().meshes[0].primitives_count));
-        const auto topology =
-            ClassifyPrimitiveTopology(fixture.Data().meshes[0].primitives[0], fixtureId);
-        EXPECT_EQ(expectedMode, PrimitiveTopologyMode(topology));
-        EXPECT_EQ(static_cast<int>(NumberOr(actualRecord, "classifiedMode", -1)),
-                  PrimitiveTopologyMode(topology));
-        EXPECT_EQ(StringOr(actualRecord, "classifiedModeName", ""),
-                  std::string(PrimitiveTopologyName(topology)));
-        EXPECT_FALSE(IsPrimitiveTopologySupported(topology));
-
-        // (2) The import is rejected, and the mode reaches the diagnostic by name and by number --
-        // a caller reading only the error message can still tell exactly what the file declared.
-        const std::vector<ExtractedPrimitive> extracted = ExtractSceneMeshesEXT(fixture.Data());
-        ASSERT_EQ(1u, extracted.size());
-        EXPECT_TRUE(BoolOr(actualRecord, "importRejected", false));
-        ASSERT_FALSE(extracted[0].extracted)
-            << "a non-TRIANGLES primitive imported successfully -- if GLTF-072 landed, mark D5 "
-               "fixed in tools/gltf_fixtures and delete this test";
-        for (const std::string& fragment : Strings(Member(actualRecord, "errorContains")))
-        {
-            EXPECT_NE(std::string::npos, extracted[0].error.find(fragment))
-                << "the rejection does not name '" << fragment << "': " << extracted[0].error;
-        }
-
-        // (3) Nothing reaches the numIndices/3 triangle-list path. This is the assertion that
-        // distinguishes "explicitly rejected" from "silently corrupted": there is no index list to
-        // divide by three at all, where before there was one that produced a single wrong triangle.
-        const MeshOutDump& dump = extracted[0].dump;
-        EXPECT_TRUE(dump.indices.empty()) << "an index list survived a rejected import";
-        EXPECT_EQ(0u, dump.indices.size() / 3);
-        EXPECT_EQ(Member(actualRecord, "triangles").arrayValue.size(), dump.indices.size() / 3);
-        // ...and what the audit measured before GLTF-071 is still on record, unchanged.
-        const JsonValue& prior = Member(defect, "priorActual");
-        EXPECT_EQ(1u, Member(prior, "triangles").arrayValue.size())
-            << "the pre-GLTF-071 measurement (one silently reinterpreted triangle) was lost";
-        EXPECT_FALSE(BoolOr(prior, "topologyCarried", true));
-    }
 }
 
 // --- D1/D2/D3: the node transform pipeline ----------------------------------------------------
@@ -243,131 +172,36 @@ namespace
 
 // --- D5: primitive topology ----------------------------------------------------------------------
 
-TEST(GltfKnownDefect, D5_TriangleStripIsClassifiedAndRejectedPendingConversion)
-{
-    // GLTF-071 closed the reading half; GLTF-072 owns the strip -> triangle-list conversion.
-    ExpectTopologyClassifiedAndRejected("mode-triangle-strip");
-}
-
-TEST(GltfKnownDefect, D5_NonIndexedPointsAreClassifiedAndRejectedPendingASupportDecision)
-{
-    // GLTF-071 closed the reading half; GLTF-072/GLTF-077 own what a point primitive becomes.
-    ExpectTopologyClassifiedAndRejected("mode-points");
-}
+// --- D5: primitive topology ----------------------------------------------------------------------
+//
+// REMEDIATED by GLTF-071 -> GLTF-072 -> GLTF-073/GLTF-076/GLTF-078. There are deliberately no
+// known-defect tests here any more. All seven glTF modes import: the three triangle modes as a
+// triangle list (converted where needed, winding preserved), a LINE_LOOP as a LINE_STRIP carrying
+// the closing segment glTF leaves implicit in the mode, and the rest as themselves with a real
+// PrimitiveType on the part and a §12.3 primitive count. GltfConformanceL3/L5 and
+// GltfPrimitiveTopology assert all seven in full, so any of it regressing fails an ordinary green
+// test. The record stays in the corpus as the regression witness with the audit's original
+// measurement under priorActual.
 
 // --- D6: rigid node animation ---------------------------------------------------------------------
 
-TEST(GltfKnownDefect, D6_RigidNodeAnimationIsSilentlyDropped)
-{
-    // Owned by GLTF-103 -> GLTF-113 -> GLTF-114 -> GLTF-284.
-    using namespace CNA::Internal::GltfImport;
+// --- D6: rigid node animation ---------------------------------------------------------------------
+//
+// REMEDIATED by GLTF-103 -> GLTF-113 -> GLTF-114 -> GLTF-293 -> GLTF-294. There is deliberately no
+// known-defect test here any more: the clip is extracted, serialised, read back and playable, and
+// GltfRigidAnimation asserts all four ends of that. The record stays in the corpus as the
+// regression witness with the audit's original measurement under priorActual.
 
-    const LoadedFixture fixture("anim-rigid-node");
-    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
-    const JsonValue& defect = DefectRecord(fixture, "D6");
-    ASSERT_NO_FATAL_FAILURE(RequireStillOpen(defect, "D6"));
-    const JsonValue& actualRecord = CurrentActual(defect);
-
-    // The file really does carry the animation -- the loss is entirely on CNA's side.
-    ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().animations_count));
-    ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().animations[0].channels_count));
-    ASSERT_EQ(0u, static_cast<std::size_t>(fixture.Data().skins_count));
-
-    // Mechanism one: clip extraction is gated on the group having a skin, and this file has none,
-    // so the converter never calls ExtractClips at all and emits no "animations" key.
-    const std::vector<MeshGroup> groups = CollectMeshGroups(&fixture.Data());
-    ASSERT_EQ(1u, groups.size());
-    EXPECT_EQ(nullptr, groups[0].skin);
-    EXPECT_TRUE(BoolOr(actualRecord, "clipExtractionGatedOnSkin", false));
-
-    // Mechanism two: even when called, ExtractClips resolves each channel target against the
-    // joint set, so a channel targeting an ordinary mesh node is skipped -- silently, with no
-    // warning. Both mechanisms have to be addressed for D6 to be fixed.
-    SkeletonResult emptySkeleton;
-    std::vector<std::string> warnings;
-    const std::vector<ClipOut> clips =
-        ExtractClips(&fixture.Data(), emptySkeleton, 1.0f, warnings);
-    EXPECT_EQ(static_cast<std::size_t>(NumberOr(actualRecord, "clipCountIfExtractClipsWereCalled", -1)),
-              clips.size());
-    std::size_t trackCount = 0;
-    for (const ClipOut& clip : clips) { trackCount += clip.tracks.size(); }
-    EXPECT_EQ(static_cast<std::size_t>(NumberOr(actualRecord, "trackCountIfExtractClipsWereCalled", -1)),
-              trackCount);
-    EXPECT_EQ(0u, trackCount)
-        << "a rigid node channel now produces a track -- if GLTF-284 landed, mark D6 fixed in "
-           "tools/gltf_fixtures and delete this test";
-    EXPECT_EQ(BoolOr(actualRecord, "warningEmitted", true), !warnings.empty())
-        << "the drop is supposed to be silent; a warning appearing is itself a change";
-}
 
 // --- D7: factor-only PBR material ------------------------------------------------------------------
 
-TEST(GltfKnownDefect, D7_FactorOnlyPbrMaterialIsDowngradedAndItsStateLost)
-{
-    // Owned by GLTF-217 / GLTF-228 / GLTF-229.
-    const LoadedFixture fixture("mat-factor-only-gold");
-    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
-    const JsonValue& defect = DefectRecord(fixture, "D7");
-    ASSERT_NO_FATAL_FAILURE(RequireStillOpen(defect, "D7"));
-    const JsonValue& actualRecord = CurrentActual(defect);
+// --- D7: material state --------------------------------------------------------------------------
+//
+// REMEDIATED by GLTF-215 -> GLTF-216/217/219/221 -> GLTF-228/229/231. There is deliberately no
+// known-defect test here any more: with the record marked fixed and its divergentFields empty,
+// GltfConformanceL3 asserts mat-factor-only-gold's material in full, so any of it regressing fails
+// an ordinary green test. GltfMaterialState carries the end-to-end assertions.
 
-    // The file authors a real, non-default material.
-    ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().materials_count));
-    const cgltf_material& material = fixture.Data().materials[0];
-    ASSERT_NE(0, material.has_pbr_metallic_roughness);
-    EXPECT_NE(cgltf_alpha_mode_opaque, material.alpha_mode);
-    EXPECT_NE(0, material.double_sided);
-
-    const std::vector<ExtractedPrimitive> extracted = ExtractSceneMeshesEXT(fixture.Data());
-    ASSERT_EQ(1u, extracted.size());
-    ASSERT_TRUE(extracted[0].extracted) << extracted[0].error;
-    const MeshOutDump& dump = extracted[0].dump;
-
-    // With no normal map and no metallic-roughness map, the PBR path can never be selected, so the
-    // surface falls all the way back to BasicEffect's stride-32 layout.
-    EXPECT_EQ(BoolOr(actualRecord, "usePbr", true), dump.usePbr);
-    EXPECT_FALSE(dump.usePbr)
-        << "a factor-only material now selects the PBR path -- if GLTF-217 landed, mark D7 fixed "
-           "in tools/gltf_fixtures and delete this test";
-    EXPECT_EQ(static_cast<int>(NumberOr(actualRecord, "stride", -1)), dump.stride);
-
-    // Not one material property survives. MeshOut has no field at all for baseColorFactor,
-    // alphaMode, alphaCutoff or doubleSided; and the three factor fields it does have are
-    // assigned only inside ExtractMesh's `if (usePbr)` guard, so they are left at MeshOut's own
-    // defaults rather than the file's values. This is plan_gltf.md §1.1's "zero material fields
-    // emitted", confirmed field by field.
-    const JsonValue& expectedMaterial =
-        Member(Path(fixture.Expected(), "l3.primitives").arrayValue.at(0), "material");
-    ASSERT_EQ(JsonType::Object, expectedMaterial.type);
-
-    EXPECT_NEAR(NumberOr(actualRecord, "metallicFactor", -1),
-                static_cast<double>(dump.metallicFactor), kTolerance);
-    EXPECT_NEAR(NumberOr(actualRecord, "roughnessFactor", -1),
-                static_cast<double>(dump.roughnessFactor), kTolerance);
-    EXPECT_GT(std::fabs(NumberOr(expectedMaterial, "metallicFactor", -1) -
-                        static_cast<double>(dump.metallicFactor)), kTolerance)
-        << "metallicFactor now reaches MeshOut for a factor-only material -- if GLTF-217 landed, "
-           "mark D7 fixed in tools/gltf_fixtures and delete this test";
-    EXPECT_GT(std::fabs(NumberOr(expectedMaterial, "roughnessFactor", -1) -
-                        static_cast<double>(dump.roughnessFactor)), kTolerance)
-        << "roughnessFactor now reaches MeshOut for a factor-only material";
-
-    const std::vector<double> expectedEmissive = Numbers(Member(expectedMaterial, "emissiveFactor"));
-    const std::vector<double> actualEmissive = Numbers(Member(actualRecord, "emissiveFactor"));
-    ASSERT_EQ(3u, expectedEmissive.size());
-    ASSERT_EQ(3u, actualEmissive.size());
-    double emissiveDelta = 0.0;
-    for (std::size_t c = 0; c < 3; ++c)
-    {
-        EXPECT_NEAR(actualEmissive[c], static_cast<double>(dump.emissiveFactor[c]), kTolerance);
-        emissiveDelta += std::fabs(expectedEmissive[c] - static_cast<double>(dump.emissiveFactor[c]));
-    }
-    EXPECT_GT(emissiveDelta, kTolerance) << "emissiveFactor now reaches MeshOut";
-
-    EXPECT_TRUE(Strings(Member(actualRecord, "carriedFields")).empty())
-        << "the ledger claims a material field survives; none does";
-    EXPECT_FALSE(dump.hasBaseColorImage);
-}
 
 // --- D8: the skin ancestor chain ---------------------------------------------------------------------
 
@@ -388,12 +222,16 @@ TEST(GltfKnownDefect, EveryOpenDefectInTheCorpusLedgerHasAnExecutableTestHere)
     // documented but unproven, which is exactly the failure mode this batch exists to remove. The
     // converse matters just as much: a defect the corpus records as remediated must NOT still have
     // a "still broken" test here, or the file would start lying about the state of the code.
-    const std::set<std::string> open = {"D5", "D6", "D7"};
+    // Every audit defect (D1..D8) is remediated. GLTF-241 is a later, non-audit defect recorded
+    // the same way -- the ledger is not reserved for the eight the audit happened to find, and
+    // this is the mechanism doing its job: declaring a divergence in the corpus immediately
+    // demanded an executable test for it.
+    const std::set<std::string> open = {"GLTF-241"};
     // Remediated defects, and the task that closed each. Their records stay in the corpus as
     // regression witnesses and their fixtures are asserted by the ordinary conformance suites.
     const std::map<std::string, std::string> remediated = {
         {"D1", "GLTF-114"}, {"D2", "GLTF-114"}, {"D3", "GLTF-114"}, {"D4", "GLTF-063"},
-        {"D8", "GLTF-247"}};
+        {"D5", "GLTF-073"}, {"D6", "GLTF-294"}, {"D7", "GLTF-228"}, {"D8", "GLTF-247"}};
 
     const JsonValue& ledger = Member(CorpusManifest(), "defectLedger");
     ASSERT_EQ(JsonType::Array, ledger.type);
@@ -437,4 +275,51 @@ TEST(GltfKnownDefect, EveryOpenDefectInTheCorpusLedgerHasAnExecutableTestHere)
             << id << " was remediated by " << task << " but its record was deleted from the "
             << "corpus ledger -- a remediated defect stays as the regression witness";
     }
+}
+
+// --- plan_gltf.md GLTF-241: vertex-coloured PBR, reported rather than supported -------------------
+
+// The one material combination CNA cannot import as the file asks. `mat-vertex-color-pbr` carries
+// COLOR_0 and a metallic-roughness material; no CNA vertex layout holds a Colour alongside a
+// Tangent, and no PBR shader reads a colour stream, so supporting it means a new stride plus a
+// shader variant on every renderer -- the same blast radius that ruled out colour-space option A.
+//
+// GLTF-241's acceptance allows the other outcome: REPORTED, not silently downgraded. This test is
+// what makes "reported" mean something, and it asserts the loss runs one layer deeper than the
+// material -- the stride a coloured primitive lands on has no Normal slot either, so the authored
+// normals go with it and the primitive cannot be lit at all.
+TEST(GltfKnownDefect, GLTF241_VertexColouredPbrIsReportedByNameRatherThanSilentlyDowngraded)
+{
+    const LoadedFixture fixture("mat-vertex-color-pbr");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    const CNA::Internal::GltfImport::MeshOut extracted = CNA::Internal::GltfImport::ExtractMesh(
+        &fixture.Data(), fixture.Data().meshes[0].primitives[0], "ColoredMetalTri", nullptr, 1.0f);
+
+    // What is preserved: the vertex colours, which is why BasicEffect is the right landing place
+    // rather than an outright refusal.
+    EXPECT_TRUE(extracted.colored);
+    EXPECT_EQ(24, extracted.stride);
+    EXPECT_FALSE(extracted.usePbr);
+
+    // What is lost -- and, crucially, NAMED. Before this the import was silent on both counts.
+    EXPECT_EQ("metallic-roughness", extracted.unsupportedMaterialModelEXT)
+        << "the dropped material model is not reported, so the downgrade is silent again";
+    EXPECT_TRUE(extracted.droppedNormalForStrideEXT)
+        << "the file authors NORMAL and the stride-24 layout has no slot for it, but nothing says so";
+
+    // The second loss, measured rather than asserted from the flag alone: the normals really are
+    // gone, which is what makes the primitive unlightable rather than merely unlit-by-PBR.
+    EXPECT_TRUE(extracted.vertexBytes.size() > 0u);
+    const CNA::Internal::JsonValue& primitives = Path(fixture.Expected(), "l3.primitives");
+    ASSERT_EQ(CNA::Internal::JsonType::Array, primitives.type);
+    ASSERT_FALSE(primitives.arrayValue.empty());
+    EXPECT_FALSE(Member(primitives.arrayValue.front(), "normals").arrayValue.empty())
+        << "the fixture stopped authoring normals, so it can no longer show they are dropped";
+
+    // And the material's own factors survived into MeshOut even though no effect will consume
+    // them (GLTF-219/221 ungated them). That distinction is worth pinning: the importer
+    // understood the material perfectly and the vertex layout is what could not carry it.
+    EXPECT_NEAR(0.85f, extracted.material.metallicFactor, 1e-5f);
+    EXPECT_NEAR(0.15f, extracted.material.roughnessFactor, 1e-5f);
 }

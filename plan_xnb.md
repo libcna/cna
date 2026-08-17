@@ -1,5 +1,12 @@
 # XNB binary content pipeline: task plan
 
+> **Compiled-effect update (2026-08-13):** XNB-14B/XNB-32A's historical unsupported placeholder
+> has been replaced by the canonical general `EffectReader`. It performs bounded exact reads and
+> constructs compiled XNA/FNA Effect Framework effects on renderers that advertise
+> `GraphicsCapability::CompiledEffects` (currently FNA3D). Non-FNA3D renderers still fail
+> explicitly with asset context. Historical rows below are retained rather than rewritten; use
+> [`plan_fx.md`](plan_fx.md) and `docs/xnb-content-pipeline-support.md` for current status.
+
 > **Status: 🔄 PARTIALLY UN-FROZEN 2026-07-16 — MVP scope (Phase 0/A/B/B2/B3/C) complete; Phase D
 > (LZX decompression) fully complete; Phase E (`SpriteFont`, stock effects, `SoundEffect`/`Song`,
 > `ReadExternalReference<T>()`) fully complete; Phase F (`Model`) fully complete; Phase D3

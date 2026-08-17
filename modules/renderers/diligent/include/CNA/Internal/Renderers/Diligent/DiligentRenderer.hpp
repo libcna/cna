@@ -2,6 +2,8 @@
 #pragma once
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformGlRendererState.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "CNA/CNAHelper.hpp"
 
 #include <cstdint>
@@ -22,11 +24,6 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Diligent/DiligentDeviceSelection.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
-
-/// Forward declaration matching SDL3's own `typedef struct SDL_GLContextState* SDL_GLContext;` --
-/// avoids pulling the full SDL3 header into every translation unit that includes this one, the same
-/// rationale IGraphicsRenderer.hpp's own `struct SDL_Window;` forward declaration already follows.
-struct SDL_GLContextState;
 
 namespace CNA::Internal::Renderers::Diligent
 {
@@ -113,12 +110,6 @@ namespace CNA::Internal::Renderers::Diligent
         [[nodiscard]] int GetWidth() const override { return width_; }
         /** @brief Returns the texture height in pixels. */
         [[nodiscard]] int GetHeight() const override { return height_; }
-
-        /**
-         * @brief Returns nothing: this renderer has no SDL_Texture behind its textures.
-         * @return Always nullptr.
-         */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         /**
          * @brief Replaces the whole level-0 image.
@@ -346,12 +337,6 @@ namespace CNA::Internal::Renderers::Diligent
         [[nodiscard]] int GetWidth() const override { return width_; }
         /** @brief Returns the target height in pixels. */
         [[nodiscard]] int GetHeight() const override { return height_; }
-
-        /**
-         * @brief Returns nothing: this renderer has no SDL_Texture behind its render targets.
-         * @return Always nullptr.
-         */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         /**
          * @brief Replaces the whole level-0 image of the target's colour texture.
@@ -883,9 +868,9 @@ namespace CNA::Internal::Renderers::Diligent
 
     public:
         /**
-         * @brief Creates the render device, immediate context and swap chain for @p args.window.
+         * @brief Creates the render device, immediate context and swap chain for @p args.surface.
          *
-         * @param args Renderer creation arguments; `window` must be a live SDL window.
+         * @param args Renderer creation arguments; `surface.windowId` must identify a live window.
          * @throws std::runtime_error If no Diligent device type could be created for this window.
          */
         explicit DiligentRenderer(const GraphicsRendererCreateArgs& args);
@@ -908,6 +893,9 @@ namespace CNA::Internal::Renderers::Diligent
          * @param height Receives the logical height in pixels.
          */
         void GetViewportSize(int& width, int& height) override;
+
+        /** @brief Refreshes the platform surface snapshot and resizes the swap chain if needed. */
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
 
         /**
          * @brief Sets the logical resolution the game draws in.
@@ -965,11 +953,6 @@ namespace CNA::Internal::Renderers::Diligent
          */
         bool TransformLogicalToWindow(float logX, float logY,
                                       float& windowX, float& windowY) const override;
-
-        /** @brief Returns the SDL window this renderer renders into. */
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-        /** @brief Returns nothing: this renderer never creates an SDL_Renderer. */
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         /**
          * @brief Creates a GPU texture from CPU pixels.
@@ -1388,7 +1371,9 @@ namespace CNA::Internal::Renderers::Diligent
             LitTexturedVertexLit3D, ///< stride 32: LitTextured3D's PreferPerPixelLighting==false sibling
             SkinnedVertexLit3D,     ///< stride 52: Skinned3D's PreferPerPixelLighting==false sibling
             Pbr3D,                  ///< stride 48: PbrEffect's glTF metallic-roughness BRDF
+            PbrDualUv3D,            ///< stride 60: Pbr3D plus importer-appended TEXCOORD_1
             SkinnedPbr3D,           ///< stride 68: Pbr3D combined with Skinned3D's bone palette
+            SkinnedPbrDualUv3D,     ///< stride 76: skinned PBR plus TEXCOORD_1
         };
 
         /** @brief Everything that distinguishes one Diligent pipeline state object from another. */
@@ -1477,6 +1462,8 @@ namespace CNA::Internal::Renderers::Diligent
             Dg::IShaderResourceVariable* metallicRoughnessVariable = nullptr;
             Dg::IShaderResourceVariable* emissiveMapVariable = nullptr;
             Dg::IShaderResourceVariable* occlusionMapVariable = nullptr;
+            Dg::IShaderResourceVariable* specularMapVariable = nullptr;
+            Dg::IShaderResourceVariable* specularColorMapVariable = nullptr;
         };
 
         /** @brief Constant buffer contents shared by every built-in shader. */
@@ -1503,6 +1490,7 @@ namespace CNA::Internal::Renderers::Diligent
             float flags[4];
             float alphaTest[4];
             float fogVector[4];
+            /// xyz = FogColor; w = PBR output sRGB encode flag (zero for every non-PBR shader).
             float fogColor[4];
             float envMapParams[4];
             float envMapSpecular[4];
@@ -1583,15 +1571,14 @@ namespace CNA::Internal::Renderers::Diligent
         /// every `DiligentRenderTargetRenderer` with a `resolveTexture_`.
         void ResolveTextureSubresource(Dg::ITexture* src, Dg::ITexture* dst);
 
-        SDL_Window* window_ = nullptr;
+        PlatformRendererSurfaceState surface_;
+        CNA::Platform::IPlatformGlContext* platformGlContextService_ = nullptr;
         /// Only set when deviceType_ == OpenGL. Diligent's own GLContext (GLContextLinux.cpp)
         /// attaches to whatever GL context is already current on this thread via glXGetCurrentContext()
         /// -- it does not create one itself, unlike Vulkan/D3D where DiligentCore owns the whole
-        /// device/context/swap-chain lifecycle. SDL_GL_CreateContext()/SDL_GL_MakeCurrent() must run
-        /// before CreateDeviceAndSwapChainGL(), and this context outlives it (destroyed only in
-        /// ~DiligentRenderer(), after device_/context_/swapChain_ are done with the GL calls
-        /// they make internally).
-        SDL_GLContextState* glContext_ = nullptr;
+        /// device/context/swap-chain lifecycle. The platform context must be current before
+        /// CreateDeviceAndSwapChainGL(), and outlives every Diligent object that can issue GL calls.
+        std::unique_ptr<PlatformGlContextOwner> glContext_;
         DiligentDeviceType deviceType_ = DiligentDeviceType::Vulkan;
         Dg::RefCntAutoPtr<Dg::IRenderDevice> device_;
         Dg::RefCntAutoPtr<Dg::IDeviceContext> context_;

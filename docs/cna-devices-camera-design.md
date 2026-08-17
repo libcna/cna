@@ -1,9 +1,10 @@
 # `CNA::Devices::Camera` — Design Note (Task `DEVICES-CNA-010`)
 
-**Status: design only, no implementation.** Per `plan_cna_devices.md`'s own Phase 4
-scoping, this task is explicitly "write a design note, do not implement `Camera`
-itself." This document exists so a future implementation task starts from a concrete
-plan grounded in this codebase's actual APIs, not from scratch.
+**Status: implemented; platform migration completed by `PLAT-106`.** The original
+design-only task established the public API and native-camera constraints. The
+implementation now keeps that public API SDL-free and routes enumeration, permission
+polling, format negotiation and capture through `IPlatformCameraProvider` and
+`IPlatformCamera`; SDL3 details live only in `modules/platform/src/Sdl3/Sdl3Camera.*`.
 
 **Why `Camera` is last, not first:** every other `CNA::Devices` capability (Phases
 1-3, all closed — see `plan_cna_devices.md`) was a thin, mostly-synchronous wrapper
@@ -102,7 +103,7 @@ texture pipeline found it is already solved, generically, by existing infrastruc
   open question below, not resolved by this document), but the upload mechanism
   itself requires no new graphics-renderer code.
 
-## 4. Proposed class shape (illustrative, not final)
+## 4. Implemented class shape
 
 ```cpp
 namespace CNA::Devices {
@@ -113,8 +114,7 @@ namespace CNA::Devices {
         static bool getIsSupportedProperty();
         static std::vector<CameraDeviceInfo> getAvailableCamerasProperty(); // name, front/back-facing
 
-        explicit Camera(/* device selection, or default */);
-        Camera(/* device selection */, std::unique_ptr<Detail::ICameraBackend> renderer); // test-only, mirrors SystemTray's constructor-injection pattern
+        Camera(); // Opens the first camera reported by the selected platform.
         ~Camera();
 
         [[nodiscard]] CameraState getStateProperty() const;
@@ -135,47 +135,34 @@ that instead of forcing an artificial callback/event model on top of it — a co
 already calls this once per `Game::Update()`/`Draw()` anyway to actually use the
 video feed.
 
-## 5. Testability — same renderer-injection lesson from Phases 1-3, applied up front
+## 5. Testability through the platform seam
 
-Both `DEVICES-CNA-008` (`FileDialog`) and `DEVICES-CNA-009` (`SystemTray`) found real
-bugs specifically because their real renderers have side effects an automated test
-cannot safely trigger (an orphaned `zenity` dialog; a real tray icon). `Camera`'s real
-renderer is at least as unsafe to exercise in CI — it would either fail loudly (no
-camera hardware in most CI containers) or, worse, actually request OS camera
-permission and open a real device if one happens to be present. **`Detail::ICameraBackend`
-must exist from the very first line of implementation**, not be retrofitted after an
-incident — following `SystemTray`'s constructor-injection pattern (a fake renderer
-supplied before any real device-opening call happens), not `FileDialog`'s original
-post-construction `SetRendererForTesting()` mistake.
+The real implementation is unsafe to exercise in ordinary CI: it could request OS
+camera permission and open actual hardware. Tests therefore install a
+`CannedCameraPlatform` before constructing `Camera`. The canned provider scripts
+enumeration, open failure, permission/device states, dimensions and RGBA frames while
+recording calls and session destruction. This exercises the same public platform seam
+as production without retaining a second devices-local backend abstraction.
 
-## 6. Open questions for whoever implements this
+## 6. Decisions and remaining limitation
 
-1. **RGBA format negotiation reliability** (Section 3) — needs empirical verification
-   per platform, not resolved here.
-2. **Permission UX ownership** — should `Camera` surface `SDL_EVENT_CAMERA_DEVICE_APPROVED`/
-   `_DENIED` itself (meaning `CNA::Devices` needs its own event-pump integration, which
-   no current class has), or should the consumer be responsible for pumping SDL's
-   event queue and informing `Camera` of the outcome? This is a real architectural
-   fork depending on how this engine's main loop already handles the SDL event queue
-   elsewhere (not investigated as part of this design-only task).
-3. **Multiple simultaneous `Camera` instances** — SDL3 itself supports opening more
-   than one camera device; whether this codebase's `Camera` class needs to support
-   that from day one, or can start single-instance-only (mirroring `VibrateController`'s
-   singleton simplicity), is a scope decision for the implementation task, not this
-   note.
-4. **Device-loss recovery** (the `Lost` state above) — SDL3 sends a separate event for
+1. **RGBA negotiation:** the platform requests `SDL_PIXELFORMAT_RGBA32`, starting from
+   the first advertised dimensions/rate when available. It validates the negotiated
+   format only after permission is approved and rejects any non-RGBA result.
+2. **Permission ownership:** `IPlatformCamera::GetState()` polls permission. Camera
+   users do not consume SDL events and a pending decision remains `Opening`.
+3. **Multiple sessions:** the platform provider creates independently owned sessions;
+   the current public `Camera` constructor still selects the first enumerated device.
+4. **Device-loss recovery:** SDL3 sends a separate event for
    this per its own doc comment; exact recovery semantics (does the app need to
    re-`SDL_OpenCamera()`, or does the same handle recover on its own) needs verifying
-   against SDL3's own behavior before writing the `Lost`→`Ready` transition logic.
+   against real hardware. The contract preserves `Lost`, but automatic recovery is
+   deliberately outside the first implementation.
 
-## 7. Recommended scope for the first implementation task, if/when prioritized
+## 7. First implementation scope
 
-Given the above, a first `Camera` implementation task should probably be scoped to:
-single camera device (default/first available), synchronous permission check only
-(no event-queue integration — poll `SDL_GetCameraPermissionState()` each tick instead,
-simpler and sufficient for a first pass), RGBA-only format request (fail/report
-`NotSupported` rather than converting non-RGBA formats, deferring format conversion to
-a follow-up task if a real device needs it). This keeps the first pass small enough to
-verify end-to-end on at least one real platform before expanding scope — consistent
-with this plan's own "verify before generalizing" discipline used throughout Phases
-1-3.
+The completed first implementation intentionally remains bounded to the default/first
+camera, permission polling without event-queue integration and RGBA-only delivery.
+Native row padding is compacted before the frame crosses the contract. Unsupported
+platforms expose a null provider and the public class remains inert rather than
+touching native camera APIs.

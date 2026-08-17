@@ -4,7 +4,7 @@
 // Like EnvironmentMapEffect/SkinnedEffect (see env_map3d.vert.glsl/skinned3d.vert.glsl), this does
 // NOT share the common `Transform` uniform block -- PbrEffect's own field set (base colour factor
 // kept independent from alpha per glTF, raw AmbientLightColor rather than pre-folded emissive,
-// metallic/roughness factors, no alpha test) doesn't fit it, and this vertex/fragment pair is
+// metallic/roughness factors, alpha coverage) doesn't fit it, and this vertex/fragment pair is
 // never linked with any other shader here.
 //
 // Needs a `Tangent` vertex element (see MapVertexUsage's own new case) alongside position/normal/
@@ -18,22 +18,30 @@ layout(std140, binding = 1) uniform PbrParams
     mat4 mvpMatrix;
     mat4 worldMatrix;
     vec4 diffuseColor;         // rgb = base colour factor, a = alpha (kept independent, not premultiplied)
-    vec4 ambientColorPad;      // xyz = AmbientLightColor
+    vec4 ambientColorPad;      // xyz = AmbientLightColor, w = decode base colour
     vec4 emissiveMetallic;     // xyz = EmissiveFactor, w = MetallicFactor
-    vec4 roughnessWeightsPad;  // x = RoughnessFactor, y = WeightsPerVertex (unused by this shader)
-    vec4 light0DirPad;
+    vec4 roughnessWeightsPad;  // x=RoughnessFactor, y=WeightsPerVertex (unused), z=NormalScale, w=OcclusionStrength
+    vec4 light0DirPad;         // xyz = direction, w = encode output
     vec4 light0DiffusePad;
     vec4 light1DirPad;
     vec4 light1DiffusePad;
     vec4 light2DirPad;
     vec4 light2DiffusePad;
-    vec4 eyePositionWorldPad;
+    vec4 eyePositionWorldPad;  // xyz = eye position, w = decode emissive
     vec4 fogColor;             // xyz = FogColor, w = fogEnabled (0/1)
     vec4 fogVector;
+    vec4 alphaTest;            // reference, tolerance, pass weight, fail weight
+    vec4 dielectricFresnel;    // xyz = unclamped dielectric F0, w = specular factor
+    vec4 textureTransformRows[10];
+    vec4 specularState;        // x = seven-bit TEXCOORD_1 selector mask, y = decode specular colour
+    vec4 specularTextureTransformRows[4];
 };
 
 layout(location = 0) in vec3 position;
 layout(location = 2) in vec2 texCoord;
+#ifdef CNA_PBR_DUAL_UV
+layout(location = 7) in vec2 texCoord1;
+#endif
 layout(location = 3) in vec3 normal;
 layout(location = 6) in vec4 tangent;
 
@@ -43,16 +51,27 @@ layout(location = 2) out vec3  vTangent;
 layout(location = 3) out float vBitangentSign;
 layout(location = 4) out vec3  vWorldPos;
 layout(location = 5) out float vFogFactor;
+layout(location = 6) out vec2  vTexCoord1;
 
 out gl_PerVertex
 {
     vec4 gl_Position;
 };
 
+float cnaDirectionHandedness(mat3 m)
+{
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
+
 void main()
 {
     gl_Position = mvpMatrix * vec4(position, 1.0);
     vTexCoord   = texCoord;
+#ifdef CNA_PBR_DUAL_UV
+    vTexCoord1  = texCoord1;
+#else
+    vTexCoord1  = texCoord;
+#endif
 
     // Normals take the world matrix's inverse-transpose so a non-uniform scale does not skew
     // them, matching every other lit shader here.
@@ -62,7 +81,7 @@ void main()
     // transpose) -- correct for uniform-scale World transforms, matching the Vulkan renderer's own
     // pbr3d.vert.glsl and its documented simplification.
     vTangent       = mat3(worldMatrix) * tangent.xyz;
-    vBitangentSign = tangent.w;
+    vBitangentSign = tangent.w * cnaDirectionHandedness(mat3(worldMatrix));
     vWorldPos      = (worldMatrix * vec4(position, 1.0)).xyz;
     vFogFactor     = clamp(dot(vec4(position, 1.0), fogVector), 0.0, 1.0) * fogColor.a;
 }

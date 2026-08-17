@@ -1,0 +1,429 @@
+{
+  "id": "mat-vertex-color-pbr",
+  "description": "A primitive with COLOR_0 and a metallic-roughness material -- the one combination CNA cannot import as the file asks. It arrives as a BasicEffect with its vertex colours and without its material, and now says so instead of downgrading in silence.",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "metallic-roughness-material",
+    "meshes-overview"
+  ],
+  "inventory": {
+    "id": "mat-vertex-color-pbr",
+    "owningGroup": "materials",
+    "referencingGroups": [],
+    "validatedLayers": [
+      "L1",
+      "L2",
+      "L3"
+    ],
+    "features": [
+      "COLOR_0 with a PBR material",
+      "unsupported material model",
+      "import report"
+    ],
+    "auditFixture": null
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 1,
+    "meshCount": 1,
+    "materialCount": 1,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
+    "skinCount": 0,
+    "animationCount": 0,
+    "accessorCount": 4,
+    "bufferViewCount": 4,
+    "bufferCount": 1,
+    "bufferByteLength": 90,
+    "extensionsUsed": [],
+    "extensionsRequired": [],
+    "punctualLightCount": 0
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 0,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      {
+        "index": 1,
+        "usage": "NORMAL",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 36,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 2,
+        "usage": "COLOR_0",
+        "type": "VEC4",
+        "componentType": 5121,
+        "componentTypeName": "UNSIGNED_BYTE",
+        "count": 3,
+        "componentsPerElement": 4,
+        "normalized": true,
+        "sparse": false,
+        "bufferView": 2,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 72,
+        "bufferViewByteStride": null,
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0
+        ]
+      },
+      {
+        "index": 3,
+        "usage": "indices",
+        "type": "SCALAR",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 3,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 3,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 84,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          2
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": [
+      {
+        "mesh": 0,
+        "meshName": "ColoredMetalTri",
+        "primitive": 0,
+        "mode": 4,
+        "modeName": "TRIANGLES",
+        "indexed": true,
+        "vertexCount": 3,
+        "positions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "normals": [
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "tangents": [],
+        "texcoords": [],
+        "colors": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ]
+        ],
+        "joints": [],
+        "weights": [],
+        "indices": [
+          0,
+          1,
+          2
+        ],
+        "triangles": [
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        "importPolicy": {
+          "imported": true,
+          "topologyMode": 4,
+          "topologyName": "TRIANGLES",
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "converted": false,
+          "primitiveCount": 1
+        },
+        "material": {
+          "index": 0,
+          "name": "ColoredMetal",
+          "baseColorFactor": [
+            0.2,
+            0.4,
+            0.8,
+            1.0
+          ],
+          "metallicFactor": 0.85,
+          "roughnessFactor": 0.15,
+          "emissiveFactor": [
+            0.05,
+            0.0,
+            0.2
+          ],
+          "alphaMode": "OPAQUE",
+          "alphaCutoff": 0.5,
+          "doubleSided": false,
+          "hasBaseColorTexture": false,
+          "hasNormalTexture": false,
+          "hasMetallicRoughnessTexture": false,
+          "hasOcclusionTexture": false,
+          "hasEmissiveTexture": false,
+          "unsupportedMaterialModel": "metallic-roughness",
+          "importedEffect": "BasicEffect",
+          "vertexColorsPreserved": true,
+          "materialPropertiesApplied": false,
+          "note": "No CNA vertex layout carries a Color alongside a Tangent and no PBR shader reads a colour stream, so supporting this means a new stride plus a shader variant on every renderer. The primitive keeps its vertex colours and the material is reported as dropped -- the other outcome GLTF-241's acceptance allows."
+        }
+      }
+    ]
+  },
+  "l4": {
+    "instances": [
+      {
+        "node": 0,
+        "nodeName": "MeshNode",
+        "mesh": 0,
+        "parentNodePath": [],
+        "worldMatrixColumnMajor": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "worldPositions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      }
+    ],
+    "worldBounds": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        1.0,
+        1.0,
+        0.0
+      ]
+    }
+  },
+  "l5": {
+    "supported": true,
+    "parts": [
+      {
+        "mesh": 0,
+        "primitive": 0,
+        "stride": 24,
+        "vertexCount": 3,
+        "fields": [
+          {
+            "name": "Position",
+            "offset": 0,
+            "size": 12
+          },
+          {
+            "name": "Color",
+            "offset": 12,
+            "size": 4
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 16,
+            "size": 8
+          }
+        ],
+        "vertexBufferFile": "mat-vertex-color-pbr.vb.bin",
+        "vertexBufferBytes": 72,
+        "vertexBufferSha256": "c6be0730d9234a8b9f6667f93969b2f04aee8a84d35794dc2a2a4c25c15e98d1",
+        "indexElementSize": 2,
+        "indexCount": 3,
+        "indexBufferFile": "mat-vertex-color-pbr.ib.bin",
+        "indexBufferBytes": 6,
+        "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "sourceTopology": "TRIANGLES",
+        "topology": "TRIANGLES",
+        "primitiveCount": 1
+      }
+    ]
+  },
+  "rejection": null,
+  "defects": [
+    {
+      "id": "GLTF-241",
+      "summary": "A primitive with COLOR_0 and a metallic-roughness material cannot be imported as the file asks, and the loss runs one layer deeper than the material: the stride-24 layout a coloured primitive lands on has no Normal slot either, so an authored NORMAL is discarded and the primitive cannot be lit at all. Supporting the combination means a new stride plus a shader variant on every renderer, the same blast radius that ruled out colour-space option A. GLTF-241's acceptance allows the other outcome -- REPORTED, not silently downgraded -- and that is what landed: MeshOut names both losses and both loaders log them.",
+      "firstDivergentLayer": "L3",
+      "divergentFields": [
+        "normals"
+      ],
+      "divergentFieldsByLayer": {
+        "L3": [
+          "normals"
+        ]
+      },
+      "owner": "GLTF-MATERIAL",
+      "owningTasks": [
+        "GLTF-238",
+        "GLTF-241"
+      ],
+      "closedTasks": [
+        "GLTF-241"
+      ],
+      "remainingTasks": [
+        "GLTF-238"
+      ],
+      "status": "partially-remediated",
+      "currentActual": {
+        "usePbr": false,
+        "stride": 24,
+        "effect": "BasicEffect",
+        "vertexColorsPreserved": true,
+        "unsupportedMaterialModel": "metallic-roughness",
+        "droppedNormalForStride": true,
+        "normalsImported": 0,
+        "note": "The primitive keeps its vertex colours and loses both its material and its normals. Both are now named by MeshOut and logged by both loaders, so the downgrade is visible at import rather than only in the rendered result. GLTF-238 owns actually supporting the combination."
+      },
+      "priorActual": {
+        "usePbr": false,
+        "stride": 24,
+        "effect": "BasicEffect",
+        "vertexColorsPreserved": true,
+        "unsupportedMaterialModel": null,
+        "droppedNormalForStride": null,
+        "note": "The same geometry, imported in complete silence: nothing recorded that the material had been dropped, and nothing recorded that the normals had been dropped with it."
+      }
+    }
+  ]
+}

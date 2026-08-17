@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -140,58 +141,30 @@ namespace CNA::Internal::Renderers::Bgfx
             }
         }
 
-        bgfx::PlatformData CreatePlatformData(SDL_Window* window)
+        bgfx::PlatformData CreatePlatformData(const CNA::Platform::NativeWindowHandle& handle)
         {
             bgfx::PlatformData platformData{};
 
-            const SDL_PropertiesID windowProperties = SDL_GetWindowProperties(window);
-
 #if defined(_WIN32)
-            platformData.nwh = SDL_GetPointerProperty(windowProperties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+            CNA::Platform::Win32NativeWindow native;
+            if (CNA::Platform::TryGetWin32(handle, native)) platformData.nwh = native.hwnd;
 #elif defined(__APPLE__)
-            platformData.nwh = SDL_GetPointerProperty(windowProperties, SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, nullptr);
+            CNA::Platform::CocoaNativeWindow native;
+            if (CNA::Platform::TryGetCocoa(handle, native)) platformData.nwh = native.window;
 #elif defined(__linux__)
-            const char* videoDriver = SDL_GetCurrentVideoDriver();
-
-            if (videoDriver && SDL_strcmp(videoDriver, "x11") == 0)
+            CNA::Platform::X11NativeWindow x11;
+            CNA::Platform::WaylandNativeWindow wayland;
+            if (CNA::Platform::TryGetX11(handle, x11))
             {
                 platformData.type = bgfx::NativeWindowHandleType::Default;
-                platformData.ndt = SDL_GetPointerProperty(windowProperties, SDL_PROP_WINDOW_X11_DISPLAY_POINTER,
-                                                          nullptr);
-
-                const Uint64 windowHandle = SDL_GetNumberProperty(windowProperties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER,
-                                                                  0);
-                platformData.nwh = reinterpret_cast<void*>(static_cast<uintptr_t>(windowHandle));
-
-                if (!platformData.ndt)
-                {
-                    throw std::runtime_error(
-                        "Failed to initialize BGFX renderer: SDL X11 display handle is not available.");
-                }
-                if (!platformData.nwh)
-                {
-                    throw std::runtime_error(
-                        "Failed to initialize BGFX renderer: SDL X11 window handle is not available.");
-                }
+                platformData.ndt = x11.display;
+                platformData.nwh = reinterpret_cast<void*>(static_cast<uintptr_t>(x11.window));
             }
-            else if (videoDriver && SDL_strcmp(videoDriver, "wayland") == 0)
+            else if (CNA::Platform::TryGetWayland(handle, wayland))
             {
                 platformData.type = bgfx::NativeWindowHandleType::Wayland;
-                platformData.ndt = SDL_GetPointerProperty(windowProperties, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER,
-                                                          nullptr);
-                platformData.nwh = SDL_GetPointerProperty(windowProperties, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER,
-                                                          nullptr);
-
-                if (!platformData.ndt)
-                {
-                    throw std::runtime_error(
-                        "Failed to initialize BGFX renderer: SDL Wayland display handle is not available.");
-                }
-                if (!platformData.nwh)
-                {
-                    throw std::runtime_error(
-                        "Failed to initialize BGFX renderer: SDL Wayland surface handle is not available.");
-                }
+                platformData.ndt = wayland.display;
+                platformData.nwh = wayland.surface;
             }
 #endif
 
@@ -978,7 +951,7 @@ namespace CNA::Internal::Renderers::Bgfx
             const bool hasBackbuffer =
                 (formatCaps & BGFX_CAPS_FORMAT_TEXTURE_BACKBUFFER) != 0;
 
-            if (const char* trace = SDL_getenv("CNA_BGFX_TRACE_DIAGNOSTICS");
+            if (const char* trace = std::getenv("CNA_BGFX_TRACE_DIAGNOSTICS");
                 trace != nullptr && trace[0] != '\0' && trace[0] != '0')
             {
                 std::fprintf(stderr,
@@ -1627,31 +1600,23 @@ namespace CNA::Internal::Renderers::Bgfx
         std::fflush(stderr);
     }
 
-    BgfxRenderer::BgfxRenderer(SDL_Window* window, int swapInterval)
-        : window(window)
-        , resetFlags_(swapInterval > 0 ? BGFX_RESET_VSYNC : BGFX_RESET_NONE)
+    BgfxRenderer::BgfxRenderer(const GraphicsRendererCreateArgs& args)
+        : surface_(args.surface, "BgfxRenderer")
+        , resetFlags_(args.swapInterval > 0 ? BGFX_RESET_VSYNC : BGFX_RESET_NONE)
     {
-        if (!window)
-        {
-            throw std::runtime_error("BgfxRenderer initialized with null window.");
-        }
-
-        int width = 0;
-        int height = 0;
-        if (!SDL_GetWindowSize(window, &width, &height))
-        {
-            throw std::runtime_error(std::string("SDL_GetWindowSize failed: ") + SDL_GetError());
-        }
+        const auto drawableSize = surface_.GetDrawableSize();
+        const int width = drawableSize.width;
+        const int height = drawableSize.height;
 
         const uint16_t initialWidth = static_cast<uint16_t>(std::max(width, 1));
         const uint16_t initialHeight = static_cast<uint16_t>(std::max(height, 1));
-        const char* rendererOverride = SDL_getenv(kRendererOverrideEnvVar);
+        const char* rendererOverride = std::getenv(kRendererOverrideEnvVar);
         const bgfx::RendererType::Enum requestedRendererType = Detail::ResolveRendererType(rendererOverride);
 
         // REMED-GFX-154: decided BEFORE bgfx::init, because renderer selection and fallback are
         // among the things bgfx traces and they happen inside init itself.
         {
-            const char* diag = SDL_getenv("CNA_BGFX_TRACE_DIAGNOSTICS");
+            const char* diag = std::getenv("CNA_BGFX_TRACE_DIAGNOSTICS");
             readbackCallback_.traceDiagnostics =
                 diag != nullptr && diag[0] != '\0' && diag[0] != '0';
         }
@@ -1659,7 +1624,7 @@ namespace CNA::Internal::Renderers::Bgfx
         bgfx::Init init;
         init.type = requestedRendererType;
         init.vendorId = BGFX_PCI_ID_NONE;
-        init.platformData = CreatePlatformData(window);
+        init.platformData = CreatePlatformData(surface_.GetNativeHandle());
         init.resolution.width = initialWidth;
         init.resolution.height = initialHeight;
         init.resolution.reset = resetFlags_;
@@ -1668,11 +1633,9 @@ namespace CNA::Internal::Renderers::Bgfx
 
         if (!init.platformData.nwh)
         {
-            const char* videoDriver = SDL_GetCurrentVideoDriver();
             throw std::runtime_error(
-                std::string("Failed to initialize BGFX renderer: native window handle is not available")
-                + (videoDriver ? std::string(" for SDL video driver '") + videoDriver + "'." : ".")
-            );
+                "Failed to initialize BGFX renderer: native window handle is not available for "
+                + CNA::Platform::Describe(surface_.GetNativeHandle()));
         }
 
         if (!bgfx::init(init))
@@ -1702,13 +1665,13 @@ namespace CNA::Internal::Renderers::Bgfx
         // REMED-GFX-155: bgfx's view execution order is not observable through the public API, so it
         // is written to stderr on demand. Read once, here, so no draw path pays for the lookup.
         {
-            const char* trace = SDL_getenv("CNA_BGFX_TRACE_VIEW_ORDER");
+            const char* trace = std::getenv("CNA_BGFX_TRACE_VIEW_ORDER");
             traceViewOrder_ = trace != nullptr && trace[0] != '\0' && trace[0] != '0';
         }
 
         // REMED-GFX-154: same idea for the readback/resolve sequence, read once for the same reason.
         {
-            const char* trace = SDL_getenv("CNA_BGFX_TRACE_READBACK");
+            const char* trace = std::getenv("CNA_BGFX_TRACE_READBACK");
             traceReadback_ = trace != nullptr && trace[0] != '\0' && trace[0] != '0';
         }
 
@@ -1833,10 +1796,18 @@ namespace CNA::Internal::Renderers::Bgfx
 
                 // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: PbrEffect/SkinnedPbrEffect uniforms.
                 metallicRoughnessFactorUnif_ = bgfx::createUniform("u_metallicRoughnessFactor", bgfx::UniformType::Vec4);
+                pbrSrgbUnif_                  = bgfx::createUniform("u_srgb",                    bgfx::UniformType::Vec4);
+                dielectricFresnelUnif_        = bgfx::createUniform("u_dielectricFresnel",      bgfx::UniformType::Vec4);
+                pbrSpecularStateUnif_         = bgfx::createUniform("u_specularState",           bgfx::UniformType::Vec4);
+                pbrTextureTransformUnif_      = bgfx::createUniform("u_pbrTextureTransform",    bgfx::UniformType::Vec4, 10);
+                pbrSpecularTextureTransformUnif_ = bgfx::createUniform(
+                    "u_pbrSpecularTextureTransform", bgfx::UniformType::Vec4, 4);
                 normalMapSampler_            = bgfx::createUniform("s_texNormal",             bgfx::UniformType::Sampler);
                 metallicRoughnessSampler_    = bgfx::createUniform("s_texMetallicRoughness",  bgfx::UniformType::Sampler);
                 emissiveMapSampler_          = bgfx::createUniform("s_texEmissive",           bgfx::UniformType::Sampler);
                 occlusionMapSampler_         = bgfx::createUniform("s_texOcclusion",          bgfx::UniformType::Sampler);
+                specularMapSampler_          = bgfx::createUniform("s_texSpecular",           bgfx::UniformType::Sampler);
+                specularColorMapSampler_     = bgfx::createUniform("s_texSpecularColor",      bgfx::UniformType::Sampler);
                 // REMED-GFX-078: per-slot render-target V-flip flags (see rtFlipV_ / BindSamplerSlot).
                 rtFlipVUnif_                 = bgfx::createUniform("u_rtFlipV",               bgfx::UniformType::Vec4);
 
@@ -1987,10 +1958,17 @@ namespace CNA::Internal::Renderers::Bgfx
         destroyU(envMapSpecularUnif_);
         destroyU(envMapSampler_);
         destroyU(metallicRoughnessFactorUnif_);
+        destroyU(pbrSrgbUnif_);
+        destroyU(dielectricFresnelUnif_);
+        destroyU(pbrSpecularStateUnif_);
+        destroyU(pbrTextureTransformUnif_);
+        destroyU(pbrSpecularTextureTransformUnif_);
         destroyU(normalMapSampler_);
         destroyU(metallicRoughnessSampler_);
         destroyU(emissiveMapSampler_);
         destroyU(occlusionMapSampler_);
+        destroyU(specularMapSampler_);
+        destroyU(specularColorMapSampler_);
         if (bgfx::isValid(defaultWhiteTexture3D_)) { bgfx::destroy(defaultWhiteTexture3D_); defaultWhiteTexture3D_ = BGFX_INVALID_HANDLE; }
         if (bgfx::isValid(defaultFlatNormalTexture3D_)) { bgfx::destroy(defaultFlatNormalTexture3D_); defaultFlatNormalTexture3D_ = BGFX_INVALID_HANDLE; }
         destroyP(colored3DProgram_);
@@ -2022,12 +2000,9 @@ namespace CNA::Internal::Renderers::Bgfx
 
     void BgfxRenderer::EnsureViewState()
     {
-        int width = 0;
-        int height = 0;
-        if (!SDL_GetWindowSize(window, &width, &height))
-        {
-            throw std::runtime_error(std::string("SDL_GetWindowSize failed: ") + SDL_GetError());
-        }
+        const auto drawableSize = surface_.GetDrawableSize();
+        const int width = drawableSize.width;
+        const int height = drawableSize.height;
 
         const uint16_t newWidth = static_cast<uint16_t>(std::max(width, 1));
         const uint16_t newHeight = static_cast<uint16_t>(std::max(height, 1));
@@ -2172,10 +2147,14 @@ namespace CNA::Internal::Renderers::Bgfx
 
     void BgfxRenderer::GetViewportSize(int& width, int& height)
     {
-        if (!SDL_GetWindowSize(window, &width, &height))
-        {
-            throw std::runtime_error(std::string("SDL_GetWindowSize failed: ") + SDL_GetError());
-        }
+        const auto drawableSize = surface_.GetDrawableSize();
+        width = drawableSize.width;
+        height = drawableSize.height;
+    }
+
+    void BgfxRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        surface_.Update(surface);
     }
 
     std::unique_ptr<ITextureRenderer> BgfxRenderer::CreateTexture(const ImageData& data)
@@ -3299,6 +3278,17 @@ namespace CNA::Internal::Renderers::Bgfx
             layout.add(bgfx::Attrib::Tangent,   4, bgfx::AttribType::Float);
             layout.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float);
         }
+        else if (stride == 60)
+        {
+            // GLTF-182/344: rigid PBR with the importer-appended TEXCOORD_1 at offset 48.
+            // The public vertex declaration includes four bytes of tail padding.
+            layout.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Normal,    3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Tangent,   4, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::TexCoord1, 2, bgfx::AttribType::Float);
+            layout.skip(4);
+        }
         else if (stride == 56)
         {
             // CNB-67 (Phase 13C) Bgfx port: the stride-52 SkinnedVertex layout with a per-vertex
@@ -3323,6 +3313,17 @@ namespace CNA::Internal::Renderers::Bgfx
             layout.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float);
             layout.add(bgfx::Attrib::Weight,    4, bgfx::AttribType::Float);
             layout.add(bgfx::Attrib::Indices,   4, bgfx::AttribType::Uint8);
+        }
+        else if (stride == 76)
+        {
+            // GLTF-183/344: skinned PBR with TEXCOORD_1 after blend indices at offset 68.
+            layout.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Normal,    3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Tangent,   4, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Weight,    4, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Indices,   4, bgfx::AttribType::Uint8);
+            layout.add(bgfx::Attrib::TexCoord1, 2, bgfx::AttribType::Float);
         }
         else
         {
@@ -3532,15 +3533,21 @@ namespace CNA::Internal::Renderers::Bgfx
     }
 
     // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: binds the base color map (unit 0, shared
-    // texColor3DSampler_) plus PbrEffect's 4 additional maps (units 1-4, bound before unit 0 to
+    // texColor3DSampler_) plus PbrEffect's 6 additional maps (units 1-6, bound before unit 0 to
     // leave it active last, matching EasyGLRenderer::BindDrawParams()'s established
     // envMap/texture2 unit-ordering precedent). Each fallback texture is the correct "map
     // absent" constant for its own semantic -- see EnsureDefaultFlatNormalTexture()'s doc
     // comment (mirrored on defaultFlatNormalTexture3D_ above) for the normal-map case; the other
-    // 3 all reuse defaultWhiteTexture3D_ since their respective factor/no-op semantics already
+    // 5 all reuse defaultWhiteTexture3D_ since their respective factor/no-op semantics already
     // make (1,1,1,1) the correct "map absent" value.
     void BgfxRenderer::BindPbrTextures(const GpuDrawParams& params)
     {
+        bgfx::setUniform(pbrTextureTransformUnif_, params.pbrTextureTransformRows, 10);
+        bgfx::setUniform(pbrSpecularTextureTransformUnif_,
+                         params.pbrSpecularTextureTransformRows, 4);
+        const float specularState[4] = {
+            static_cast<float>(params.pbrTextureCoordinateSetMask & 0x7fu), 0.0f, 0.0f, 0.0f};
+        bgfx::setUniform(pbrSpecularStateUnif_, specularState);
         // REMED-GFX-078: each slot resolved through IBgfxSamplable (see BindSamplerSlot) so a
         // RenderTarget2D set as any PBR map binds its real handle instead of UB-casting to
         // BgfxTextureRenderer. Slots 1-4 are bound before slot 0 so slot 0 stays active last
@@ -3549,6 +3556,8 @@ namespace CNA::Internal::Renderers::Bgfx
         BindSamplerSlot(2, metallicRoughnessSampler_,   params.pbrMetallicRoughnessMap, defaultWhiteTexture3D_);
         BindSamplerSlot(3, emissiveMapSampler_,         params.pbrEmissiveMap,          defaultWhiteTexture3D_);
         BindSamplerSlot(4, occlusionMapSampler_,        params.pbrOcclusionMap,         defaultWhiteTexture3D_);
+        BindSamplerSlot(5, specularMapSampler_,         params.pbrSpecularMap,          defaultWhiteTexture3D_);
+        BindSamplerSlot(6, specularColorMapSampler_,    params.pbrSpecularColorMap,     defaultWhiteTexture3D_);
         BindSamplerSlot(0, texColor3DSampler_,          params.texture0,                defaultWhiteTexture3D_);
     }
 
@@ -4040,8 +4049,18 @@ namespace CNA::Internal::Renderers::Bgfx
             float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
                                    params.emissiveColor[2], 0.0f };
             bgfx::setUniform(emissiveColor3DUnif_, emissive);
-            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor, 0.0f, 0.0f };
+            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor,
+                                  params.pbrNormalScale, params.pbrOcclusionStrength };
             bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
+            float srgb[4] = { params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f,
+                              params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f };
+            bgfx::setUniform(pbrSrgbUnif_, srgb);
+            float dielectricFresnel[4] = {
+                params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
+                params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor };
+            bgfx::setUniform(dielectricFresnelUnif_, dielectricFresnel);
             float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
             bgfx::setUniform(light0Dir3DUnif_, dir0);
             float diff0[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
@@ -4088,8 +4107,18 @@ namespace CNA::Internal::Renderers::Bgfx
             float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
                                    params.emissiveColor[2], 0.0f };
             bgfx::setUniform(emissiveColor3DUnif_, emissive);
-            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor, 0.0f, 0.0f };
+            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor,
+                                  params.pbrNormalScale, params.pbrOcclusionStrength };
             bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
+            float srgb[4] = { params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f,
+                              params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f };
+            bgfx::setUniform(pbrSrgbUnif_, srgb);
+            float dielectricFresnel[4] = {
+                params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
+                params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor };
+            bgfx::setUniform(dielectricFresnelUnif_, dielectricFresnel);
             float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
             bgfx::setUniform(light0Dir3DUnif_, dir0);
             float diff0[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
@@ -4485,8 +4514,18 @@ namespace CNA::Internal::Renderers::Bgfx
             float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
                                    params.emissiveColor[2], 0.0f };
             bgfx::setUniform(emissiveColor3DUnif_, emissive);
-            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor, 0.0f, 0.0f };
+            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor,
+                                  params.pbrNormalScale, params.pbrOcclusionStrength };
             bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
+            float srgb[4] = { params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f,
+                              params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f };
+            bgfx::setUniform(pbrSrgbUnif_, srgb);
+            float dielectricFresnel[4] = {
+                params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
+                params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor };
+            bgfx::setUniform(dielectricFresnelUnif_, dielectricFresnel);
             float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
             bgfx::setUniform(light0Dir3DUnif_, dir0);
             float diff0[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
@@ -4533,8 +4572,18 @@ namespace CNA::Internal::Renderers::Bgfx
             float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
                                    params.emissiveColor[2], 0.0f };
             bgfx::setUniform(emissiveColor3DUnif_, emissive);
-            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor, 0.0f, 0.0f };
+            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor,
+                                  params.pbrNormalScale, params.pbrOcclusionStrength };
             bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
+            float srgb[4] = { params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f,
+                              params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f };
+            bgfx::setUniform(pbrSrgbUnif_, srgb);
+            float dielectricFresnel[4] = {
+                params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
+                params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor };
+            bgfx::setUniform(dielectricFresnelUnif_, dielectricFresnel);
             float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
             bgfx::setUniform(light0Dir3DUnif_, dir0);
             float diff0[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
@@ -5011,9 +5060,14 @@ namespace CNA::Internal::Renderers::Bgfx
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_BGFX
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace Bgfx { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> Bgfx::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<Bgfx::BgfxRenderer>(args.window, args.swapInterval);
+        return std::make_unique<Bgfx::BgfxRenderer>(args);
     }
 #endif
 }

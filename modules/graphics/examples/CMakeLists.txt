@@ -1,9 +1,18 @@
-# Graphics-subsystem examples (module-local registration; the target definitions moved
-# here verbatim from cmake/Examples.cmake / cmake/Harnesses.cmake /
-# cmake/Tests/CrossRendererBenchmark.cmake when examples moved into their owning
-# physical modules). This directory also owns the shared renderer-agnostic conformance
-# fixtures the per-renderer suites instantiate (reached via CNA_GRAPHICS_EXAMPLES_DIR)
-# and the shared example-support headers under common/.
+# plan_runtimerenderer.md RTR-P9-13/P9-15 -- the rule these gates follow, corrected after getting it
+# wrong once:
+#
+#   * A gate deciding whether a TARGET EXISTS, where that target runs against whatever renderer the
+#     build DEFAULTS to, must test equality with CNA_GRAPHICS_RENDERER. Membership is wrong there: a
+#     multi-renderer build defaulting to SOFTWARE but containing OPENGLES3 would build a demo that
+#     needs 3D and then throw "3D not supported" at runtime -- a build that succeeds and a program
+#     that cannot work.
+#   * A gate deciding whether a RESOURCE is available -- a runtime library to copy, a renderer's own
+#     device-free test sources -- may test membership, because the user really can select that
+#     renderer at runtime in a multi build.
+#
+# In single-renderer mode the two are identical, which is exactly why the distinction is easy to
+# miss.
+
 
 # Example/demo executables historically live at the build root (docs, scripts and the
 # golden-image working-directory conventions rely on it); keep them there even though
@@ -11,6 +20,14 @@
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 if(CNA_BUILD_EXAMPLES)
+    # ---- Runtime renderer selection reference (plan_runtimerenderer.md RTR-P4-14) ----
+    # Renderer-agnostic: it reports whatever this build contains rather than assuming one.
+    add_executable(cna_demo_renderer_selection
+        renderer_selection/renderer_selection_demo.cpp
+    )
+    target_link_libraries(cna_demo_renderer_selection PRIVATE CNA)
+    cna_link_sharp_runtime(cna_demo_renderer_selection PRIVATE)
+
     # ---- 2D sprite demo (works with all renderers) ----------------------------
     add_executable(cna_demo_2d
         demo_2d/src/Main.cpp
@@ -47,7 +64,7 @@ if(CNA_BUILD_EXAMPLES)
                 "${CMAKE_CURRENT_SOURCE_DIR}/demo_2d/Content"
                 "$<TARGET_FILE_DIR:cna_demo_2d>/Content"
             COMMENT "Copying Content next to cna_demo_2d executable")
-        if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU" AND CNA_WEBGPU_RUNTIME_LIBRARY)
+        if("WEBGPU" IN_LIST CNA_RENDERER_IDENTITIES AND CNA_WEBGPU_RUNTIME_LIBRARY)
             add_custom_command(TARGET cna_demo_2d POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${CNA_WEBGPU_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:cna_demo_2d>"
@@ -77,15 +94,29 @@ if(CNA_BUILD_EXAMPLES)
     endif()
 endif()
 
+# A full terminal-platform smoke test.  The Python runner owns a pseudo-terminal so the real demo
+# receives a TTY (unlike ordinary CTest stdout), a resize signal and keyboard input.  It is kept
+# to the one tuple that has a CPU presenter capable of reaching a terminal.
+if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES AND CNA_PLATFORM STREQUAL "TERMINAL"
+   AND CNA_GRAPHICS_RENDERER STREQUAL "BLEND2D" AND TARGET Python3::Interpreter)
+    add_test(NAME TerminalBlend2DDemoIntegration
+        COMMAND Python3::Interpreter
+            "${CMAKE_SOURCE_DIR}/tools/platform/terminal_demo_integration_test.py"
+            "$<TARGET_FILE:cna_demo_2d>")
+    set_tests_properties(TerminalBlend2DDemoIntegration PROPERTIES TIMEOUT 25)
+endif()
+
 if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
         OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
         OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"))
-    # ---- 3D house demo (EasyGL and Vulkan) -----------------------------------
-    # The 3D house demo exercises the EasyGL 3D pipeline. Other renderers throw
-    # "3D not supported", so the target is only enabled with a GL-family public renderer
+        OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"
+        OR CNA_GRAPHICS_RENDERER STREQUAL "FNA3D"))
+    # ---- 3D house demo --------------------------------------------------------
+    # The 3D house demo exercises the shared BasicEffect 3D path. The target is enabled
+    # only with renderers that support every graphics operation used by the scene: a GL-family
+    # public renderer
     # (OPENGLES2/OPENGLES3/OPENGL33/WEBGL1/WEBGL2, all implemented by EasyGL -- see
-    # plan_glbackends.md) or VULKAN.
+    # plan_glbackends.md), VULKAN, or FNA3D.
     add_executable(cna_house3d_demo house3d_demo.cpp)
 
     if(EMSCRIPTEN)
@@ -150,34 +181,28 @@ if(CNA_BUILD_TESTS)
     add_executable(cna_diag_compare cross_renderer_diagnostic_compare.cpp)
 endif()
 
-# plan_html_dom.md Phase D10: a deliberately renderer-agnostic benchmark
-# (graphics_renderer_benchmark.cpp), built for whichever Emscripten renderer the current
-# configure selected. Comparing HTML_DOM against CANVAS/WEBGL2 means configuring and building this
-# target three times, once per renderer (three separate build directories, e.g.
-# cmake-build-canvas/cmake-build-webgl2/cmake-build-htmldom) -- this file just makes sure the
-# target exists in each, not tied to any single CNA_GRAPHICS_RENDERER value the way the
-# canvas/html-dom renderer example registrations are.
-#
-# Gated on EMSCRIPTEN alone: on a native (non-browser) renderer this benchmark's own JS timing
-# (performance.now()) and result-publishing hooks don't exist, and the point of this benchmark is
-# specifically a browser-vs-browser comparison.
-if(CNA_BUILD_TESTS AND EMSCRIPTEN)
+# plan_html_dom.md Phase D10 and plan_platform.md PLAT-7/120: one renderer-agnostic fixed-scene
+# benchmark, built against whichever renderer this configure selected. Browser builds publish via
+# JavaScript as before; native builds use steady_clock and emit the raw samples as JSON. Keeping
+# this under either examples or tests makes a lean benchmark-only configure possible.
+if((CNA_BUILD_TESTS OR CNA_BUILD_EXAMPLES) AND NOT ANDROID)
     add_executable(cna_bench_graphics_renderer graphics_renderer_benchmark.cpp)
-    target_link_libraries(cna_bench_graphics_renderer PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
-    set_target_properties(cna_bench_graphics_renderer PROPERTIES SUFFIX ".html")
-    target_link_options(cna_bench_graphics_renderer PRIVATE
-        -sALLOW_MEMORY_GROWTH=1
-        -sEXIT_RUNTIME=1
-        -sEXPORTED_RUNTIME_METHODS=UTF8ToString)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
-        # Emscripten defaults to -sMAX_WEBGL_VERSION=1; without this, the EasyGL implementation's
-        # ES 3.0/WebGL2
-        # SDL_GL_CONTEXT_MAJOR_VERSION=3 request (EasyGLRenderer.cpp) silently falls back to
-        # a WebGL1 context, which then fails to compile EasyGL's GLSL ES 3.0 shaders. Mirrors the
-        # cna_house3d_demo target's own WEBGL2/VULKAN Emscripten link options above.
+    target_link_libraries(cna_bench_graphics_renderer PRIVATE CNA SHARP_RUNTIME)
+    if(EMSCRIPTEN)
+        target_link_libraries(cna_bench_graphics_renderer PRIVATE SDL3::SDL3)
+        set_target_properties(cna_bench_graphics_renderer PROPERTIES SUFFIX ".html")
         target_link_options(cna_bench_graphics_renderer PRIVATE
-            "-sMIN_WEBGL_VERSION=2"
-            "-sMAX_WEBGL_VERSION=2")
+            -sALLOW_MEMORY_GROWTH=1
+            -sEXIT_RUNTIME=1
+            -sEXPORTED_RUNTIME_METHODS=UTF8ToString)
+        if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
+            # Emscripten defaults to WebGL1; EasyGL's ES 3.0 shaders require WebGL2.
+            target_link_options(cna_bench_graphics_renderer PRIVATE
+                "-sMIN_WEBGL_VERSION=2"
+                "-sMAX_WEBGL_VERSION=2")
+        endif()
+    elseif(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_bench_graphics_renderer PRIVATE SDL3::SDL3main)
     endif()
 endif()
 

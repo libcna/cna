@@ -57,7 +57,10 @@ struct CnaConstants
     float4 worldIT3;
     float4 envMapParams;    // x = amount, y = fresnel enabled, z = fresnel factor
     float4 envMapSpecular;  // rgb = EnvironmentMapEffect.EnvironmentMapSpecular
-    float4 pbrFactors;      // x = metallic, y = roughness
+    float4 pbrFactors;      // x=metallic, y=roughness, z=normal scale, w=occlusion strength
+    float4 pbrSrgb;         // x=decode base, y=decode emissive, z=encode output
+    float4 pbrDielectricFresnel; // xyz=dielectric F0, w=dielectric F90
+    float4 pbrTextureTransformRows[10]; // two affine UV rows per PBR map
 };
 
 ConstantBuffer<CnaConstants> cb : register(b0);
@@ -97,6 +100,11 @@ float3 TransformNormalToWorld(float3 n)
 {
     float4 v = float4(n, 0.0f);
     return float3(dot(v, cb.world0), dot(v, cb.world1), dot(v, cb.world2));
+}
+
+float WorldDirectionHandedness()
+{
+    return dot(cb.world0.xyz, cross(cb.world1.xyz, cb.world2.xyz)) < 0.0f ? -1.0f : 1.0f;
 }
 
 VSOut FillCommon(float3 position)
@@ -261,6 +269,45 @@ void SkinVertex(float3 position, float3 normal, float4 weights, uint4 indices,
     }
 }
 
+float3 BlendSkinColumn(uint column, float4 weights, uint4 indices)
+{
+    const float weightsPerVertex = bones.skinParams.x;
+    float3 result = bones.boneColumns[indices.x * 4 + column].xyz * weights.x;
+    if (weightsPerVertex >= 2.0f)
+        result += bones.boneColumns[indices.y * 4 + column].xyz * weights.y;
+    if (weightsPerVertex >= 4.0f)
+        result += bones.boneColumns[indices.z * 4 + column].xyz * weights.z
+                + bones.boneColumns[indices.w * 4 + column].xyz * weights.w;
+    return result;
+}
+
+// GLTF-264: PBR normals follow the inverse transpose of the complete weighted skin matrix. The
+// cofactor columns avoid reconstructing/inverting an HLSL matrix and retain a finite direct-
+// transform fallback for nearly singular blends.
+float3 ApplySkinNormal(float3 normal, float4 weights, uint4 indices)
+{
+    const float3 c0 = BlendSkinColumn(0, weights, indices);
+    const float3 c1 = BlendSkinColumn(1, weights, indices);
+    const float3 c2 = BlendSkinColumn(2, weights, indices);
+    const float3 co0 = cross(c1, c2);
+    const float3 co1 = cross(c2, c0);
+    const float3 co2 = cross(c0, c1);
+    const float determinant = dot(c0, co0);
+    const float3 transformed = co0 * normal.x + co1 * normal.y + co2 * normal.z;
+    const float3 direct = c0 * normal.x + c1 * normal.y + c2 * normal.z;
+    return abs(determinant) > 1e-6f
+        ? transformed * (determinant < 0.0f ? -1.0f : 1.0f)
+        : direct;
+}
+
+float SkinDirectionHandedness(float4 weights, uint4 indices)
+{
+    const float3 c0 = BlendSkinColumn(0, weights, indices);
+    const float3 c1 = BlendSkinColumn(1, weights, indices);
+    const float3 c2 = BlendSkinColumn(2, weights, indices);
+    return dot(c0, cross(c1, c2)) < 0.0f ? -1.0f : 1.0f;
+}
+
 VSOut FillSkinned(float3 position, float3 normal, float2 uv, float4 weights, uint4 indices)
 {
     float3 skinnedPosition;
@@ -341,7 +388,7 @@ PbrVSOut FillPbr(float3 position, float3 normal, float4 tangent, float2 uv)
     const float4 n = float4(normal, 0.0f);
     o.normalWS = normalize(float3(dot(n, cb.worldIT0), dot(n, cb.worldIT1), dot(n, cb.worldIT2)));
     o.tangentWS = TransformNormalToWorld(tangent.xyz);
-    o.bitangentSign = tangent.w;
+    o.bitangentSign = tangent.w * WorldDirectionHandedness();
     o.uv = uv;
     return o;
 }
@@ -369,6 +416,7 @@ PbrVSOut PbrSkinned68VS(float3 position : POSITION, float3 normal : NORMAL,
     float3 skinnedPosition;
     float3 skinnedNormal;
     SkinVertex(position, normal, blendWeights, blendIndices, skinnedPosition, skinnedNormal);
+    skinnedNormal = ApplySkinNormal(normal, blendWeights, blendIndices);
 
     float3 skinnedTangent;
     float3 ignoredNormal;
@@ -388,13 +436,37 @@ PbrVSOut PbrSkinned68VS(float3 position : POSITION, float3 normal : NORMAL,
     const float4 n = float4(skinnedNormal, 0.0f);
     o.normalWS = normalize(float3(dot(n, cb.worldIT0), dot(n, cb.worldIT1), dot(n, cb.worldIT2)));
     o.tangentWS = TransformNormalToWorld(skinnedTangent);
-    o.bitangentSign = tangent.w;
+    o.bitangentSign = tangent.w * WorldDirectionHandedness()
+                              * SkinDirectionHandedness(blendWeights, blendIndices);
     o.uv = uv;
     return o;
 }
 
+float3 CnaSrgbToLinear(float3 color)
+{
+    const float3 low = color / 12.92f;
+    const float3 high = pow((color + 0.055f) / 1.055f, float3(2.4f, 2.4f, 2.4f));
+    return lerp(low, high, step(float3(0.04045f, 0.04045f, 0.04045f), color));
+}
+
+float3 CnaLinearToSrgb(float3 color)
+{
+    const float3 low = color * 12.92f;
+    const float exponent = 1.0f / 2.4f;
+    const float3 high = 1.055f * pow(max(color, 0.0f),
+                                    float3(exponent, exponent, exponent)) - 0.055f;
+    return lerp(low, high, step(float3(0.0031308f, 0.0031308f, 0.0031308f), color));
+}
+
+float2 CnaPbrTransformUv(float2 uv, int slot)
+{
+    const float3 value = float3(uv, 1.0f);
+    return float2(dot(value, cb.pbrTextureTransformRows[slot * 2].xyz),
+                  dot(value, cb.pbrTextureTransformRows[slot * 2 + 1].xyz));
+}
+
 float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0,
-                float roughness, float metallic)
+                float3 F90, float roughness, float metallic)
 {
     const float3 H = normalize(V + L);
     const float NdotL = max(dot(N, L), 0.0f);
@@ -410,7 +482,7 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
     k = k * k / 8.0f;
     const float G = (NdotV / (NdotV * (1.0f - k) + k)) * (NdotL / (NdotL * (1.0f - k) + k));
 
-    const float3 F = F0 + (float3(1.0f, 1.0f, 1.0f) - F0) * pow(saturate(1.0f - VdotH), 5.0f);
+    const float3 F = F0 + (F90 - F0) * pow(saturate(1.0f - VdotH), 5.0f);
     const float3 specular = (D * G * F) / max(4.0f * NdotV * NdotL, 1e-4f);
     const float3 diffuseColor = albedo * (1.0f - metallic);
     const float3 kd = float3(1.0f, 1.0f, 1.0f) - F;
@@ -419,42 +491,58 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
 
 float4 PbrPS(PbrVSOut input) : SV_Target
 {
-    const float4 baseColorTex = texture0.Sample(sampler0, input.uv);
-    const float3 albedo = baseColorTex.rgb * cb.diffuse.rgb;
+    const float4 baseColorTex = texture0.Sample(sampler0, CnaPbrTransformUv(input.uv, 0));
+    const float3 baseColor = lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), cb.pbrSrgb.x);
+    const float3 albedo = baseColor * cb.diffuse.rgb;
     const float alpha = baseColorTex.a * cb.diffuse.a;
 
     const float3 N = normalize(input.normalWS);
     const float3 T = normalize(input.tangentWS - N * dot(N, input.tangentWS));
     const float3 B = cross(N, T) * input.bitangentSign;
     const float3x3 TBN = float3x3(T, B, N);
-    const float3 sampledNormal = normalMap.Sample(sampler0, input.uv).rgb * 2.0f - 1.0f;
+    float3 sampledNormal = normalMap.Sample(sampler0, CnaPbrTransformUv(input.uv, 1)).rgb * 2.0f - 1.0f;
+    sampledNormal.xy *= cb.pbrFactors.z;
     const float3 finalNormal = normalize(mul(sampledNormal, TBN));
 
-    const float4 mr = metallicRoughnessMap.Sample(sampler0, input.uv);
+    const float4 mr = metallicRoughnessMap.Sample(sampler0, CnaPbrTransformUv(input.uv, 2));
     const float roughness = clamp(mr.g * cb.pbrFactors.y, 0.045f, 1.0f);
     const float metallic = saturate(mr.b * cb.pbrFactors.x);
 
     const float3 V = normalize(cb.eyePosition.xyz - input.positionWS);
-    const float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedo, metallic);
+    const float3 F0 = lerp(cb.pbrDielectricFresnel.xyz, albedo, metallic);
+    const float3 F90 = lerp(float3(cb.pbrDielectricFresnel.w,
+                                  cb.pbrDielectricFresnel.w,
+                                  cb.pbrDielectricFresnel.w),
+                            float3(1.0f, 1.0f, 1.0f), metallic);
 
     float3 Lo = float3(0.0f, 0.0f, 0.0f);
     Lo += PbrLight(finalNormal, V, normalize(-cb.lightDir0.xyz), cb.lightDiffuse0.rgb,
-                   albedo, F0, roughness, metallic);
+                   albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-cb.lightDir1.xyz), cb.lightDiffuse1.rgb,
-                   albedo, F0, roughness, metallic);
+                   albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-cb.lightDir2.xyz), cb.lightDiffuse2.rgb,
-                   albedo, F0, roughness, metallic);
+                   albedo, F0, F90, roughness, metallic);
 
-    const float occlusion = occlusionMap.Sample(sampler0, input.uv).r;
+    const float occlusionSample = occlusionMap.Sample(sampler0, CnaPbrTransformUv(input.uv, 4)).r;
+    const float occlusion = 1.0f + cb.pbrFactors.w * (occlusionSample - 1.0f);
     const float3 ambient = cb.ambient.rgb * albedo * occlusion;
-    const float3 emissive = cb.emissive.rgb * emissiveMap.Sample(sampler0, input.uv).rgb;
+    const float3 emissiveRaw = emissiveMap.Sample(sampler0, CnaPbrTransformUv(input.uv, 3)).rgb;
+    const float3 emissiveSample = lerp(emissiveRaw, CnaSrgbToLinear(emissiveRaw), cb.pbrSrgb.y);
+    const float3 emissive = cb.emissive.rgb * emissiveSample;
+
+    const float selected = (cb.alphaTest.y > 0.0f)
+        ? ((abs(alpha - cb.alphaTest.x) < cb.alphaTest.y) ? cb.alphaTest.z : cb.alphaTest.w)
+        : ((alpha < cb.alphaTest.x) ? cb.alphaTest.z : cb.alphaTest.w);
+    clip(selected);
 
     float3 rgb = ambient + Lo + emissive;
     if (cb.fogColor.w != 0.0f)
     {
         const float keep = 1.0f - saturate(dot(input.positionOS, cb.fogVector));
-        rgb = lerp(cb.fogColor.rgb, rgb, keep);
+        const float3 fogLinear = lerp(cb.fogColor.rgb, CnaSrgbToLinear(cb.fogColor.rgb), cb.pbrSrgb.z);
+        rgb = lerp(fogLinear, rgb, keep);
     }
+    rgb = lerp(rgb, CnaLinearToSrgb(rgb), cb.pbrSrgb.z);
     return float4(rgb, alpha);
 }
 

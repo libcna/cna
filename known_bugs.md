@@ -1,5 +1,209 @@
 # CNA Known Bugs
 
+
+## `Matrix::Decompose` lost every axis-aligned rotation to a negative-zero sign test — FIXED 2026-08-12
+
+XNA's `Decompose` recovers each axis' scale sign from the product of that row's four elements.
+FNA's guard is `Math.Sign(product) < 0`, and **`Math.Sign` returns 0 for negative zero**, so FNA
+takes the `+1` branch there. CNA used `std::signbit`, which *is* true for negative zero, and a
+comment called the difference "an edge case with no practical impact".
+
+It was not an edge case. A quarter turn about any principal axis has exact zeros in every row, and
+`(-1) * 0` is `-0.0`, so `signbit` fired and flipped that row's sign. At unit scale that turns the
+normalised 3×3 into a **reflection**, and `Quaternion::CreateFromRotationMatrix` of a reflection is
+not a rotation at all: the quarter turn came back as the **identity quaternion**. Any code
+decomposing a node's local transform — glTF's own animation import among them — silently lost the
+node's orientation, with no error and no wrong-looking number anywhere upstream.
+
+Found by `anim-translation-scale`, a glTF fixture whose node rest pose is a quarter turn about +Z
+precisely so "the undriven component comes from the bind pose" is distinguishable from "the
+undriven component is identity". Every keyframe came back with an identity rotation.
+
+Fixed by reproducing FNA's test exactly (`product < 0.0f`, which is `Math.Sign(x) < 0` including
+for `-0.0f`). Locked by `MatrixTest.DecomposeAxisAlignedQuarterTurnRecoversTheRotationRatherThanIdentity`
+for all three axes, because the zero pattern differs per row and one axis passing is what made this
+look fine.
+
+One boundary is documented rather than changed, in
+`MatrixTest.DecomposeReportsPositiveScaleForAMirroredAffineTransform`: the sign heuristic multiplies
+the **fourth** column into each product, and `M14`/`M24`/`M34` are zero in every affine transform,
+so the sign is always `+1` for the matrices anyone actually decomposes and a mirrored transform
+decomposes to positive scales. That is FNA's behaviour, so CNA keeps it — `Decompose` is simply not
+a mirroring test, and anything that needs handedness (glTF's winding rule, `GLTF-116`) takes the
+determinant of the 3×3 instead.
+
+
+## glTF L6 oracle: the normal-matrix sweep transposed the world one time too many — FIXED 2026-08-12
+
+`GltfConformanceL6.NormalMatrixIsTheInverseTransposeOfTheWorldUpper3x3` checks the renderer's
+cofactor derivation against `Matrix::Invert` on the same world. It rebuilt the XNA matrix from the
+captured `worldColMajor` array and then transposed it — but `Matrix::ToColumnMajor` is a **straight
+sequential copy** of XNA's row-major storage (reinterpreting a row-vector matrix's rows as a
+column-vector matrix's columns *is* the transpose, so no arithmetic one is performed). Copying the
+array back therefore already reproduces the XNA world, and the extra transpose asked the oracle for
+the **inverse** rotation.
+
+Invisible for the whole life of the suite because every world 3×3 in the corpus was diagonal, and a
+diagonal matrix is its own transpose. `anim-translation-scale` is the first fixture whose bound
+world carries a rotation, and it failed immediately. The renderer's own derivation was correct
+throughout; only the oracle was wrong.
+
+The sweep now counts how many worlds it saw that are actually asymmetric and fails if that count is
+zero, so it cannot go back to agreeing with itself under either convention.
+
+
+## glTF validation ran cgltf's validator before its own alignment check — FIXED 2026-08-12
+
+**Found by the container fuzz (`plan_gltf.md` `GLTF-040`) on its first run under UBSan**, not by
+inspection, and it is the same class as `REMED-NA-016` one call earlier.
+
+`ValidateGltfEXT` ran `cgltf_validate` first and CNA's own §3.6.2.4 alignment refusal after it. That
+is one call too late: `cgltf_validate` does not merely inspect metadata — for every indexed
+primitive it walks the index accessor's **actual bytes** through `cgltf_calc_index_bound`, with a
+raw `*(const uint16_t*)` cast. A file whose index `bufferView` is oddly offset therefore performed a
+misaligned 16-bit load *inside the validator that exists to protect the reader*, before the check
+that would have refused the file ever ran.
+
+```text
+third_party/cgltf/cgltf.h:1566:44: runtime error: load of misaligned address …
+  #0 cgltf_calc_index_bound  cgltf.h:1566
+  #1 cgltf_validate          cgltf.h:1714
+  #2 CNA::Internal::GltfImport::ValidateGltfEXT
+```
+
+**Fixed by ordering, not by patching cgltf** (`GLTF-038`'s rule): the two metadata-only checks —
+§3.6.2.4 alignment, then `GLTF-039`'s span arithmetic — now run **before** `cgltf_validate`. Both
+read offsets and sizes and never buffer contents, so they are safe on an unvalidated document, and
+after them cgltf only ever walks bytes a check has already vouched for.
+
+One visible consequence, recorded because it looks like a regression and is not:
+`bad-accessor-out-of-bounds` is now refused by CNA's span check rather than by cgltf's, so its
+diagnostic changed — from "a range extends past the data backing it" to "reads 36 bytes from a
+bufferView of 24 bytes", which is the better message and is what its fixture now asserts.
+
+## glTF suites outside the `Gltf*` filter were neither sanitised nor rung-checked — FIXED 2026-08-12
+
+`RuntimeGltfModelTest` loads `.gltf` through `ContentManager` end to end, and its name does not
+begin with `Gltf`. Three things keyed off that prefix: the conformance ladder's "every glTF suite
+belongs to exactly one rung" check, the ladder's own CTest registration, and the sanitizer CI job's
+`--gtest_filter='Gltf*'`. The suite was therefore invisible to all three.
+
+It was not idle in the meantime: **four of its cases had been failing since `GLTF-215`** changed
+effect selection, on every renderer that reports `GraphicsCapability::ThreeD` — they assert
+`BasicEffect`/`SkinnedEffect`/`DualTextureEffect` for materials that now select the PBR path. The
+`STUB` renderer skips them, so a green run said nothing about them at all. They surfaced the moment
+a second renderer (`HEADLESS`) ran the corpus (`plan_gltf.md` `GLTF-383`).
+
+Fixed in three places: the ladder now matches a suite whose name **contains** `Gltf`, the rung list
+carries `RuntimeGltfModelTest.*`, and the CI job filters on `*Gltf*`. The four cases now assert the
+effect the material model selects, and say why in a comment.
+
+## A file with no `scenes` array imported every mesh at the origin — FIXED 2026-08-13
+
+Found by `scene-no-scenes`, a fixture written while completing `plan_gltf.md` `GLTF-399`'s scene
+group. §3.5 permits a glTF file with **no `scenes` array at all** and says nothing is *required* to
+be rendered — which is not "nothing may be", and CNA's own documented decision is to import
+everything.
+
+`BuildSceneGraph` returned an **empty graph** in that case, with the comment "caller falls back to
+'every mesh'". The caller does exactly that, so the geometry arrived — **with no placement**. Every
+mesh sat at the origin and every node transform was discarded.
+
+That is defect **D1**'s failure mode surviving in the one corner the scene traversal never covered:
+`GLTF-113`/`GLTF-114` fixed placement *for nodes reached through a scene*, and a file with no scenes
+reaches none. The corpus had no such asset, so nothing could have caught it.
+
+Fixed by walking the **root nodes** (`parent == nullptr`) when there is no scene, which keeps the
+fallback's reach and gives every mesh the transform the file authored. The L4 oracle and the corpus
+generator now make the same fallback explicit rather than returning nothing, so all three agree —
+and `scene-no-scenes` asserts it at L1 (no default scene is a legitimate manifest value of `-1`),
+L3 and L4.
+
+## A morph target with no POSITION was indistinguishable from one full of zeros — FIXED 2026-08-13
+
+Found while building `GLTF-292`'s morph fixture family, by a fixture authored specifically to have
+a target carrying **only** `NORMAL` deltas.
+
+`ExtractMesh` sized every target's position-delta array *before* checking whether the target
+authored one:
+
+```cpp
+out.morphPositionDeltas[ti].resize(vertexCount);   // unconditional
+if (posDeltaAcc) { /* fill it */ }
+```
+
+So a spec-legal target with no `POSITION` arrived as `vertexCount` zero vectors — byte-identical to
+a target that authored zeros. Two consequences, neither of which any test could have caught,
+because both are about a *distinction that no longer existed*:
+
+* **`MorphReportEXT::targetsWithoutPositions` could never be non-zero.** A counter that is
+  structurally unable to report is worse than a missing one: it reads as evidence that nothing was
+  missing.
+* The blend added a zero vector per vertex per such target, and `BlendMorphTargetsEXT` indexed
+  `PositionDeltas[t][v]` unconditionally — safe only because the array was never empty.
+
+Fixed by moving the `resize` inside the branch, so **emptiness means "this target contributes
+nothing"** for positions exactly as it already did for normals and tangents, and by guarding the
+blend's read. One rule instead of two, and the report can now say what it was written to say.
+
+## glTF import: the eight defects the forensic audit found (`plan_gltf.md` D1–D8)
+
+`plan_gltf.md` `GLTF-012`. Every one was found by the conformance campaign's own oracle ladder
+rather than by a bug report, which is the point worth recording: each produced a **model that
+rendered**, so none would have arrived as a bug report at all. Each has a corpus fixture that
+reproduces it, and each fixture keeps asserting the fixed behaviour so a regression fails a
+green test rather than going quiet again.
+
+**Where the regression test is now, and why it is not here.** None of D1–D8 has an inverted
+"known-defect" test any more, and that is deliberate: an inverted test asserts the *bug*, so it has
+to be deleted the day the bug is fixed, which is the day it stops protecting anything. Each record
+instead stays in the corpus ledger as a witness — with the audit's original measurement preserved
+under `priorActual` — while the fixed behaviour is asserted in full by the ordinary green suites
+named below. `GltfKnownDefect.EveryOpenDefectInTheCorpusLedgerHasAnExecutableTestHere` asserts that
+bookkeeping in both directions, so a record that reopens without a test fails.
+
+| ID | What it did | Fixture | Owning task | Regression test | Status |
+|---|---|---|---|---|---|
+| D1 | Every mesh instance was emitted in mesh-local space with an identity bone, so a mesh instanced by two nodes drew twice at the origin | `xf-shared-mesh` | `GLTF-113`/`GLTF-114` | `GltfConformanceL4`, `GltfModelShape` | **Fixed** |
+| D2 | A parent node's transform never reached its child, so a scaled parent with a translated child placed the child at its own local offset | `xf-parent-child` | `GLTF-113`/`GLTF-114` | `GltfConformanceL4`, `GltfSceneGraphBones` | **Fixed** |
+| D3 | `node.matrix` was discarded entirely — the import data model had nowhere to put it | `xf-matrix-node` | `GLTF-107`/`GLTF-113` | `GltfConformanceL4`, `GltfConventions` | **Fixed** |
+| D4 | A sparse **index** accessor decoded to all zeros: `cgltf_accessor_read_index` returns 0 when the accessor is sparse or has no bufferView, with no error channel, and the caller checked neither | `sparse-indices` | `GLTF-063` | `GltfConformanceL3`, `GltfIndexDecode` | **Fixed** |
+| D5 | `primitive.mode` was never read, so every topology was flattened into an index list all three loaders divided by three and drew as a triangle list — a strip lost every triangle after the first, a point cloud became one arbitrary triangle, and neither warned | `mode-triangle-strip`, `mode-lines`, `mode-points` | `GLTF-071`/`GLTF-072`/`GLTF-073`/`GLTF-078` | `GltfConformanceL3`, `GltfConformanceL5`, `GltfPrimitiveTopology`, `GltfDrawTopology` | **Fixed** |
+| D6 | Rigid (non-joint) node animation was dropped: an unskinned model's clips had nowhere to live | `anim-rigid-node` | `GLTF-294` | `GltfRigidAnimation` | **Fixed** |
+| D7 | A factor-only metallic-roughness material was downgraded to an untextured white `BasicEffect` — the selection rule asked which texture *maps* were present, so a material with every PBR factor and no map could never select `PbrEffect` | `mat-factor-only-gold` | `GLTF-215`/`GLTF-216` | `GltfConformanceL3`, `GltfMaterialState`, `GltfConformanceL6` (`MaterialFactorsReachTheBoundEffect`) | **Fixed** |
+| D8 | `BuildSkeleton` walked parent links only inside the skin's own joint set, so an armature transform above the joints was dropped from the bind pose while the authored `inverseBindMatrices` still contained it | `skin-armature-ancestor` | `GLTF-245`/`GLTF-247`/`GLTF-249` | `GltfSkinSpaces`, `GltfSkinComposition` | **Fixed** |
+
+D7's L6 entry is the one worth reading twice. D7 decoded correctly at L3 for the whole of the audit
+and still rendered opaque white, because nothing assigned the decoded material to an effect — so an
+L3-only regression test would pass while the defect was live. That is why the material rows are
+asserted at the **effect boundary** as well as at import.
+
+Two further defects were found in the **vendored cgltf** rather than in CNA, and are worked around
+CNA-side with the workaround pinned to the vendored behaviour so an upgrade retires both copies:
+
+| What | Where | Worked around by |
+|---|---|---|
+| Sparse accessor values were read at the base accessor's stride rather than tightly packed, contradicting cgltf's own validator | `third_party/cgltf/cgltf.h` | `ApplySparseOverridesTightly` (`GLTF-062`) |
+| §3.6.2.2's `max(c/N, −1)` clamp was omitted for signed normalized components, so −128 decoded to −1.0079 | `third_party/cgltf/cgltf.h` | `ClampNormalizedSigned` (`GLTF-056`) |
+
+One defect is **partially remediated** rather than fixed, and is recorded as such in the corpus's
+own ledger so the conformance suite keeps asserting the current behaviour:
+
+| ID | What it does | Fixture | Owning task |
+|---|---|---|---|
+| `GLTF-241` | A primitive with `COLOR_0` **and** a metallic-roughness material cannot be imported as the file asks: no CNA vertex layout carries a colour alongside a tangent and no PBR shader reads a colour stream, so it imports through the non-PBR path with its colours and without its material. The stride-24 layout it lands on has no normal slot either, so an authored `NORMAL` is discarded and the primitive cannot be lit at all. Both losses are now reported by name rather than silent. | `mat-vertex-color-pbr` | `GLTF-238`/`GLTF-241` |
+
+Two environment/external-scope residues remain named rather than hidden:
+
+* Renderer context-loss recovery (`GLTF-439`) cannot be measured here because the available
+  renderers expose only a no-op simulation hook.
+* The glTF viewer's own defect list lives in `openeggbert/cna-gltf-viewer` (`GLTF-421`), a separate
+  repository.
+
+The former EasyGL unknown-stride defect (`GLTF-157`) is closed: a real OPENGLES3 build now runs a
+registered test proving an unlisted stride is rejected by name instead of silently bound as
+position-only.
+
 ## LLGL post-audit disposition (2026-08-09)
 
 This is the authoritative disposition for LLGL entries later in this historical ledger. It does
@@ -23,6 +227,84 @@ not rename or absorb them:
 
 The original detailed entries remain below as evidence of discovery and prior experiments. Their
 old `OPEN` headings are historical where this disposition explicitly supersedes them.
+
+## Pinned MojoShader is not hardened against hostile compiled-effect content
+
+**Backend:** FNA3D (the defect is in MojoShader itself, so it reaches every backend that would use
+it -- SDL_GPU, OpenGL, D3D11 and the planned Vulkan/Metal adapters alike).
+
+**Status:** FIXED to a measured bound. Forty crash classes are fixed by
+`cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch` and one in CNA's own
+`Fna3dCompiledEffect.cpp`. The coverage-guided campaign is clean on both FNA3D drivers past the
+FX-051 bar -- over three million executions on OpenGL/GLSL and over two and a half million on
+SDL_GPU/SPIR-V, no new artifact. Not closed outright: the SPIR-V emitter still validates untrusted
+shader bytecode with `assert()` in about fifty places no campaign has yet reached.
+
+A compiled Effect Framework binary is untrusted binary input handed to a native parser that was
+written for compiler output, not for hostile content. The plan_fx.md FX-051 mutation campaign
+(`tools/graphics/compiled_effect_fuzzer.cpp --campaign`) found forty-one distinct ways it crashed the
+process -- dereferenced NULL parse results, asserts on parsed values, allocations sized before
+their own bounds check, register copies sized by a constant table rather than by the parsed
+storage, an unchecked shader-array selector, and a union member read without checking the object's
+type. Forty are upstream and are now ordinary parser errors; the fortieth was CNA's own
+sampler-texture map reading a parameter's value storage as sampler states on the strength of its
+type alone. `docs/fx-bytecode-fuzzing.md` lists them.
+
+What remains: nothing the campaign currently reaches. Both FNA3D drivers met the FX-051 bar on
+2026-08-15 -- 3,079,834 coverage-guided executions on OpenGL/GLSL and 2,669,555 on SDL_GPU/SPIR-V,
+under AddressSanitizer with asserts fatal, no new artifact. That is a measured bound, not a proof:
+the SPIR-V emitter still validates untrusted shader bytecode with `assert()` in roughly fifty
+places no campaign has yet reached.
+
+**Consequence for CNA's contract:** `docs/fx-compiled-effects.md` promises that malformed content
+fails explicitly and safely. That holds for CNA's own layer and, to the bound above, for the parser
+paths a coverage-guided campaign reaches -- but it is not a guarantee for arbitrary hostile
+content, and the porter guide says so. Treat a compiled effect like any other natively-parsed
+asset: ship your own; treat a user-supplied one as untrusted input that has been made much harder
+to weaponise, not as safe.
+
+**Fix direction:** keep running the campaign as the surface changes, extending the managed patch. Upstream
+MojoShader would be the better long-term home for these fixes.
+
+## FNA3D resource renderers that outlive their device free through a dangling FNA3D_Device
+
+**Backend:** FNA3D (found on the SDL_GPU/Vulkan driver; the ownership bug is driver-independent).
+
+**Status:** OPEN. Found 2026-08-14 by the plan_fx.md FX-054 full-suite regression run; not caused
+by the compiled-effect work, which never touches these types.
+
+A `Fna3dRenderTargetCubeRenderer` (and, by the same pattern, the other `Fna3dResources.cpp`
+renderers) keeps a raw `FNA3D_Device*` and guards its destructor only with `device_ == nullptr`.
+When the resource outlives its `GraphicsDevice` -- which is exactly what
+`MetalResourceHealth.RenderTargetCubeRendererEscapesThroughTextureCubeBaseMove` deliberately
+arranges by moving a renderer out through the `TextureCube` base and holding the `shared_ptr` past
+device destruction -- that pointer is dangling rather than null, so the destructor calls
+`FNA3D_AddDisposeTexture` on freed memory.
+
+Effect: running the whole `CnaTests` binary under the FNA3D renderer ends in a segmentation fault
+after the last test, so the run produces no gtest summary even though every test passed. The suite
+passes when run standalone, which is why it went unnoticed.
+
+AddressSanitizer, from a full-suite run of `cmake-build-fna3d-asan`:
+
+```
+ERROR: AddressSanitizer: heap-use-after-free
+    #0 FNA3D_AddDisposeTexture FNA3D.c:754
+    #1 Fna3dRenderTargetCubeRenderer::~Fna3dRenderTargetCubeRenderer Fna3dResources.cpp:452
+   ...
+    #10 MetalResourceHealth_RenderTargetCubeRendererEscapesThroughTextureCubeBaseMove_Test::TestBody
+        MetalResourceHealthTests.cpp:240
+freed by:
+    #1 SDLGPU_DestroyDevice FNA3D_Driver_SDL.c:4263
+    #2 FNA3D_DestroyDevice FNA3D.c:247
+    #3 Fna3dRenderer::~Fna3dRenderer Fna3dRenderer.cpp:428
+```
+
+**Fix direction:** give the FNA3D renderer a shared liveness token that its destructor
+invalidates, and have every `Fna3dResources.cpp` renderer hold a weak reference to it and skip
+native disposal once the device is gone -- the discipline several other renderers already apply,
+and the discipline the neighbouring `MetalResourceHealth.*RejectAfterDeviceDeath` cases exist to
+enforce.
 
 ## Multiple SpriteBatch Begin/End in one frame discards all but the last
 

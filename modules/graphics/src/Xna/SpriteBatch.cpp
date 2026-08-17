@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <functional>
 #include <limits>
 #include <stdexcept>
 
@@ -223,6 +224,9 @@ namespace Microsoft::Xna::Framework::Graphics
                 flushBatch();
             renderer_->End();
             renderer_->SetCustomEffect(nullptr);
+            // Deferred renderers may submit their final texture group only from End(). Retain
+            // every queued texture renderer through that call, then release the queue.
+            spriteQueue_.clear();
         }
         begun         = false;
         customEffect_ = nullptr;
@@ -243,9 +247,13 @@ namespace Microsoft::Xna::Framework::Graphics
         // FNA itself doesn't guard SpriteBatch.Draw's texture argument, but its managed runtime
         // fails more safely there than a raw C++ null-reference dereference would here, so this is
         // a genuine hardening fix, not just an FNA-parity gap.
-        System::ObjectDisposedException::ThrowIf(texture.getIsDisposedProperty(), texture.getNameProperty());
+        System::ObjectDisposedException::ThrowIf(texture.getIsDisposedProperty(),
+                                                  texture.getNameProperty());
+        std::shared_ptr<ITextureRenderer> textureRenderer = texture.GetRendererWeak().lock();
+        if (!textureRenderer)
+            throw System::ObjectDisposedException(texture.getNameProperty());
         SpriteInfo info;
-        info.texture    = &texture;
+        info.texture    = std::move(textureRenderer);
         info.destRect   = dest;
         info.srcRect    = src;
         info.color      = color;
@@ -267,7 +275,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::flushSingle(const SpriteInfo& s)
     {
         if (!renderer_ || !s.texture) return;
-        renderer_->Draw(s.texture->GetRenderer(),
+        renderer_->Draw(*s.texture,
                        s.destRect, s.srcRect, s.color,
                        s.rotation, s.origin, s.effects, s.layerDepth);
     }
@@ -294,15 +302,13 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             std::stable_sort(spriteQueue_.begin(), spriteQueue_.end(),
                 [](const SpriteInfo& a, const SpriteInfo& b) {
-                    return a.texture < b.texture;
+                    return std::less<const ITextureRenderer*>{}(a.texture.get(), b.texture.get());
                 });
         }
         // Deferred: no sort, submission order
 
         for (const SpriteInfo& s : spriteQueue_)
             flushSingle(s);
-
-        spriteQueue_.clear();
     }
 
     // -----------------------------------------------------------------------

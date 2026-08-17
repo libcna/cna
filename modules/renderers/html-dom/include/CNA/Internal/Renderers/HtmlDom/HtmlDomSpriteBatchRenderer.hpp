@@ -90,7 +90,7 @@ namespace CNA::Internal::Renderers::HtmlDom
          *
          * @param effect The effect requested; null restores the built-in path.
          * @throws std::runtime_error for any non-null effect -- there is no programmable shader
-         *         stage in CSS compositing, the same conclusion `SDL_RENDERER` and `CANVAS` reached.
+         *         stage in CSS compositing, the same conclusion the native renderer and `CANVAS` reached.
          */
         void SetCustomEffect(Effect* effect) override;
 
@@ -99,7 +99,7 @@ namespace CNA::Internal::Renderers::HtmlDom
          *
          * Maps the magnification ("expand") component of `TextureFilter` to CSS `image-rendering`,
          * which is the only sampling control CSS backgrounds expose -- the same
-         * magnification-dominant grouping `SDL_RENDERER` (Task 701) and `CANVAS` (CANVAS-42) use
+         * magnification-dominant grouping the native renderer (Task 701) and `CANVAS` (CANVAS-42) use
          * against their own coarser primitives.
          *
          * @param textureFilter Raw TextureFilter ordinal.

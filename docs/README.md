@@ -1,6 +1,6 @@
 # docs/ index
 
-99 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
+169 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
 AI agent) can tell what's current without opening every file. It groups files by topic and flags
 which ones are known-current vs. historical/dated. Entries not explicitly flagged have not been
 individually re-verified in the 2026-07-11 documentation pass that produced this index — treat
@@ -14,6 +14,20 @@ on it) rather than assuming either way.
   "is X still broken" over any dated snapshot below.
 - **`graphics-renderer-feature-matrix.md`** — current per-renderer Graphics feature status
   (SDL_Renderer/EasyGL/Vulkan/Bgfx). Start here for "does renderer X support feature Y."
+- **[`gltf-renderer-stride-conformance.md`](gltf-renderer-stride-conformance.md)** — current
+  seven-layout audit and automated evidence across STUB, HEADLESS, OpenGL ES 3 and Vulkan.
+- **[`gltf-renderer-pbr-fallbacks.md`](gltf-renderer-pbr-fallbacks.md)** — five-map native binding
+  ABIs and semantic neutral textures, audited across every PBR-capable renderer implementation.
+- **[`renderer-registry.md`](renderer-registry.md)** — the canonical list of the **47** public
+  renderer identities (enum, CMake selector, compile definition, factory, platform/dependency
+  gate). Start here for "which renderers does CNA have."
+- **[`tinygl-renderer.md`](tinygl-renderer.md)** — capability boundary for `TINYGL`, the
+  fixed-function CPU OpenGL renderer (C-Chads/tinygl); task breakdown in `../plan_tinygl.md`, and
+  the pre-implementation probe in `../tinygl-spike/README.md`.
+- **[`renderer-expansion-candidates.md`](renderer-expansion-candidates.md)** — surveyed catalog of
+  **41** possible future renderer identities, screened against the live registry and against the
+  "no alias identities" rule, plus the list of things that must *not* become identities. A
+  catalog only: it authorizes nothing, exactly like `../FUTURE.md`.
 - **[`webgpu-renderer.md`](webgpu-renderer.md)** — current status, build instructions and explicit
   limitations for the experimental fifth renderer; detailed remaining work is in `../plan_webgpu.md`.
 - **[`sokol-renderer.md`](sokol-renderer.md)** — capability boundary, build options and known
@@ -106,6 +120,11 @@ Kept for their investigation methodology and root-cause detail, not as current s
 
 - `android-graphics-limitations.md`, `web-emscripten-graphics-limitations.md` — per-platform
   Graphics constraints (Emscripten, Android NDK).
+- **[`apple-platforms.md`](apple-platforms.md)** — macOS and iOS: build instructions, the iOS
+  renderer allow-list, bundle/lifecycle/storage behavior, and an explicit per-claim evidence
+  boundary (macOS has a native CI gate; iOS final-links for device and runs a one-frame smoke app
+  in the simulator, but still lacks physical-device and feature evidence). Task breakdown is in
+  `../plan_apple.md`.
 - `sdl-renderer-2d-completeness.md` — SDL_Renderer's own full Phase 70 2D audit.
 - **[`skia-renderer.md`](skia-renderer.md)** — the experimental Skia CPU-raster 2D renderer; unlike
   an accelerated Skia/GPU path, only its evidence-linked bounded feature table is advertised.

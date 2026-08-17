@@ -6,6 +6,7 @@
 #include <string>
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Platform/NativeWindowHandle.hpp"
 #include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
@@ -13,7 +14,15 @@
 #include "System/EventHandler.hpp"
 #include "System/Object.hpp"
 
-struct SDL_Window;
+namespace CNA::Platform
+{
+    class IPlatformWindow;
+}
+
+namespace CNA::Devices
+{
+    class DisplayInfo;
+}
 
 namespace Microsoft::Xna::Framework
 {
@@ -21,15 +30,16 @@ namespace Microsoft::Xna::Framework
     class GraphicsDeviceManager;
 
     /**
-     * @brief Represents the game window backed by an SDL window.
+     * @brief Represents the game window backed by the selected platform.
      *
-     * FNA defines GameWindow as abstract with per-platform subclasses; CNA collapses
-     * that hierarchy into one concrete SDL-backed class.
+     * FNA defines GameWindow as abstract with per-platform subclasses; CNA keeps one concrete
+     * facade and delegates its behavior to `IPlatformWindow`.
      */
     class GameWindow : public System::Object
     {
         friend class Game;
         friend class GraphicsDeviceManager;
+        friend class CNA::Devices::DisplayInfo;
 
     public:
         /** @brief String type alias for C++ compatibility. */
@@ -46,17 +56,20 @@ namespace Microsoft::Xna::Framework
         /** @brief Raised when the screen device name changes. */
         System::EventHandler<System::EventArgs> ScreenDeviceNameChanged;
 
-        /** @brief Creates a window wrapper without an attached SDL window. */
+        /** @brief Creates a window wrapper without an attached platform window. */
         GameWindow();
 
         /**
-         * @brief Creates a window wrapper for an existing SDL window.
-         * @param window Pointer to an existing SDL_Window to wrap.
+         * @brief Creates a non-owning wrapper for an existing platform window.
+         *
+         * The caller retains ownership and must keep @p window alive for this object's lifetime.
+         *
+         * @param window Platform window to borrow; may be null.
          */
-        CNAEXT explicit GameWindow(SDL_Window* window);
+        CNAEXT explicit GameWindow(CNA::Platform::IPlatformWindow* window);
 
         /** @brief Destructor. */
-        ~GameWindow() override = default;
+        ~GameWindow() override;
 
         /**
          * @brief Gets whether the user may resize the window.
@@ -89,17 +102,15 @@ namespace Microsoft::Xna::Framework
         [[nodiscard]] SharpRuntime::IntPtr getHandleProperty() const;
 
         /**
-         * @brief Gets the underlying native SDL window this instance wraps.
+         * @brief Gets the native window-system handle this instance wraps.
          *
-         * CNA extension for code that needs to query SDL3 window/display state this
-         * class does not itself expose as a property (e.g.
-         * `CNA::Devices::DisplayInfo`'s content-scale/safe-area queries) — never for
-         * use in the strict XNA-facing API surface itself.
+         * CNA extension for renderer or interop code that needs a platform-neutral native handle.
+         * The returned value owns nothing and is valid only while the borrowed platform window
+         * remains alive. Callers must inspect its `system` before using a typed native field.
          *
-         * @return The native SDL_Window pointer, or nullptr if this GameWindow wraps
-         * no SDL window.
+         * @return The native handle, or an `Unknown` empty handle when no window is attached.
          */
-        CNAEXT [[nodiscard]] SDL_Window* GetNativeSdlWindowEXT() const;
+        CNAEXT [[nodiscard]] CNA::Platform::NativeWindowHandle GetNativeWindowHandleEXT() const;
 
         /**
          * @brief Gets the name of the screen/display containing this window.
@@ -114,7 +125,7 @@ namespace Microsoft::Xna::Framework
         [[nodiscard]] const String& getTitleProperty() const;
 
         /**
-         * @brief Sets the title of the window and updates the native SDL window.
+         * @brief Sets the title of the window and updates the platform window.
          * @param title The new window title.
          */
         void setTitleProperty(const String& title);
@@ -126,7 +137,7 @@ namespace Microsoft::Xna::Framework
         [[nodiscard]] bool getIsBorderlessEXTProperty() const;
 
         /**
-         * @brief Shows or hides the window border when supported by SDL.
+         * @brief Shows or hides the window border when supported by the platform.
          * @param value true to remove the border; false to restore it.
          */
         void setIsBorderlessEXTProperty(bool value);
@@ -135,7 +146,7 @@ namespace Microsoft::Xna::Framework
          * @brief Minimizes the window to the taskbar/dock.
          *
          * CNA extension — XNA has no minimize/restore API of its own. No-op if this
-         * GameWindow wraps no SDL window.
+         * GameWindow wraps no platform window.
          */
         CNAEXT void MinimizeEXT();
 
@@ -143,7 +154,7 @@ namespace Microsoft::Xna::Framework
          * @brief Restores a minimized or maximized window to its normal state.
          *
          * CNA extension — XNA has no minimize/restore API of its own. No-op if this
-         * GameWindow wraps no SDL window.
+         * GameWindow wraps no platform window.
          */
         CNAEXT void RestoreEXT();
 
@@ -205,7 +216,10 @@ namespace Microsoft::Xna::Framework
         virtual void SetTitle(const String& title);
 
     private:
-        SDL_Window* window_;
+        // GameWindow never owns the platform window. GraphicsDevice or the public constructor's
+        // caller keeps it alive.
+        CNA::Platform::IPlatformWindow* window_;
+        SharpRuntime::IntPtr legacyHandle_;
         String title_;
         String screenDeviceName_;
         Rectangle clientBounds_;
@@ -216,12 +230,14 @@ namespace Microsoft::Xna::Framework
         bool pendingFullScreen_;
         bool hasPendingScreenDeviceChange_;
 
-        void setWindowInternal(SDL_Window* window);
+        void setWindowInternal(CNA::Platform::IPlatformWindow* window,
+                               SharpRuntime::IntPtr legacyHandle);
+        [[nodiscard]] CNA::Platform::IPlatformWindow* getPlatformWindowInternal() const;
         void setCurrentOrientationProperty(DisplayOrientation value);
-        void updateFromSDL();
-        void refreshCachedSDLState(bool raiseEvents);
-        [[nodiscard]] Rectangle queryClientBoundsFromSDL() const;
-        [[nodiscard]] String queryScreenDeviceNameFromSDL() const;
+        void updateFromPlatform();
+        void refreshCachedPlatformState(bool raiseEvents);
+        [[nodiscard]] Rectangle queryClientBoundsFromPlatform() const;
+        [[nodiscard]] String queryScreenDeviceNameFromPlatform() const;
         [[nodiscard]] DisplayOrientation orientationFromBounds(const Rectangle& bounds) const;
         [[nodiscard]] bool orientationIsSupported(DisplayOrientation orientation) const;
     };

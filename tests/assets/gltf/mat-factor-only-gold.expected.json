@@ -1,6 +1,6 @@
 {
   "id": "mat-factor-only-gold",
-  "description": "A metallic-roughness material with no texture maps at all: gold baseColorFactor at 50% alpha, non-default metallic/roughness/emissive factors, alphaMode BLEND, doubleSided. Every one of those is a first-class glTF material property and none of them survives import today. The scalar factors were added when promoting the audit's f8, which authored only the base colour, alpha mode and double-sidedness -- they widen the same defect without changing it.",
+  "description": "A metallic-roughness material with no texture maps at all: gold baseColorFactor at 50% alpha, non-default metallic/roughness/emissive factors, alphaMode BLEND, doubleSided, plus factor-only IOR/specular extensions. Every one of those is a first-class glTF material property. The scalar factors were added when promoting the audit's f8, which authored only the base colour, alpha mode and double-sidedness -- they widen the same defect without changing it.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -16,7 +16,8 @@
   "specAnchors": [
     "metallic-roughness-material",
     "alpha-coverage",
-    "double-sided"
+    "double-sided",
+    "extensions"
   ],
   "inventory": {
     "id": "mat-factor-only-gold",
@@ -32,6 +33,9 @@
       "baseColorFactor",
       "alphaMode BLEND",
       "doubleSided",
+      "KHR_materials_ior",
+      "KHR_materials_specular",
+      "factor-only dielectric F0",
       "no texture maps"
     ],
     "auditFixture": "f8"
@@ -43,14 +47,21 @@
     "nodeCount": 1,
     "meshCount": 1,
     "materialCount": 1,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
     "skinCount": 0,
     "animationCount": 0,
     "accessorCount": 3,
     "bufferViewCount": 3,
     "bufferCount": 1,
     "bufferByteLength": 78,
-    "extensionsUsed": [],
-    "extensionsRequired": []
+    "extensionsUsed": [
+      "KHR_materials_ior",
+      "KHR_materials_specular"
+    ],
+    "extensionsRequired": [],
+    "punctualLightCount": 0
   },
   "l2": {
     "accessors": [
@@ -172,6 +183,7 @@
             1.0
           ]
         ],
+        "tangents": [],
         "texcoords": [],
         "colors": [],
         "joints": [],
@@ -188,6 +200,18 @@
             2
           ]
         ],
+        "importPolicy": {
+          "imported": true,
+          "topologyMode": 4,
+          "topologyName": "TRIANGLES",
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "converted": false,
+          "primitiveCount": 1
+        },
         "material": {
           "index": 0,
           "name": "Gold",
@@ -199,6 +223,19 @@
           ],
           "metallicFactor": 0.9,
           "roughnessFactor": 0.35,
+          "ior": 2.0,
+          "specularFactor": 0.3,
+          "specularColorFactor": [
+            0.25,
+            1.0,
+            12.0
+          ],
+          "dielectricF0": [
+            0.008333333333333333,
+            0.03333333333333333,
+            0.3
+          ],
+          "dielectricF90": 0.3,
           "emissiveFactor": [
             0.25,
             0.1,
@@ -279,7 +316,7 @@
       {
         "mesh": 0,
         "primitive": 0,
-        "stride": 32,
+        "stride": 48,
         "vertexCount": 3,
         "fields": [
           {
@@ -293,47 +330,94 @@
             "size": 12
           },
           {
-            "name": "TextureCoordinate",
+            "name": "Tangent",
             "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
             "size": 8
           }
         ],
         "vertexBufferFile": "mat-factor-only-gold.vb.bin",
-        "vertexBufferBytes": 96,
-        "vertexBufferSha256": "0bf2d7345e853cc2a0d95efbd090e7d6da38cdc1e83660b3ce95842179ea5288",
+        "vertexBufferBytes": 144,
+        "vertexBufferSha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683",
         "indexElementSize": 2,
         "indexCount": 3,
         "indexBufferFile": "mat-factor-only-gold.ib.bin",
         "indexBufferBytes": 6,
         "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "sourceTopology": "TRIANGLES",
         "topology": "TRIANGLES",
         "primitiveCount": 1
       }
     ]
   },
+  "rejection": null,
   "defects": [
     {
       "id": "D7",
-      "summary": "A factor-only metallic-roughness material is downgraded to BasicEffect and NOT ONE material property survives. MeshOut has no field at all for baseColorFactor, alphaMode, alphaCutoff or doubleSided, and the three fields it does have -- metallicFactor, roughnessFactor, emissiveFactor -- are only assigned inside an `if (usePbr)` guard, so a factor-only material leaves them at their MeshOut defaults.",
+      "summary": "A factor-only metallic-roughness material was downgraded to BasicEffect and NOT ONE material property survived. The selection rule asked which texture MAPS were present (`normalImage || metallicRoughnessImage`), so a material with every PBR factor and no map could never select PbrEffect -- and because the factor assignments sat behind that same guard, even the fields MeshOut could carry were left at their defaults. GLTF-215 replaced the rule with the material MODEL the file declares, GLTF-217 gave a primitive with no material glTF's own default (which IS metallic-roughness), GLTF-216 added baseColorFactor and carried it to PbrEffect's DiffuseColor/Alpha, and GLTF-219/GLTF-221 ungated the scalar factors. The alpha and sidedness state -- alphaMode, alphaCutoff, doubleSided -- has no MeshOut field or effect parameter yet and is owned by GLTF-228/GLTF-229/GLTF-231.",
       "firstDivergentLayer": "L3",
-      "divergentFields": [
-        "material"
-      ],
-      "divergentFieldsByLayer": {
-        "L3": [
-          "material"
-        ]
-      },
+      "divergentFields": [],
+      "divergentFieldsByLayer": {},
       "owner": "GLTF-MATERIAL",
       "owningTasks": [
+        "GLTF-215",
+        "GLTF-216",
         "GLTF-217",
+        "GLTF-219",
+        "GLTF-221",
         "GLTF-228",
-        "GLTF-229"
+        "GLTF-229",
+        "GLTF-231"
       ],
-      "closedTasks": [],
+      "closedTasks": [
+        "GLTF-215",
+        "GLTF-216",
+        "GLTF-217",
+        "GLTF-219",
+        "GLTF-221",
+        "GLTF-228",
+        "GLTF-229",
+        "GLTF-231"
+      ],
       "remainingTasks": [],
-      "status": "known-failing",
+      "status": "fixed",
       "currentActual": {
+        "usePbr": true,
+        "stride": 48,
+        "effect": "PbrEffect",
+        "carriedFields": [
+          "baseColorFactor",
+          "metallicFactor",
+          "roughnessFactor",
+          "emissiveFactor",
+          "alphaMode",
+          "alphaCutoff",
+          "doubleSided"
+        ],
+        "lostFields": [],
+        "baseColorFactor": [
+          1.0,
+          0.72,
+          0.315,
+          0.5
+        ],
+        "metallicFactor": 0.9,
+        "roughnessFactor": 0.35,
+        "emissiveFactor": [
+          0.25,
+          0.1,
+          0.0
+        ],
+        "alphaMode": "BLEND",
+        "alphaCutoff": 0.5,
+        "doubleSided": true,
+        "note": "Not one material property is lost any more. The material selects PbrEffect; the gold base colour reaches DiffuseColor with its 0.5 alpha; the metallic/roughness/emissive factors are read for any metallic-roughness material rather than only one that carried a map; and the alpha and sidedness state reaches AlphaModeEXT/AlphaCutoff/DoubleSided on both PBR effects and through the .cnj. The L5 golden is byte-exact at stride 48, which is what proves the effect switch rather than merely asserting it. One boundary is deliberate and recorded in docs/gltf-api-change-review.md \u00a71.4: doubleSided is CARRIED, not applied -- culling is a RasterizerState the application sets. GLTF-230 proves the analogous application-owned blend and draw-order boundary without making Model::Draw seize global device state."
+      },
+      "priorActual": {
         "usePbr": false,
         "stride": 32,
         "effect": "BasicEffect",
@@ -354,7 +438,8 @@
           0.0,
           0.0
         ],
-        "note": "usePbr requires a normal map or a metallic-roughness map, so a factor-only material can never select PbrEffect -- and because the factor assignments sit behind that same usePbr guard, even the fields MeshOut could carry are left at their defaults. The surface renders opaque white with default lighting. This confirms plan_gltf.md \u00a71.1's 'zero material fields emitted' precisely."
+        "measuredOn": "fb3728267e8f2179d43b96357ff372ae712b7e7f",
+        "note": "What the forensic audit measured: usePbr required a normal map or a metallic-roughness map, so a factor-only material could never select PbrEffect, and because the factor assignments sat behind that same guard even the three fields MeshOut could carry were left at their defaults. The surface rendered opaque white under default lighting."
       }
     }
   ]

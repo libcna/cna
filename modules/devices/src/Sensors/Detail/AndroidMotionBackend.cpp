@@ -8,7 +8,9 @@
 
 #include <android/sensor.h>
 
-#include <SDL3/SDL.h>
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/Input/IPlatformSensors.hpp"
 
 #include "Microsoft/Devices/Sensors/Detail/AndroidCompassMath.hpp"
 #include "Microsoft/Devices/Sensors/Detail/AndroidMotionMath.hpp"
@@ -233,9 +235,13 @@ namespace Microsoft::Devices::Sensors::Detail
                 return raw;
             }
 
-            const SDL_DisplayOrientation orient = SDL_GetCurrentDisplayOrientation(SDL_GetPrimaryDisplay());
+            CNA::Platform::IPlatformSensors* sensors =
+                CNA::Platform::GetCurrentPlatform().GetSensors();
+            const CNA::Platform::SensorDisplayRotation rotation = sensors != nullptr
+                ? sensors->GetDisplayRotation()
+                : CNA::Platform::SensorDisplayRotation::Unknown;
             const AndroidSensorLandscapeOrientation mappedOrientation =
-                (orient == SDL_ORIENTATION_LANDSCAPE_FLIPPED)
+                (rotation == CNA::Platform::SensorDisplayRotation::Degrees270)
                     ? AndroidSensorLandscapeOrientation::Rotation270
                     : AndroidSensorLandscapeOrientation::Rotation90;
 

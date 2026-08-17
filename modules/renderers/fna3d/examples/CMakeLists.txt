@@ -52,6 +52,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     cna_register_renderer_test(NAME Fna3d_Lifetime COMMAND cna_test_fna3d_lifetime
         TIMEOUT 120 LABELS "Fna3d")
 
+    cna_fna3d_test(cna_test_fna3d_device_lifetime fna3d_device_lifetime_test.cpp)
+    # This direct-renderer test pulls GraphicsDevice.cpp in through FNA3D without otherwise
+    # referencing Input. On single-pass ELF linkers that exposes CNA's documented
+    # graphics_core <-> input static-archive cycle, so re-scan just that cycle for this target.
+    if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
+        target_link_libraries(cna_test_fna3d_device_lifetime PRIVATE
+            "-Wl,--start-group" cna_input cna_graphics_core cna_renderer_fna3d
+            "-Wl,--end-group")
+    endif()
+    cna_register_renderer_test(NAME Fna3d_Device_Lifetime
+        COMMAND cna_test_fna3d_device_lifetime TIMEOUT 120 LABELS "Fna3d")
+
     cna_fna3d_test(cna_test_fna3d_sampler fna3d_sampler_test.cpp)
     cna_register_renderer_test(NAME Fna3d_Sampler COMMAND cna_test_fna3d_sampler
         TIMEOUT 120 LABELS "Fna3d")
@@ -85,6 +97,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     cna_fna3d_test(cna_test_fna3d_capabilities fna3d_capabilities_test.cpp)
     cna_register_renderer_test(NAME Fna3d_Capabilities COMMAND cna_test_fna3d_capabilities
         TIMEOUT 120 LABELS "Fna3d")
+
+    # Keep the stated validation target executable, not merely documentary: every CTest in this
+    # directory must exercise the OpenGL arm unless a developer runs a binary directly with a
+    # different hint. The oracle script has the same default, but an explicit test property keeps
+    # `ctest -L Fna3d` uniform and visible in `ctest -V`.
+    get_property(_cna_fna3d_tests DIRECTORY PROPERTY TESTS)
+    set_tests_properties(${_cna_fna3d_tests} PROPERTIES
+        ENVIRONMENT "FNA3D_FORCE_DRIVER=OpenGL")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

@@ -221,6 +221,15 @@ void Game1::UpdateFlyers(float deltaTime)
 
 void Game1::Update(Microsoft::Xna::Framework::GameTime& gameTime)
 {
+    // A portable, useful default for every interactive build.  On a terminal this is also the
+    // end-to-end path exercised by the pseudo-TTY integration test.
+    if (Microsoft::Xna::Framework::Input::Keyboard::GetState().IsKeyDown(
+            Microsoft::Xna::Framework::Input::Keys::Escape))
+    {
+        Exit();
+        return;
+    }
+
     if (smokeFramesLeft_ > 0)
     {
         if (--smokeFramesLeft_ == 0) { Exit(); return; }

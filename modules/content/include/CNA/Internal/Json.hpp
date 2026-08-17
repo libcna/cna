@@ -34,6 +34,19 @@ namespace CNA::Internal
      * silently-truncated `1`). Object member order is preserved; lookups are linear (`.cnj`
      * documents are small).
      */
+    struct JsonValue;
+
+    /**
+     * @brief One member of a JSON object: its key and its value, in source order.
+     *
+     * A distinct type rather than `std::pair<std::string, JsonValue>` because a pair cannot be
+     * instantiated with a type that is still incomplete, which JsonValue necessarily is inside
+     * its own definition. `std::vector` may name an incomplete element type; `std::pair` may not,
+     * and libstdc++ enforces that under clang. Its two members are public and in this order, so
+     * `for (auto& [key, value] : objectValue)` reads exactly as it did before.
+     */
+    struct JsonMember;
+
     struct JsonValue
     {
         /** @brief Which alternative this value holds. */
@@ -52,7 +65,27 @@ namespace CNA::Internal
         std::vector<JsonValue> arrayValue;
 
         /** @brief Valid when @ref type is `Object`; preserves source member order. */
-        std::vector<std::pair<std::string, JsonValue>> objectValue;
+        std::vector<JsonMember> objectValue;
+
+        /**
+         * @brief Default-constructs a null value.
+         *
+         * These six are user-declared and defined out of line only so that JsonMember can stay
+         * incomplete inside this definition: an implicit destructor here would instantiate
+         * `std::vector<JsonMember>::~vector` on the spot, and a vector may name an incomplete
+         * element type only until one of its members is referenced.
+         */
+        JsonValue();
+        /** @brief Destroys the value and everything nested in it. */
+        ~JsonValue();
+        /** @brief Copies a value, including nested arrays and object members. */
+        JsonValue(const JsonValue& other);
+        /** @brief Moves a value, including nested arrays and object members. */
+        JsonValue(JsonValue&& other) noexcept;
+        /** @brief Copy-assigns a value, including nested arrays and object members. */
+        JsonValue& operator=(const JsonValue& other);
+        /** @brief Move-assigns a value, including nested arrays and object members. */
+        JsonValue& operator=(JsonValue&& other) noexcept;
 
         /** @brief True if @ref type is `Object`. */
         [[nodiscard]] bool IsObject() const { return type == JsonType::Object; }
@@ -70,15 +103,7 @@ namespace CNA::Internal
          * @return Pointer to the member's value, or `nullptr` if this is not an object or the
          *         key is absent.
          */
-        [[nodiscard]] const JsonValue* FindMember(const std::string& key) const
-        {
-            if (type != JsonType::Object) return nullptr;
-            for (const auto& [memberKey, memberValue] : objectValue)
-            {
-                if (memberKey == key) return &memberValue;
-            }
-            return nullptr;
-        }
+        [[nodiscard]] const JsonValue* FindMember(const std::string& key) const;
 
         // --- Construction helpers (Task 4.2: achievement/leaderboard local persistence) ---
 
@@ -99,15 +124,43 @@ namespace CNA::Internal
          * @param key Member name.
          * @param value Member value.
          */
-        void Set(const std::string& key, JsonValue value)
-        {
-            for (auto& [memberKey, memberValue] : objectValue)
-            {
-                if (memberKey == key) { memberValue = std::move(value); return; }
-            }
-            objectValue.emplace_back(key, std::move(value));
-        }
+        void Set(const std::string& key, JsonValue value);
     };
+
+    struct JsonMember
+    {
+        /** @brief The member's name, exactly as it appeared in the document. */
+        std::string key;
+
+        /** @brief The member's value. */
+        JsonValue value;
+    };
+
+    inline JsonValue::JsonValue() = default;
+    inline JsonValue::~JsonValue() = default;
+    inline JsonValue::JsonValue(const JsonValue& other) = default;
+    inline JsonValue::JsonValue(JsonValue&& other) noexcept = default;
+    inline JsonValue& JsonValue::operator=(const JsonValue& other) = default;
+    inline JsonValue& JsonValue::operator=(JsonValue&& other) noexcept = default;
+
+    inline const JsonValue* JsonValue::FindMember(const std::string& key) const
+    {
+        if (type != JsonType::Object) return nullptr;
+        for (const auto& [memberKey, memberValue] : objectValue)
+        {
+            if (memberKey == key) return &memberValue;
+        }
+        return nullptr;
+    }
+
+    inline void JsonValue::Set(const std::string& key, JsonValue value)
+    {
+        for (auto& [memberKey, memberValue] : objectValue)
+        {
+            if (memberKey == key) { memberValue = std::move(value); return; }
+        }
+        objectValue.push_back(JsonMember{key, std::move(value)});
+    }
 
     /** @brief Thrown by ParseJson() for any malformed JSON document. */
     class JsonParseException : public std::runtime_error
@@ -233,7 +286,8 @@ namespace CNA::Internal
                     Expect(':');
 
                     JsonValue value = ParseValue();
-                    result.objectValue.emplace_back(std::move(key.stringValue), std::move(value));
+                    result.objectValue.push_back(
+                        JsonMember{std::move(key.stringValue), std::move(value)});
 
                     SkipWhitespace();
                     if (AtEnd()) throw JsonParseException("Unterminated JSON object.");

@@ -30,7 +30,10 @@ namespace CNA::Internal::Renderers::Software
 
         int width = 0;
         int height = 0;
-        std::vector<std::uint8_t> color;  ///< RGBA8, width*height*4 bytes.
+        /// RGBA8, width*height*4 bytes. With MSAA this is the logically mutable resolved cache:
+        /// a const readback may refresh it from `multiSampleColor` without changing the rendered
+        /// image or the active render-pass state.
+        mutable std::vector<std::uint8_t> color;
         std::vector<float> depthBuffer;   ///< width*height floats, 0..1.
         /// One 8-bit stencil value per pixel. It remains per-pixel when the optional four-sample
         /// colour plane is active; it is deliberately not a per-sample depth/stencil attachment.
@@ -50,7 +53,7 @@ namespace CNA::Internal::Renderers::Software
         /// Copies every resolved RGBA pixel into all active samples. A no-op when MSAA is off.
         void CopyResolvedColorToMultiSample();
         /// Resolves the per-sample colour plane into `color`. A no-op for single-sample targets.
-        void ResolveColor();
+        void ResolveColor() const;
         void ClearColor(float r, float g, float b, float a);
         void ClearDepthValue(float depthValue);
         void ClearStencilValue(int stencilValue);
@@ -236,7 +239,7 @@ namespace CNA::Internal::Renderers::Software
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
@@ -293,7 +296,7 @@ namespace CNA::Internal::Renderers::Software
 
         [[nodiscard]] int GetWidth() const override { return framebuffer_.width; }
         [[nodiscard]] int GetHeight() const override { return framebuffer_.height; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         /**
          * @brief Copies a sub-rectangle of the rendered colour attachment into @p data as RGBA8.
@@ -306,8 +309,10 @@ namespace CNA::Internal::Renderers::Software
          *
          * Reads the colour attachment only; the depth buffer is never consulted. Rows are returned
          * top-first, matching this renderer's framebuffer layout and `ReadBackbuffer`, so no flip is
-         * applied. An unsupported or out-of-range request throws instead of leaving caller memory
-         * silently unchanged.
+         * applied. Level-zero reads of an active multisampled target first refresh the resolved
+         * colour cache from its live samples; this is a snapshot only and neither unbinds the target
+         * nor generates mipmaps. An unsupported or out-of-range request throws instead of leaving
+         * caller memory silently unchanged.
          *
          * @param level      Mip level. Levels above zero are available only after a mipmapped
          *                   target was unbound, which completes its CPU box-filter resolve.
@@ -606,8 +611,6 @@ namespace CNA::Internal::Renderers::Software
         void SetPresentationMode(int mode) override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
-        SDL_Window* GetWindowInternal() const override { return nullptr; }
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;

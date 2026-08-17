@@ -1,5 +1,12 @@
 # Blend2D Graphics Renderer — Implementation Plan
 
+
+> **Renderer selection.** This document describes the renderer as a compile-time choice
+> (`-DCNA_GRAPHICS_RENDERER=...`), which remains the default and recommended mode. Since
+> `plan_runtimerenderer.md`, CNA can also be built with several renderers and choose between
+> them at runtime — see `docs/runtime-renderer-selection.md`. Nothing below changes in
+> single-renderer mode.
+
 > **Status: v1 baseline, remediated.** `CNA_GRAPHICS_RENDERER=BLEND2D` is a genuine 2D-only
 > CPU-raster renderer backed by [Blend2D](https://github.com/blend2d/blend2d) v0.21.2. The
 > renderer was first added in a single commit (branch `claude/renderer-blend2d-jallld`) with only

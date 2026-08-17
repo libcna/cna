@@ -17,20 +17,20 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 | Horizon | Item | State |
 |---|---|---|
 | **CURRENT** | Post-audit integration campaign promoted to `develop` | 21/21 lanes accepted, 0 pending, Batch 0–6 complete, `FINAL-STAB-001` complete |
-| **CURRENT** | Public CNA renderer identities | **46** — mechanically counted from `CNA/GraphicsRendererType.hpp` (modules/core) and `cmake/RendererSelection.cmake`, pinned by `scripts/check_renderer_identities.py`. 41 at the 2026-08-10 pre-expansion promotion, **−1** for the `ASCII` renderer identity (migrated to a renderer-neutral post-process effect), **+6** for `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG` and `PORTABLEGL`, all integrated on the `11branches` integration branch |
+| **CURRENT** | Public CNA renderer identities | **47** — mechanically counted from `CNA/GraphicsRendererType.hpp` (modules/core) and `cmake/RendererSelection.cmake`, pinned by `scripts/check_renderer_identities.py`. 41 at the 2026-08-10 pre-expansion promotion, **−1** for the `ASCII` renderer identity (migrated to a renderer-neutral post-process effect), **+6** for `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG` and `PORTABLEGL`, all integrated on the `11branches` integration branch, **+1** for `TINYGL` (2026-08-13, the first identity delivered from `docs/renderer-expansion-candidates.md`) |
 | **CURRENT** | Phase 1.5 — naming normalization (backend→renderer, DIRECTX*, OPENGLES3, CNAEXT) | **COMPLETE AND PUBLIC** — implemented on `feature/renderer-naming-normalization` (endpoint `16f76cf1a`) and promoted to `develop` on 2026-08-10 as part of the pre-expansion fast-forward. See `docs/RendererNamingMigration.md`. Renderer count unchanged at 41 |
 | **CURRENT** | Phase 1.6 — module-owned examples | **COMPLETE AND PUBLIC** — implemented on `feature/module-examples` (endpoint `675e04c7a`, a descendant of the naming endpoint) and promoted in the same fast-forward. All 1373 tracked example files now live with their owning module, registered by 44 module-local `examples/CMakeLists.txt` files; only the shared `examples/golden/` oracle corpus stays at repository level. See `docs/physical-modules.md` §"Module examples" and `modularization/module-examples/` |
 | **CURRENT** | Phase 1 — CNA modularization | **COMPLETE AND PROMOTED** in three stages, all now on public `develop`: target graph + physical `src/` layout (`41028e995`), modular sharp-runtime consumption (`ea61123e6`), and the owner-requested **final physical module/package layout** (`modules/<name>/{include,src,tests}` monorepo, MODULARIZATION_PLAN.md §11–§11.2) promoted 2026-08-10 by fast-forward to `3ecbbce72` (tree unchanged by the promotion). The modularization campaign is DONE |
 | **CURRENT** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **in progress**: six additions — `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`, `PORTABLEGL` — are implemented on their own lanes and integrated on `11branches`. The remaining planned additions are untouched and each still requires its own explicit owner instruction |
 | **FUTURE** | Phase 3 — complete XNA sample campaign | **not started**; blocked on Phases 1–2 |
 | **FUTURE** | Phase 4 — historical plan/audit review | **not started**; blocked on Phase 3 |
-| **FUTURE** | Phase 5 — glTF correctness campaign | **not started**; blocked on Phase 4 |
+| **CURRENT** | Phase 5 — glTF correctness campaign | **in progress on `feature/gltf`, ahead of its stated Phase 4 dependency** (started 2026-08-11 from `gltfissues.md`'s analysis and a forensic audit that reproduced eight defects, D1–D8, every one of which produced a *model that rendered*). The working record is `plan_gltf.md`: 460 rows, **450 closed**, and all eight audit defects `fixed` in the corpus defect ledger. The evidence base is a generated 145-asset corpus, the exact L0–L6 numerical ladder run per commit under ASan+UBSan, a required production-viewer OPENGLES3 L7 gate with 137 deterministic PNGs plus 8 deterministic safe rejections, the 13-case pinned Khronos comparison and the completed 15-case Gate C viewer retake (`docs/gltf-conformance.md`). **`GLTF CORE 2.0 CORRECT` was declared on 2026-08-15** after all 20 §27.1 rows and the fresh four-renderer Gate B were green. Phase 5 remains current, rather than complete: `GLTF-459` (**GLTF ROBUST**), optional-extension/renderer-specific L7 residue and the retrospective are still open |
 
 Explicitly **not** true today, and not to be stated as true anywhere:
 
-- CNA does **not** have 55 renderers. It has **46** (41 at the pre-expansion promotion, minus the
-  removed `ASCII` renderer identity, plus `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`
-  and `PORTABLEGL`).
+- CNA does **not** have 55 renderers. It has **47** (41 at the pre-expansion promotion, minus the
+  removed `ASCII` renderer identity, plus `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`,
+  `PORTABLEGL` and `TINYGL`).
 - Modularization is complete **and promoted**, including the final physical module/package
   layout: `develop` is a module-oriented monorepo as of 2026-08-10 (`41028e995` target graph +
   physical layout, then `3ecbbce72` `modules/<name>/{include,src,tests}`; both no-loss-proven —
@@ -40,7 +40,13 @@ Explicitly **not** true today, and not to be stated as true anywhere:
   `SharpRuntime::<Component>` targets; the audit-remediation campaign itself continues on its
   feature branch and later increments merge separately.
 - The XNA samples do **not** all pass. The corpus has not been revisited.
-- glTF is **not** corrected. `cna-gltf-viewer` still displays many assets incorrectly.
+- glTF **ROBUST** is not declared and the broader campaign is not finished. What is true, with a
+  narrower and checkable meaning, is that **GLTF CORE 2.0 CORRECT was declared on 2026-08-15** from
+  all 20 §27.1 requirements and Gate B. The separate `cna-gltf-viewer` completed the pinned Gate C
+  retake, dual UV transport/selection is pixel- and Khronos-proven, and every remaining limitation
+  is enumerated in `docs/gltf-limitations.md` and reported rather than silent. Optional material
+  extensions and renderer-specific whole-corpus L7 policies remain §27.2/ROBUST work; the CORE
+  declaration must not be expanded to cover them.
 
 Phases are sequential. Each depends on its predecessor being completed and stabilized.
 

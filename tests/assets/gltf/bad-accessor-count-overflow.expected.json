@@ -1,0 +1,133 @@
+{
+  "id": "bad-accessor-count-overflow",
+  "description": "A POSITION accessor declaring 2**62 + 1 elements over a 36-byte bufferView. At a 12-byte stride the span computation wraps to 12 bytes, so every bounds check that computes it in size_t -- including cgltf_validate's -- reports the file as sound. Only arithmetic that checks for the overflow can refuse it.",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "accessors"
+  ],
+  "inventory": {
+    "id": "bad-accessor-count-overflow",
+    "owningGroup": "robustness",
+    "referencingGroups": [],
+    "validatedLayers": [
+      "L1"
+    ],
+    "features": [
+      "accessor count overflow",
+      "size_t wrap",
+      "structural validation",
+      "import rejection"
+    ],
+    "auditFixture": null,
+    "validatorExpectedErrorCodes": [
+      "ACCESSOR_MAX_MISMATCH"
+    ],
+    "validatorExceptionReason": "The impossible accessor count is this bad-* fixture's subject; the pinned Validator's own span arithmetic wraps and therefore reports only the resulting max mismatch."
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 1,
+    "meshCount": 1,
+    "materialCount": 0,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
+    "skinCount": 0,
+    "animationCount": 0,
+    "accessorCount": 2,
+    "bufferViewCount": 2,
+    "bufferCount": 1,
+    "bufferByteLength": 42,
+    "extensionsUsed": [],
+    "extensionsRequired": [],
+    "punctualLightCount": 0
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 0,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        "declaredCount": 4611686018427387905
+      },
+      {
+        "index": 1,
+        "usage": "indices",
+        "type": "SCALAR",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 3,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 36,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          2
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": []
+  },
+  "l4": {},
+  "l5": {
+    "supported": false,
+    "reason": "The asset is rejected at validation, so no buffers are produced.",
+    "blockedBy": [
+      "GLTF-039"
+    ],
+    "parts": []
+  },
+  "rejection": {
+    "stage": "validation",
+    "task": "GLTF-039",
+    "errorContains": [
+      "overflows",
+      "bad-accessor-count-overflow"
+    ],
+    "declaredCount": 4611686018427387905,
+    "wrappedSpanBytes": 12,
+    "note": "The wrap is what makes this dangerous rather than merely wrong: an honest 2**62 would fail the bounds check on the first comparison. cgltf computes the same expression and cannot see it, so the check has to be CNA's own -- and it runs before anything reads a byte."
+  },
+  "defects": []
+}
