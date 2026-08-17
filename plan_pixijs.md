@@ -65,20 +65,29 @@
 >   requests do not) — worked around by `git clone`-ing zlib v1.3.2 and manually seeding
 >   Emscripten's ports cache directory in the expected layout. After that, **all C++ compiled
 >   successfully** (every renderer's tests, `PixiJsRendererTests.cpp` included), but the final
->   **link step crashed inside `wasm-opt --asyncify`** (`UNREACHABLE executed at .../Flatten.cpp:231`)
->   under the `emsdk` `latest` alias, which resolved to **6.0.6** — noticeably newer than the
->   **6.0.2** `plan_canvas.md`'s own session used to successfully link `CnaTests.js`. Re-tried after
->   `emsdk install 6.0.2 && emsdk activate 6.0.2` (re-seeding the zlib port cache, since switching
->   SDK versions replaces the whole `upstream/emscripten` tree) — see the next update for the outcome
->   of that retry, or check `plan_pixijs.md`'s own git history / the session transcript if this
->   paragraph was not yet updated with a result.
+>   **link step crashed inside `wasm-opt --asyncify`** (`UNREACHABLE executed at .../Flatten.cpp:231`,
+>   preceded by `em++: warning: ASYNCIFY=1 is not compatible with -fwasm-exceptions. Parts of the
+>   program that mix ASYNCIFY and exceptions will not compile.`) under the `emsdk` `latest` alias
+>   (**6.0.6**). Re-tried after `emsdk install 6.0.2 && emsdk activate 6.0.2` (the exact version
+>   `plan_canvas.md`'s own session used to successfully link `CnaTests.js`; re-seeded the `zlib` port
+>   cache, since switching SDK versions replaces the whole `upstream/emscripten` tree) — **the
+>   identical crash reproduced under 6.0.2 too**, same file/line. Since it reproduces across two
+>   different emsdk point releases, this is not a toolchain-version drift issue — it is a real,
+>   already-documented-by-emcc-itself incompatibility between `-sASYNCIFY=1` and `-fwasm-exceptions`,
+>   both of which `CnaTests`' own CMake flags enable together (`ASYNCIFY` for the `SystemLink`
+>   threading tests, per `cmake/UnitTests.cmake`'s own comment; `-fwasm-exceptions` presumably for
+>   real C++ exception propagation, which this XNA-shaped codebase relies on constantly). Not chased
+>   further per this plan's own "don't keep retrying toolchain versions indefinitely" guidance —
+>   fixing it would mean changing `CnaTests`' shared Emscripten link flags (affecting every renderer,
+>   not just `PIXIJS`) and is out of this plan's scope. Left as a genuine, real, cross-renderer
+>   Emscripten build gap for a future session to pick up if it wants automated (non-browser) GTest
+>   coverage for any renderer under Emscripten, not specifically a `PIXIJS` blocker.
 >
-> **Bottom line so far**: `PIXIJS` genuinely builds and links under a real Emscripten toolchain
-> (`cna_renderer_pixijs` and `cna_test_pixijs_smoke` both proven), fixing one real bug along the way.
-> The remaining open item to get automated (non-browser) GTest coverage running is specific to the
-> shared `CnaTests` target's `-sASYNCIFY=1` flag interacting badly with a newer Binaryen, not to
-> anything in this renderer's own code — track it as an emsdk-version pin, not a `PixiJsRenderer.cpp`
-> bug, if it recurs.
+> **Bottom line**: `PIXIJS` genuinely builds and links under a real Emscripten toolchain
+> (`cna_renderer_pixijs` and `cna_test_pixijs_smoke` both proven, one real bug found and fixed along
+> the way). Automated (non-browser) GTest coverage for `PixiJsRendererTests.cpp` is blocked on a
+> real, reproduced, non-renderer-specific `CnaTests`/Emscripten toolchain gap
+> (`-sASYNCIFY=1` + `-fwasm-exceptions`), not on anything in this renderer's own code.
 
 ### What remains (in dependency order)
 
@@ -88,11 +97,15 @@
 3. ~~Fix whatever the first real Emscripten build surfaces.~~ **One real bug found and fixed**:
    `Vector2::getZeroProperty()` doesn't exist (`Vector2::Zero` does). No further compile errors
    remain in `cna_renderer_pixijs`/`cna_test_pixijs_smoke` as of this update.
-4. **Still open**: get the shared `CnaTests` target (needed for `PixiJsRendererTests.cpp`'s
-   structural GTest coverage, and for `PixiJsBlendStateMapping`/`PixiJsRendererThrowNo3D` to
-   actually run under `node`) to link — blocked on an `-sASYNCIFY=1`-vs-Binaryen toolchain issue
-   unrelated to this renderer's own code (see the update above); try an older/different emsdk pin,
-   or investigate the Binaryen crash directly.
+4. **Still open, confirmed not an emsdk-version issue**: the shared `CnaTests` target (needed for
+   `PixiJsRendererTests.cpp`'s structural GTest coverage, and for
+   `PixiJsBlendStateMapping`/`PixiJsRendererThrowNo3D` to actually run under `node`) fails to link
+   under Emscripten with a real `-sASYNCIFY=1` + `-fwasm-exceptions` Binaryen crash, reproduced
+   identically under both emsdk 6.0.6 and 6.0.2 (the version `plan_canvas.md` used successfully) — a
+   genuine, cross-renderer `CnaTests`/Emscripten build gap, not something to keep chasing by trying
+   more emsdk versions. Fixing it means touching `CnaTests`' own shared link flags
+   (`cmake/UnitTests.cmake`), which affects every renderer, not just this one — a separate task from
+   this plan.
 5. Run `cna_test_pixijs_smoke` in a real browser (`emrun`), not `node` (confirmed: `node` cannot get
    past `SDL_Init`, same as `CANVAS-15`) — the first real pixel-level evidence this renderer draws
    anything at all.

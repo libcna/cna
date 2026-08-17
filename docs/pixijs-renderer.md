@@ -42,11 +42,15 @@ obtained copy (e.g. via `npm pack pixi.js@7.4.2`) was used instead; both paths a
   `ReferenceError: window is not defined` before any renderer-specific code runs, because Node has
   no real DOM. This is the expected, already-known boundary (needs a real browser via `emrun`), not
   a new PixiJS-specific failure.
-- **Not yet verified**: anything that requires the shared `CnaTests` target (built with
-  `-sASYNCIFY=1`) to link -- that link step currently crashes inside Binaryen's `wasm-opt --asyncify`
-  under a newer emsdk (6.0.6); `plan_canvas.md`'s own session used an older 6.0.2 and linked fine.
-  This blocks `PixiJsRendererTests.cpp`'s structural GTest coverage from running under `node`, and
-  is an emsdk-version/toolchain issue, not a bug in this renderer's own code. See `plan_pixijs.md`'s
+- **Confirmed blocked, and confirmed NOT an emsdk-version issue**: the shared `CnaTests` target
+  (built with `-sASYNCIFY=1` and `-fwasm-exceptions`) fails to link under Emscripten --
+  `em++` itself warns `ASYNCIFY=1 is not compatible with -fwasm-exceptions`, and `wasm-opt --asyncify`
+  then crashes (`UNREACHABLE executed at .../Flatten.cpp:231`). Reproduced **identically** under both
+  emsdk 6.0.6 and 6.0.2 (the exact version `plan_canvas.md`'s own session used to successfully link
+  `CnaTests.js`), so this is a real flag-combination incompatibility, not toolchain drift. This
+  blocks `PixiJsRendererTests.cpp`'s structural GTest coverage from running under `node` -- fixing it
+  means changing `CnaTests`' own shared link flags (`cmake/UnitTests.cmake`), which affects every
+  renderer, not just `PIXIJS`, and is out of this renderer's own scope. See `plan_pixijs.md`'s
   2026-08-17 update for the full account, including the (unrelated) workaround needed for
   Emscripten's own blocked `zlib` port fetch in a network-restricted sandbox.
 - **Not yet verified, and still the real headline gap**: nothing has been proven to draw a single
