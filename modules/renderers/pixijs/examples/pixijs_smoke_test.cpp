@@ -29,7 +29,7 @@ using namespace CNA::Internal::Renderers::PixiJs;
 
 namespace
 {
-    constexpr int kExpectedChecks = 22;
+    constexpr int kExpectedChecks = 23;
 }
 
 class PixiJsSmokeTest : public Game
@@ -101,7 +101,7 @@ protected:
             renderer.GetViewportSize(w, h);
             check(w > 0 && h > 0, "GetViewportSize() reports a positive logical size");
         }
-        else if (frame_ == 13)
+        else if (frame_ == 14)
         {
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             result_ = (passCount_ == kExpectedChecks) ? 0 : 1;
@@ -352,6 +352,26 @@ protected:
             dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
             check(pixels[0] == Color(50, 75, 119, 255),
                   "a generic (non-preset) BlendState composites via a real custom PixiJS blend-mode table entry");
+        }
+        else if (frame_ == 13)
+        {
+            // plan_pixijs.md PIXIJS-50/51: BlendState::NonPremultiplied had no test of its own --
+            // only ever exercised implicitly by sharing AlphaBlend's code path. This proves it is
+            // genuinely wired (reaches PixiJsSpriteBatchRenderer, produces a real composite) rather
+            // than silently falling through to some other default. Same fixture and expected result
+            // as frame 6's own AlphaBlend check (178,74,118,255) -- this renderer's known,
+            // documented v1-scope limitation is that NonPremultiplied and AlphaBlend are not yet
+            // distinguished (PIXIJS-51's own precisely-characterized premultiply gap), so an
+            // identical result here is the CORRECT current behavior to lock in, not a bug in this
+            // test's own expectation.
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::NonPremultiplied);
+            spriteBatch_->Draw(*semiTransparentTexture_, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+            spriteBatch_->End();
+
+            std::vector<Color> pixels(64 * 64, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
+            check(pixels[0] == Color(178, 74, 118, 255),
+                  "BlendState::NonPremultiplied is genuinely wired and composites straight-alpha content correctly");
         }
     }
 

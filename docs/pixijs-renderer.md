@@ -5,7 +5,7 @@
 `PIXIJS` was authored on **2026-08-16** per direct task instruction and is CNA's newest, most
 experimental renderer. On **2026-08-17** a real Emscripten toolchain build was performed for the
 first time, and later the same day `cna_test_pixijs_smoke` was run in a **real browser** (headless
-Chromium), starting at **5/5 PASS** and growing across several rounds the same day to **22/22
+Chromium), starting at **5/5 PASS** and growing across several rounds the same day to **23/23
 PASS**, covering scaled draws, rotation, `SpriteEffects` flip, all 3 currently-mapped blend presets
 plus a fully generic custom `BlendState`, full render-target bind/Clear/draw/readback round-tripping
 (both via `SpriteBatch` and via direct `Texture2D::SetData`), both sampler-state entry points
@@ -52,7 +52,7 @@ obtained copy (e.g. via `npm pack pixi.js@7.4.2`) was used instead; both paths a
   `ReferenceError: window is not defined` before any renderer-specific code runs, because Node has no
   real DOM.
 - **Run in a real browser (headless Chromium, driven by Playwright, `--use-gl=swiftshader`), served
-  over local HTTP: grew from `5/5 PASS` to `22/22 PASS` across several rounds on 2026-08-17.** The
+  over local HTTP: grew from `5/5 PASS` to `23/23 PASS` across several rounds on 2026-08-17.** The
   first attempt scored 3/5 -- window/renderer plumbing checks passed, but both pixel-value checks
   (`GetBackBufferData` after a scaled `Draw`) failed. Diagnosed live in the page (`page.evaluate()`
   dumping texture buffers, sprite state, and a manually-forced re-render + `extract.pixels()`), which
@@ -113,6 +113,11 @@ obtained copy (e.g. via `npm pack pixi.js@7.4.2`) was used instead; both paths a
     `setBlendMode` applies them via `gl.blendFuncSeparate`/`gl.blendEquationSeparate`. A real
     multiply-style `BlendState` (`ColorSourceBlend=DestinationColor,ColorDestinationBlend=Zero`)
     composited to the exact expected pixel.
+  - **`BlendState::NonPremultiplied`** (frame 13, → 23/23): previously untested at all (only ever
+    exercised implicitly by sharing `AlphaBlend`'s code path) -- now confirmed genuinely wired,
+    producing the same straight-alpha compositing result `AlphaBlend` does. This locks in today's
+    correct-but-incomplete behavior (the two presets are not yet *distinguished* from each other --
+    see the `AlphaBlend`/premultiply gap below) rather than leaving it silently unverified.
 - **Confirmed blocked, and confirmed NOT an emsdk-version issue**: the shared `CnaTests` target
   (built with `-sASYNCIFY=1` and `-fwasm-exceptions`) fails to link under Emscripten --
   `em++` itself warns `ASYNCIFY=1 is not compatible with -fwasm-exceptions`, and `wasm-opt --asyncify`
