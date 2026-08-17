@@ -24,7 +24,6 @@
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
-
 #include <algorithm>
 #include <cctype>
 #include <cstdint>

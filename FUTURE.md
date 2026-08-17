@@ -17,7 +17,7 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 | Horizon | Item | State |
 |---|---|---|
 | **CURRENT** | Post-audit integration campaign promoted to `develop` | 21/21 lanes accepted, 0 pending, Batch 0–6 complete, `FINAL-STAB-001` complete |
-| **CURRENT** | Public CNA renderer identities | **47** — mechanically counted from `CNA/GraphicsRendererType.hpp` (modules/core) and `cmake/RendererSelection.cmake`, pinned by `scripts/check_renderer_identities.py`. 41 at the 2026-08-10 pre-expansion promotion, **−1** for the `ASCII` renderer identity (migrated to a renderer-neutral post-process effect), **+6** for `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG` and `PORTABLEGL`, all integrated on the `11branches` integration branch, **+1** for `TINYGL` (2026-08-13, the first identity delivered from `docs/renderer-expansion-candidates.md`) |
+| **CURRENT** | Public CNA renderer identities | **48** — mechanically counted from `CNA/GraphicsRendererType.hpp` (modules/core) and `cmake/RendererSelection.cmake`, pinned by `scripts/check_renderer_identities.py`. 41 at the 2026-08-10 pre-expansion promotion, **−1** for the `ASCII` renderer identity (migrated to a renderer-neutral post-process effect), **+6** for `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG` and `PORTABLEGL`, all integrated on the `11branches` integration branch, **+1** for `TINYGL` (2026-08-13, the first identity delivered from `docs/renderer-expansion-candidates.md`), **+1** for `IGL` (2026-08-15) |
 | **CURRENT** | Phase 1.5 — naming normalization (backend→renderer, DIRECTX*, OPENGLES3, CNAEXT) | **COMPLETE AND PUBLIC** — implemented on `feature/renderer-naming-normalization` (endpoint `16f76cf1a`) and promoted to `develop` on 2026-08-10 as part of the pre-expansion fast-forward. See `docs/RendererNamingMigration.md`. Renderer count unchanged at 41 |
 | **CURRENT** | Phase 1.6 — module-owned examples | **COMPLETE AND PUBLIC** — implemented on `feature/module-examples` (endpoint `675e04c7a`, a descendant of the naming endpoint) and promoted in the same fast-forward. All 1373 tracked example files now live with their owning module, registered by 44 module-local `examples/CMakeLists.txt` files; only the shared `examples/golden/` oracle corpus stays at repository level. See `docs/physical-modules.md` §"Module examples" and `modularization/module-examples/` |
 | **CURRENT** | Phase 1 — CNA modularization | **COMPLETE AND PROMOTED** in three stages, all now on public `develop`: target graph + physical `src/` layout (`41028e995`), modular sharp-runtime consumption (`ea61123e6`), and the owner-requested **final physical module/package layout** (`modules/<name>/{include,src,tests}` monorepo, MODULARIZATION_PLAN.md §11–§11.2) promoted 2026-08-10 by fast-forward to `3ecbbce72` (tree unchanged by the promotion). The modularization campaign is DONE |
@@ -28,9 +28,9 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 
 Explicitly **not** true today, and not to be stated as true anywhere:
 
-- CNA does **not** have 55 renderers. It has **47** (41 at the pre-expansion promotion, minus the
+- CNA does **not** have 55 renderers. It has **48** (41 at the pre-expansion promotion, minus the
   removed `ASCII` renderer identity, plus `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`,
-  `PORTABLEGL` and `TINYGL`).
+  `PORTABLEGL`, `TINYGL` and `IGL`).
 - Modularization is complete **and promoted**, including the final physical module/package
   layout: `develop` is a module-oriented monorepo as of 2026-08-10 (`41028e995` target graph +
   physical layout, then `3ecbbce72` `modules/<name>/{include,src,tests}`; both no-loss-proven —

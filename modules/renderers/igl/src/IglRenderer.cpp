@@ -1330,12 +1330,13 @@ namespace CNA::Internal::Renderers::Igl
     }
 }
 
-#ifdef CNA_RENDERER_IGL
-namespace CNA::Internal::Renderers
+namespace CNA::Internal::Renderers::Igl
 {
+    // plan_runtimerenderer.md design decision 4: declared in this family's own namespace so
+    // several renderer archives can link into one binary (see IglRendererDescriptor.cpp, which
+    // takes this function's address).
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<CNA::Internal::Renderers::Igl::IglRenderer>(args);
+        return std::make_unique<IglRenderer>(args);
     }
 }
-#endif

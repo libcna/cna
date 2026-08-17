@@ -259,6 +259,7 @@ effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usabl
 - `FNA3D` (FNA's own XNA-shaped graphics library; picks SDL_GPU/Direct3D 11/OpenGL at runtime, and executes XNA's actual stock effects — see [`docs/fna3d-renderer.md`](docs/fna3d-renderer.md))
 - `OPENVG` (OpenVG 1.1 2D vector graphics via ShivaVG on a desktop OpenGL context; desktop Linux/Windows/macOS -- see [`docs/openvg-renderer.md`](docs/openvg-renderer.md))
 - `PORTABLEGL` (CPU software OpenGL 3.x-ish pipeline via `rswinkle/PortableGL`; no GPU/window required -- see [`docs/portablegl-renderer.md`](docs/portablegl-renderer.md))
+- `TINYGL` (CPU fixed-function OpenGL 1.x subset via `C-Chads/tinygl`; 1-bit colour-key transparency, no stencil/scissor/render targets/shaders -- see [`docs/tinygl-renderer.md`](docs/tinygl-renderer.md))
 - `IGL` (facebook/igl "Intermediate Graphics Library"; drives IGL's own OpenGL/GLX or Vulkan backend, selected per process with `CNA_IGL_BACKEND` -- see [`docs/igl-renderer.md`](docs/igl-renderer.md))
 
 ### Tradeoffs
