@@ -128,6 +128,13 @@ namespace CNA::Internal::Renderers::DirectX9
             case 28: count = 3; return kStride28;
             case 32: count = 3; return kStride32;
             case 48: count = 4; return kStride48;
+            // plan_gltf.md GLTF-462: stride 60's first four fields are byte-identical to stride 48,
+            // and a D3D9 declaration carries element OFFSETS while the stride travels with
+            // SetStreamSource -- so the stride-48 element list describes a stride-60 record exactly,
+            // minus the second UV set and the packed colour this renderer's PBR shader does not
+            // read. Without this row the declaration was null and the draw was refused outright.
+            // GLTF-465 owns consuming the two trailing slots.
+            case 60: count = 4; return kStride48;
             case 52: count = 5; return kStride52;
             case 56: count = 6; return kStride56;
             case 68: count = 6; return kStride68;

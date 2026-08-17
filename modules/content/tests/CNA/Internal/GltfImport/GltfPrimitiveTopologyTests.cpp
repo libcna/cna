@@ -399,6 +399,9 @@ TEST(GltfPrimitiveTopology, StripAndFanImportThroughExtractMeshAsTriangleLists)
     // composing them here states the claim that actually belongs to ExtractMesh -- that it
     // converts, and converts by the same rule -- without restating the arithmetic.
     const std::vector<std::uint32_t> authored = {0, 1, 2, 0, 2, 3};
+    // QuadWithMode's own four positions, decoded from its base64 buffer. Stated here so a
+    // geometric comparison does not have to re-decode them.
+    const std::vector<float> kQuadPositions = {0, 0, 0,  1, 0, 0,  1, 1, 0,  0, 1, 0};
     for (const PrimitiveTopology source : {PrimitiveTopology::Triangles,
                                            PrimitiveTopology::TriangleStrip,
                                            PrimitiveTopology::TriangleFan})
@@ -416,13 +419,64 @@ TEST(GltfPrimitiveTopology, StripAndFanImportThroughExtractMeshAsTriangleLists)
         // the source topology still says what the file declared.
         EXPECT_EQ(PrimitiveTopology::Triangles, mesh.topology);
         EXPECT_EQ(source, mesh.sourceTopology);
-        EXPECT_EQ(ConvertToTriangleList(authored, source), DecodedIndices(mesh));
         EXPECT_EQ(0u, DecodedIndices(mesh).size() % 3)
             << "a converted list must always divide evenly into triangles";
+        EXPECT_EQ(ConvertToTriangleList(authored, source).size(), DecodedIndices(mesh).size())
+            << "the conversion rule decides how many indices come out, whatever they are numbered";
 
-        // The vertex buffer is untouched by a topology conversion -- only the index list is
-        // rewritten, which is precisely why no renderer needs to change.
-        EXPECT_EQ(4u * 48u, mesh.vertexBytes.size());
+        // The topology conversion itself touches only the INDEX list, which is precisely why no
+        // renderer needs to change for it. What can renumber afterwards is §3.7.2.1's flat-normal
+        // split (plan_gltf.md GLTF-461), and this fixture authors no NORMAL -- so the two are
+        // separated here rather than conflated.
+        //
+        // Read as a strip, [0,1,2,0,2,3] over a planar quad expands to a +Z triangle, a REVERSED
+        // one, a degenerate one and a second reversed one. Vertices 0, 1 and 2 therefore belong to
+        // faces of opposite orientation, which flat shading cannot express without duplicating
+        // them -- so the strip case legitimately grows, while the list and fan cases (whose faces
+        // all agree) must not move at all.
+        const std::size_t vertices =
+            mesh.vertexBytes.size() / static_cast<std::size_t>(mesh.stride);
+        if (source == PrimitiveTopology::TriangleStrip)
+        {
+            EXPECT_EQ(7u, vertices);
+            EXPECT_EQ(3u, mesh.flatNormalDuplicatedVertexCountEXT);
+            // The split renumbers, so index equality is the wrong assertion; geometric equality is
+            // the right one. Every emitted triangle must occupy exactly the same three points as
+            // the triangle the conversion rule describes, in the same order -- which is what makes
+            // the split provably lossless rather than merely plausible.
+            const std::vector<std::uint32_t> converted =
+                ConvertToTriangleList(authored, source);
+            const std::vector<std::uint32_t> emitted = DecodedIndices(mesh);
+            ASSERT_EQ(converted.size(), emitted.size());
+            const auto positionAt = [&](std::uint32_t index) {
+                std::array<float, 3> p{};
+                std::memcpy(p.data(),
+                            mesh.vertexBytes.data() +
+                                static_cast<std::size_t>(index) *
+                                    static_cast<std::size_t>(mesh.stride),
+                            sizeof(p));
+                return p;
+            };
+            for (std::size_t corner = 0; corner < converted.size(); ++corner)
+            {
+                SCOPED_TRACE("corner " + std::to_string(corner));
+                const std::array<float, 3> emittedPoint = positionAt(emitted[corner]);
+                const std::size_t sourceIndex = converted[corner];
+                ASSERT_LT(sourceIndex * 3u + 2u, kQuadPositions.size());
+                EXPECT_FLOAT_EQ(kQuadPositions[sourceIndex * 3u], emittedPoint[0]);
+                EXPECT_FLOAT_EQ(kQuadPositions[sourceIndex * 3u + 1], emittedPoint[1]);
+                EXPECT_FLOAT_EQ(kQuadPositions[sourceIndex * 3u + 2], emittedPoint[2]);
+            }
+        }
+        else
+        {
+            EXPECT_EQ(4u, vertices)
+                << "every face of this expansion faces the same way, so nothing needs splitting "
+                   "and the vertex buffer must be exactly what the file authored";
+            EXPECT_EQ(0u, mesh.flatNormalDuplicatedVertexCountEXT);
+            EXPECT_EQ(ConvertToTriangleList(authored, source), DecodedIndices(mesh));
+        }
+        EXPECT_EQ(vertices * 48u, mesh.vertexBytes.size());
     }
 }
 
@@ -534,14 +588,20 @@ TEST(GltfPrimitiveTopology, DecodedDracoStripFacesAreNotConvertedAsASecondStrip)
 
 // --- GLTF-081 / GLTF-082: conversion must not disturb the vertices, and must say it happened ----
 
-TEST(GltfPrimitiveTopology, ConvertingAStripRewritesTheIndicesAndLeavesTheVertexOrderAlone)
+TEST(GltfPrimitiveTopology, ConvertingAStripCarriesEveryMorphDeltaWithItsOwnVertex)
 {
     // Morph deltas are addressed per VERTEX, by position in the target accessor, while the strip
-    // conversion rewrites the INDEX list. The two only coexist if the conversion leaves the vertex
-    // order completely alone -- and the tempting optimisation is exactly the one that breaks it:
-    // vertices 1 and 2 appear in both of a four-index strip's triangles, so de-duplicating or
-    // compacting would still produce a mesh, still produce a morph, and put every delta on the
-    // wrong vertex. A plausible deformation of the wrong shape, with nothing to indicate it.
+    // conversion rewrites the INDEX list. The tempting optimisation is exactly the one that breaks
+    // that: vertices 1 and 2 appear in both of a four-index strip's triangles, so de-duplicating or
+    // compacting them would still produce a mesh, still produce a morph, and put every delta on the
+    // wrong vertex -- a plausible deformation of the wrong shape, with nothing to indicate it.
+    //
+    // plan_gltf.md GLTF-461 restated the invariant without weakening it. This primitive authors no
+    // NORMAL, so §3.7.2.2 requires flat normals for each morph target, and every corner becomes its
+    // own vertex; the deltas move with it. What must hold is therefore the PAIRING, not the
+    // numbering: delta[new] == authoredDelta[sourceVertex[new]]. The manifest states `sourceVertex`
+    // itself, so the mapping is checked against an independent statement of §3.7.2.1's split rather
+    // than against whatever remap the importer happened to choose.
     using namespace CNA::Internal::GltfImport;
 
     const CnaTest::GltfOracle::LoadedFixture fixture("mode-triangle-strip-morph");
@@ -554,31 +614,47 @@ TEST(GltfPrimitiveTopology, ConvertingAStripRewritesTheIndicesAndLeavesTheVertex
 
     EXPECT_EQ(PrimitiveTopology::TriangleStrip, out.sourceTopology);
     EXPECT_EQ(PrimitiveTopology::Triangles, out.topology);
+    EXPECT_TRUE(out.morphedFlatNormalsEXT)
+        << "no authored NORMAL plus morph targets is exactly the case §3.7.2.2 makes pose-dependent";
 
-    // The vertex COUNT is the first half of "order unchanged": a compaction would shrink it.
     const auto expectedVertexCount =
         static_cast<std::size_t>(CnaTest::GltfOracle::NumberOr(expected, "vertexCount", -1.0));
+    const auto authoredVertexCount = static_cast<std::size_t>(
+        CnaTest::GltfOracle::NumberOr(expected, "authoredVertexCount", -1.0));
     ASSERT_GT(out.stride, 0);
     EXPECT_EQ(expectedVertexCount, out.vertexBytes.size() / static_cast<std::size_t>(out.stride));
-
     ASSERT_EQ(expectedVertexCount * static_cast<std::size_t>(out.stride), out.vertexBytes.size());
+    EXPECT_EQ(expectedVertexCount - authoredVertexCount,
+              out.flatNormalDuplicatedVertexCountEXT);
+
+    // The split renumbers, so the conversion's own contribution is checked separately: the emitted
+    // index list must be the split of the CONVERTED list, not of the authored strip run.
+    const std::vector<double> splitIndices =
+        CnaTest::GltfOracle::Numbers(CnaTest::GltfOracle::Member(expected, "splitIndices"));
+    ASSERT_EQ(6u, splitIndices.size());
 
     // The morph deltas must line up with those same vertices, one for one.
     ASSERT_EQ(1u, out.morphPositionDeltas.size());
     EXPECT_EQ(expectedVertexCount, out.morphPositionDeltas[0].size())
-        << "the delta count no longer matches the vertex count, so the conversion changed one of "
-           "them -- and the two are addressed by the same index";
+        << "the delta count no longer matches the vertex count, so one of them was rewritten "
+           "without the other -- and both are addressed by the same index";
 
-    const std::vector<CNA::Internal::JsonValue>& deltas =
-        CnaTest::GltfOracle::Member(expected, "morphDeltas").arrayValue;
-    ASSERT_EQ(expectedVertexCount, deltas.size());
-    for (std::size_t v = 0; v < deltas.size(); ++v)
+    const std::vector<CNA::Internal::JsonValue>& authoredDeltas =
+        CnaTest::GltfOracle::Member(expected, "authoredMorphDeltas").arrayValue;
+    ASSERT_EQ(authoredVertexCount, authoredDeltas.size());
+    const std::vector<double> sourceVertex =
+        CnaTest::GltfOracle::Numbers(CnaTest::GltfOracle::Member(expected, "sourceVertex"));
+    ASSERT_EQ(expectedVertexCount, sourceVertex.size());
+
+    for (std::size_t v = 0; v < expectedVertexCount; ++v)
     {
         SCOPED_TRACE("vertex " + std::to_string(v));
-        const std::vector<double> d = CnaTest::GltfOracle::Numbers(deltas[v]);
+        const auto source = static_cast<std::size_t>(sourceVertex[v]);
+        ASSERT_LT(source, authoredDeltas.size());
+        const std::vector<double> d = CnaTest::GltfOracle::Numbers(authoredDeltas[source]);
         ASSERT_EQ(3u, d.size());
-        // Each delta is a different distance along +Z, so a permutation is a different staircase
-        // rather than a subtly different surface.
+        // Each authored delta is a different distance along +Z, so a permutation is a different
+        // staircase rather than a subtly different surface.
         EXPECT_NEAR(static_cast<float>(d[2]), out.morphPositionDeltas[0][v].Z, 1e-5f)
             << "delta " << v << " landed on the wrong vertex";
     }

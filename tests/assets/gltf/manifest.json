@@ -258,20 +258,19 @@
     },
     {
       "id": "GLTF-241",
-      "summary": "A primitive with COLOR_0 and a metallic-roughness material cannot be imported as the file asks, and the loss runs one layer deeper than the material: the stride-24 layout a coloured primitive lands on has no Normal slot either, so an authored NORMAL is discarded and the primitive cannot be lit at all. Supporting the combination means a new stride plus a shader variant on every renderer, the same blast radius that ruled out colour-space option A. GLTF-241's acceptance allows the other outcome -- REPORTED, not silently downgraded -- and that is what landed: MeshOut names both losses and both loaders log them.",
+      "summary": "A primitive with COLOR_0 and a metallic-roughness material could not be imported as the file asks, and the loss ran one layer deeper than the material: the stride-24 layout a coloured primitive landed on has no Normal slot either, so an authored NORMAL was discarded and the primitive could not be lit at all. GLTF-241 chose the second outcome its acceptance allowed -- REPORTED rather than silently downgraded. GLTF-462 then carried the combination instead: \u00a73.7.2.1 makes COLOR_0 a linear MULTIPLIER on base colour, so it is a term in the metallic-roughness product rather than a reason to leave the model, and stride 60's four reserved discriminator bytes were already the slot it needed. What remains is the SKINNED case, which is a vertex-layout limit rather than a shading one: stride 76 is exactly the skinned PBR record's seven fields, so a colour there needs a stride every renderer's input layout would have to learn, and GLTF-463 owns it. A skinned coloured primitive keeps stride 56, so it keeps its NORMAL -- the cannot-be-lit half of this defect is gone entirely.",
       "owner": "GLTF-MATERIAL",
       "owningTasks": [
-        "GLTF-238",
-        "GLTF-241"
+        "GLTF-241",
+        "GLTF-462"
       ],
       "closedTasks": [
-        "GLTF-241"
+        "GLTF-241",
+        "GLTF-462"
       ],
-      "remainingTasks": [
-        "GLTF-238"
-      ],
+      "remainingTasks": [],
       "firstDivergentLayer": "L3",
-      "status": "partially-remediated",
+      "status": "fixed",
       "fixtures": [
         "mat-vertex-color-pbr"
       ]
@@ -1417,11 +1416,13 @@
       "validatedLayers": [
         "L1",
         "L2",
-        "L3"
+        "L3",
+        "L5"
       ],
       "features": [
         "COLOR_0 with a PBR material",
-        "unsupported material model",
+        "vertex colour as a base-colour multiplier",
+        "vertex stride 60 colour slot",
         "import report"
       ],
       "auditFixture": null
@@ -3521,8 +3522,8 @@
     },
     {
       "path": "draco-vs-uncompressed-pair.expected.json",
-      "bytes": 24950,
-      "sha256": "a565075a89c3f010a5adba3b6ade346d4c57b6bfc9731d893ef60139ab93230b"
+      "bytes": 26314,
+      "sha256": "d2f1cd03ed2c9dd4e7d35f58f672d261e8c094e49a27e54646d65379bb5bc2b6"
     },
     {
       "path": "draco-vs-uncompressed-pair.glb",
@@ -3556,8 +3557,8 @@
     },
     {
       "path": "draco-vs-uncompressed-pair.p2.vb.bin",
-      "bytes": 72,
-      "sha256": "823355ddeb444ee46faeb08a4dd84c0007cd758ac59699a7d1f61bfa71bd31c0"
+      "bytes": 180,
+      "sha256": "50ecc99bed0f3211b9ab3083c614a9474191fba14c6f19bc7f58c83cafaa96b6"
     },
     {
       "path": "draco-vs-uncompressed-pair.p3.ib.bin",
@@ -3566,8 +3567,8 @@
     },
     {
       "path": "draco-vs-uncompressed-pair.p3.vb.bin",
-      "bytes": 72,
-      "sha256": "823355ddeb444ee46faeb08a4dd84c0007cd758ac59699a7d1f61bfa71bd31c0"
+      "bytes": 180,
+      "sha256": "50ecc99bed0f3211b9ab3083c614a9474191fba14c6f19bc7f58c83cafaa96b6"
     },
     {
       "path": "draco-vs-uncompressed-pair.vb.bin",
@@ -3576,8 +3577,8 @@
     },
     {
       "path": "float-color.expected.json",
-      "bytes": 6563,
-      "sha256": "3f66a13ebf30a9aa8dbdcdaf74b4039e4c0128f43c856abd25f90998a8e95127"
+      "bytes": 6888,
+      "sha256": "9a774bd072509c86826e309ebd131f5589dddd9b6b83dfa4e993e6858db78ab0"
     },
     {
       "path": "float-color.glb",
@@ -3596,8 +3597,8 @@
     },
     {
       "path": "float-color.vb.bin",
-      "bytes": 72,
-      "sha256": "082d494e118e9ca9a84573506c2b39cf26b9a314f8040c07a0397f9546e52ec6"
+      "bytes": 180,
+      "sha256": "a47ebb1bdaaadd1c62a38db5cb1f36dee05fa9073736a9f7cd7d1c660f21034c"
     },
     {
       "path": "glb-basic.expected.json",
@@ -3806,8 +3807,8 @@
     },
     {
       "path": "interleaved-mixed-widths.expected.json",
-      "bytes": 6819,
-      "sha256": "dee0d364253d491f8c71811430ac34ce4651a75f99369d5b0a38ec646c5d7605"
+      "bytes": 7144,
+      "sha256": "be10a425eed3ded14579b04e88f9be3048ec4972a61eb8a02ce284489278e2b1"
     },
     {
       "path": "interleaved-mixed-widths.glb",
@@ -3826,8 +3827,8 @@
     },
     {
       "path": "interleaved-mixed-widths.vb.bin",
-      "bytes": 72,
-      "sha256": "7c3c89e67addfa5e7666811faadb026e32aad075e2f4f636369e9fd2d7a8320c"
+      "bytes": 180,
+      "sha256": "f510a22b0778df9c989f758ee354257031d39006e2189c056f8610aa15248ff6"
     },
     {
       "path": "interleaved-pos-nrm-uv.expected.json",
@@ -4246,8 +4247,8 @@
     },
     {
       "path": "mat-vertex-color-pbr.expected.json",
-      "bytes": 10583,
-      "sha256": "c4a54e907803a813b6824dcc8ff36fec54b8bbeea7f329d3279e179c97f0a91a"
+      "bytes": 11919,
+      "sha256": "3f4ef83b85b85d3db59facb7d8ac1ea7b447ae3b1b18b5177b221530dc3faa64"
     },
     {
       "path": "mat-vertex-color-pbr.glb",
@@ -4266,8 +4267,8 @@
     },
     {
       "path": "mat-vertex-color-pbr.vb.bin",
-      "bytes": 72,
-      "sha256": "c6be0730d9234a8b9f6667f93969b2f04aee8a84d35794dc2a2a4c25c15e98d1"
+      "bytes": 180,
+      "sha256": "4a84bdc7ba939ecbd83b92465a5c30ffe0982162611c494544ab34ccd5996146"
     },
     {
       "path": "mat3-padded.expected.json",
@@ -4421,8 +4422,8 @@
     },
     {
       "path": "mode-triangle-strip-morph.expected.json",
-      "bytes": 8339,
-      "sha256": "24ae90945a7e7513b8acee2d90c67c53b74f201f43273d14a0554b2fc46acfec"
+      "bytes": 11016,
+      "sha256": "c2d7ce0cac5ab6afa01a96f65320bd3b7e3844c4e82636b6199c0c700c978543"
     },
     {
       "path": "mode-triangle-strip-morph.glb",
@@ -4437,12 +4438,12 @@
     {
       "path": "mode-triangle-strip-morph.ib.bin",
       "bytes": 12,
-      "sha256": "769df21c80974149d13f85ca9f01b8361bfe89e3fcadf7aac71e3c59c247ef7b"
+      "sha256": "331cee88cf9d16fc329fa57a4d5adda0ce9de22133af028b38192e71da9c8230"
     },
     {
       "path": "mode-triangle-strip-morph.vb.bin",
-      "bytes": 192,
-      "sha256": "d45c2a7b330952e43844558a80a8f860e3499d85b41d0a7111c1a964de25ee43"
+      "bytes": 288,
+      "sha256": "f2750df6c7f7975e2bfad610c24c7417ef14d2e499d53a5a99409040852281b2"
     },
     {
       "path": "mode-triangle-strip.expected.json",
@@ -4946,8 +4947,8 @@
     },
     {
       "path": "normalized-u16-color.expected.json",
-      "bytes": 6562,
-      "sha256": "b0bd0e52c17c209a4bb9193661216b7cc2b3c791e2831ca93b7276d21800747d"
+      "bytes": 6887,
+      "sha256": "d86a4d1e45e40bb27c95c305ca8d3978739bcbbd8d37646556f2924c0c15cfae"
     },
     {
       "path": "normalized-u16-color.glb",
@@ -4966,13 +4967,13 @@
     },
     {
       "path": "normalized-u16-color.vb.bin",
-      "bytes": 72,
-      "sha256": "e30391b485e4220e22c7bde150cb04833059428ffb5a8501cebd8627c1a4b53c"
+      "bytes": 180,
+      "sha256": "5fc794fac30514942366829e7cf0804754a471dca5e320696e2d02ea65a50a59"
     },
     {
       "path": "normalized-u8-color.expected.json",
-      "bytes": 6575,
-      "sha256": "955988d7ddb6ef7ea443aa784057e90d0601fbaaf1aaa70d9c597f943a8b9379"
+      "bytes": 6900,
+      "sha256": "748ff94a0ed0163ee87317b206e16ef4933e7926b8cdc875500602415999f302"
     },
     {
       "path": "normalized-u8-color.glb",
@@ -4991,8 +4992,8 @@
     },
     {
       "path": "normalized-u8-color.vb.bin",
-      "bytes": 72,
-      "sha256": "a9d7469337c7f09463242302b16a6522e3a31f0a1df6ac18047baf83a733de70"
+      "bytes": 180,
+      "sha256": "cf25147f7780cdab4611e6e7cd946ec591e65302800e4419e1e6e8ff22a7389b"
     },
     {
       "path": "sampler-trilinear.expected.json",
@@ -6031,8 +6032,8 @@
     },
     {
       "path": "uv1-material.expected.json",
-      "bytes": 10617,
-      "sha256": "f313b3395c96697cf437dfc3352934084eb8fc75648107fea60c702130640acc"
+      "bytes": 10615,
+      "sha256": "1ad5b382f3fa4fc2c44bba3657afcf78196f1cb4821dc7486438fcb6345203e5"
     },
     {
       "path": "uv1-material.glb",
@@ -6052,7 +6053,7 @@
     {
       "path": "uv1-material.vb.bin",
       "bytes": 240,
-      "sha256": "0d343e1cad0760a1419810f0be7a4444ae620aefa80605aaa665732ea13adaf8"
+      "sha256": "b0a546efe868ada8a0a92a90cd42859a0c58a729ec509776c667ece3cdccbb0c"
     },
     {
       "path": "xf-deep-chain.expected.json",

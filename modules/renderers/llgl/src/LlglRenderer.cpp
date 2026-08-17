@@ -1567,6 +1567,17 @@ namespace CNA::Internal::Renderers::Llgl
             // byte layout -- the stride-48 PbrGpuVertex layout above with the stride-52 skinning
             // suffix (BlendWeight, BlendIndices) appended, matching
             // modules/renderers/vulkan/examples/vulkan_pbreffect_handderived_test.cpp's own SkinnedPbrGpuVertex.
+            // plan_gltf.md GLTF-462: stride 60 is the rigid PBR record with a second UV set at 48
+            // and a packed COLOR_0 at 56; its first four fields are byte-identical to stride 48.
+            // Without this case it fell to the empty default below and the mesh had no attributes at
+            // all. The two trailing slots stay undeclared because this renderer's PBR shader samples
+            // one UV set and reads no colour attribute -- GLTF-465 owns consuming them.
+            case 60:
+                addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
+                addAttribute("normal", LLGL::Format::RGB32Float, 3, 12);
+                addAttribute("tangent", LLGL::Format::RGBA32Float, 6, 24);
+                addAttribute("texCoord", LLGL::Format::RG32Float, 2, 40);
+                break;
             case 68:
                 addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
                 addAttribute("normal", LLGL::Format::RGB32Float, 3, 12);

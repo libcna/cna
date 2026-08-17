@@ -1703,6 +1703,14 @@ namespace CNA::Internal::Renderers::Software
                     std::memcpy(&out.u, raw.At(48), sizeof(float));
                     std::memcpy(&out.v, raw.At(52), sizeof(float));
                 }
+                // plan_gltf.md GLTF-462: stride 60's last four bytes were reserved padding and are
+                // the packed COLOR_0 now. §3.7.2.1 makes it "an additional linear multiplier to base
+                // color", and this raster path already multiplies out.r/g/b/a into the sampled base
+                // colour -- so reading it here is the whole of vertex-coloured PBR for this
+                // renderer. The `!params.vertexColorEnabled` guard further down replaces it with
+                // white for an uncoloured primitive, exactly as it does for stride 56.
+                if (stride == 60)
+                    UnpackColorBytes(raw.At(56), out.r, out.g, out.b, out.a);
             }
             else if (stride == 52 || stride == 56)
             {

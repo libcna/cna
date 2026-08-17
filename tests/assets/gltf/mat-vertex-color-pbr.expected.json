@@ -1,6 +1,6 @@
 {
   "id": "mat-vertex-color-pbr",
-  "description": "A primitive with COLOR_0 and a metallic-roughness material -- the one combination CNA cannot import as the file asks. It arrives as a BasicEffect with its vertex colours and without its material, and now says so instead of downgrading in silence.",
+  "description": "A primitive with COLOR_0 and a metallic-roughness material -- once the one combination CNA could not import as the file asks. It now arrives as a PbrEffect keeping its authored normals, its generated tangent basis, every material factor and its vertex colours, which multiply into base colour.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -24,11 +24,13 @@
     "validatedLayers": [
       "L1",
       "L2",
-      "L3"
+      "L3",
+      "L5"
     ],
     "features": [
       "COLOR_0 with a PBR material",
-      "unsupported material model",
+      "vertex colour as a base-colour multiplier",
+      "vertex stride 60 colour slot",
       "import report"
     ],
     "auditFixture": null
@@ -248,7 +250,27 @@
             2
           ],
           "converted": false,
-          "primitiveCount": 1
+          "primitiveCount": 1,
+          "generatedTangents": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ]
         },
         "material": {
           "index": 0,
@@ -274,11 +296,12 @@
           "hasMetallicRoughnessTexture": false,
           "hasOcclusionTexture": false,
           "hasEmissiveTexture": false,
-          "unsupportedMaterialModel": "metallic-roughness",
-          "importedEffect": "BasicEffect",
+          "unsupportedMaterialModel": null,
+          "importedEffect": "PbrEffect",
           "vertexColorsPreserved": true,
-          "materialPropertiesApplied": false,
-          "note": "No CNA vertex layout carries a Color alongside a Tangent and no PBR shader reads a colour stream, so supporting this means a new stride plus a shader variant on every renderer. The primitive keeps its vertex colours and the material is reported as dropped -- the other outcome GLTF-241's acceptance allows."
+          "materialPropertiesApplied": true,
+          "baseColorProduct": "baseColorFactor * baseColorTexture * COLOR_0, alpha included",
+          "note": "Stride 60 carries Position, Normal, Tangent, two UV sets and a packed Colour, so the material model and the colour stream are no longer alternatives. \u00a73.7.2.1 makes COLOR_0 a linear multiplier on base colour, which is a term in the metallic-roughness product rather than a different model."
         }
       }
     ]
@@ -346,7 +369,7 @@
       {
         "mesh": 0,
         "primitive": 0,
-        "stride": 24,
+        "stride": 60,
         "vertexCount": 3,
         "fields": [
           {
@@ -355,19 +378,34 @@
             "size": 12
           },
           {
-            "name": "Color",
+            "name": "Normal",
             "offset": 12,
-            "size": 4
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
           },
           {
             "name": "TextureCoordinate",
-            "offset": 16,
+            "offset": 40,
             "size": 8
+          },
+          {
+            "name": "TextureCoordinate1",
+            "offset": 48,
+            "size": 8
+          },
+          {
+            "name": "Color",
+            "offset": 56,
+            "size": 4
           }
         ],
         "vertexBufferFile": "mat-vertex-color-pbr.vb.bin",
-        "vertexBufferBytes": 72,
-        "vertexBufferSha256": "c6be0730d9234a8b9f6667f93969b2f04aee8a84d35794dc2a2a4c25c15e98d1",
+        "vertexBufferBytes": 180,
+        "vertexBufferSha256": "4a84bdc7ba939ecbd83b92465a5c30ffe0982162611c494544ab34ccd5996146",
         "indexElementSize": 2,
         "indexCount": 3,
         "indexBufferFile": "mat-vertex-color-pbr.ib.bin",
@@ -383,29 +421,33 @@
   "defects": [
     {
       "id": "GLTF-241",
-      "summary": "A primitive with COLOR_0 and a metallic-roughness material cannot be imported as the file asks, and the loss runs one layer deeper than the material: the stride-24 layout a coloured primitive lands on has no Normal slot either, so an authored NORMAL is discarded and the primitive cannot be lit at all. Supporting the combination means a new stride plus a shader variant on every renderer, the same blast radius that ruled out colour-space option A. GLTF-241's acceptance allows the other outcome -- REPORTED, not silently downgraded -- and that is what landed: MeshOut names both losses and both loaders log them.",
+      "summary": "A primitive with COLOR_0 and a metallic-roughness material could not be imported as the file asks, and the loss ran one layer deeper than the material: the stride-24 layout a coloured primitive landed on has no Normal slot either, so an authored NORMAL was discarded and the primitive could not be lit at all. GLTF-241 chose the second outcome its acceptance allowed -- REPORTED rather than silently downgraded. GLTF-462 then carried the combination instead: \u00a73.7.2.1 makes COLOR_0 a linear MULTIPLIER on base colour, so it is a term in the metallic-roughness product rather than a reason to leave the model, and stride 60's four reserved discriminator bytes were already the slot it needed. What remains is the SKINNED case, which is a vertex-layout limit rather than a shading one: stride 76 is exactly the skinned PBR record's seven fields, so a colour there needs a stride every renderer's input layout would have to learn, and GLTF-463 owns it. A skinned coloured primitive keeps stride 56, so it keeps its NORMAL -- the cannot-be-lit half of this defect is gone entirely.",
       "firstDivergentLayer": "L3",
-      "divergentFields": [
-        "normals"
-      ],
-      "divergentFieldsByLayer": {
-        "L3": [
-          "normals"
-        ]
-      },
+      "divergentFields": [],
+      "divergentFieldsByLayer": {},
       "owner": "GLTF-MATERIAL",
       "owningTasks": [
-        "GLTF-238",
-        "GLTF-241"
+        "GLTF-241",
+        "GLTF-462"
       ],
       "closedTasks": [
-        "GLTF-241"
+        "GLTF-241",
+        "GLTF-462"
       ],
-      "remainingTasks": [
-        "GLTF-238"
-      ],
-      "status": "partially-remediated",
+      "remainingTasks": [],
+      "status": "fixed",
       "currentActual": {
+        "usePbr": true,
+        "stride": 60,
+        "effect": "PbrEffect",
+        "vertexColorsPreserved": true,
+        "unsupportedMaterialModel": null,
+        "droppedNormalForStride": false,
+        "normalsImported": 3,
+        "vertexColorEnabled": true,
+        "note": "The rigid case is carried in full: normals, tangent basis, factors, maps and colour all arrive, and the colour multiplies base colour. The residue is a SKINNED vertex-coloured primitive, which keeps SkinnedEffect and its normals but not the metallic-roughness material; GLTF-463 owns the stride that would carry it."
+      },
+      "priorActual": {
         "usePbr": false,
         "stride": 24,
         "effect": "BasicEffect",
@@ -413,16 +455,7 @@
         "unsupportedMaterialModel": "metallic-roughness",
         "droppedNormalForStride": true,
         "normalsImported": 0,
-        "note": "The primitive keeps its vertex colours and loses both its material and its normals. Both are now named by MeshOut and logged by both loaders, so the downgrade is visible at import rather than only in the rendered result. GLTF-238 owns actually supporting the combination."
-      },
-      "priorActual": {
-        "usePbr": false,
-        "stride": 24,
-        "effect": "BasicEffect",
-        "vertexColorsPreserved": true,
-        "unsupportedMaterialModel": null,
-        "droppedNormalForStride": null,
-        "note": "The same geometry, imported in complete silence: nothing recorded that the material had been dropped, and nothing recorded that the normals had been dropped with it."
+        "note": "The same geometry, imported through a layout with no Normal slot: the material and the normals were both dropped, and before GLTF-241 neither drop was recorded at all."
       }
     }
   ]

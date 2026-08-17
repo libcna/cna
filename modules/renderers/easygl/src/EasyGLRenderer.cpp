@@ -4858,7 +4858,15 @@ else
             break;
         case 60:
             // GLTF-182/183: collision-free rigid PBR dual-UV layout. Bytes 0..47 are the
-            // established stride-48 prefix, UV1 is appended at 48 and bytes 56..59 are padding.
+            // established stride-48 prefix and UV1 is appended at 48.
+            //
+            // plan_gltf.md GLTF-462: bytes 56..59 were reserved padding and are the packed COLOR_0
+            // slot now, which is what lets a vertex-coloured metallic-roughness primitive keep its
+            // material instead of falling back to a layout with no Normal at all. Location 5
+            // mirrors the stride-52/56 precedent exactly: the slot is always bound, and
+            // GpuDrawParams::vertexColorEnabled (from PbrEffect::VertexColorEnabledEXT) decides
+            // whether the shader reads it. An uncoloured primitive fills it with opaque white, so
+            // even a mis-set gate multiplies by one rather than darkening the surface.
             vao.enable_attribute(0);
             vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
             vao.enable_attribute(1);
@@ -4869,6 +4877,8 @@ else
             vao.set_attribute_pointer(3, 2, ::easygl::DataType::Float, false, s, (void*)40);
             vao.enable_attribute(4);
             vao.set_attribute_pointer(4, 2, ::easygl::DataType::Float, false, s, (void*)48);
+            vao.enable_attribute(5);
+            vao.set_attribute_pointer(5, 4, ::easygl::DataType::UnsignedByte, true, s, (void*)56);
             break;
         case 52:
             // Task 11.10: this layout is independently duplicated (magic stride 52) in
@@ -6244,7 +6254,12 @@ std::string("#version 300 es\n") +
 "layout(location=1) in vec3 aNormal;\n"
 "layout(location=2) in vec4 aTangent;\n"
 "layout(location=3) in vec2 aUV;\n"
-+ (dualUv ? "layout(location=4) in vec2 aUV1;\n" : "") +
++ (dualUv ? "layout(location=4) in vec2 aUV1;\n"
+          // plan_gltf.md GLTF-462: only the stride-60 program declares the colour, for the reason
+          // in this function's own opening comment -- an unused varying added to the stride-48
+          // program moved thousands of llvmpipe fragments by one RGB unit, and stride 60 is the only
+          // rigid PBR record that HAS a colour slot.
+            "layout(location=5) in vec4 aColor;\n" : "") +
 CNA_GL_INSTANCE_TRANSFORM_DECL
 CNA_GL_DIRECTION_HANDEDNESS_DECL
 "uniform mat4 uWVP;\n"
@@ -6255,7 +6270,7 @@ CNA_GL_DIRECTION_HANDEDNESS_DECL
 "out vec3 vTangent;\n"
 "out float vBitangentSign;\n"
 "out vec2 vUV;\n"
-+ (dualUv ? "out vec2 vUV1;\n" : "") +
++ (dualUv ? "out vec2 vUV1;\nout vec4 vColor;\n" : "") +
 "out float vFogFactor;\n"
 "out vec3 vWorldPos;\n"
 "void main(){\n"
@@ -6271,7 +6286,7 @@ CNA_GL_DIRECTION_HANDEDNESS_DECL
 "    float instanceHandedness=(uCnaInstanced>0.5)?cnaDirectionHandedness(mat3(cnaInstanceMatrix())):1.0;\n"
 "    vBitangentSign=aTangent.w*cnaDirectionHandedness(worldDirectionMat)*instanceHandedness;\n"
 "    vUV=aUV;\n"
-+ (dualUv ? "    vUV1=aUV1;\n" : "") +
++ (dualUv ? "    vUV1=aUV1;\n    vColor=aColor;\n" : "") +
 "    vWorldPos=(uWorld*cnaPos).xyz;\n"
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
 "}\n";
@@ -6293,7 +6308,7 @@ std::string("#version 300 es\n") +
 "in vec3 vTangent;\n"
 "in float vBitangentSign;\n"
 "in vec2 vUV;\n"
-+ (dualUv ? "in vec2 vUV1;\n" : "") +
++ (dualUv ? "in vec2 vUV1;\nin vec4 vColor;\nuniform float uVertexColorEnabled;\n" : "") +
 "in float vFogFactor;\n"
 "in vec3 vWorldPos;\n"
 "uniform sampler2D uTexture;\n"
@@ -6376,8 +6391,15 @@ CNA_GL_RT_SAMPLE_UV_DECL
 // glTF §3.9.2: the base-colour TEXTURE is sRGB-encoded, the base-colour FACTOR is linear. Only
 // the sample is decoded -- transferring both would apply it twice to one of them.
 "    vec3 baseRGB=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),uSrgb.x);\n"
-"    vec3 albedo=baseRGB*uDiffuseColor.rgb;\n"
-"    float alpha=baseColorTex.a*uDiffuseColor.a;\n"
+// plan_gltf.md GLTF-462. §3.7.2.1: "if a primitive specifies a vertex color using the attribute
+// semantic property COLOR_0, then this value acts as an additional linear multiplier to base
+// color". LINEAR is the operative word and the reason there is no transfer function here: the
+// attribute is a normalized integer already in linear space, unlike the base-colour TEXTURE. Both
+// RGB and alpha are multiplied, because §3.9.2's base colour is an RGBA product.
++ (dualUv ? "    vec4 cnaVertexColor=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
+          : "    vec4 cnaVertexColor=vec4(1.0,1.0,1.0,1.0);\n") +
+"    vec3 albedo=baseRGB*uDiffuseColor.rgb*cnaVertexColor.rgb;\n"
+"    float alpha=baseColorTex.a*uDiffuseColor.a*cnaVertexColor.a;\n"
 "    vec3 N=normalize(vNormal);\n"
 "    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
@@ -6428,6 +6450,9 @@ CNA_GL_RT_SAMPLE_UV_DECL
                        dualUv ? "pbr_dual_uv" : "pbr");
         ResolveRenderTargetOrientationUniforms(program);
         auto& p = program;
+        // GLTF-462: -1 on the single-UV program, which has no colour slot to gate; BindDrawParams
+        // skips a negative location like every other optional uniform in Prog3D.
+        p.loc_vertexcolor = p.prog.uniform_location("uVertexColorEnabled");
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
         p.loc_normalmat = p.prog.uniform_location("uNormalMatrix");

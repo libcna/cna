@@ -708,7 +708,7 @@ namespace CNA::Internal::Renderers::OpenGL2
                     glVertexAttrib4f(1, 1, 1, 1, 1);
                 }
             }
-            else if (stride == 48 || stride == 68)
+            else if (stride == 48 || stride == 60 || stride == 68)
             {
                 // VertexPositionNormalTangentTexture(Skinned): float3 pos(0) + float3 normal(12) +
                 // float4 tangent(24, xyz + bitangent handedness in w) + float2 uv(40) [+ float4
@@ -735,6 +735,19 @@ namespace CNA::Internal::Renderers::OpenGL2
                     glDisableVertexAttribArray(4);
                     glDisableVertexAttribArray(5);
                 }
+                // plan_gltf.md GLTF-462. Stride 60 is the rigid PBR record with a second UV set at
+                // 48 and a packed COLOR_0 at 56, and it had NO case here at all: it fell into the
+                // `stride >= 32` catch-all below, which reads the TEXCOORD at offset 24 -- inside
+                // the tangent. So a dual-UV PBR mesh (live since GLTF-182) textured itself from the
+                // tangent's bytes, silently, and every vertex-coloured PBR mesh would have joined it
+                // now that GLTF-462 routes those here too.
+                //
+                // Only the offsets are corrected here. This renderer's PBR shader declares no
+                // colour attribute and samples a single UV set, so the second UV set at 48 and the
+                // colour at 56 stay unbound and location 1 keeps the constant opaque white set
+                // above -- which is COLOR_0's identity as a multiplier, so the surface is correct
+                // rather than merely not corrupt. Consuming them is GLTF-465's remaining work,
+                // recorded per renderer in docs/gltf-renderer-pbr-fallbacks.md.
             }
             else if (stride >= 32)
             {

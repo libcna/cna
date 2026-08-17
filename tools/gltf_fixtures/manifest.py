@@ -508,6 +508,7 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
                  weights: Sequence[Sequence[float]] | None = None,
                  indices: Sequence[int] | None = None,
                  material: dict[str, Any] | None = None,
+                 flat_normals: str | None = None,
                  dropped_attributes: Sequence[str] | None = None,
                  dropped_reason: str | None = None) -> dict[str, Any]:
     """One primitive's spec-correct semantic mesh record -- the L3 expectation.
@@ -521,6 +522,14 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
     not a licence to ignore them. They stay stated at full value here, because that is what the
     file means; the conformance comparison skips exactly those fields and asserts they came back
     EMPTY, so "dropped" cannot quietly become "present and wrong".
+
+    ``flat_normals`` opts the primitive into §3.7.2.1's flat-normal computation (``GLTF-461``):
+    ``"minimal"`` for a primitive that authors no ``NORMAL``, ``"per-corner"`` when it also carries
+    morph targets (§3.7.2.2 requires flat normals *per target*, and a ``POSITION`` delta can rotate a
+    face). Every per-vertex stream passed here is then renumbered onto the split, ``normals`` becomes
+    the computed per-face values, and ``importPolicy.flatNormalSplit`` records the remap so a reader
+    can check it rather than infer it from the output. Pass the AUTHORED streams; the split is
+    applied here exactly once.
 
     ``importPolicy`` is the one part of this record that is **not** spec-derived: it states what
     CNA's own documented policies must turn the primitive into. A strip or fan is converted to a
@@ -549,6 +558,30 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
     else:
         imported_mode = mode
         imported_indices = list(resolved)
+    # GLTF-461: §3.7.2.1's flat normals, applied to the CONVERTED triangle list -- the importer
+    # splits after the topology conversion, because a strip's adjacent triangles are exactly the
+    # shared-vertex case flat shading has to resolve.
+    flat_split = None
+    if flat_normals is not None:
+        from . import flatnormals
+        if flat_normals not in ("minimal", "per-corner"):
+            raise ValueError(f"unknown flat_normals policy {flat_normals!r}")
+        if normals:
+            raise ValueError(
+                "a primitive whose flat normals are computed must not also state authored ones -- "
+                "§3.7.2.1 applies only when NORMAL is absent")
+        flat_split = flatnormals.compute(positions, imported_indices,
+                                         per_corner=(flat_normals == "per-corner"))
+        imported_indices = flat_split.indices
+        positions = flatnormals.gather(positions, flat_split.source_vertex)
+        normals = flat_split.normals
+        tangents = flatnormals.gather(tangents, flat_split.source_vertex)
+        texcoords = flatnormals.gather(texcoords, flat_split.source_vertex)
+        if texcoords1 is not None:
+            texcoords1 = flatnormals.gather(texcoords1, flat_split.source_vertex)
+        colors = flatnormals.gather(colors, flat_split.source_vertex)
+        joints = flatnormals.gather(joints, flat_split.source_vertex)
+        weights = flatnormals.gather(weights, flat_split.source_vertex)
     import_policy: dict[str, Any] = {
         "imported": True,
         "topologyMode": imported_mode,
@@ -559,6 +592,22 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
         # well as in l5 so an L3 comparison can catch a count that no longer follows the topology.
         "primitiveCount": primitive_count_for_mode(imported_mode, len(imported_indices)),
     }
+    if flat_split is not None:
+        import_policy["flatNormalSplit"] = {
+            "policy": flat_normals,
+            "sourceVertex": list(flat_split.source_vertex),
+            "duplicatedVertices": flat_split.duplicated,
+            "mergedVertices": flat_split.merged,
+            "rule": "§3.7.2.1 requires flat normals when NORMAL is absent, and flat shading gives "
+                    "a vertex one normal PER FACE -- so a vertex shared between differently "
+                    "oriented faces must be duplicated once per orientation, which renumbers every "
+                    "per-vertex stream. New vertices are handed out in source-vertex order, so a "
+                    "primitive that does not split keeps its own numbering.",
+            "perCornerRule": "§3.7.2.2 requires flat normals for each morph target. A POSITION "
+                             "delta can rotate a face, so two faces coplanar at rest need not stay "
+                             "coplanar and a rest-pose split cannot serve every pose; only a fully "
+                             "split primitive can carry an exact per-face normal at any weight.",
+        }
     if dropped_attributes:
         import_policy["droppedAttributes"] = list(dropped_attributes)
         import_policy["droppedReason"] = dropped_reason or ""

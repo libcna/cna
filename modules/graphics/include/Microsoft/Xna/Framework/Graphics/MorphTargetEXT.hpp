@@ -102,6 +102,29 @@ namespace Microsoft::Xna::Framework::Graphics
         std::vector<float> Weights;
         /** @brief Optional time-varying weight animation track (glTF "weights" animation channel), or empty if none. */
         MorphWeightTrackEXT WeightTrack;
+        /**
+         * @brief True when the blend must recompute flat normals from the morphed positions.
+         *
+         * @note CNAEXT — plan_gltf.md `GLTF-461`. §3.7.2.2: "When the base mesh primitive does not
+         * specify normals, client implementations **MUST** calculate flat normals for each morph
+         * target." A `POSITION` delta can rotate a face, so a normal baked at rest is only right at
+         * weight zero — and the same section makes an original attribute a precondition for a
+         * target attribute, so such a primitive cannot legally carry `NORMAL` deltas to blend
+         * instead. The importer splits every corner of such a primitive into its own vertex, which
+         * is what makes the recomputed per-face normal exact rather than an average.
+         */
+        bool RecomputeFlatNormalsEXT = false;
+        /**
+         * @brief The triangle list the recomputation needs, three indices per face.
+         *
+         * @note CNAEXT — plan_gltf.md `GLTF-461`. Only read when @ref RecomputeFlatNormalsEXT is
+         * true, and empty otherwise, so an ordinary morph target costs nothing for it. Held here
+         * rather than read back from the part's `IndexBuffer` because index readback is not
+         * something every renderer can offer. A vertex that several faces still reach — which the
+         * importer's own split rules out, but a caller building this by hand could produce — gets
+         * the area-weighted sum of those faces, so the result is order-independent either way.
+         */
+        std::vector<std::uint32_t> TriangleIndicesEXT;
     };
 
     /**

@@ -1494,6 +1494,19 @@ TEST(GltfConformanceL3, SemanticMeshStreamsMatchTheManifest)
                 {
                     ASSERT_EQ(triangles.arrayValue.size() * 3, dump.indices.size())
                         << "the emitted index list does not describe the expected triangle count";
+                    // plan_gltf.md GLTF-461: §3.7.2.1's flat-normal split renumbers, so an emitted
+                    // index is compared through the manifest's own independently computed remap
+                    // rather than against the authored number directly. `triangles` stays in
+                    // AUTHORED numbering because it is the spec's own expansion of the file, which
+                    // is exactly what makes this a second opinion on the conversion rule.
+                    const std::vector<double> splitSource =
+                        Numbers(Path(policy, "flatNormalSplit.sourceVertex"));
+                    const auto authoredCorner = [&](std::uint32_t emitted) -> std::uint32_t {
+                        if (splitSource.empty()) { return emitted; }
+                        return emitted < splitSource.size()
+                            ? static_cast<std::uint32_t>(splitSource[emitted])
+                            : emitted;
+                    };
                     for (std::size_t t = 0; t < triangles.arrayValue.size(); ++t)
                     {
                         const std::vector<double> corners = Numbers(triangles.arrayValue[t]);
@@ -1501,7 +1514,7 @@ TEST(GltfConformanceL3, SemanticMeshStreamsMatchTheManifest)
                         for (std::size_t c = 0; c < 3; ++c)
                         {
                             EXPECT_EQ(static_cast<std::uint32_t>(corners[c]),
-                                      dump.indices[t * 3 + c])
+                                      authoredCorner(dump.indices[t * 3 + c]))
                                 << "triangles[" << t << "][" << c << "] -- winding is preserved "
                                    "only if a strip's odd triangle swaps its first two corners";
                         }
@@ -1662,7 +1675,29 @@ TEST(GltfConformanceL4, CnaWorldPositionsMatchTheExpectedGeometry)
             ASSERT_NE(cnaByPlacement.end(), found)
                 << "CNA imported no instance for this node/primitive pair";
             EXPECT_EQ(expectedInstance->mesh, found->second->mesh);
-            const std::vector<float> expectedPositions = Flatten(expectedInstance->worldPositions);
+            // plan_gltf.md GLTF-461: §3.7.2.1's flat-normal split duplicates a vertex shared
+            // between differently oriented faces, so CNA can emit more vertices than the file
+            // declares. The invariant is that the split DUPLICATES and never MOVES: every emitted
+            // vertex must sit exactly where its source vertex does. Mapping through the remap keeps
+            // that exact -- collapsing the copies instead would hide a copy that had moved.
+            const std::vector<std::uint32_t>& remap = found->second->vertexSource;
+            std::vector<std::array<float, 3>> expectedForCna;
+            if (remap.empty())
+            {
+                expectedForCna = expectedInstance->worldPositions;
+            }
+            else
+            {
+                EXPECT_EQ(remap.size(), found->second->worldPositions.size())
+                    << "the split remap does not describe every emitted vertex";
+                for (const std::uint32_t source : remap)
+                {
+                    ASSERT_LT(source, expectedInstance->worldPositions.size())
+                        << "the split remap names a vertex the file does not declare";
+                    expectedForCna.push_back(expectedInstance->worldPositions[source]);
+                }
+            }
+            const std::vector<float> expectedPositions = Flatten(expectedForCna);
             ExpectComponents(std::vector<double>(expectedPositions.begin(), expectedPositions.end()),
                              Flatten(found->second->worldPositions), "worldPositions");
         }
@@ -1898,9 +1933,35 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
     // than the counter taught to see through concatenation, because the ratchet's job is to make
     // the next addition a deliberate act, and it still does that from here.
     //
+    // 263 -> 265 for GLTF-461's two spec-rule probes: a normal-less quad whose morph target lifts
+    // the vertex both its triangles share (§3.7.2.2's "MUST calculate flat normals for each morph
+    // target"), and a triangle authoring TANGENT but no NORMAL (§3.7.2.1's "the provided tangents
+    // MUST be ignored"). Both ARE conformance statements and both belong in tools/gltf_fixtures/ by
+    // §3.8's rule -- they are inline only because the corpus asset count is pinned at 145 by four
+    // committed L7 provenance reports that enumerate every asset, and one of the four
+    // (`directx11`) cannot be re-captured in this environment. Promoting them is GLTF-464.
+    //
+    // 265 -> 267 for GLTF-468's two storage-form probes, and both are the same story: §3.7.2.1's
+    // attribute table allows `COLOR_n` as VEC3 or VEC4 and `TEXCOORD_n` as float, unsigned byte
+    // normalized or unsigned short normalized, and the corpus had an asset for exactly one form of
+    // each. Neither found a bug -- CNA decodes all of them -- so what they add is the assertion, and
+    // an unasserted rule is how the four §27.1.2 divergences survived. GLTF-464 owns promoting them.
+    //
+    // 267 -> 276 buys no further document, for the reason this test already records above:
+    // GLTF-468's `ColorAndTexcoordFormDocument` is PARAMETERISED (colour type and texcoord component
+    // type), so it splices `std::to_string` calls into the middle of one file and each splice closes
+    // and reopens the raw literal. Ten literal openings there are one glTF document. The ratchet is
+    // still doing its job from here -- its purpose is to make the next ADDITION deliberate, not to
+    // count string fragments, and teaching the counter to see through concatenation would trade a
+    // reliable prompt for a fragile parser.
+    //
+    // 276 -> 277 for GLTF-470's sparse animation sampler: one document, written with literal offsets
+    // so it needs no splices at all. It crosses two features the corpus covers separately and never
+    // together, which is a gap §24's own per-feature inventory is structurally unable to see.
+    //
     // Note for whoever edits this comment: the scan counts the opening delimiter anywhere in a
     // .cpp, comments included, so spelling it here would raise the very number it explains.
-    constexpr int kCeiling = 263;
+    constexpr int kCeiling = 277;
 
     int found = 0;
     std::map<std::string, int> perFile;

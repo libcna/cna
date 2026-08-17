@@ -277,7 +277,7 @@
       {
         "mesh": 0,
         "primitive": 0,
-        "stride": 24,
+        "stride": 60,
         "vertexCount": 3,
         "fields": [
           {
@@ -286,19 +286,34 @@
             "size": 12
           },
           {
-            "name": "Color",
+            "name": "Normal",
             "offset": 12,
-            "size": 4
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
           },
           {
             "name": "TextureCoordinate",
-            "offset": 16,
+            "offset": 40,
             "size": 8
+          },
+          {
+            "name": "TextureCoordinate1",
+            "offset": 48,
+            "size": 8
+          },
+          {
+            "name": "Color",
+            "offset": 56,
+            "size": 4
           }
         ],
         "vertexBufferFile": "interleaved-mixed-widths.vb.bin",
-        "vertexBufferBytes": 72,
-        "vertexBufferSha256": "7c3c89e67addfa5e7666811faadb026e32aad075e2f4f636369e9fd2d7a8320c",
+        "vertexBufferBytes": 180,
+        "vertexBufferSha256": "f510a22b0778df9c989f758ee354257031d39006e2189c056f8610aa15248ff6",
         "indexElementSize": 2,
         "indexCount": 3,
         "indexBufferFile": "interleaved-mixed-widths.ib.bin",

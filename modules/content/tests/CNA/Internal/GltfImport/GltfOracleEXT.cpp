@@ -632,7 +632,9 @@ namespace CnaTest::GltfOracle
             case 52: normalOffset = 12; uvOffset = 24; weightOffset = 32; jointOffset = 48; break;
             case 56: normalOffset = 12; uvOffset = 24; weightOffset = 32; jointOffset = 48;
                      colorOffset = 52; break;
-            case 60: normalOffset = 12; tangentOffset = 24; uvOffset = 40; uv1Offset = 48; break;
+            // GLTF-462: stride 60's reserved discriminator bytes are the packed COLOR_0 slot.
+            case 60: normalOffset = 12; tangentOffset = 24; uvOffset = 40; uv1Offset = 48;
+                     colorOffset = 56; break;
             case 68: normalOffset = 12; tangentOffset = 24; uvOffset = 40; weightOffset = 48;
                      jointOffset = 64; break;
             case 76: normalOffset = 12; tangentOffset = 24; uvOffset = 40; weightOffset = 48;
@@ -960,6 +962,7 @@ namespace CnaTest::GltfOracle
                             instance.worldPositions.push_back(
                                 TransformPoint(world, local[0], local[1], local[2]));
                         }
+                        instance.vertexSource = out.vertexSourceEXT;
                     }
                     catch (const std::exception&)
                     {

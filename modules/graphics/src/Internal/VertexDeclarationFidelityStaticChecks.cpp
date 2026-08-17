@@ -111,19 +111,24 @@ namespace
                           offsetof(PositionNormalTangentTextureStream, u)),
                   "stride 48: TextureCoordinate moved in the struct but not in the table");
 
-    // --- stride 60: PositionNormalTangentTexture2PaddedStream -------------------------------
-    static_assert(sizeof(PositionNormalTangentTexture2PaddedStream) == 60,
+    // --- stride 60: PositionNormalTangentTexture2ColorStream -------------------------------
+    static_assert(sizeof(PositionNormalTangentTexture2ColorStream) == 60,
                   "the rigid PBR+UV1 stream no longer matches its padded stride-60 record");
     static_assert(TableOffset(fidelity::kStride60, 5, VertexElementUsage::Position) ==
-                      static_cast<int>(offsetof(PositionNormalTangentTexture2PaddedStream, x)));
+                      static_cast<int>(offsetof(PositionNormalTangentTexture2ColorStream, x)));
     static_assert(TableOffset(fidelity::kStride60, 5, VertexElementUsage::Normal) ==
-                      static_cast<int>(offsetof(PositionNormalTangentTexture2PaddedStream, nx)));
+                      static_cast<int>(offsetof(PositionNormalTangentTexture2ColorStream, nx)));
     static_assert(TableOffset(fidelity::kStride60, 5, VertexElementUsage::Tangent) ==
-                      static_cast<int>(offsetof(PositionNormalTangentTexture2PaddedStream, tx)));
+                      static_cast<int>(offsetof(PositionNormalTangentTexture2ColorStream, tx)));
     static_assert(fidelity::kStride60[3].offset ==
-                      static_cast<int>(offsetof(PositionNormalTangentTexture2PaddedStream, u0)));
+                      static_cast<int>(offsetof(PositionNormalTangentTexture2ColorStream, u0)));
     static_assert(fidelity::kStride60[4].offset ==
-                      static_cast<int>(offsetof(PositionNormalTangentTexture2PaddedStream, u1)));
+                      static_cast<int>(offsetof(PositionNormalTangentTexture2ColorStream, u1)));
+    // GLTF-462: the four bytes GLTF-182 reserved as padding are the packed COLOR_0 slot now.
+    static_assert(TableOffset(fidelity::kStride60, 6, VertexElementUsage::Color) ==
+                      static_cast<int>(offsetof(PositionNormalTangentTexture2ColorStream, r)),
+                  "stride 60: the colour slot moved in the struct but not in the table");
+
 
     // --- stride 52: PositionNormalTextureSkinnedStream ----------------------------------------
     static_assert(sizeof(PositionNormalTextureSkinnedStream) == 52,

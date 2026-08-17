@@ -255,6 +255,15 @@ namespace CnaTest::GltfOracle
         GltfMatrix worldMatrix = IdentityMatrix();
         /** @brief The instance's vertex positions in world space. */
         std::vector<std::array<float, 3>> worldPositions;
+        /**
+         * @brief plan_gltf.md `GLTF-461`: emitted vertex -> source vertex, empty when identity.
+         *
+         * Only the CNA-side evaluator fills this. §3.7.2.1's flat-normal split duplicates a vertex
+         * shared between differently oriented faces, so CNA can legitimately emit more vertices
+         * than the file declares — and a comparison against the file's own accessors has to map
+         * rather than assume a one-to-one correspondence it no longer has.
+         */
+        std::vector<std::uint32_t> vertexSource;
     };
 
     /** @brief Every mesh instance of a file in world space, plus the union bounds. */

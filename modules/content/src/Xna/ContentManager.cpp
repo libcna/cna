@@ -2081,6 +2081,19 @@ namespace Microsoft::Xna::Framework::Content
             return indices;
         }
 
+        /// Widens a packed index buffer to the 32-bit form the morph blend's flat-normal
+        /// recomputation needs (plan_gltf.md `GLTF-461`), whatever width the mesh was uploaded in.
+        std::vector<std::uint32_t> WidenedIndicesEXT(const std::vector<std::uint8_t>& bytes,
+                                                     bool use32BitIndices)
+        {
+            const std::size_t elementSize = use32BitIndices ? sizeof(std::uint32_t)
+                                                            : sizeof(std::uint16_t);
+            const int count = static_cast<int>(bytes.size() / elementSize);
+            if (use32BitIndices) { return IndicesFromBytes<std::uint32_t>(bytes, count); }
+            const std::vector<std::uint16_t> narrow = IndicesFromBytes<std::uint16_t>(bytes, count);
+            return std::vector<std::uint32_t>(narrow.begin(), narrow.end());
+        }
+
 
         // Task 927: `stride` is always one of XNA's own "clean" (tightly packed, no vtable) sizes
         // -- 16/20/24/32/52/56 -- since every offline conversion tool (and, since CNB-70, the
@@ -3020,10 +3033,19 @@ namespace Microsoft::Xna::Framework::Content
 
                 if (meshOut.colored)
                 {
+                    // plan_gltf.md GLTF-462: the PBR effects join the list. §3.7.2.1 makes COLOR_0
+                    // an additional linear multiplier on base colour, so a vertex-coloured
+                    // metallic-roughness primitive is shaded by PbrEffect with its colour applied
+                    // instead of being downgraded off the material model entirely.
                     if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get()))
                         basicFx->VertexColorEnabled = true;
                     else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get()))
                         skinnedFx->VertexColorEnabled = true;
+                    else if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get()))
+                        pbrFx->VertexColorEnabledEXT = true;
+                    else if (auto* skinnedPbrFx =
+                                 dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get()))
+                        skinnedPbrFx->VertexColorEnabledEXT = true;
                 }
 
                 if (!ApplyUnlitMaterialEXT(*fx, meshOut))
@@ -3195,20 +3217,63 @@ namespace Microsoft::Xna::Framework::Content
                                    "the single factor."
                                  : ""));
                     }
-                    // plan_gltf.md GLTF-173: normals CNA derived rather than the file authoring
-                    // them. Only reported when the derivation had to approximate -- a faceted mesh
-                    // whose author already split its edges gets exact flat normals, and saying so
-                    // on every such import would be noise nobody reads.
-                    if (meshOut.smoothedNormalVertexCountEXT > 0)
+                    // plan_gltf.md GLTF-173/GLTF-461: normals CNA derived rather than the file
+                    // authoring them. The split itself is Debug -- it is an exact, lossless
+                    // transformation of the same surface, and a warning per faceted mesh would be
+                    // noise nobody reads. What stays a warning is the residue: a vertex whose
+                    // normal really did average faces the tolerance merged, and an authored
+                    // tangent basis §3.7.2.1 required to be thrown away.
+                    if (meshOut.flatNormalDuplicatedVertexCountEXT > 0)
+                    {
+                        CNA::Logger::Debug(
+                            "glTF file '" + path + "': primitive '" + meshOut.name +
+                            "' authors no NORMAL, so §3.7.2.1's flat normals were computed and " +
+                            std::to_string(meshOut.flatNormalDuplicatedVertexCountEXT) +
+                            " vertex/vertices were duplicated so each face carries its own "
+                            "(GLTF-461).");
+                    }
+                    if (meshOut.flatNormalMergedVertexCountEXT > 0)
                     {
                         CNA::Logger::Warn(
                             "glTF file '" + path + "': primitive '" + meshOut.name +
-                            "' authors no NORMAL, so normals were computed per §3.7.2.1 -- but " +
-                            std::to_string(meshOut.smoothedNormalVertexCountEXT) +
-                            " vertex/vertices are shared between faces of different orientation. "
-                            "Flat shading would duplicate those vertices once per face, which this "
-                            "importer does not do, so they received the area-weighted average "
-                            "instead and that edge will look smooth rather than sharp (GLTF-173).");
+                            "' authors no NORMAL and " +
+                            std::to_string(meshOut.flatNormalMergedVertexCountEXT) +
+                            " vertex/vertices average faces that are parallel only within the "
+                            "split's reproducibility tolerance rather than exactly, so those "
+                            "normals are within ~0.081 degrees of the face normal rather than "
+                            "equal to it (GLTF-461).");
+                    }
+                    if (meshOut.ignoredTangentForGeneratedNormalsEXT)
+                    {
+                        CNA::Logger::Warn(
+                            "glTF file '" + path + "': primitive '" + meshOut.name +
+                            "' authors a TANGENT basis but no NORMAL. §3.7.2.1 requires the "
+                            "provided tangents to be ignored in that case, so a basis was "
+                            "generated from the computed normals instead (GLTF-461).");
+                    }
+                    if (!meshOut.ignoredMorphAttributesEXT.empty())
+                    {
+                        std::string names;
+                        for (const std::string& semantic : meshOut.ignoredMorphAttributesEXT)
+                        {
+                            if (!names.empty()) { names += ", "; }
+                            names += semantic;
+                        }
+                        CNA::Logger::Warn(
+                            "glTF file '" + path + "': primitive '" + meshOut.name +
+                            "' has morph targets carrying " + names +
+                            ", which CNA does not morph. §3.7.2.2 makes morphed TEXCOORD_n and "
+                            "COLOR_n optional and CNA carries only POSITION, NORMAL and TANGENT, so "
+                            "those deltas are dropped (GLTF-466).");
+                    }
+                    if (meshOut.ignoredMorphNormalDeltasForGeneratedNormalsEXT)
+                    {
+                        CNA::Logger::Warn(
+                            "glTF file '" + path + "': primitive '" + meshOut.name +
+                            "' has a morph target declaring NORMAL deltas while the base authors "
+                            "no NORMAL, which §3.7.2.2 does not permit. The deltas were dropped "
+                            "and each morphed pose's flat normals are computed instead "
+                            "(GLTF-461).");
                     }
                     // plan_gltf.md GLTF-273: the skin's own import report. Every quantity in it is
                     // a place a rig is imported approximately, and each is silent on its own.
@@ -3428,6 +3493,15 @@ namespace Microsoft::Xna::Framework::Content
                             // with the undeformed basis.
                             morph->TangentDeltas.push_back(meshOut.morphTangentDeltas[t]);
                         }
+                        // plan_gltf.md GLTF-461: a primitive with no authored NORMAL has its flat
+                        // normals recomputed from the morphed positions at every pose, so the blend
+                        // needs the connectivity as well as the deltas.
+                        morph->RecomputeFlatNormalsEXT = meshOut.morphedFlatNormalsEXT;
+                        if (morph->RecomputeFlatNormalsEXT)
+                        {
+                            morph->TriangleIndicesEXT = WidenedIndicesEXT(
+                                meshOut.indexBytes, meshOut.use32BitIndices);
+                        }
                         // GLTF-281: the instancing node's own weights win over the mesh's.
                         morph->Weights = GetMeshDefaultWeights(mesh, targetCount, instance.node);
 
@@ -3553,6 +3627,15 @@ namespace Microsoft::Xna::Framework::Content
                                 morph->PositionDeltas = variantMesh.morphPositionDeltas;
                                 morph->NormalDeltas = variantMesh.morphNormalDeltas;
                                 morph->TangentDeltas = variantMesh.morphTangentDeltas;
+                                // plan_gltf.md GLTF-461, per variant: a variant's own layout can
+                                // differ, so its connectivity and split come from its own MeshOut
+                                // rather than from the default material's.
+                                morph->RecomputeFlatNormalsEXT = variantMesh.morphedFlatNormalsEXT;
+                                if (morph->RecomputeFlatNormalsEXT)
+                                {
+                                    morph->TriangleIndicesEXT = WidenedIndicesEXT(
+                                        variantMesh.indexBytes, variantMesh.use32BitIndices);
+                                }
                                 morph->Weights =
                                     GetMeshDefaultWeights(mesh, targetCount, instance.node);
                                 if (auto weightTrack =
@@ -4166,6 +4249,12 @@ namespace Microsoft::Xna::Framework::Content
                             const std::vector<float> morphWeightsField =
                                 JsonFloatArrayN(mg, FindKeyArray(mg, "morphWeights"));
                             const std::string morphWeightTrackJson = ExtractJsonObjectFieldEXT(mg, "morphWeightTrack");
+                            // plan_gltf.md GLTF-461: the source primitive authored no NORMAL, so
+                            // its flat normals depend on the morph weights and the blend has to
+                            // recompute them. Only the decision is serialized -- the connectivity
+                            // the recomputation needs is the index sidecar this reader already
+                            // loads, so nothing is stored twice.
+                            const bool morphFlatNormals = JsonBool(mg, "morphFlatNormals", false);
 
                             if (vertFile.empty() || idxFile.empty())
                                 continue;
@@ -4264,6 +4353,12 @@ namespace Microsoft::Xna::Framework::Content
                                 auto morph = std::make_unique<Graphics::MorphTargetDataEXT>();
                                 morph->BaseVertexBytes = vertBytes;
                                 morph->Stride = stride;
+                                morph->RecomputeFlatNormalsEXT = morphFlatNormals;
+                                if (morphFlatNormals)
+                                {
+                                    morph->TriangleIndicesEXT =
+                                        WidenedIndicesEXT(idxBytes, use32BitIndices);
+                                }
                                 morph->PositionDeltas.reserve(static_cast<std::size_t>(targetCount));
                                 morph->NormalDeltas.reserve(static_cast<std::size_t>(targetCount));
                                 std::vector<int> serializedVertexCounts;
@@ -4699,11 +4794,20 @@ namespace Microsoft::Xna::Framework::Content
                             // present in the vertex buffer but the shader ignores them.
                             // SkinnedEffect's VertexColorEnabled is a CNAEXT addition (real XNA's
                             // SkinnedEffect has no such property at all).
+                            // plan_gltf.md GLTF-462 adds strides 60 and 80 to that list: a
+                            // vertex-coloured metallic-roughness primitive keeps its PBR material
+                            // and multiplies COLOR_0 into base colour, so the PBR effects need the
+                            // same flag as BasicEffect and SkinnedEffect.
                             if (vertexColorEnabled) {
                                 if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
                                     basicFx->VertexColorEnabled = true;
                                 } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
                                     skinnedFx->VertexColorEnabled = true;
+                                } else if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
+                                    pbrFx->VertexColorEnabledEXT = true;
+                                } else if (auto* skinnedPbrFx =
+                                               dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
+                                    skinnedPbrFx->VertexColorEnabledEXT = true;
                                 }
                             }
 

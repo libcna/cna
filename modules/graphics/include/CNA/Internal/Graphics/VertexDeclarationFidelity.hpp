@@ -328,15 +328,23 @@ namespace CNA::Internal::Graphics
             {VertexElementUsage::Color,             0, 52, VertexElementFormat::Color},
         };
 
-        // GLTF-182 deliberately pads the naturally 56-byte rigid PBR+UV1 record to 60 bytes:
+        // GLTF-182 deliberately padded the naturally 56-byte rigid PBR+UV1 record to 60 bytes:
         // stride 56 already denotes skinned+colour, and keeping one meaning per stride avoids an
         // effect-dependent interpretation of the same vertex declaration.
+        //
+        // GLTF-462 gives those four bytes a job rather than leaving them reserved -- they are the
+        // packed COLOR_0 of a vertex-coloured metallic-roughness primitive, which §3.7.2.1 makes an
+        // additional linear multiplier on base colour. Offsets 0..55 are unchanged, so every
+        // renderer that already binds this stride is unaffected, and a primitive with no COLOR_0
+        // writes opaque white -- the identity multiplier -- so reading the slot can never darken a
+        // draw that used to be right. `GpuDrawParams::vertexColorEnabled` says which it is.
         inline constexpr InferredVertexElement kStride60[] = {
             {VertexElementUsage::Position,          0,  0, VertexElementFormat::Vector3},
             {VertexElementUsage::Normal,            0, 12, VertexElementFormat::Vector3},
             {VertexElementUsage::Tangent,           0, 24, VertexElementFormat::Vector4},
             {VertexElementUsage::TextureCoordinate, 0, 40, VertexElementFormat::Vector2},
             {VertexElementUsage::TextureCoordinate, 1, 48, VertexElementFormat::Vector2},
+            {VertexElementUsage::Color,             0, 56, VertexElementFormat::Color},
         };
 
         inline constexpr InferredVertexElement kStride68[] = {
@@ -357,6 +365,7 @@ namespace CNA::Internal::Graphics
             {VertexElementUsage::BlendIndices,      0, 64, VertexElementFormat::Byte4},
             {VertexElementUsage::TextureCoordinate, 1, 68, VertexElementFormat::Vector2},
         };
+
 
         // The two fallbacks a renderer uses for a stride the table above does not list. Both are
         // measured behaviours, not guesses: Vulkan's ordinary route renders a position-only

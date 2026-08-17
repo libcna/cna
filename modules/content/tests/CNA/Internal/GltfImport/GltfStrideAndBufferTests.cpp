@@ -222,12 +222,16 @@ TEST(GltfStrideAndBuffer, EveryCanonicalStrideHasExactlyTheElementsSection23Stat
         {VertexElementUsage::BlendIndices, 48, VertexElementFormat::Byte4},
         {VertexElementUsage::Color, 52, VertexElementFormat::Color},
     });
+    // plan_gltf.md GLTF-462: the four bytes GLTF-182 reserved purely to keep this stride distinct
+    // from 56 are the packed COLOR_0 slot now, which is what lets a vertex-coloured primitive keep
+    // its metallic-roughness material instead of being downgraded to a layout with no Normal at all.
     ExpectStrideLayout(60, {
         {VertexElementUsage::Position, 0, VertexElementFormat::Vector3},
         {VertexElementUsage::Normal, 12, VertexElementFormat::Vector3},
         {VertexElementUsage::Tangent, 24, VertexElementFormat::Vector4},
         {VertexElementUsage::TextureCoordinate, 40, VertexElementFormat::Vector2, 0},
         {VertexElementUsage::TextureCoordinate, 48, VertexElementFormat::Vector2, 1},
+        {VertexElementUsage::Color, 56, VertexElementFormat::Color},
     });
     ExpectStrideLayout(68, {
         {VertexElementUsage::Position, 0, VertexElementFormat::Vector3},
@@ -300,11 +304,17 @@ TEST(GltfStrideAndBuffer, EveryImportedGltfStrideCarriesItsCanonicalVertexDeclar
     struct Case { const char* fixture; int stride; };
     const Case cases[] = {
         {"tex-dual-texture-stride", 20},
-        {"normalized-u8-color", 24},
+        // GLTF-462: a rigid vertex-coloured primitive keeps its metallic-roughness material now,
+        // so it takes the rigid PBR layout and its colour rides in stride 60's own colour slot.
+        // Stride 24 is reached only by a coloured primitive whose material declares
+        // KHR_materials_unlit -- `mat-unlit-vertex-color-alpha` is that fixture.
+        {"normalized-u8-color", 60},
         {"mat-unlit", 32},
         {"mat-authored-tangent", 48},
         {"uv1-material", 60},
         {"skin-unlit", 52},
+        // GLTF-463: a SKINNED vertex-coloured primitive is the one combination still without a
+        // colour-carrying PBR stride, so it keeps SkinnedEffect's stride-56 layout.
         {"skin-vertex-color", 56},
         {"skin-parented-joints", 68},
     };

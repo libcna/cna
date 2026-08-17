@@ -770,7 +770,27 @@
             2
           ],
           "converted": false,
-          "primitiveCount": 1
+          "primitiveCount": 1,
+          "generatedTangents": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ]
         },
         "material": null
       },
@@ -859,7 +879,27 @@
             2
           ],
           "converted": false,
-          "primitiveCount": 1
+          "primitiveCount": 1,
+          "generatedTangents": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ]
         },
         "material": null
       }
@@ -1133,7 +1173,7 @@
       {
         "mesh": 0,
         "primitive": 2,
-        "stride": 24,
+        "stride": 60,
         "vertexCount": 3,
         "fields": [
           {
@@ -1142,19 +1182,34 @@
             "size": 12
           },
           {
-            "name": "Color",
+            "name": "Normal",
             "offset": 12,
-            "size": 4
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
           },
           {
             "name": "TextureCoordinate",
-            "offset": 16,
+            "offset": 40,
             "size": 8
+          },
+          {
+            "name": "TextureCoordinate1",
+            "offset": 48,
+            "size": 8
+          },
+          {
+            "name": "Color",
+            "offset": 56,
+            "size": 4
           }
         ],
         "vertexBufferFile": "draco-vs-uncompressed-pair.p2.vb.bin",
-        "vertexBufferBytes": 72,
-        "vertexBufferSha256": "823355ddeb444ee46faeb08a4dd84c0007cd758ac59699a7d1f61bfa71bd31c0",
+        "vertexBufferBytes": 180,
+        "vertexBufferSha256": "50ecc99bed0f3211b9ab3083c614a9474191fba14c6f19bc7f58c83cafaa96b6",
         "indexElementSize": 2,
         "indexCount": 3,
         "indexBufferFile": "draco-vs-uncompressed-pair.p2.ib.bin",
@@ -1167,7 +1222,7 @@
       {
         "mesh": 0,
         "primitive": 3,
-        "stride": 24,
+        "stride": 60,
         "vertexCount": 3,
         "fields": [
           {
@@ -1176,19 +1231,34 @@
             "size": 12
           },
           {
-            "name": "Color",
+            "name": "Normal",
             "offset": 12,
-            "size": 4
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
           },
           {
             "name": "TextureCoordinate",
-            "offset": 16,
+            "offset": 40,
             "size": 8
+          },
+          {
+            "name": "TextureCoordinate1",
+            "offset": 48,
+            "size": 8
+          },
+          {
+            "name": "Color",
+            "offset": 56,
+            "size": 4
           }
         ],
         "vertexBufferFile": "draco-vs-uncompressed-pair.p3.vb.bin",
-        "vertexBufferBytes": 72,
-        "vertexBufferSha256": "823355ddeb444ee46faeb08a4dd84c0007cd758ac59699a7d1f61bfa71bd31c0",
+        "vertexBufferBytes": 180,
+        "vertexBufferSha256": "50ecc99bed0f3211b9ab3083c614a9474191fba14c6f19bc7f58c83cafaa96b6",
         "indexElementSize": 2,
         "indexCount": 3,
         "indexBufferFile": "draco-vs-uncompressed-pair.p3.ib.bin",

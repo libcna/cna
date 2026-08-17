@@ -143,6 +143,87 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
 
+        // plan_gltf.md GLTF-461. §3.7.2.2: "When the base mesh primitive does not specify normals,
+        // client implementations MUST calculate flat normals for each morph target." Everything
+        // above blends what the file authored; this recomputes what it did not.
+        //
+        // Why it has to be here rather than at import: a POSITION delta can rotate a face, so the
+        // normal of a normal-less primitive is a function of the WEIGHTS, and the weights are a
+        // runtime value an animation drives. Baking the rest pose left such a primitive lit as
+        // though it had never deformed -- correct at weight 0 and wrong everywhere else -- and no
+        // delta blend could have fixed it, because §3.7.2.2 makes an original attribute a
+        // precondition for a target attribute and so forbids the NORMAL deltas outright.
+        //
+        // Exact rather than averaged because the importer splits every corner of such a primitive
+        // into its own vertex: each face owns its three vertices, so writing the face normal to
+        // them is flat shading, not a smoothing of neighbours.
+        if (morph.RecomputeFlatNormalsEXT && hasNormalSlot && numVertices > 0)
+        {
+            std::vector<Vector3> accumulated(static_cast<std::size_t>(numVertices));
+            const auto positionOf = [&](std::uint32_t index) {
+                float p[3];
+                std::memcpy(p, blended.data() +
+                                  static_cast<std::size_t>(index) * static_cast<std::size_t>(stride),
+                            sizeof(p));
+                return Vector3(p[0], p[1], p[2]);
+            };
+
+            const std::vector<std::uint32_t>& indices = morph.TriangleIndicesEXT;
+            for (std::size_t f = 0; f + 2 < indices.size(); f += 3)
+            {
+                const std::uint32_t i0 = indices[f], i1 = indices[f + 1], i2 = indices[f + 2];
+                if (i0 >= static_cast<std::uint32_t>(numVertices) ||
+                    i1 >= static_cast<std::uint32_t>(numVertices) ||
+                    i2 >= static_cast<std::uint32_t>(numVertices))
+                {
+                    continue;
+                }
+                const Vector3 a = positionOf(i0), b = positionOf(i1), c = positionOf(i2);
+                // Un-normalized: its length is twice the triangle's area, so a vertex a caller left
+                // shared gets an area weighting rather than whichever face came last.
+                const Vector3 weighted = Vector3::Cross(b - a, c - a);
+                accumulated[i0] = accumulated[i0] + weighted;
+                accumulated[i1] = accumulated[i1] + weighted;
+                accumulated[i2] = accumulated[i2] + weighted;
+            }
+
+            for (int v = 0; v < numVertices; ++v)
+            {
+                const std::size_t off = static_cast<std::size_t>(v) * static_cast<std::size_t>(stride);
+                const std::size_t normOff = off + static_cast<std::size_t>(normalOffset);
+                Vector3 n = accumulated[static_cast<std::size_t>(v)];
+                const float lenSq = n.X * n.X + n.Y * n.Y + n.Z * n.Z;
+                if (lenSq <= 1e-24f)
+                {
+                    // A vertex no face reaches, or one whose faces all collapsed at this pose, has
+                    // no computable normal -- leave whatever the base pose carried rather than
+                    // inventing a direction the geometry does not state.
+                    continue;
+                }
+                const float invLen = 1.0f / std::sqrt(lenSq);
+                n = Vector3(n.X * invLen, n.Y * invLen, n.Z * invLen);
+                std::memcpy(blended.data() + normOff, &n, sizeof(n));
+
+                // §3.7.2.2 SHOULD-recompute tangents per morph target with MikkTSpace against the
+                // updated positions, normals and UVs. CNA re-orthogonalizes the generated basis
+                // against the new normal instead -- a documented approximation of that SHOULD (see
+                // docs/gltf-limitations.md), and one that at least keeps T perpendicular to N, which
+                // is the property tangent-space normal mapping actually depends on.
+                if (!hasTangentSlot) { continue; }
+                const std::size_t tanOff = off + static_cast<std::size_t>(tangentOffset);
+                float baseTangent[4];
+                std::memcpy(baseTangent, blended.data() + tanOff, sizeof(baseTangent));
+                const Vector3 t(baseTangent[0], baseTangent[1], baseTangent[2]);
+                const float projection = t.X * n.X + t.Y * n.Y + t.Z * n.Z;
+                Vector3 ortho(t.X - n.X * projection, t.Y - n.Y * projection, t.Z - n.Z * projection);
+                const float orthoLenSq = ortho.X * ortho.X + ortho.Y * ortho.Y + ortho.Z * ortho.Z;
+                if (orthoLenSq <= 1e-24f) { continue; }
+                const float invOrtho = 1.0f / std::sqrt(orthoLenSq);
+                ortho = Vector3(ortho.X * invOrtho, ortho.Y * invOrtho, ortho.Z * invOrtho);
+                std::memcpy(blended.data() + tanOff, &ortho, sizeof(ortho));
+            }
+        }
+
         return blended;
     }
 

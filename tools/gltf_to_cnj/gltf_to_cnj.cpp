@@ -373,6 +373,11 @@ namespace
             std::string morphFile;
             std::vector<float> morphWeights;
             std::optional<MorphWeightTrackOut> morphWeightTrack;
+            // plan_gltf.md GLTF-461: the primitive authored no NORMAL, so its flat normals are a
+            // function of the morph weights and the runtime has to recompute them per pose. Carried
+            // as a mesh-entry JSON field rather than a further binary trailer because the reader
+            // already has the index buffer it needs; only the DECISION has to travel.
+            bool morphFlatNormals = false;
             // plan_gltf.md GLTF-114/GLTF-129 (Phase 5): index into the emitted "bones" array of the
             // node that instantiates this primitive's mesh -- 0 (the identity root) for a skinned
             // instance, whose own node transform glTF requires to be ignored.
@@ -420,6 +425,7 @@ namespace
                 std::string morphFile;
                 std::vector<float> morphWeights;
                 std::optional<MorphWeightTrackOut> morphWeightTrack;
+                const bool morphFlatNormals = meshOut.morphedFlatNormalsEXT;
                 if (!meshOut.morphPositionDeltas.empty())
                 {
                     morphFile = outName + "_mesh" + std::to_string(meshCounter) + "_morph.bin";
@@ -489,17 +495,45 @@ namespace
                             : ""));
                 }
 
-                // plan_gltf.md GLTF-173: computed normals that had to be averaged rather than
-                // truly flat, because a vertex is shared between faces of different orientation.
-                if (meshOut.smoothedNormalVertexCountEXT > 0)
+                // plan_gltf.md GLTF-461: the residue of the flat-normal computation, not the
+                // computation itself -- the split is exact, so only what the tolerance merged and
+                // what glTF required to be thrown away are worth a warning.
+                if (meshOut.flatNormalMergedVertexCountEXT > 0)
                 {
                     warnings.push_back(
-                        "Primitive '" + partName + "' authors no NORMAL, so normals were computed "
-                        "per glTF 3.7.2.1; " +
-                        std::to_string(meshOut.smoothedNormalVertexCountEXT) +
-                        " vertex/vertices are shared between faces of different orientation and "
-                        "received the area-weighted average instead of a true flat normal, so "
-                        "those edges will look smooth rather than sharp.");
+                        "Primitive '" + partName + "' authors no NORMAL, so glTF 3.7.2.1's flat "
+                        "normals were computed; " +
+                        std::to_string(meshOut.flatNormalMergedVertexCountEXT) +
+                        " vertex/vertices average faces that are parallel only within the split's "
+                        "reproducibility tolerance rather than exactly.");
+                }
+                if (meshOut.ignoredTangentForGeneratedNormalsEXT)
+                {
+                    warnings.push_back(
+                        "Primitive '" + partName + "' authors a TANGENT basis but no NORMAL. glTF "
+                        "3.7.2.1 requires the provided tangents to be ignored in that case, so a "
+                        "basis was generated from the computed normals instead.");
+                }
+                if (!meshOut.ignoredMorphAttributesEXT.empty())
+                {
+                    std::string names;
+                    for (const std::string& semantic : meshOut.ignoredMorphAttributesEXT)
+                    {
+                        if (!names.empty()) { names += ", "; }
+                        names += semantic;
+                    }
+                    warnings.push_back(
+                        "Primitive '" + partName + "' has morph targets carrying " + names +
+                        ", which CNA does not morph: glTF 3.7.2.2 makes morphed TEXCOORD_n and "
+                        "COLOR_n optional and CNA carries only POSITION, NORMAL and TANGENT.");
+                }
+                if (meshOut.ignoredMorphNormalDeltasForGeneratedNormalsEXT)
+                {
+                    warnings.push_back(
+                        "Primitive '" + partName + "' has a morph target declaring NORMAL deltas "
+                        "while the base authors no NORMAL, which glTF 3.7.2.2 does not permit. The "
+                        "deltas were dropped and each morphed pose's flat normals are computed "
+                        "instead.");
                 }
 
                 // plan_gltf.md GLTF-095/GLTF-257: influence sets past the first are dropped,
@@ -661,6 +695,7 @@ namespace
                 entry.unlit = meshOut.unlitEXT;
                 entry.morphFile = morphFile;
                 entry.morphWeights = morphWeights;
+                entry.morphFlatNormals = morphFlatNormals;
                 entry.morphWeightTrack = morphWeightTrack;
                 entry.parentBone = instance.skinned ? 0 : instance.sceneNodeIndex;
                 // GLTF-139: only a multi-primitive placement needs the grouping key; a
@@ -760,6 +795,9 @@ namespace
                             GetMeshDefaultWeights(mesh, targetCount, instance.node);
                         variantEntry.morphWeightTrack =
                             ExtractMorphWeightTrack(data, mesh, targetCount);
+                        // plan_gltf.md GLTF-461, per variant: a variant chooses its own layout, so
+                        // whether its normals are generated is its own MeshOut's answer.
+                        variantEntry.morphFlatNormals = variantMesh.morphedFlatNormalsEXT;
                     }
                     meshEntries.push_back(std::move(variantEntry));
                 }
@@ -1157,6 +1195,7 @@ namespace
                     json << e.morphWeights[w] << (w + 1 < e.morphWeights.size() ? ", " : "");
                 }
                 json << "]";
+                if (e.morphFlatNormals) { json << ", \"morphFlatNormals\": true"; }
                 if (e.morphWeightTrack)
                 {
                     const MorphWeightTrackOut& track = *e.morphWeightTrack;

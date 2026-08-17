@@ -26,6 +26,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "GltfFixtureCorpus.hpp"
 #include "GltfOracleEXT.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -406,19 +407,51 @@ TEST(GltfAttributeCoverage, EveryAuthoredAttributeEitherArrivesOrIsNamedInARepor
 
         // A dropped NORMAL or TANGENT is a stride consequence, so the two reports must agree with
         // the layout that was actually selected rather than with each other.
+        //
+        // plan_gltf.md GLTF-278/GLTF-462: asked of the CANONICAL TABLE rather than of a literal
+        // stride list. The list this replaced said a tangent survives at stride 48 or 68 only, which
+        // was already wrong for the dual-UV strides 60 and 76 and became reachable the moment a
+        // vertex-coloured primitive started taking stride 60. A test carrying its own copy of an ABI
+        // asserts the copy.
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+        const auto slotExists = [&](VertexElementUsage usage) {
+            const CNA::Internal::Graphics::InferredVertexLayout layout =
+                CNA::Internal::Graphics::InferredLayoutForStride(
+                    out.stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+            if (!layout.known) { return false; }
+            for (std::size_t i = 0; i < layout.count; ++i)
+            {
+                if (layout.elements[i].usage == usage && layout.elements[i].usageIndex == 0)
+                {
+                    return true;
+                }
+            }
+            return false;
+        };
         if (authored("NORMAL"))
         {
-            const bool droppedByStride = (out.stride == 20 || out.stride == 24);
-            EXPECT_EQ(droppedByStride, out.droppedNormalForStrideEXT)
+            EXPECT_EQ(!slotExists(VertexElementUsage::Normal), out.droppedNormalForStrideEXT)
                 << "iteration " << iteration << ": stride " << out.stride
                 << " and the dropped-normal report disagree";
         }
         if (authored("TANGENT"))
         {
-            const bool carriesTangent = (out.stride == 48 || out.stride == 68);
-            EXPECT_EQ(!carriesTangent, out.droppedTangentForStrideEXT)
-                << "iteration " << iteration << ": stride " << out.stride
-                << " and the dropped-tangent report disagree";
+            // GLTF-461: an authored tangent is also ignored when the primitive authors no NORMAL,
+            // which §3.7.2.1 requires and which is reported separately -- so the stride report is
+            // only asked about the stride when normals were not generated.
+            if (!out.generatedNormalsEXT)
+            {
+                EXPECT_EQ(!slotExists(VertexElementUsage::Tangent), out.droppedTangentForStrideEXT)
+                    << "iteration " << iteration << ": stride " << out.stride
+                    << " and the dropped-tangent report disagree";
+            }
+            else
+            {
+                EXPECT_TRUE(out.ignoredTangentForGeneratedNormalsEXT ||
+                            out.droppedTangentForStrideEXT)
+                    << "iteration " << iteration
+                    << ": an authored TANGENT was neither carried nor named as ignored";
+            }
         }
 
         // Anything the stride cannot carry must be named by the GLTF-100 summary too, so the

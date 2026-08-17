@@ -174,6 +174,103 @@ namespace
     }
 }
 
+// --- GLTF-470: sparse accessors on an animation sampler -----------------------------------------
+
+namespace
+{
+    // plan_gltf.md GLTF-470. Both of this animation's sampler accessors are **sparse with no base
+    // bufferView**, which §3.6.2.3 defines as a zero-filled base with the sparse entries applied over
+    // it. The corpus has sparse fixtures and animation fixtures and nothing that crosses them, so
+    // this legal core combination had no coverage at all.
+    //
+    // Every part of it is a discriminator. The INPUT accessor's three times are 0, 1 and 2 and all
+    // three come from the sparse block, so a reader that ignored sparse would see three zeros -- an
+    // input that is not strictly increasing, which CNA refuses by name, so the failure is loud rather
+    // than a subtly wrong curve. The OUTPUT accessor overrides only index 1, so the track has to be
+    // (0,0,0) -> (0,5,0) -> (0,0,0): a reader that applied the override to the wrong element, or to
+    // all of them, produces a different shape rather than a smaller one.
+    const char* kSparseAnimationSamplerGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0, 1] } ],
+  "nodes": [
+    { "name": "Joint0" },
+    { "name": "SkinnedMeshNode", "mesh": 0, "skin": 0 }
+  ],
+  "skins": [ { "name": "Skin", "joints": [0], "inverseBindMatrices": 3 } ],
+  "meshes": [ { "primitives": [ {
+      "attributes": { "POSITION": 0, "JOINTS_0": 1, "WEIGHTS_0": 2 }, "mode": 4
+  } ] } ],
+  "animations": [ {
+      "name": "Clip",
+      "samplers": [ { "input": 4, "output": 5, "interpolation": "LINEAR" } ],
+      "channels": [ { "sampler": 0, "target": { "node": 0, "path": "translation" } } ]
+  } ],
+  "buffers": [ { "byteLength": 196,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAAQACAAAAAAAAAAAAgD8AAABAAQAAAAAAAAAAAKBAAAAAAA==" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 12 },
+    { "buffer": 0, "byteOffset": 48,  "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 96,  "byteLength": 64 },
+    { "buffer": 0, "byteOffset": 160, "byteLength": 6 },
+    { "buffer": 0, "byteOffset": 168, "byteLength": 12 },
+    { "buffer": 0, "byteOffset": 180, "byteLength": 2 },
+    { "buffer": 0, "byteOffset": 184, "byteLength": 12 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+      "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5121, "count": 3, "type": "VEC4" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 3, "componentType": 5126, "count": 1, "type": "MAT4" },
+    { "componentType": 5126, "count": 3, "type": "SCALAR", "min": [0], "max": [2],
+      "sparse": { "count": 3,
+        "indices": { "bufferView": 4, "byteOffset": 0, "componentType": 5123 },
+        "values":  { "bufferView": 5, "byteOffset": 0 } } },
+    { "componentType": 5126, "count": 3, "type": "VEC3",
+      "sparse": { "count": 1,
+        "indices": { "bufferView": 6, "byteOffset": 0, "componentType": 5123 },
+        "values":  { "bufferView": 7, "byteOffset": 0 } } }
+  ]
+})GLTF";
+}
+
+TEST(GltfAnimationSampling, ASparseAnimationSamplerResolvesItsOverridesOnBothInputAndOutput)
+{
+    Parsed parsed;
+    ASSERT_TRUE(Parse(parsed, kSparseAnimationSamplerGltf));
+
+    const std::vector<ClipOut> clips = ClipsOf(parsed);
+    ASSERT_EQ(1u, clips.size());
+    ASSERT_EQ(1u, clips.front().tracks.size());
+    const TrackOut& track = clips.front().tracks.front();
+
+    // The three keyframe times come entirely from the input accessor's sparse block. Their mere
+    // presence is the first assertion: an ignored sparse block gives three zeros, which is not a
+    // strictly increasing input and does not survive validation.
+    ASSERT_EQ(3u, track.keys.size())
+        << "the sampler's three sparse-resolved times did not become three keyframes";
+    const KeyframeOut* first = KeyAt(track, 0.0);
+    const KeyframeOut* middle = KeyAt(track, 1.0);
+    const KeyframeOut* last = KeyAt(track, 2.0);
+    ASSERT_NE(nullptr, first);
+    ASSERT_NE(nullptr, middle);
+    ASSERT_NE(nullptr, last);
+
+    // And the output's single override landed on element 1 alone.
+    EXPECT_NEAR(0.0f, first->translation.Y, 1e-5f);
+    EXPECT_NEAR(5.0f, middle->translation.Y, 1e-5f)
+        << "the sparse output override did not reach the middle keyframe";
+    EXPECT_NEAR(0.0f, last->translation.Y, 1e-5f)
+        << "the override reached more elements than the sparse block names";
+    for (const KeyframeOut* key : {first, middle, last})
+    {
+        EXPECT_NEAR(0.0f, key->translation.X, 1e-5f);
+        EXPECT_NEAR(0.0f, key->translation.Z, 1e-5f);
+    }
+}
+
 // --- GLTF-300 / GLTF-309: LINEAR, and the time domain -------------------------------------------
 
 TEST(GltfAnimationSampling, LinearTranslationReachesItsAuthoredEndpointsExactly)

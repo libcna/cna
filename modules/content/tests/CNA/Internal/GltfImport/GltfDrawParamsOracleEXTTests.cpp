@@ -143,6 +143,47 @@ namespace
 // "A PbrEffect draw yields all 12 §21.1 quantities." Asserted one contract row at a time on the
 // fixture that authors every material property at once, so a row that stopped being captured
 // fails by name instead of by a diff nobody reads.
+// plan_gltf.md GLTF-462. The L6 layer is where "the importer is right" stops being enough: a
+// vertex-coloured metallic-roughness primitive has to arrive at the renderer AS a PBR draw with the
+// colour stream switched ON, or §3.7.2.1's "additional linear multiplier to base color" is a value
+// sitting in a vertex buffer nobody reads.
+//
+// Both halves are asserted because they fail independently and for different reasons. The effect
+// TYPE is the importer's `usePbr` decision reaching `ModelMeshPart`; `vertexColorEnabled` is
+// `PbrEffect::VertexColorEnabledEXT` reaching `GpuDrawParams`, and it defaults to false on the
+// effect while `GpuDrawParams` defaults it to TRUE -- so a loader that forgot to set the property
+// produces a draw that looks enabled from one side and disabled from the other.
+TEST(GltfDrawParamsOracleL6, AVertexColouredPbrDrawArrivesAsPbrWithItsColourStreamEnabled)
+{
+    const LoadedFixture fixture("mat-vertex-color-pbr");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("mat-vertex-color-pbr");
+
+    const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+        model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+    ASSERT_EQ(1u, captured.size());
+    const DrawParamsDump& d = captured.front();
+    SCOPED_TRACE(ToJson(d));
+
+    EXPECT_EQ("Microsoft.Xna.Framework.Graphics.PbrEffect", d.effectTypeName)
+        << "a colour stream is a multiplier on base colour, not a different material model";
+    EXPECT_TRUE(d.pbr) << "the draw does not select a PBR shader variant";
+    EXPECT_TRUE(d.vertexColorEnabled)
+        << "the stride-60 record carries COLOR_0 but the draw tells the renderer to ignore it, so "
+           "the colour reaches the GPU and is discarded there";
+
+    // And the material factor is still the material's own, not replaced by the colour: the two are
+    // multiplied per fragment, so a loader that folded one into the other would pass the checks
+    // above and light the surface wrongly.
+    EXPECT_NEAR(0.2f, d.diffuseColor[0], 1e-5f);
+    EXPECT_NEAR(0.4f, d.diffuseColor[1], 1e-5f);
+    EXPECT_NEAR(0.8f, d.diffuseColor[2], 1e-5f);
+}
+
 TEST(GltfDrawParamsOracleL6, APbrDrawYieldsEverySection211QuantityItCanCarry)
 {
     const LoadedFixture fixture("mat-factor-only-gold");

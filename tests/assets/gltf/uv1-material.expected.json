@@ -507,14 +507,14 @@
             "size": 8
           },
           {
-            "name": "Padding",
+            "name": "Color",
             "offset": 56,
             "size": 4
           }
         ],
         "vertexBufferFile": "uv1-material.vb.bin",
         "vertexBufferBytes": 240,
-        "vertexBufferSha256": "0d343e1cad0760a1419810f0be7a4444ae620aefa80605aaa665732ea13adaf8",
+        "vertexBufferSha256": "b0a546efe868ada8a0a92a90cd42859a0c58a729ec509776c667ece3cdccbb0c",
         "indexElementSize": 2,
         "indexCount": 6,
         "indexBufferFile": "uv1-material.ib.bin",

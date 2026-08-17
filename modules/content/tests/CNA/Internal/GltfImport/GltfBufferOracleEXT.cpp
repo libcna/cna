@@ -112,9 +112,11 @@ namespace CnaTest::GltfOracle
                                  {"BlendWeight", 32, 16}, {"BlendIndices", 48, 4}, {"Color", 52, 4}};
                 break;
             case 60:
+                // plan_gltf.md GLTF-462: the four bytes GLTF-182 reserved as a stride discriminator
+                // are the packed COLOR_0 slot; an uncoloured primitive fills them with opaque white.
                 layout.fields = {{"Position", 0, 12}, {"Normal", 12, 12}, {"Tangent", 24, 16},
                                  {"TextureCoordinate", 40, 8}, {"TextureCoordinate1", 48, 8},
-                                 {"Padding", 56, 4}};
+                                 {"Color", 56, 4}};
                 break;
             case 68:
                 layout.fields = {{"Position", 0, 12}, {"Normal", 12, 12}, {"Tangent", 24, 16},

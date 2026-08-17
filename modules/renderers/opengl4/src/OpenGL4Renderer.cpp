@@ -2147,6 +2147,13 @@ void main()
             }
             break;
         case 48:
+        // plan_gltf.md GLTF-462: stride 60 is the rigid PBR record with a second UV set at 48 and a
+        // packed COLOR_0 at 56. Its first four fields are byte-identical to stride 48, and without
+        // this case it reached the position-only default below -- a dual-UV or vertex-coloured PBR
+        // mesh drew with no normal, no tangent and no UV at all. The two trailing slots stay unbound
+        // because this renderer's PBR shader samples one UV set and reads no colour attribute;
+        // GLTF-465 owns consuming them.
+        case 60:
         case 68:
             // plan_opengl4.md GL4-23: VertexPositionNormalTangentTexture (packed): float3
             // position + float3 normal + float4 tangent (xyz + bitangent-handedness sign in w)

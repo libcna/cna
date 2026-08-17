@@ -137,6 +137,16 @@ namespace CNA::Internal::Renderers::Magnum
                         MakeAttribute(1, 12, 3, false, 2),
                         MakeAttribute(2, 24, 4, false, 3),
                         MakeAttribute(3, 40, 2, false, 1)};
+            // plan_gltf.md GLTF-462: stride 60 is the rigid PBR record with a second UV set at 48
+            // and a packed COLOR_0 at 56; its first four fields are byte-identical to stride 48.
+            // Without this row it fell to the empty default below and the mesh had no attributes at
+            // all. The two trailing slots stay unlisted because this renderer's PBR shader samples
+            // one UV set and reads no colour attribute -- GLTF-465 owns consuming them.
+            case 60:
+                return {MakeAttribute(0,  0, 3, false, 2),
+                        MakeAttribute(1, 12, 3, false, 2),
+                        MakeAttribute(2, 24, 4, false, 3),
+                        MakeAttribute(3, 40, 2, false, 1)};
             case 68:
                 return {MakeAttribute(0,  0, 3, false, 2),
                         MakeAttribute(1, 12, 3, false, 2),
