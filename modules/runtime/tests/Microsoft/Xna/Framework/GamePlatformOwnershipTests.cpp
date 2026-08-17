@@ -78,15 +78,48 @@ TEST_F(GamePlatformOwnershipTest, TheSameInstanceIsReturnedEveryTime)
 
 TEST_F(GamePlatformOwnershipTest, ExplicitPlatformIsOwnedAndInstalledBeforeGameMembers)
 {
+    // Created by name rather than by Create(), so this is genuinely a platform the caller supplied
+    // -- but by the *build's own* name, because a Game constructs a GraphicsDevice and the selected
+    // renderer may require services a differently-named platform does not offer. Naming "Headless"
+    // here made the test pass on a headless renderer and throw "EasyGL renderer does not support
+    // OpenGlContext" on a GL one, which says nothing about the ownership contract under test.
+    const std::string& platformName = CNA::Platform::PlatformFactory::GetDefaultName();
     std::unique_ptr<CNA::Platform::IPlatform> supplied =
-        CNA::Platform::PlatformFactory::Create("Headless");
+        CNA::Platform::PlatformFactory::Create(platformName);
     CNA::Platform::IPlatform* expected = supplied.get();
 
     QuietGame game(std::move(supplied));
 
     EXPECT_EQ(&game.GetPlatformEXT(), expected);
     EXPECT_EQ(&CNA::Platform::GetCurrentPlatform(), expected);
-    EXPECT_EQ(game.GetPlatformEXT().GetName(), "Headless");
+    EXPECT_EQ(game.GetPlatformEXT().GetName(), platformName);
+}
+
+TEST_F(GamePlatformOwnershipTest, AFailedConstructionLeavesNothingInstalled)
+{
+    // The installation happens from platform_'s own initialiser, so that later members find the
+    // game's platform instead of lazily creating a second one. That timing also means a throw from
+    // any later member unwinds without ~Game ever running: before PLAT-46's install guard, the
+    // process-wide accessor stayed aimed at a platform that the same unwind then destroyed, and
+    // every later test in the process was reading freed memory through it.
+    //
+    // Pairing Headless with a renderer that needs a real GL context is one concrete way to reach
+    // that path; where the combination happens to be valid there is no failed construction to
+    // observe and nothing to assert.
+    bool constructionFailed = false;
+    try
+    {
+        QuietGame game(CNA::Platform::PlatformFactory::Create("Headless"));
+    }
+    catch (const std::exception&)
+    {
+        constructionFailed = true;
+    }
+
+    if (!constructionFailed)
+        GTEST_SKIP() << "this renderer accepts the Headless platform; no failed construction to observe";
+
+    EXPECT_FALSE(CNA::Platform::HasCurrentPlatform());
 }
 
 TEST_F(GamePlatformOwnershipTest, ExplicitNullPlatformIsRejected)

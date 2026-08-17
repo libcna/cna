@@ -156,6 +156,33 @@ namespace Microsoft::Xna::Framework
         }
     }
 
+    /// PLAT-46 follow-up: the scope guard that makes the ambient installation transactional.
+    ///
+    /// Armed the moment the platform is installed and disarmed once Game's constructor completes.
+    /// In between, a throw from any later member destroys this object -- members already
+    /// constructed are destroyed during unwinding, even though ~Game never runs -- and the
+    /// installation is undone before the platform itself goes away with the argument temporary.
+    struct Game::PlatformInstallation
+    {
+        explicit PlatformInstallation(CNA::Platform::IPlatform* installed) : platform(installed) {}
+
+        ~PlatformInstallation()
+        {
+            if (platform != nullptr)
+            {
+                UninstallPlatform(platform);
+            }
+        }
+
+        PlatformInstallation(const PlatformInstallation&)            = delete;
+        PlatformInstallation& operator=(const PlatformInstallation&) = delete;
+
+        /// Called once the constructor has completed: from then on ~Game owns the uninstall.
+        void Disarm() { platform = nullptr; }
+
+        CNA::Platform::IPlatform* platform = nullptr;
+    };
+
     const System::TimeSpan Game::MaxElapsedTime = System::TimeSpan::FromMilliseconds(500.0);
 
     const std::string& Game::GetTypeName() const
@@ -171,6 +198,7 @@ namespace Microsoft::Xna::Framework
 
     Game::Game(std::unique_ptr<CNA::Platform::IPlatform> platform)
         : platform_(InstallPlatform(std::move(platform))),
+          platformInstallation_(std::make_unique<PlatformInstallation>(platform_.get())),
           platformCapabilities_(platform_->GetCapabilities()),
           eventBatch_(std::make_unique<PlatformEventBatch>()),
           Components_(),
@@ -217,6 +245,12 @@ namespace Microsoft::Xna::Framework
         Content_.setGraphicsDevice(GraphicsDevice_);
 
         FrameworkDispatcher::Update();
+
+        // Construction completed: from here the destructor is guaranteed to run, and it is the one
+        // that uninstalls. Leaving the guard armed would uninstall twice -- harmless today, but it
+        // would also move the uninstall after the body, quietly changing the ordering ~Game's own
+        // comment relies on.
+        platformInstallation_->Disarm();
     }
 
     Game::~Game()
