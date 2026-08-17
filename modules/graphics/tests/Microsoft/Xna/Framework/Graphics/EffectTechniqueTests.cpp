@@ -91,3 +91,25 @@ TEST(EffectPassTest, EmptyNameAllowed)
     EXPECT_EQ(p.getNameProperty(), "");
 }
 
+TEST(EffectPassTest, IndexDefaultsToZero)
+{
+    EffectPass p(nullptr, "Pass0");
+    EXPECT_EQ(p.getIndexInternal(), 0u);
+}
+
+TEST(EffectPassTest, IndexReturnsConstructorIndex)
+{
+    EffectPass p(nullptr, "Pass2", 7u, 2u);
+    EXPECT_EQ(p.getIndexInternal(), 2u);
+}
+
+TEST(EffectPassTest, IndexIsIndependentOfTechniqueIdentity)
+{
+    // The two trailing constructor arguments are separate facts: which technique owns the pass,
+    // and where the pass sits inside it.
+    EffectPass first(nullptr, "P", 100u, 0u);
+    EffectPass second(nullptr, "P", 100u, 3u);
+    EXPECT_EQ(first.getIndexInternal(), 0u);
+    EXPECT_EQ(second.getIndexInternal(), 3u);
+}
+

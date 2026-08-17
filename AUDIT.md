@@ -149,9 +149,13 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > both identity ranges, and turned on the strict warnings the adapter **library** had never had —
 > which is how `TINYGL` was found recorded as implemented with no C constant existing for it at
 > all. The inventory is now 420 headers, 6,693 declarations, **6,286 implemented, 12 approved
-> partial, 9 planned, 386 not applicable**, and the release gate reads **not ready** until
-> `CBIND-052B` binds the remaining `Effect` object-graph rows. Do not read the paragraph above as
-> the current state: a closed matrix is a snapshot between merges, not a finished one.
+> partial, 9 planned, 386 not applicable**. `CBIND-052B` then bound the remaining `Effect`
+> object-graph rows and found that the C adapter's `Clone()` override had begun silently dropping a
+> compiled effect's runtime and parameter values, because the canonical `Clone()` stopped being pure
+> virtual; it also added the public `EffectPass::getIndexInternal()` the owner ruled for on
+> 2026-08-17, mirroring `EffectTechnique`'s. The inventory is **6,296 implemented, 12 approved
+> partial, 0 planned, 386 not applicable** and the release gate reads **ready** again. Do not read
+> any of this as a finished state: a closed matrix is a snapshot between merges, not an end.
 
 ---
 

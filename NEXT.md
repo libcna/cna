@@ -40,8 +40,31 @@
 > a tree you did not rebuild is not evidence. Compare `libcna_c_api.so`'s mtime with
 > `git log -1 --format=%ci` first.
 >
-> `CBIND-052B` owns the 9 remaining rows — the `Effect`/`EffectParameter`/`EffectPass`/
-> `EffectTechnique` object graph — and `RELEASE_GATE.md` reads **not ready** until it lands.
+> **`CBIND-052B` then closed the other 9, and its finding was a defect nothing would have
+> reported.** `Effect::Clone()` and `OnApply()` stopped being pure virtual in the merge. The C
+> adapter had overridden `Clone()` with "construct a fresh empty effect" — correct while there was
+> nothing to inherit, and wrong the moment the base began cloning a compiled effect's runtime and
+> copying its parameter values. A C caller cloning a compiled effect would have received an empty
+> one, silently, with no error anywhere. The lesson generalizes past this class: **when a canonical
+> method stops being pure virtual, every adapter override of it becomes a candidate bug**, because
+> the override was written to substitute for nothing and now substitutes for something.
+>
+> The rest followed precedent. `GetCompiledRuntimePtr()` became `cna_effect_get_is_compiled_ext`,
+> since the runtime object is renderer-owned implementation C can neither construct nor call into.
+> The three `EffectParameter` `const` overloads were re-approvals — C has no second spelling of the
+> same read, and the `EffectPass` annotation pair was already approved that way. The two reflected
+> constructors became additive `_ext` siblings rather than growing published signatures, for the
+> fourth time in this campaign. And the one owner decision — `EffectPass`'s `passIndex`, private,
+> accessorless and unreachable from C — was ruled on by adding the public
+> `EffectPass::getIndexInternal()` that `EffectTechnique` already had, which is the asymmetry the FX
+> work left behind, rather than recording a thirteenth partial.
+>
+> The matrix is closed at **6,296 implemented, 12 approved partial, 0 planned, 386 not applicable**
+> and `RELEASE_GATE.md` reads **ready**. Across the pair of slices the gate fired in **both**
+> directions it was built for: refusing a recorded-met criterion that had regressed, then refusing a
+> recorded-not-met one that had quietly become met. One gap is recorded rather than papered over:
+> no tree this campaign builds advertises `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`, so
+> `cna_effect_create_compiled`'s accepting path is never taken here.
 
 ## The 2026-08-17 merge of `next`, and what it exposed
 

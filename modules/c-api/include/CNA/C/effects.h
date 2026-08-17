@@ -831,6 +831,38 @@ CNA_C_API CNA_Result cna_effect_pass_create(
     CNA_EffectPassHandle* out_pass);
 
 /**
+ * @brief Creates an ownerless native pass that also states its runtime index.
+ *
+ * The companion to @ref cna_effect_pass_create for the shape a compiled effect's reflection
+ * produces. The two trailing values are separate facts: `technique_identity` says which technique
+ * owns the pass, `pass_index` says where the pass sits inside it.
+ *
+ * @param name UTF-8 pass name copied by the call.
+ * @param technique_identity Owning-technique identity metadata, or zero.
+ * @param pass_index Zero-based runtime index this pass reports.
+ * @param out_pass Receives the owned pass handle.
+ * @return A CNA result code; failure leaves @p out_pass invalid.
+ */
+CNA_C_API CNA_Result cna_effect_pass_create_indexed_ext(
+    CNA_StringView name,
+    uint64_t technique_identity,
+    uint32_t pass_index,
+    CNA_EffectPassHandle* out_pass);
+
+/**
+ * @brief Gets the pass's zero-based runtime index within a compiled effect.
+ *
+ * A pass built by @ref cna_effect_pass_create, or the canonical default `P0` pass, reports zero.
+ *
+ * @param pass Pass handle.
+ * @param out_index Receives the zero-based runtime index.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_pass_get_index_ext(
+    CNA_EffectPassHandle pass,
+    uint32_t* out_index);
+
+/**
  * @brief Destroys a pass or stable pass-element view handle.
  * @param pass Owned pass handle.
  * @return A CNA result code.
@@ -1006,6 +1038,42 @@ CNA_C_API CNA_Result cna_effect_technique_copy_name(
 CNA_C_API CNA_Result cna_effect_technique_get_identity(
     CNA_EffectTechniqueHandle technique,
     uint64_t* out_identity);
+
+/**
+ * @brief Gets the technique's zero-based runtime index within a compiled effect.
+ *
+ * Distinct from @ref cna_effect_technique_get_identity: the identity is unique per constructed
+ * technique and says nothing about ordering, while this is the position the compiled effect's own
+ * reflection assigned. A technique built by @ref cna_effect_technique_create_default or
+ * @ref cna_effect_technique_create_named reports zero, because it belongs to no compiled effect.
+ *
+ * @param technique Technique handle.
+ * @param out_index Receives the zero-based runtime index.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_technique_get_index_ext(
+    CNA_EffectTechniqueHandle technique,
+    uint32_t* out_index);
+
+/**
+ * @brief Creates an ownerless technique carrying a compiled effect's reflected index.
+ *
+ * The companion to @ref cna_effect_technique_create_named for the shape a compiled effect's
+ * reflection produces: the technique states its own runtime index, and says whether it starts with
+ * the canonical default `P0` pass or with an empty pass list that reflected passes are appended to.
+ *
+ * @param name UTF-8 technique name copied by the call.
+ * @param technique_index Zero-based runtime index this technique reports.
+ * @param add_default_pass `CNA_TRUE` to start with the canonical default pass, `CNA_FALSE` to
+ * start with no passes at all.
+ * @param out_technique Receives the owned technique handle.
+ * @return A CNA result code; failure leaves @p out_technique invalid.
+ */
+CNA_C_API CNA_Result cna_effect_technique_create_reflected_ext(
+    CNA_StringView name,
+    uint32_t technique_index,
+    CNA_Bool add_default_pass,
+    CNA_EffectTechniqueHandle* out_technique);
 
 /**
  * @brief Gets a mutable view of the technique's pass collection.
@@ -1234,6 +1302,23 @@ CNA_C_API CNA_Result cna_effect_copy_type_name(
     char* destination,
     uint64_t capacity,
     uint64_t* out_byte_count);
+
+/**
+ * @brief Gets whether an effect carries a compiled Effect Framework runtime.
+ *
+ * The canonical accessor hands back the runtime object itself, which is renderer-owned
+ * implementation a C caller can neither construct nor call into, so what crosses the ABI is the
+ * one fact a caller can act on: whether this effect came from compiled bytecode. `CNA_TRUE` means
+ * its parameters, techniques and passes were reflected out of that bytecode rather than built by
+ * hand, and that @ref cna_effect_clone will clone the runtime with it.
+ *
+ * @param effect Effect handle.
+ * @param out_is_compiled Receives `CNA_TRUE` when a compiled runtime is present.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_get_is_compiled_ext(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_is_compiled);
 
 /** @brief Gets the exact UTF-8 vertex-source byte count. */
 CNA_C_API CNA_Result cna_effect_get_vertex_source_byte_count(

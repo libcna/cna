@@ -15,7 +15,7 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 6,286 | A C route exists and is tested. |
+| Fully mapped | 6,296 | A C route exists and is tested. |
 | **Partially mapped** | 12 | A route exists but covers a stated subset. Read the next section before relying on one. |
 | **No C form** | 386 | Nothing callable was omitted; see the reasons below. |
 
@@ -125,6 +125,7 @@ promise rather than of any declaration.
 | **Handles are thread-affine and never leave their process** | A handle used from a thread other than its creator's answers `CNA_RESULT_THREAD`. Handles are not pointers, not serializable and not stable across processes. | by design (HANDLES.md) |
 | **The ABI is 0.x and experimental** | An incompatible change requires only a minor-version increment, release notes and a regenerated baseline. The additive-only guarantee begins at 1.0, which is a separate, later decision. | by design (ABI_VERSIONING.md) |
 | **Four of the 49 renderers are built and run here** | The other 45 share the same C surface and the same capability queries. What a given backend supports is answered by `cna_graphics_device_supports_capability`, never by its renderer identity. | by design (RENDERERS_AND_CAPABILITIES.md) |
+| **No verification tree can create a compiled Effect Framework effect** | `cna_effect_create_compiled`'s three refusals are renderer-independent and are tested, but none of the four trees this campaign builds -- HEADLESS, SDL_RENDERER and SOFTWARE twice -- advertises `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`, so the accepting path is never taken. That leaves `cna_effect_get_is_compiled_ext` proved only on its `CNA_FALSE` branch, and clone-preserves-compiled-state asserted as a relationship between source and clone rather than on a genuinely compiled effect. A tree on a renderer that implements compiled effects would close both. | not tested here (EFFECTS.md) |
 
 ## Not covered by any test here
 
