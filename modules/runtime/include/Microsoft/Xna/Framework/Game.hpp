@@ -380,12 +380,24 @@ namespace Microsoft::Xna::Framework
         friend class CNA::Internal::GameTestPeer;
 
         struct PlatformEventBatch;
+        struct PlatformInstallation;
 
         // Declared before every other member, and therefore constructed first and destroyed last.
         // The graphics device, the window and the content manager may all reach the platform
         // during their own construction or teardown, so the platform's lifetime has to strictly
         // contain theirs. Member order is the only thing that guarantees that.
         std::unique_ptr<CNA::Platform::IPlatform> platform_;
+
+        // PLAT-46 follow-up: undoes the ambient installation if construction does not complete.
+        // Installing from platform_'s own initialiser is what lets later members find the game's
+        // platform instead of lazily creating a second one -- but it also means a throw from any
+        // of those members (a renderer refusing the platform it was handed, say) unwinds without
+        // ever running ~Game, leaving the process-wide accessor aimed at a platform that is
+        // destroyed moments later during that same unwind. This member is constructed immediately
+        // after the installation and disarmed once the constructor completes, so exactly the
+        // failed-construction path is covered and the normal path still uninstalls from ~Game.
+        std::unique_ptr<PlatformInstallation> platformInstallation_;
+
         CNA::Platform::PlatformCapabilities platformCapabilities_;
         std::unique_ptr<PlatformEventBatch> eventBatch_;
 

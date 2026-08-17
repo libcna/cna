@@ -26,6 +26,7 @@ namespace CNA::Internal::Renderers::EasyGL
     }
 }
 
+#include "CNA/Logger.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -3174,8 +3175,11 @@ if (ProfileUsesGlslEs100())
         device.initialize(glProcAddressLoader);
         if (ProfileIsDesktopCore())
             EnableVertexProgramPointSize();
-        std::cout << "EasyGLRenderer initialized with OpenGL "
-            << device.capabilities().context_info().version_string << std::endl;
+        // Same reason as the capability dump below: a startup diagnostic goes to the logger (and
+        // therefore stderr), never to the program's own stdout.
+        CNA::Logger::Info(std::string("EasyGLRenderer initialized with OpenGL ")
+                              + device.capabilities().context_info().version_string,
+                          CNA::LogCategory::RENDER);
 
         // Task 456: one-time startup capability dump. Task 918 wired up real
         // GL_EXT_texture_filter_anisotropic support in ApplySamplerState(); report the real,
@@ -3226,7 +3230,14 @@ if (ProfileUsesGlslEs100())
             GLfloat maxAnisoCap = 1.0f;
             if (hasAniso)
                 metagl::glGetFloatv(::metagl::GetParameter::MaxTextureMaxAnisotropy, &maxAnisoCap);
-            std::cout << "CNA: EasyGL capabilities -- MSAA up to " << maxSamplesCap
+            // A startup diagnostic belongs on stderr, through the logger that honours log levels
+            // -- stdout is the program's own output channel, and a library writing to it corrupts
+            // anything that pipes a game's output. GraphicsDeviceRendererTest::
+            // StartupDiagnosticNeverWritesToStdout pins that for the renderer-name line; this one
+            // had been left on std::cout and broke it.
+            std::ostringstream capabilityMessage;
+            capabilityMessage
+                      << "CNA: EasyGL capabilities -- MSAA up to " << maxSamplesCap
                       << "x; MRT up to " << maxMrtTargets_
                       << " targets (GL draw buffers=" << maxDrawBuffers
                       << ", color attachments=" << maxColorAttachments
@@ -3236,7 +3247,8 @@ if (ProfileUsesGlslEs100())
                          "anisotropic filtering: "
                       << (hasAniso ? ("supported (Task 918, up to " + std::to_string(static_cast<int>(maxAnisoCap)) + "x)")
                                    : std::string("NOT supported (falls back to trilinear)"))
-                      << "; SurfaceFormat: Color only (Task 176)" << std::endl;
+                      << "; SurfaceFormat: Color only (Task 176)";
+            CNA::Logger::Info(capabilityMessage.str(), CNA::LogCategory::RENDER);
         }
 
         platformContext_->SetSwapInterval(swapInterval);

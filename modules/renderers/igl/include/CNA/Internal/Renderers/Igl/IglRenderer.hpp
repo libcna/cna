@@ -1794,6 +1794,18 @@ namespace CNA::Internal::Renderers::Igl
             std::uint32_t& attributeMask);
         [[nodiscard]] igl::ITexture* ResolveDummyTexture(bool cube);
 
+        /// GLTF-374: which 1x1 stand-in an unbound sampler slot gets. White is neutral for colour,
+        /// metallic-roughness, emissive and occlusion; a tangent-space normal map needs the
+        /// flat-normal texel instead, because white decodes to a normal 55 degrees off the surface.
+        enum class NeutralTextureKind
+        {
+            White2D,
+            WhiteCube,
+            FlatNormal2D
+        };
+
+        [[nodiscard]] igl::ITexture* ResolveNeutralTexture(NeutralTextureKind kind);
+
         std::unique_ptr<IglPlatformSurface> surface_;
 
         // Frame state.
@@ -1850,6 +1862,7 @@ namespace CNA::Internal::Renderers::Igl
         std::unordered_map<std::uint64_t, std::shared_ptr<igl::ISamplerState>> samplerStates_;
         std::shared_ptr<igl::ITexture> dummyTexture2D_;
         std::shared_ptr<igl::ITexture> dummyTextureCube_;
+        std::shared_ptr<igl::ITexture> dummyFlatNormal2D_;
 
         std::unique_ptr<IglDynamicBufferPool> dynamicVertexPool_;
         std::unique_ptr<IglDynamicBufferPool> dynamicIndexPool_;
