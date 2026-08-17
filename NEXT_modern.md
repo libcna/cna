@@ -99,6 +99,14 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-17 | same, with `MOD-105`/`108`/`124`/`131` applied | same | 7565 ran · 7501 pass · 64 skip · **0 fail** |
 | 2026-08-17 | same, with `MOD-107` applied | same | 7567 ran · 7503 pass · 64 skip · **0 fail** |
 | 2026-08-17 | same, through Phases 2/3/4/6/7 (tonemap, bloom, FXAA, pipeline) | same | 7630 ran · 7566 pass · 64 skip · **0 fail** |
+| 2026-08-17 | `cmake-build-debug` — the same branch with **`CNA_CNAEXT=OFF`** (the default) | same | 7544 ran · 7480 pass · 64 skip · **0 fail** |
+
+The `CNA_CNAEXT=OFF` row is the one that answers "can this break what already works". It configures,
+builds and passes with the whole engine layer compiled out. Its lower test count is expected and not
+a sign of anything missing: the pre-existing `DepthEffect`, `CRTEffect` and `AsciiPostProcessEffect`
+suites are themselves `CNA_CNAEXT`-guarded, so they compile away alongside the new ones. What does
+*not* compile away — the capability queries, the float render-target work and the HDR round trip --
+runs in both configurations.
 
 That is a clean run, and it is new. Measuring the first baseline on this branch turned up eight
 failures and a segfault at ~7300 tests, all of them pre-existing on `next` (verified by rebuilding
