@@ -5,13 +5,14 @@
 `PIXIJS` was authored on **2026-08-16** per direct task instruction and is CNA's newest, most
 experimental renderer. On **2026-08-17** a real Emscripten toolchain build was performed for the
 first time, and later the same day `cna_test_pixijs_smoke` was run in a **real browser** (headless
-Chromium), starting at **5/5 PASS** and growing across several rounds the same day to **16/16
+Chromium), starting at **5/5 PASS** and growing across several rounds the same day to **19/19
 PASS**, covering scaled draws, rotation, `SpriteEffects` flip, all 3 currently-mapped blend presets,
 full render-target bind/Clear/draw/readback round-tripping, both sampler-state entry points
-(`SetSamplerFilter`/`SetSamplerAddressMode`), and `SpriteFont`/`DrawString`. Five real, independent
-bugs (`REMED-PIXIJS-1` through `REMED-PIXIJS-5`) were found and fixed along the way, each preceded by
-a standalone live-browser probe confirming the actual PixiJS/WebGL behavior before the fix was
-written. See `plan_pixijs.md`
+(`SetSamplerFilter`/`SetSamplerAddressMode`), `SpriteFont`/`DrawString`, and a real
+`Begin(transformMatrix)` camera-style transform. Five real, independent bugs (`REMED-PIXIJS-1`
+through `REMED-PIXIJS-5`) were found and fixed along the way, each preceded by a standalone
+live-browser probe confirming the actual PixiJS/WebGL behavior before the fix was written. See
+`plan_pixijs.md`
 for the full task breakdown, design decisions, and this renderer's own honest, continuously-updated
 status legend -- what follows here is the real, current verification picture, not the original
 zero-verification starting point.
@@ -48,7 +49,7 @@ obtained copy (e.g. via `npm pack pixi.js@7.4.2`) was used instead; both paths a
   `ReferenceError: window is not defined` before any renderer-specific code runs, because Node has no
   real DOM.
 - **Run in a real browser (headless Chromium, driven by Playwright, `--use-gl=swiftshader`), served
-  over local HTTP: grew from `5/5 PASS` to `16/16 PASS` across several rounds on 2026-08-17.** The
+  over local HTTP: grew from `5/5 PASS` to `19/19 PASS` across several rounds on 2026-08-17.** The
   first attempt scored 3/5 -- window/renderer plumbing checks passed, but both pixel-value checks
   (`GetBackBufferData` after a scaled `Draw`) failed. Diagnosed live in the page (`page.evaluate()`
   dumping texture buffers, sprite state, and a manually-forced re-render + `extract.pixels()`), which
@@ -88,6 +89,13 @@ obtained copy (e.g. via `npm pack pixi.js@7.4.2`) was used instead; both paths a
     renderer-specific code -- a one-glyph `SpriteFont` drawn via `DrawString` produced the glyph's
     exact atlas color at the requested position on the first try, since `DrawString`'s `pushSprite`
     funnels every glyph through the same `Draw()` overload frames 1-8 already exercised.
+  - **`SetTransformMatrix`** (frame 10, → 19/19): implemented for real, replacing the previous
+    throw -- the batch's 2D affine transform is composed with each sprite's own local placement
+    matrix and applied via `PIXI.Transform.setFromMatrix`, matching FNA's own "transform applies
+    after per-sprite local placement" contract. Composition math was confirmed correct via a
+    standalone browser probe (identity/translate/scale cases) before the implementation was written;
+    a real `Matrix::CreateTranslation(16,16,0)` in the smoke test correctly shifts an entire scaled
+    draw, with the untransformed origin confirmed back to background color.
 - **Confirmed blocked, and confirmed NOT an emsdk-version issue**: the shared `CnaTests` target
   (built with `-sASYNCIFY=1` and `-fwasm-exceptions`) fails to link under Emscripten --
   `em++` itself warns `ASYNCIFY=1 is not compatible with -fwasm-exceptions`, and `wasm-opt --asyncify`
@@ -100,9 +108,8 @@ obtained copy (e.g. via `npm pack pixi.js@7.4.2`) was used instead; both paths a
   2026-08-17 update for the full account, including the (unrelated) workaround needed for
   Emscripten's own blocked `zlib` port fetch in a network-restricted sandbox.
 - **Still open**: `NonPremultiplied` blend (shares `AlphaBlend`'s code path, no distinct test yet),
-  mip level > 0 texture uploads, direct `Texture2D::SetData` on a bound render target,
-  `SetTransformMatrix` with a non-identity matrix, the generic-`BlendState` stretch goal, and
-  `SpriteFont`/`DrawString` all remain unverified or unimplemented -- see `plan_pixijs.md`'s own
+  mip level > 0 texture uploads, direct `Texture2D::SetData` on a bound render target, and the
+  generic-`BlendState` stretch goal all remain unverified or unimplemented -- see `plan_pixijs.md`'s own
   "What remains" list for the current, precise picture.
 
 The renderer's C++ source compiles conditionally behind `#if defined(__EMSCRIPTEN__)` for every
@@ -158,8 +165,6 @@ described as complete until that task actually closes with real verification:
   (`PixiJsRenderTargetRenderer::UpdatePixels`) -- a `PIXI.RenderTexture` has no simple synchronous
   CPU-buffer upload path the way a buffer-backed plain texture does; needs a re-upload-via-sprite
   design that has not been written yet.
-- **`SetTransformMatrix()` (`Begin(transformMatrix)`) is not implemented** (`PIXIJS-45`) -- a
-  non-identity matrix throws rather than being silently ignored.
 - **Custom `Effect` support throws** (`PIXIJS-47`) -- unlike `CANVAS`/`HTML_DOM`, this is *not* a
   structural boundary (PixiJS has a real GLSL shader stage via `PIXI.Filter`/`PIXI.Shader`); it is
   simply out of this plan's v1 scope.

@@ -29,7 +29,7 @@ using namespace CNA::Internal::Renderers::PixiJs;
 
 namespace
 {
-    constexpr int kExpectedChecks = 16;
+    constexpr int kExpectedChecks = 19;
 }
 
 class PixiJsSmokeTest : public Game
@@ -101,7 +101,7 @@ protected:
             renderer.GetViewportSize(w, h);
             check(w > 0 && h > 0, "GetViewportSize() reports a positive logical size");
         }
-        else if (frame_ == 10)
+        else if (frame_ == 11)
         {
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             result_ = (passCount_ == kExpectedChecks) ? 0 : 1;
@@ -277,6 +277,28 @@ protected:
             dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
             check(pixels[2 * 64 + 2] == Color(255, 200, 0, 255),
                   "DrawString renders the glyph's own atlas color at the requested position, with zero renderer-specific code");
+        }
+        else if (frame_ == 10)
+        {
+            // plan_pixijs.md PIXIJS-45: Begin(transformMatrix) with a real (non-identity) camera-
+            // style translation. The same scaled draw as frame 1 (destRect(8,8,8,8), 2x2 source),
+            // but with a Matrix::CreateTranslation(16,16,0) transform -- the transform applies AFTER
+            // the sprite's own local placement (FNA's own contract), so the whole 8x8 quad that
+            // frame 1 placed at (8,8)-(16,16) must land at (24,24)-(32,32) instead, with the same
+            // per-texel content.
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, nullptr, nullptr,
+                                nullptr, nullptr, Matrix::CreateTranslation(16.0f, 16.0f, 0.0f));
+            spriteBatch_->Draw(*texture_, Rectangle(8, 8, 8, 8), Rectangle(0, 0, 2, 2), Color::White);
+            spriteBatch_->End();
+
+            std::vector<Color> pixels(64 * 64, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
+            check(pixels[24 * 64 + 24] == Color(255, 0, 0, 255),
+                  "Begin(transformMatrix) translation shifts the whole draw, top-left texel unaffected");
+            check(pixels[31 * 64 + 31] == Color(255, 255, 0, 255),
+                  "Begin(transformMatrix) translation shifts the whole draw, bottom-right texel unaffected");
+            check(pixels[8 * 64 + 8] == Color(100, 149, 237, 255),
+                  "the untransformed origin (8,8) is back to the CornflowerBlue background -- the draw truly moved, not just replicated");
         }
     }
 

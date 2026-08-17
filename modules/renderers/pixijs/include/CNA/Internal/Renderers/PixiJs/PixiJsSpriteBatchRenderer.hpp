@@ -35,8 +35,9 @@ namespace CNA::Internal::Renderers::PixiJs
         void End() override;
         /** @brief Selects immediate per-draw replay or one deferred bulk replay from End(). */
         void SetImmediateMode(bool immediate) override;
-        /// plan_pixijs.md PIXIJS-45: not yet implemented -- throws not_yet_implemented rather than
-        /// silently ignoring a non-identity transform.
+        /// plan_pixijs.md PIXIJS-45: applied by composing the batch's 2D affine transform with each
+        /// sprite's own local placement matrix at flush time (`sprite.transform.setFromMatrix`),
+        /// matching FNA's own "transformMatrix applied after per-sprite local placement" contract.
         void SetTransformMatrix(const Matrix& m) override;
         /// plan_pixijs.md PIXIJS-47/Design decision 10: throws for a non-null custom Effect in
         /// this v1 scope.
@@ -107,5 +108,16 @@ namespace CNA::Internal::Renderers::PixiJs
         /// True for a "linear" (smoothed) sampler, false for "point" (nearest) -- same
         /// magnification-dominant TextureFilter grouping CANVAS-42 already established.
         bool linearFilter_ = true;
+        /// plan_pixijs.md PIXIJS-45: the batch's 2D affine transform (`Begin(transformMatrix)`),
+        /// stored as its own upper-left 2x2 + translation components (XNA's `Matrix.M11/M12/M21/
+        /// M22/M41/M42`) rather than the full 4x4 `Matrix` -- SpriteBatch's transform is always a 2D
+        /// affine map in this v1 scope, matching FNA's own `SpriteEffect` vertex shader usage.
+        /// Defaults to identity.
+        float transformA_ = 1.0f;
+        float transformB_ = 0.0f;
+        float transformC_ = 0.0f;
+        float transformD_ = 1.0f;
+        float transformTx_ = 0.0f;
+        float transformTy_ = 0.0f;
     };
 }

@@ -191,17 +191,31 @@
 >   readback and by direct inspection of `SpriteBatch.cpp`: `DrawString`'s `pushSprite` funnels every
 >   glyph through the same `Draw(destRect, srcRect, color, rotation, origin, effects, layerDepth)`
 >   overload frames 1-8 already exercised. Result: **16/16**.
+> - **`SetTransformMatrix`** (PIXIJS-45, frame 10) was implemented for real, replacing the previous
+>   throw: the batch's 2D affine transform (from `Matrix.M11/M12/M21/M22/M41/M42`) is composed with
+>   each sprite's own local placement matrix (built the same way PixiJS's own
+>   `updateLocalTransform` would from position/rotation/scale) and handed to
+>   `PIXI.Transform.setFromMatrix` for decomposition back into position/scale/rotation/skew, matching
+>   FNA's own contract that the transform applies *after* per-sprite local placement. The composition
+>   math and `setFromMatrix`'s own decomposition were confirmed correct via a standalone browser probe
+>   (identity, pure translation, and pure scale all landed at the exact expected pixel bounding box)
+>   before any source change was written. A real `Matrix::CreateTranslation(16,16,0)` transform in the
+>   smoke test (frame 10) correctly shifts an entire scaled draw, with the untransformed origin
+>   confirmed back to plain background color (not a leftover copy). The identity-transform case keeps
+>   the renderer's exact pre-existing code path, so none of the other 16 checks were put at risk.
+>   Result: **19/19**.
 >
-> **Bottom line, this update**: `cna_test_pixijs_smoke` now exercises and passes 16/16 real,
+> **Bottom line, this update**: `cna_test_pixijs_smoke` now exercises and passes 19/19 real,
 > pixel-verified checks in a real headless-Chromium browser, covering scaled draws, rotation, flip,
 > all 3 currently-mapped blend presets with correct compositing math, full render-target
-> bind/Clear/draw/readback round-tripping, both sampler-state entry points, and `SpriteFont`. Five
-> real, independent bugs (`REMED-PIXIJS-1` through `REMED-PIXIJS-5`) were found and fixed this way,
-> none of them guessed — every fix was preceded by a standalone live-browser probe confirming the
-> actual PixiJS/WebGL behavior before the corresponding source change was written. Not yet exercised
-> by any test: `SetTransformMatrix` with a non-identity matrix (PIXIJS-45, still throws), direct
-> `Texture2D::SetData` on a bound render target (PIXIJS-32, still throws), mip level>0 policy
-> (PIXIJS-31, still throws), and the generic-`BlendState` stretch goal (PIXIJS-52).
+> bind/Clear/draw/readback round-tripping, both sampler-state entry points, `SpriteFont`, and a real
+> `Begin(transformMatrix)` camera-style transform. Five real, independent bugs (`REMED-PIXIJS-1`
+> through `REMED-PIXIJS-5`) were found and fixed this way, none of them guessed — every fix (and the
+> `SetTransformMatrix` implementation itself) was preceded by a standalone live-browser probe
+> confirming the actual PixiJS/WebGL behavior before the corresponding source change was written. Not
+> yet exercised by any test: direct `Texture2D::SetData` on a bound render target (PIXIJS-32, still
+> throws), mip level>0 policy (PIXIJS-31, still throws), and the generic-`BlendState` stretch goal
+> (PIXIJS-52).
 
 ### What remains (in dependency order)
 
@@ -222,7 +236,7 @@
    this plan.
 5. ~~Run `cna_test_pixijs_smoke` in a real browser and get real pixel-level evidence.~~ **Done**
    (2026-08-17, via a headless Chromium driven by Playwright, not `emrun` specifically, but a real
-   browser regardless): now **16/16 PASS** (grew from the original 5/5 across several rounds this
+   browser regardless): now **19/19 PASS** (grew from the original 5/5 across several rounds this
    same day — see the dated update above for exactly which checks were added and which real bugs
    each one found).
 6. Once basic drawing works, close the still-open design/implementation gaps, roughly in this order:
@@ -249,8 +263,9 @@
      `Texture` view rejects any frame rectangle exceeding its base texture, so wrap mode can only
      ever affect linear-filter edge bleed through this renderer, never large-scale tiling within one
      `Draw()` call (see the dated update above).
-   - **PIXIJS-45** — `SetTransformMatrix` (non-identity `Begin(transformMatrix)`). **Still open**,
-     still throws.
+   - ~~**PIXIJS-45** — `SetTransformMatrix` (non-identity `Begin(transformMatrix)`).~~ **Implemented
+     and verified**: composed with each sprite's own local placement matrix via
+     `PIXI.Transform.setFromMatrix`, verified with a real translation transform in the smoke test.
    - ~~**PIXIJS-60** — confirm `SpriteFont`/`DrawString` actually falls out of the `SpriteBatch` path
      for free.~~ **Verified**: a `DrawString` call renders the glyph's own atlas color at the
      requested backbuffer position with zero renderer-specific code, same as `CANVAS`/`HTML_DOM`.
@@ -551,7 +566,7 @@ For every task: at minimum, get a real Emscripten toolchain in a later session a
 | PIXIJS-42 | Color tint: `sprite.tint = 0xRRGGBB` (native, RGB only — same split as `CANVAS-32`/Canvas2D, alpha is `sprite.alpha` separately) | 🟨 | Exercised indirectly by every frame's `Color::White` draws (RGB tint 0xFFFFFF is a no-op, so this alone doesn't prove the split). No premultiply/straight-alpha tint normalization yet (`CANVAS-84`'s own analogous fix has no PixiJS counterpart) — tracked under PIXIJS-51. |
 | PIXIJS-43 | Rotation around `origin`: `sprite.anchor.set(originX/width, originY/height); sprite.rotation = ...` — PixiJS's `anchor` *is* XNA's `origin` concept almost directly | ✅ | Verified 2026-08-17 (frame 2): a 180° rotation around a texture's exact center (`origin=(1,1)` on a 2x2 texture) produces the exact expected swapped-quadrant pixels while the bounding box itself does not move. |
 | PIXIJS-44 | `SpriteEffects::FlipHorizontally`/`FlipVertically`: `PIXI.Texture`'s own GroupD8 `rotate` parameter (12=H-mirror, 8=V-mirror, 4=both) | ✅ | Verified 2026-08-17 (frame 3), with a real bug found and fixed first (`REMED-PIXIJS-2`): the original negative-`sprite.scale` design shifted the destination rectangle's footprint instead of only mirroring sampling. Fixed by switching to the texture-level `rotate` parameter; GroupD8 values confirmed empirically via a standalone browser probe, not from documentation alone. |
-| PIXIJS-45 | `SetTransformMatrix()` (`Begin(transformMatrix)`) | ⬜ | Still not implemented — throws for any non-identity matrix rather than silently ignoring it; identity is a no-op. |
+| PIXIJS-45 | `SetTransformMatrix()` (`Begin(transformMatrix)`) | ✅ | Implemented and verified 2026-08-17: the batch's 2D affine transform (`M11/M12/M21/M22/M41/M42`) is composed with each sprite's own local placement matrix and applied via `PIXI.Transform.setFromMatrix`, matching FNA's own post-local-placement `transformMatrix` contract. Composition math confirmed correct via a standalone browser probe (identity/translate/scale cases) before being written; a real `Begin(transformMatrix)` with `Matrix::CreateTranslation(16,16,0)` correctly shifts an entire scaled draw in the smoke test (frame 10, 3 checks). Identity transform keeps the exact pre-existing fast code path, so no regression risk to the other 16 already-verified checks. |
 | PIXIJS-46 | `TextureAddressMode` via native `baseTexture.wrapMode = PIXI.WRAP_MODES.{CLAMP,REPEAT,MIRRORED_REPEAT}` | 🟨 | Implemented and verified 2026-08-17: `SetSamplerAddressMode` genuinely sets `baseTexture.wrapMode` to the real WebGL GL-enum values (confirmed live: `REPEAT`=10497, `CLAMP`=33071, `MIRRORED_REPEAT`=33648). Stays 🟨, not ✅: a real architectural boundary was found — PixiJS's `Texture` constructor rejects any per-draw frame rectangle exceeding the base texture, so XNA's classic "oversized source rect tiles under Wrap" behavior cannot be produced through this renderer's current per-draw-Texture-view architecture; only the subtler linear-filter edge-bleed effect is reachable, and that has not been pixel-verified. |
 | PIXIJS-47 | Custom `Effect` via `Begin(effect)`: throws for v1 (Design decision 10) | ✅ | Implemented in `PixiJsSpriteBatchRenderer::SetCustomEffect`, same confidence level as `CANVAS-38`. |
 

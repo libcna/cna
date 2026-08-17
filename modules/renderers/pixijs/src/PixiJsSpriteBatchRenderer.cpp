@@ -32,7 +32,18 @@
 // PIXI.Texture "view" onto it (Design decision 8's own per-draw frame views all share one
 // baseTexture) -- setting them here is genuinely global to that texture, matching how a real
 // WebGL sampler parameter would behave too.
-EM_JS(void, CNA_PixiJs_FlushSprites, (const void* commands, int count, int stride, int blendMode, int wrapMode, int scaleMode), {
+// plan_pixijs.md PIXIJS-45: transformA/B/C/D/tx/ty are the batch's Begin(transformMatrix), applied
+// AFTER each sprite's own local placement matrix (position/rotation/scale) -- matching FNA's own
+// SpriteEffect vertex shader, which multiplies the per-sprite local quad by this matrix as a
+// separate world/view step. Composition and PIXI.Transform.setFromMatrix's own decomposition back
+// into position/scale/rotation/skew were confirmed correct via a standalone browser probe (identity,
+// pure translation, and pure scale cases all landed at the exact expected pixel bounding box) before
+// this code was written.
+EM_JS(void, CNA_PixiJs_FlushSprites, (const void* commands, int count, int stride, int blendMode, int wrapMode, int scaleMode,
+                                       float transformA, float transformB, float transformC, float transformD,
+                                       float transformTx, float transformTy), {
+    const isIdentityTransform = transformA === 1 && transformB === 0 && transformC === 0 &&
+                                 transformD === 1 && transformTx === 0 && transformTy === 0;
     const app = Module['cnaPixiApp'];
     if (!app) return;
     if (!Module['cnaPixiSpritePool']) Module['cnaPixiSpritePool'] = [];
@@ -94,10 +105,35 @@ EM_JS(void, CNA_PixiJs_FlushSprites, (const void* commands, int count, int strid
 
         // plan_pixijs.md PIXIJS-43: anchor is PixiJS's own normalized (0..1 of the frame) pivot --
         // XNA's origin is source-pixel space, so divide through by the source rectangle's own size.
+        // Anchor is a vertex-generation-time pivot, independent of the transform below (matches
+        // FNA's own origin subtraction happening before the transformMatrix multiply).
         sprite.anchor.set(sourceWidth ? originX / sourceWidth : 0, sourceHeight ? originY / sourceHeight : 0);
-        sprite.position.set(destinationX, destinationY);
-        sprite.scale.set(sourceWidth ? destinationWidth / sourceWidth : 1, sourceHeight ? destinationHeight / sourceHeight : 1);
-        sprite.rotation = rotation;
+
+        const scaleX = sourceWidth ? destinationWidth / sourceWidth : 1;
+        const scaleY = sourceHeight ? destinationHeight / sourceHeight : 1;
+        if (isIdentityTransform) {
+            // Fast path: byte-identical to this renderer's pre-PIXIJS-45 behavior.
+            sprite.position.set(destinationX, destinationY);
+            sprite.scale.set(scaleX, scaleY);
+            sprite.rotation = rotation;
+        } else {
+            // plan_pixijs.md PIXIJS-45: compose the batch's transform (a1,b1,c1,d1,tx1,ty1) with this
+            // sprite's own local placement matrix (a2,b2,c2,d2,tx2,ty2 -- translate*rotate*scale, the
+            // same matrix PixiJS's own updateLocalTransform would build from position/rotation/scale),
+            // then hand the combined 2x3 affine matrix to PIXI.Transform's own decomposition rather
+            // than re-deriving rotation/scale/skew by hand.
+            const cosR = Math.cos(rotation), sinR = Math.sin(rotation);
+            const a2 = cosR * scaleX, b2 = sinR * scaleX;
+            const c2 = -sinR * scaleY, d2 = cosR * scaleY;
+            const tx2 = destinationX, ty2 = destinationY;
+            const ca = transformA * a2 + transformC * b2;
+            const cb = transformB * a2 + transformD * b2;
+            const cc = transformA * c2 + transformC * d2;
+            const cd = transformB * c2 + transformD * d2;
+            const ctx = transformA * tx2 + transformC * ty2 + transformTx;
+            const cty = transformB * tx2 + transformD * ty2 + transformTy;
+            sprite.transform.setFromMatrix(new PIXI.Matrix(ca, cb, cc, cd, ctx, cty));
+        }
 
         // plan_pixijs.md PIXIJS-42: native sprite.tint is RGB-only (same split CANVAS-32 already
         // has for Canvas2D) -- alpha is the separate sprite.alpha property.
@@ -204,7 +240,9 @@ namespace CNA::Internal::Renderers::PixiJs
             const int pixiWrapMode = TextureAddressModeToPixiWrapMode(addressU_);
             const int pixiScaleMode = linearFilter_ ? 1 : 0; // PIXI.SCALE_MODES.LINEAR/.NEAREST
             CNA_PixiJs_FlushSprites(commands_.data(), static_cast<int>(commands_.size()), 14,
-                                    pixiBlendModeCode, pixiWrapMode, pixiScaleMode);
+                                    pixiBlendModeCode, pixiWrapMode, pixiScaleMode,
+                                    transformA_, transformB_, transformC_, transformD_,
+                                    transformTx_, transformTy_);
         }
 #endif
         begun_ = false;
@@ -217,12 +255,15 @@ namespace CNA::Internal::Renderers::PixiJs
 
     void PixiJsSpriteBatchRenderer::SetTransformMatrix(const Matrix& m)
     {
-        // plan_pixijs.md PIXIJS-45: not yet implemented. A non-identity transform silently ignored
-        // would misrender with no error, so this throws rather than pretending to apply it.
-        if (m != Matrix::getIdentityProperty())
-            throw std::runtime_error(
-                "PixiJS (v1 scope): SpriteBatch::Begin(transformMatrix) with a non-identity matrix "
-                "is not yet implemented -- plan_pixijs.md PIXIJS-45.");
+        // plan_pixijs.md PIXIJS-45: SpriteBatch's transformMatrix is always a 2D affine map in this
+        // v1 scope (matching FNA's own SpriteEffect vertex shader, which only ever receives a 2D
+        // camera/view matrix here) -- only the upper-left 2x2 and the XY translation row matter.
+        transformA_ = m.M11;
+        transformB_ = m.M12;
+        transformC_ = m.M21;
+        transformD_ = m.M22;
+        transformTx_ = m.M41;
+        transformTy_ = m.M42;
     }
 
     void PixiJsSpriteBatchRenderer::SetCustomEffect(Effect* effect)
@@ -302,7 +343,9 @@ namespace CNA::Internal::Renderers::PixiJs
             const int pixiBlendModeCode = PixiBlendModeToPixiJsCode(activeBlendMode_);
             const int pixiWrapMode = TextureAddressModeToPixiWrapMode(addressU_);
             const int pixiScaleMode = linearFilter_ ? 1 : 0; // PIXI.SCALE_MODES.LINEAR/.NEAREST
-            CNA_PixiJs_FlushSprites(&command, 1, 14, pixiBlendModeCode, pixiWrapMode, pixiScaleMode);
+            CNA_PixiJs_FlushSprites(&command, 1, 14, pixiBlendModeCode, pixiWrapMode, pixiScaleMode,
+                                    transformA_, transformB_, transformC_, transformD_,
+                                    transformTx_, transformTy_);
             return;
         }
 #endif
