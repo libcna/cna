@@ -47,19 +47,53 @@ TEST(PixiJsBlendStateMapping, StandardPresetsMapCorrectly)
     EXPECT_EQ(BlendStateToPixiJsBlendMode(4, 4, 0, 0, 0, 0), PixiJsBlendMode::Additive);
 }
 
-TEST(PixiJsBlendStateMapping, AsymmetricColorAlphaFactorsThrow)
+// plan_pixijs.md PIXIJS-52: any non-preset Blend/BlendFunction combination now gets a real, generic
+// Custom mapping instead of a throw -- verified in a real browser (cna_test_pixijs_smoke frame 12,
+// 22/22) via a custom PixiJS blend-mode table registration, not just this pure-function mapping.
+TEST(PixiJsBlendStateMapping, AsymmetricColorAlphaFactorsMapToCustom)
 {
-    EXPECT_THROW(BlendStateToPixiJsBlendMode(0, 4, 5, 5, 0, 0), std::runtime_error);
+    EXPECT_EQ(BlendStateToPixiJsBlendMode(0, 4, 5, 5, 0, 0), PixiJsBlendMode::Custom);
 }
 
-TEST(PixiJsBlendStateMapping, NonAddBlendFunctionThrows)
+TEST(PixiJsBlendStateMapping, NonAddBlendFunctionMapsToCustom)
 {
-    EXPECT_THROW(BlendStateToPixiJsBlendMode(0, 0, 5, 5, 1, 0), std::runtime_error);
+    EXPECT_EQ(BlendStateToPixiJsBlendMode(0, 0, 5, 5, 1, 0), PixiJsBlendMode::Custom);
 }
 
-TEST(PixiJsBlendStateMapping, ArbitraryCustomBlendFactorsThrow)
+TEST(PixiJsBlendStateMapping, ArbitraryCustomBlendFactorsMapToCustom)
 {
-    EXPECT_THROW(BlendStateToPixiJsBlendMode(2, 2, 3, 3, 0, 0), std::runtime_error);
+    EXPECT_EQ(BlendStateToPixiJsBlendMode(2, 2, 3, 3, 0, 0), PixiJsBlendMode::Custom);
+}
+
+// plan_pixijs.md PIXIJS-52: XnaBlendToGlFactor/XnaBlendFunctionToGlEquation are the pure-function
+// halves of the generic mapping -- every enumerator covered, matching real WebGL GL enum values
+// confirmed live against a real WebGL context (see PixiJsRenderer.cpp's own doc comments).
+TEST(PixiJsBlendStateMapping, XnaBlendToGlFactorCoversEveryEnumerator)
+{
+    EXPECT_EQ(XnaBlendToGlFactor(0), 1);      // One -> ONE
+    EXPECT_EQ(XnaBlendToGlFactor(1), 0);      // Zero -> ZERO
+    EXPECT_EQ(XnaBlendToGlFactor(2), 768);    // SourceColor -> SRC_COLOR
+    EXPECT_EQ(XnaBlendToGlFactor(3), 769);    // InverseSourceColor -> ONE_MINUS_SRC_COLOR
+    EXPECT_EQ(XnaBlendToGlFactor(4), 770);    // SourceAlpha -> SRC_ALPHA
+    EXPECT_EQ(XnaBlendToGlFactor(5), 771);    // InverseSourceAlpha -> ONE_MINUS_SRC_ALPHA
+    EXPECT_EQ(XnaBlendToGlFactor(6), 774);    // DestinationColor -> DST_COLOR
+    EXPECT_EQ(XnaBlendToGlFactor(7), 775);    // InverseDestinationColor -> ONE_MINUS_DST_COLOR
+    EXPECT_EQ(XnaBlendToGlFactor(8), 772);    // DestinationAlpha -> DST_ALPHA
+    EXPECT_EQ(XnaBlendToGlFactor(9), 773);    // InverseDestinationAlpha -> ONE_MINUS_DST_ALPHA
+    EXPECT_EQ(XnaBlendToGlFactor(10), 32769); // BlendFactor -> CONSTANT_COLOR
+    EXPECT_EQ(XnaBlendToGlFactor(11), 32770); // InverseBlendFactor -> ONE_MINUS_CONSTANT_COLOR
+    EXPECT_EQ(XnaBlendToGlFactor(12), 776);   // SourceAlphaSaturation -> SRC_ALPHA_SATURATE
+    EXPECT_THROW(XnaBlendToGlFactor(13), std::runtime_error);
+}
+
+TEST(PixiJsBlendStateMapping, XnaBlendFunctionToGlEquationCoversEveryEnumerator)
+{
+    EXPECT_EQ(XnaBlendFunctionToGlEquation(0), 32774); // Add -> FUNC_ADD
+    EXPECT_EQ(XnaBlendFunctionToGlEquation(1), 32778); // Subtract -> FUNC_SUBTRACT
+    EXPECT_EQ(XnaBlendFunctionToGlEquation(2), 32779); // ReverseSubtract -> FUNC_REVERSE_SUBTRACT
+    EXPECT_EQ(XnaBlendFunctionToGlEquation(3), 32776); // Max -> MAX
+    EXPECT_EQ(XnaBlendFunctionToGlEquation(4), 32775); // Min -> MIN
+    EXPECT_THROW(XnaBlendFunctionToGlEquation(5), std::runtime_error);
 }
 
 TEST(PixiJsRendererThrowNo3D, ClearVariantsThrow)
@@ -129,12 +163,16 @@ TEST(PixiJsSpriteBatchRendererTest, NullCustomEffectDoesNotThrow)
     EXPECT_NO_THROW(batch.SetCustomEffect(nullptr));
 }
 
-TEST(PixiJsSpriteBatchRendererTest, NonIdentityTransformThrows)
+// plan_pixijs.md PIXIJS-45: SetTransformMatrix no longer throws for a non-identity matrix -- it
+// applies the transform for real (verified in a real browser, cna_test_pixijs_smoke frame 10). This
+// test only checks the pure C++ setter doesn't throw; the real transform math is EM_JS/browser-only
+// and isn't exercised by this native-buildable test.
+TEST(PixiJsSpriteBatchRendererTest, NonIdentityTransformDoesNotThrow)
 {
     PixiJsSpriteBatchRenderer batch;
     Matrix m = Matrix::getIdentityProperty();
     m.M11 = 2.0f;
-    EXPECT_THROW(batch.SetTransformMatrix(m), std::runtime_error);
+    EXPECT_NO_THROW(batch.SetTransformMatrix(m));
     EXPECT_NO_THROW(batch.SetTransformMatrix(Matrix::getIdentityProperty()));
 }
 #endif

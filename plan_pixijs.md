@@ -227,9 +227,55 @@
 > a decision): a live probe of `PIXI.BufferResource`/`PIXI.BaseTexture`'s own prototypes confirmed
 > PixiJS exposes no public per-level CPU upload API at all -- mipmaps are GPU-auto-generated from
 > level 0 only. The throw for level>0 is unchanged, but is now a documented structural conclusion
-> (matching `CANVAS-21`'s own reasoning) rather than an open question. Only the generic-`BlendState`
-> stretch goal (PIXIJS-52) and a distinct `NonPremultiplied`-vs-`AlphaBlend` test remain genuinely
-> open in this renderer's own v1 scope.
+> (matching `CANVAS-21`'s own reasoning) rather than an open question.
+>
+> **PIXIJS-51's `AlphaBlend`-vs-premultiplied-content gap was precisely characterized (not fixed)**:
+> a standalone probe confirmed `PIXI.ALPHA_MODES.PMA` + `BLEND_MODES.NORMAL` correctly composites
+> genuinely premultiplied source content, but this renderer always uploads `NPM` regardless of which
+> `BlendState` a later `Draw()` uses -- so `AlphaBlend` on premultiplied content would render wrong
+> today. Not attempted: fixing it would need per-flush `baseTexture.alphaMode` switching and is
+> plausibly a CNA-wide `Texture2D` semantics question (does the content pipeline premultiply by
+> default anywhere?), not a PixiJS-only fix.
+>
+> **Update, 2026-08-17 (continued further) — PIXIJS-52's stretch goal implemented and verified for
+> real, and a genuine regression caught by a new native-test verification technique.** Before writing
+> any implementation code, a live probe confirmed `renderer.state.blendModes` accepts arbitrary
+> custom entries (`[srcRGB,dstRGB,srcAlpha,dstAlpha]` or the 6-element form with a blend equation
+> pair) and that PixiJS's own `state.setBlendMode` genuinely applies them via
+> `gl.blendFuncSeparate`/`gl.blendEquationSeparate` -- a hand-registered "multiply" blend mode
+> produced the exact expected composited pixel. `BlendStateToPixiJsBlendMode` now returns
+> `PixiJsBlendMode::Custom` (never throws) for any non-preset combination; `XnaBlendToGlFactor`/
+> `XnaBlendFunctionToGlEquation` map every `Blend`/`BlendFunction` enumerator to real WebGL GL
+> constants; a reserved `blendModes` slot is mutated in place per flush with the resolved factors/
+> equation. A real custom `BlendState` (`ColorSourceBlend=DestinationColor,
+> ColorDestinationBlend=Zero` -- a multiply blend, not one of the 4 presets) verified in the browser
+> smoke test: **22/22 PASS** (frame 12).
+>
+> Separately: `PixiJsRendererTests.cpp` (the pure-C++ `PixiJsBlendStateMapping`/`PixiJsRendererThrowNo3D`
+> GTest coverage) has **never once compiled or run in any session** -- not because of the documented
+> `CnaTests`/Emscripten `ASYNCIFY` link crash alone, but because the `pixijs` CMake module itself only
+> configures `if(EMSCRIPTEN AND CNA_PIXIJS_JS_FILE)`, so it is entirely absent from every native
+> (non-Emscripten) `CnaTests` build too -- there was never a build combination in which it could run.
+> Worked around this session by compiling `PixiJsRendererTests.cpp` plus the 4 renderer `.cpp` files
+> directly with native `g++` (`-DCNA_RENDERER_PIXIJS`, no `-D__EMSCRIPTEN__`, so every `EM_JS` block
+> compiles out) against the already-built native `cmake-build-debug` libraries (`cna_graphics_core`,
+> `cna_core`, `sharp_runtime_*`, `SDL3`, `gtest`) -- a real, if manual, first-ever execution of this
+> test file. Result: **13/14 passed, 1 real regression caught**:
+> `PixiJsSpriteBatchRendererTest.NonIdentityTransformThrows` still expected `SetTransformMatrix` to
+> throw for a non-identity matrix, left over from before this session's own `PIXIJS-45`
+> implementation replaced that throw with a real transform. Fixed (renamed to
+> `NonIdentityTransformDoesNotThrow`, matching current behavior) and re-verified: **14/14 native
+> tests pass**, including 2 brand-new `XnaBlendToGlFactor`/`XnaBlendFunctionToGlEquation` coverage
+> tests exercising every enumerator. This native-compile workaround is not part of the CMake build
+> graph (it was a manual, one-off `g++` invocation, not a new build target) -- a future session could
+> turn it into a real lightweight native CMake target so this coverage runs automatically without
+> waiting on the `CnaTests`/Emscripten `ASYNCIFY` fix.
+>
+> **Bottom line, this update**: `cna_test_pixijs_smoke` is at **22/22 PASS**, and
+> `PixiJsRendererTests.cpp`'s pure-C++ coverage has been run for the first time ever (via a native
+> workaround), at **14/14 PASS** after fixing one real, genuine regression it caught. The only
+> genuinely open items left in this renderer's own v1 scope are the `AlphaBlend`/premultiplied-content
+> gap (PIXIJS-51, likely CNA-wide) and a distinct `NonPremultiplied`-vs-`AlphaBlend` test.
 
 ### What remains (in dependency order)
 
@@ -289,16 +335,23 @@
    - ~~**PIXIJS-60** — confirm `SpriteFont`/`DrawString` actually falls out of the `SpriteBatch` path
      for free.~~ **Verified**: a `DrawString` call renders the glyph's own atlas color at the
      requested backbuffer position with zero renderer-specific code, same as `CANVAS`/`HTML_DOM`.
-7. **PIXIJS-52** (stretch) — fully generic `BlendState` support via custom PixiJS blend-mode
-   registration, once the 4-preset path above is real and verified. **Still open.**
-8. **PIXIJS-80/82** — real GTest execution under Emscripten/`node` (blocked on step 4 above), and a
-   manual browser verification checklist (mirroring `docs/canvas-backend.md`'s own 10-item
-   checklist) once there is something real to check. **Still open** — Playwright-driven headless
-   Chromium has substituted for the manual checklist so far, but no `emrun`/real-device pass has
-   happened yet.
+7. ~~**PIXIJS-52** (stretch) — fully generic `BlendState` support via custom PixiJS blend-mode
+   registration.~~ **Implemented and verified**: a real custom (non-preset) `BlendState` composites
+   correctly in the browser smoke test via a reserved, per-flush-mutated `renderer.state.blendModes`
+   slot.
+8. **PIXIJS-80/82** — real GTest execution under the official `CnaTests` CMake target under
+   Emscripten/`node` is **still blocked** (step 4's `ASYNCIFY`/`-fwasm-exceptions` crash), but
+   `PixiJsRendererTests.cpp`'s own pure-C++ coverage has now actually run once, via a manual native
+   `g++` workaround (see the dated update above) -- 14/14 pass. A manual browser verification
+   checklist (mirroring `docs/canvas-backend.md`'s own 10-item checklist) is **still open** --
+   Playwright-driven headless Chromium has substituted for it so far, but no `emrun`/real-device pass
+   has happened yet. Turning the native workaround into a real lightweight CMake target (so this
+   coverage runs automatically, independent of the Emscripten blocker) is a good, well-scoped task
+   for a future session.
 
-Steps 1-3, 5, and most of step 6 are now done. Code review is still not the same as verification —
-every ✅ mark below is tied to a specific, dated, reproduced browser result, not to source existing.
+Steps 1-3, 5, 6, and 7 are now done. Code review is still not the same as verification — every ✅
+mark below is tied to a specific, dated, reproduced browser (or, for pure-C++ logic, native GTest)
+result, not to source existing.
 
 ---
 
@@ -596,7 +649,7 @@ For every task: at minimum, get a real Emscripten toolchain in a later session a
 |---|---|---|---|
 | PIXIJS-50 | `ApplyBlendState` → the 4 standard presets, mapped to a `PixiJsBlendMode` as a pure C++ function (`BlendStateToPixiJsBlendMode`) | 🟨 | Verified 2026-08-17 for `Opaque` (frame 5), `AlphaBlend` (frame 6), and `Additive` (frame 4) with exact compositing math confirmed via standalone probes. `PixiBlendModeToPixiJsCode()` added as the single source of truth (`REMED-PIXIJS-3`) so `PixiJsRenderer.cpp`/`PixiJsSpriteBatchRenderer.cpp` can't drift apart. Stays 🟨, not ✅: `NonPremultiplied` shares `AlphaBlend`'s code path but has no test distinguishing it yet. |
 | PIXIJS-51 | Premultiply/straight-alpha handling for `AlphaBlend` vs `NonPremultiplied` via per-texture `PIXI.ALPHA_MODES` | 🟨 | Textures now upload with `PIXI.ALPHA_MODES.NPM` instead of the silently-premultiplying `UNPACK` (`REMED-PIXIJS-4`, found and fixed 2026-08-17 — `UNPACK` is actually `PREMULTIPLY_ON_UPLOAD`). This makes straight-alpha sampling correct (verified via frames 5/6) for straight-alpha *content*. **Real gap precisely characterized 2026-08-17 via a standalone probe** (not just "not implemented"): real XNA's `BlendState.AlphaBlend` formula `(One, InvSourceAlpha)` expects the source texture's RGB to already be premultiplied by its own alpha (the content pipeline's default `TextureProcessor` does this at build time); `BlendState.NonPremultiplied` `(SourceAlpha, InvSourceAlpha)` is the preset for straight-alpha (e.g. runtime-loaded) content. Confirmed live: `ALPHA_MODES.PMA` + genuinely premultiplied source pixels + `BLEND_MODES.NORMAL` gives the exact correct composite (178,74,118,255, matching frame 6's straight-alpha result exactly) -- PixiJS *can* do both correctly -- but uploading premultiplied content as `NPM` (what this renderer always does today, regardless of which `BlendState` a later `Draw()` uses) gives a wrong result (114,74,118,255 in the same probe). Since `Texture2D::CreateFromPixels` (this renderer's own test fixtures, and CNA's general runtime-load path) supplies straight-alpha data, not premultiplied, this gap is invisible to every check in this smoke test — it would only surface with genuinely premultiplied source content drawn under `BlendState::AlphaBlend`. Fixing it for real would mean tracking, per-`Draw()`, which alpha convention the active texture's content follows and switching `baseTexture.alphaMode` (+ `.update()`) accordingly -- the same per-flush baseTexture-mutation pattern `PIXIJS-46`/`PIXIJS-53` already established for wrap/scale mode -- and is plausibly a CNA-wide `Texture2D`/`BlendState` semantics question (does CNA's content pipeline premultiply by default anywhere yet?) rather than a PixiJS-only fix, so it was not attempted this session. |
-| PIXIJS-52 | **Stretch goal**: fully generic `ApplyBlendState` (arbitrary `Blend`/`BlendFunction`) via on-demand custom blend-mode registration (Design decision 6) — real, cheap-looking API surface, but unimplemented and unverified; do not claim this without actually building and testing it | ⬜ | |
+| PIXIJS-52 | **Stretch goal, now implemented and verified**: fully generic `ApplyBlendState` (arbitrary `Blend`/`BlendFunction`) via on-demand custom blend-mode registration (Design decision 6) | ✅ | Implemented 2026-08-17: `BlendStateToPixiJsBlendMode` now returns `PixiJsBlendMode::Custom` (instead of throwing) for any combination outside the 4 presets; `XnaBlendToGlFactor`/`XnaBlendFunctionToGlEquation` map every `Blend`/`BlendFunction` enumerator to real WebGL GL constants; a reserved slot in `renderer.state.blendModes` is mutated in place per flush (same pattern PIXIJS-46/53 established for wrap/scale mode) with the raw `[srcRGB,dstRGB,srcAlpha,dstAlpha,eqRGB,eqAlpha]` 6-tuple PixiJS's real `state.setBlendMode` genuinely applies via `gl.blendFuncSeparate`/`gl.blendEquationSeparate` (confirmed live before writing any implementation code: a hand-registered custom "multiply" blend mode produced the exact expected composited pixel). A real custom (non-preset) `BlendState` — `ColorSourceBlend=DestinationColor, ColorDestinationBlend=Zero` — verified in the browser smoke test (frame 12, 22/22): exact expected multiply-composited pixel. |
 | PIXIJS-53 | `SetSamplerFilter` → `PIXI.SCALE_MODES.{NEAREST,LINEAR}` | ✅ | Implemented and verified 2026-08-17 (frame 8): an explicit `SamplerState` with `TextureFilter::Point` keeps a texel-boundary pixel unblended, a value empirically confirmed (via a standalone probe) to differ from the `LinearClamp` default's own blended result at that exact pixel — the check can only pass if the real sampler state changed. |
 
 ## Phase P6 — `SpriteFont`

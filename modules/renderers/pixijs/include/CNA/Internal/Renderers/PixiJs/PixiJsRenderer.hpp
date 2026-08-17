@@ -12,24 +12,49 @@ namespace CNA::Internal::Renderers::PixiJs
     /// dedicated enum (mirroring CanvasCompositeOp's own reasoning) rather than passing the raw
     /// PIXI.BLEND_MODES numeric value across the wasm/JS boundary directly, so C++-side blend-state
     /// mapping (plan_pixijs.md Design decision 6) stays a pure, unit-testable function.
-    enum class PixiJsBlendMode { Opaque = 0, AlphaBlend = 1, NonPremultiplied = 2, Additive = 3 };
+    /// `Custom` (PIXIJS-52) covers any Blend/BlendFunction combination outside the 4 standard
+    /// presets -- its real GL blend factors/equations live on PixiJsRendererState's own
+    /// `customBlend*` fields, populated by `XnaBlendToGlFactor`/`XnaBlendFunctionToGlEquation`.
+    enum class PixiJsBlendMode { Opaque = 0, AlphaBlend = 1, NonPremultiplied = 2, Additive = 3, Custom = 4 };
 
     /** @brief Blend state shared by one PixiJS renderer and the SpriteBatch instances it creates. */
     struct PixiJsRendererState
     {
         /** @brief Blend mode captured by a SpriteBatch when it begins. */
         PixiJsBlendMode blendMode = PixiJsBlendMode::AlphaBlend;
+        /// plan_pixijs.md PIXIJS-52: real WebGL blend-factor GL enum values, meaningful only when
+        /// `blendMode == PixiJsBlendMode::Custom`. Applied to a reserved, mutated-in-place slot in
+        /// PixiJS's own `renderer.state.blendModes` table at flush time (confirmed live, 2026-08-17,
+        /// that this table accepts arbitrary custom entries and that PixiJS's own `setBlendMode`
+        /// genuinely applies them via `gl.blendFuncSeparate`/`gl.blendEquationSeparate`).
+        int customBlendSrcRGB = 1;
+        int customBlendDstRGB = 0;
+        int customBlendSrcAlpha = 1;
+        int customBlendDstAlpha = 0;
+        int customBlendEquationRGB = 32774;   // GL_FUNC_ADD
+        int customBlendEquationAlpha = 32774; // GL_FUNC_ADD
     };
 
     /// Pure mapping from raw BlendState factors/BlendFunction (see IGraphicsRenderer::ApplyBlendState's
-    /// own parameter doc) to a PixiJsBlendMode; throws std::runtime_error for any Blend/BlendFunction
-    /// combination that isn't one of the 4 standard presets (plan_pixijs.md Design decision 6, v1
-    /// scope -- PIXIJS-52 tracks a future fully-generic mapping). Contains no EM_JS/JS calls --
-    /// exposed standalone so a future GTest run can unit test this mapping without a real
-    /// PIXI.Application (plan_pixijs.md status block: nothing here has actually been run yet).
+    /// own parameter doc) to a PixiJsBlendMode; returns `PixiJsBlendMode::Custom` for any
+    /// Blend/BlendFunction combination that isn't one of the 4 standard presets (plan_pixijs.md
+    /// PIXIJS-52 -- a real generic mapping, not a throw). Contains no EM_JS/JS calls -- exposed
+    /// standalone so a native GTest run can unit test this mapping without a real PIXI.Application.
     PixiJsBlendMode BlendStateToPixiJsBlendMode(int colorSrcBlend, int alphaSrcBlend,
                                                 int colorDstBlend, int alphaDstBlend,
                                                 int colorBlendFunc, int alphaBlendFunc);
+
+    /// plan_pixijs.md PIXIJS-52: maps a raw XNA `Blend` enum value (0=One .. 12=SourceAlphaSaturation)
+    /// to the real WebGL blend-factor GL enum value PixiJS's `renderer.state.blendModes` table
+    /// expects (confirmed live against a real WebGL context, 2026-08-17). `BlendFactor`/
+    /// `InverseBlendFactor` map to `CONSTANT_COLOR`/`ONE_MINUS_CONSTANT_COLOR` -- the actual RGBA
+    /// constant itself (XNA's `GraphicsDevice.BlendFactor`) is not wired through in this v1 scope
+    /// (WebGL's `gl.blendColor` is never set), so those two values are a real but partial mapping.
+    int XnaBlendToGlFactor(int xnaBlend);
+
+    /// plan_pixijs.md PIXIJS-52: maps a raw XNA `BlendFunction` enum value (0=Add .. 4=Min) to the
+    /// real WebGL blend-equation GL enum value PixiJS's blend-mode table expects (confirmed live).
+    int XnaBlendFunctionToGlEquation(int xnaBlendFunction);
 
     /**
      * @brief PixiJS (pixijs.com) graphics renderer (Emscripten-only, 2D-only in v1 scope).
@@ -85,9 +110,9 @@ namespace CNA::Internal::Renderers::PixiJs
                               int count) override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
-        /// plan_pixijs.md PIXIJS-50: maps the 4 standard BlendState presets to a PixiJsBlendMode
-        /// (Design decision 6); throws for any other Blend/BlendFunction combination in this v1
-        /// scope (PIXIJS-52 tracks a future fully-generic custom-blend-mode mapping).
+        /// plan_pixijs.md PIXIJS-50/52: maps the 4 standard BlendState presets to a PixiJsBlendMode
+        /// (Design decision 6); any other Blend/BlendFunction combination gets a real, generic
+        /// mapping via a custom PixiJS blend-mode table entry (PIXIJS-52), not a throw.
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc,

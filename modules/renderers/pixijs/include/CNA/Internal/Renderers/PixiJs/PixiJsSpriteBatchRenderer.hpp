@@ -119,5 +119,14 @@ namespace CNA::Internal::Renderers::PixiJs
         float transformD_ = 1.0f;
         float transformTx_ = 0.0f;
         float transformTy_ = 0.0f;
+        /// plan_pixijs.md PIXIJS-52: real WebGL blend-factor/equation GL enum values, captured from
+        /// PixiJsRendererState at Begin() (mirroring how activeBlendMode_ itself is captured),
+        /// meaningful only when activeBlendMode_ == PixiJsBlendMode::Custom.
+        int customBlendSrcRGB_ = 1;
+        int customBlendDstRGB_ = 0;
+        int customBlendSrcAlpha_ = 1;
+        int customBlendDstAlpha_ = 0;
+        int customBlendEquationRGB_ = 32774;
+        int customBlendEquationAlpha_ = 32774;
     };
 }

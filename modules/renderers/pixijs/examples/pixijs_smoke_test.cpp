@@ -29,7 +29,7 @@ using namespace CNA::Internal::Renderers::PixiJs;
 
 namespace
 {
-    constexpr int kExpectedChecks = 21;
+    constexpr int kExpectedChecks = 22;
 }
 
 class PixiJsSmokeTest : public Game
@@ -101,7 +101,7 @@ protected:
             renderer.GetViewportSize(w, h);
             check(w > 0 && h > 0, "GetViewportSize() reports a positive logical size");
         }
-        else if (frame_ == 12)
+        else if (frame_ == 13)
         {
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             result_ = (passCount_ == kExpectedChecks) ? 0 : 1;
@@ -324,6 +324,34 @@ protected:
                   "Texture2D::SetData on an unbound RenderTarget2D is visible when later sampled as a texture (top-left texel)");
             check(pixels[49 * 64 + 49] == Color(0, 255, 0, 255),
                   "Texture2D::SetData on an unbound RenderTarget2D is visible when later sampled as a texture (bottom-right texel)");
+        }
+        else if (frame_ == 12)
+        {
+            // plan_pixijs.md PIXIJS-52: a fully generic BlendState -- a "multiply" blend
+            // (ColorSourceBlend=DestinationColor, ColorDestinationBlend=Zero, AlphaSourceBlend=One,
+            // AlphaDestinationBlend=Zero) that is NOT one of the 4 standard presets, exercising the
+            // real custom PixiJS blend-mode table registration path rather than the fixed
+            // Opaque/AlphaBlend/NonPremultiplied/Additive set frames 4-6 already cover. Draws an
+            // opaque gray (128,128,128,255) texel over the CornflowerBlue(100,149,237) background;
+            // exact expected result (50,75,119,255) confirmed via a standalone probe registering the
+            // identical GL blend factors/equation before this assertion was written.
+            BlendState multiply;
+            multiply.setColorSourceBlendProperty(Blend::DestinationColor);
+            multiply.setColorDestinationBlendProperty(Blend::Zero);
+            multiply.setAlphaSourceBlendProperty(Blend::One);
+            multiply.setAlphaDestinationBlendProperty(Blend::Zero);
+
+            Texture2D grayTexture(Texture2D::CreateFromPixels(dev, 1, 1, std::vector<std::uint8_t>{
+                128, 128, 128, 255,
+            }));
+            spriteBatch_->Begin(SpriteSortMode::Deferred, multiply);
+            spriteBatch_->Draw(grayTexture, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+            spriteBatch_->End();
+
+            std::vector<Color> pixels(64 * 64, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
+            check(pixels[0] == Color(50, 75, 119, 255),
+                  "a generic (non-preset) BlendState composites via a real custom PixiJS blend-mode table entry");
         }
     }
 

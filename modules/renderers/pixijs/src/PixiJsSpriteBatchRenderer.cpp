@@ -39,9 +39,20 @@
 // into position/scale/rotation/skew were confirmed correct via a standalone browser probe (identity,
 // pure translation, and pure scale cases all landed at the exact expected pixel bounding box) before
 // this code was written.
+// plan_pixijs.md PIXIJS-52: when blendMode === -1 (PixiBlendModeToPixiJsCode's own sentinel for
+// PixiJsBlendMode::Custom), customBlendSrcRGB/DstRGB/SrcAlpha/DstAlpha/EquationRGB/EquationAlpha are
+// real WebGL blend-factor/equation GL enum values applied to a reserved, mutated-in-place slot in
+// PIXI's own `renderer.state.blendModes` table -- confirmed live, 2026-08-17, that this table
+// accepts arbitrary custom entries (`[srcRGB,dstRGB,srcAlpha,dstAlpha,eqRGB,eqAlpha]`, 6 elements)
+// and that `state.setBlendMode` genuinely applies them via `gl.blendFuncSeparate`/
+// `gl.blendEquationSeparate` (verified with a real multiply-style blend producing the exact expected
+// composited pixel, not just that the table accepted the write).
 EM_JS(void, CNA_PixiJs_FlushSprites, (const void* commands, int count, int stride, int blendMode, int wrapMode, int scaleMode,
                                        float transformA, float transformB, float transformC, float transformD,
-                                       float transformTx, float transformTy), {
+                                       float transformTx, float transformTy,
+                                       int customBlendSrcRGB, int customBlendDstRGB,
+                                       int customBlendSrcAlpha, int customBlendDstAlpha,
+                                       int customBlendEquationRGB, int customBlendEquationAlpha), {
     const isIdentityTransform = transformA === 1 && transformB === 0 && transformC === 0 &&
                                  transformD === 1 && transformTx === 0 && transformTy === 0;
     const app = Module['cnaPixiApp'];
@@ -50,6 +61,18 @@ EM_JS(void, CNA_PixiJs_FlushSprites, (const void* commands, int count, int strid
     const pool = Module['cnaPixiSpritePool'];
     const container = Module['cnaPixiActiveContainer'] || app.stage;
     const textures = Module['cnaPixiTextures'] || {};
+
+    let resolvedBlendMode = blendMode;
+    if (blendMode === -1) {
+        const state = app.renderer.state;
+        if (Module['cnaPixiCustomBlendSlot'] === undefined) {
+            Module['cnaPixiCustomBlendSlot'] = state.blendModes.length;
+        }
+        const slot = Module['cnaPixiCustomBlendSlot'];
+        state.blendModes[slot] = [customBlendSrcRGB, customBlendDstRGB, customBlendSrcAlpha,
+                                   customBlendDstAlpha, customBlendEquationRGB, customBlendEquationAlpha];
+        resolvedBlendMode = slot;
+    }
 
     const base = commands >> 2;
     for (let i = 0; i < count; ++i) {
@@ -140,7 +163,7 @@ EM_JS(void, CNA_PixiJs_FlushSprites, (const void* commands, int count, int strid
         const r = color & 0xFF, g = (color >>> 8) & 0xFF, b = (color >>> 16) & 0xFF, a = (color >>> 24) & 0xFF;
         sprite.tint = (r << 16) | (g << 8) | b;
         sprite.alpha = a / 255;
-        sprite.blendMode = blendMode;
+        sprite.blendMode = resolvedBlendMode;
         sprite.visible = true;
     }
     // Hide pooled sprites left over from an earlier flush within the same frame (Clear() already
@@ -175,6 +198,10 @@ namespace CNA::Internal::Renderers::PixiJs
             {
                 case PixiJsBlendMode::Opaque: return 20; // PIXI.BLEND_MODES.NONE
                 case PixiJsBlendMode::Additive: return 1; // PIXI.BLEND_MODES.ADD
+                // plan_pixijs.md PIXIJS-52: -1 is a sentinel, not a real PIXI.BLEND_MODES value --
+                // CNA_PixiJs_FlushSprites (below) reads it as "mutate and use the reserved custom
+                // blend-mode slot instead" rather than one of the built-in numeric codes.
+                case PixiJsBlendMode::Custom: return -1;
                 case PixiJsBlendMode::AlphaBlend:
                 case PixiJsBlendMode::NonPremultiplied:
                 default: return 0; // PIXI.BLEND_MODES.NORMAL
@@ -226,6 +253,15 @@ namespace CNA::Internal::Renderers::PixiJs
     {
         commands_.clear();
         activeBlendMode_ = state_->blendMode;
+        // plan_pixijs.md PIXIJS-52: mirrors how activeBlendMode_ itself is captured -- only
+        // meaningful when activeBlendMode_ == PixiJsBlendMode::Custom, but copied unconditionally
+        // since PixiJsRendererState always holds a valid (if stale/unused) value.
+        customBlendSrcRGB_ = state_->customBlendSrcRGB;
+        customBlendDstRGB_ = state_->customBlendDstRGB;
+        customBlendSrcAlpha_ = state_->customBlendSrcAlpha;
+        customBlendDstAlpha_ = state_->customBlendDstAlpha;
+        customBlendEquationRGB_ = state_->customBlendEquationRGB;
+        customBlendEquationAlpha_ = state_->customBlendEquationAlpha;
         begun_ = true;
     }
 
@@ -242,7 +278,10 @@ namespace CNA::Internal::Renderers::PixiJs
             CNA_PixiJs_FlushSprites(commands_.data(), static_cast<int>(commands_.size()), 14,
                                     pixiBlendModeCode, pixiWrapMode, pixiScaleMode,
                                     transformA_, transformB_, transformC_, transformD_,
-                                    transformTx_, transformTy_);
+                                    transformTx_, transformTy_,
+                                    customBlendSrcRGB_, customBlendDstRGB_,
+                                    customBlendSrcAlpha_, customBlendDstAlpha_,
+                                    customBlendEquationRGB_, customBlendEquationAlpha_);
         }
 #endif
         begun_ = false;
@@ -345,7 +384,10 @@ namespace CNA::Internal::Renderers::PixiJs
             const int pixiScaleMode = linearFilter_ ? 1 : 0; // PIXI.SCALE_MODES.LINEAR/.NEAREST
             CNA_PixiJs_FlushSprites(&command, 1, 14, pixiBlendModeCode, pixiWrapMode, pixiScaleMode,
                                     transformA_, transformB_, transformC_, transformD_,
-                                    transformTx_, transformTy_);
+                                    transformTx_, transformTy_,
+                                    customBlendSrcRGB_, customBlendDstRGB_,
+                                    customBlendSrcAlpha_, customBlendDstAlpha_,
+                                    customBlendEquationRGB_, customBlendEquationAlpha_);
             return;
         }
 #endif

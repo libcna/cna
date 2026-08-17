@@ -165,6 +165,12 @@ EM_JS(void, CNA_PixiJs_SetBlendMode, (int blendCode), {
     // all of which draw through this same NORMAL path with Color::White tint), but the exact
     // premultiplied-vs-straight distinction the two BlendState presets are supposed to carry is
     // still not independently applied -- tracked as PIXIJS-51, not silently assumed equivalent.
+    // Module['cnaPixiBlendMode'] is currently write-only: this renderer's 2D-only v1 scope means no
+    // draw path ever reads it back (SpriteBatch flushes apply blend mode directly from their own
+    // activeBlendMode_/PixiBlendModeToPixiJsCode(), not through this global). PixiJsBlendMode::Custom
+    // (index 4, PIXIJS-52) has no entry here and falls back to 0 -- harmless for the same reason, and
+    // the real generic-blend GL factors/equation are applied by PixiJsSpriteBatchRenderer's own
+    // per-flush custom blend-mode slot instead (PixiJsSpriteBatchRenderer.cpp).
     const modes = [20, 0, 0, 1];
     Module['cnaPixiBlendMode'] = modes[blendCode] !== undefined ? modes[blendCode] : 0;
 });
@@ -340,10 +346,61 @@ namespace CNA::Internal::Renderers::PixiJs
             return PixiJsBlendMode::NonPremultiplied;
         if (isAdd && symmetric && colorSrcBlend == 4 && colorDstBlend == 0)
             return PixiJsBlendMode::Additive;
-        throw std::runtime_error(
-            "PixiJS (v1 scope) only supports the 4 standard BlendState presets "
-            "(Opaque/AlphaBlend/NonPremultiplied/Additive) -- plan_pixijs.md PIXIJS-52 tracks a "
-            "future fully-generic mapping via custom PixiJS blend-mode registration.");
+        // plan_pixijs.md PIXIJS-52: any other combination gets a real, generic mapping via a custom
+        // PixiJS blend-mode table entry (see ApplyBlendState/XnaBlendToGlFactor/
+        // XnaBlendFunctionToGlEquation below) rather than a throw.
+        return PixiJsBlendMode::Custom;
+    }
+
+    // plan_pixijs.md PIXIJS-52: raw XNA Blend enum (One=0, Zero=1, SourceColor=2,
+    // InverseSourceColor=3, SourceAlpha=4, InverseSourceAlpha=5, DestinationColor=6,
+    // InverseDestinationColor=7, DestinationAlpha=8, InverseDestinationAlpha=9, BlendFactor=10,
+    // InverseBlendFactor=11, SourceAlphaSaturation=12) -> real WebGL blend-factor GL enum values,
+    // confirmed live against a real WebGL context (2026-08-17: gl.ONE===1, gl.ZERO===0,
+    // gl.SRC_COLOR===768, gl.DST_COLOR===774, gl.SRC_ALPHA_SATURATE===776, etc. -- not hand-derived
+    // from memory).
+    int XnaBlendToGlFactor(int xnaBlend)
+    {
+        switch (xnaBlend)
+        {
+            case 0: return 1;     // One -> ONE
+            case 1: return 0;     // Zero -> ZERO
+            case 2: return 768;   // SourceColor -> SRC_COLOR
+            case 3: return 769;   // InverseSourceColor -> ONE_MINUS_SRC_COLOR
+            case 4: return 770;   // SourceAlpha -> SRC_ALPHA
+            case 5: return 771;   // InverseSourceAlpha -> ONE_MINUS_SRC_ALPHA
+            case 6: return 774;   // DestinationColor -> DST_COLOR
+            case 7: return 775;   // InverseDestinationColor -> ONE_MINUS_DST_COLOR
+            case 8: return 772;   // DestinationAlpha -> DST_ALPHA
+            case 9: return 773;   // InverseDestinationAlpha -> ONE_MINUS_DST_ALPHA
+            case 10: return 32769; // BlendFactor -> CONSTANT_COLOR (gl.blendColor not wired, PIXIJS-52 note)
+            case 11: return 32770; // InverseBlendFactor -> ONE_MINUS_CONSTANT_COLOR
+            case 12: return 776;  // SourceAlphaSaturation -> SRC_ALPHA_SATURATE
+            default:
+                throw std::runtime_error(
+                    "PixiJS: unrecognized Blend enum value " + std::to_string(xnaBlend) +
+                    " passed to XnaBlendToGlFactor.");
+        }
+    }
+
+    // plan_pixijs.md PIXIJS-52: raw XNA BlendFunction enum (Add=0, Subtract=1, ReverseSubtract=2,
+    // Max=3, Min=4) -> real WebGL blend-equation GL enum values (FUNC_ADD=32774,
+    // FUNC_SUBTRACT=32778, FUNC_REVERSE_SUBTRACT=32779, MAX=32776, MIN=32775 -- WebGL2 core, no
+    // extension needed).
+    int XnaBlendFunctionToGlEquation(int xnaBlendFunction)
+    {
+        switch (xnaBlendFunction)
+        {
+            case 0: return 32774; // Add -> FUNC_ADD
+            case 1: return 32778; // Subtract -> FUNC_SUBTRACT
+            case 2: return 32779; // ReverseSubtract -> FUNC_REVERSE_SUBTRACT
+            case 3: return 32776; // Max -> MAX
+            case 4: return 32775; // Min -> MIN
+            default:
+                throw std::runtime_error(
+                    "PixiJS: unrecognized BlendFunction enum value " +
+                    std::to_string(xnaBlendFunction) + " passed to XnaBlendFunctionToGlEquation.");
+        }
     }
 
     void PixiJsRenderer::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
@@ -354,6 +411,18 @@ namespace CNA::Internal::Renderers::PixiJs
         const PixiJsBlendMode mode = BlendStateToPixiJsBlendMode(
             colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend, colorBlendFunc, alphaBlendFunc);
         state_->blendMode = mode;
+        if (mode == PixiJsBlendMode::Custom)
+        {
+            // plan_pixijs.md PIXIJS-52: real generic mapping, computed once here rather than at
+            // every SpriteBatch flush -- PixiJsSpriteBatchRenderer::Begin() copies these onto its
+            // own members, mirroring how it already copies state_->blendMode itself.
+            state_->customBlendSrcRGB = XnaBlendToGlFactor(colorSrcBlend);
+            state_->customBlendDstRGB = XnaBlendToGlFactor(colorDstBlend);
+            state_->customBlendSrcAlpha = XnaBlendToGlFactor(alphaSrcBlend);
+            state_->customBlendDstAlpha = XnaBlendToGlFactor(alphaDstBlend);
+            state_->customBlendEquationRGB = XnaBlendFunctionToGlEquation(colorBlendFunc);
+            state_->customBlendEquationAlpha = XnaBlendFunctionToGlEquation(alphaBlendFunc);
+        }
 #if defined(__EMSCRIPTEN__)
         CNA_PixiJs_SetBlendMode(static_cast<int>(mode));
 #else
