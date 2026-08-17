@@ -1918,6 +1918,7 @@ else
         ::metagl::PixelType      pixelType;
         bool                     isFloat;      ///< Needs a float-renderable colour buffer.
         bool                     isFullFloat;  ///< 32-bit per channel (vs 16-bit half float).
+        int                      bytesPerPixel;///< Readback stride per texel, for GetData.
     };
 
     static bool MapRenderTargetColorFormat(int surfaceFormat, RenderTargetColorStorage& out)
@@ -1927,34 +1928,34 @@ else
         {
         case SurfaceFormat::Color:
             out = {RgbaTexImageInternalFormat(), ::metagl::PixelFormat::Rgba,
-                   ::metagl::PixelType::UnsignedByte, false, false};
+                   ::metagl::PixelType::UnsignedByte, false, false, 4};
             return true;
         case SurfaceFormat::Single:
             out = {::metagl::InternalFormat::R32F, ::metagl::PixelFormat::Red,
-                   ::metagl::PixelType::Float, true, true};
+                   ::metagl::PixelType::Float, true, true, 4};
             return true;
         case SurfaceFormat::Vector2:
             out = {::metagl::InternalFormat::Rg32F, ::metagl::PixelFormat::Rg,
-                   ::metagl::PixelType::Float, true, true};
+                   ::metagl::PixelType::Float, true, true, 8};
             return true;
         case SurfaceFormat::Vector4:
             out = {::metagl::InternalFormat::Rgba32F, ::metagl::PixelFormat::Rgba,
-                   ::metagl::PixelType::Float, true, true};
+                   ::metagl::PixelType::Float, true, true, 16};
             return true;
         case SurfaceFormat::HalfSingle:
             out = {::metagl::InternalFormat::R16F, ::metagl::PixelFormat::Red,
-                   ::metagl::PixelType::HalfFloat, true, false};
+                   ::metagl::PixelType::HalfFloat, true, false, 2};
             return true;
         case SurfaceFormat::HalfVector2:
             out = {::metagl::InternalFormat::Rg16F, ::metagl::PixelFormat::Rg,
-                   ::metagl::PixelType::HalfFloat, true, false};
+                   ::metagl::PixelType::HalfFloat, true, false, 4};
             return true;
         case SurfaceFormat::HalfVector4:
         case SurfaceFormat::HdrBlendable:
             // HdrBlendable is XNA's "float format for HDR data"; on Windows it was RGBA16F, and CNA
             // makes that equivalence explicit rather than inventing a third meaning for it.
             out = {::metagl::InternalFormat::Rgba16F, ::metagl::PixelFormat::Rgba,
-                   ::metagl::PixelType::HalfFloat, true, false};
+                   ::metagl::PixelType::HalfFloat, true, false, 8};
             return true;
         default:
             return false;
@@ -2244,9 +2245,16 @@ else
     bool EasyGLRenderTargetRenderer::GetData(
         int level, int x, int y, int w, int h, void* data, int dataLength) const
     {
+        // plan_modern.md MOD-108: a float target's texels are 2, 4, 8 or 16 bytes wide, not always
+        // 4. Reading one back as RGBA8 would silently clamp exactly the above-1.0 values the format
+        // was chosen to keep -- the readback has to speak the target's own format.
+        RenderTargetColorStorage colorStorage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat_, colorStorage))
+            MapRenderTargetColorFormat(0, colorStorage);
+
         if (!data || level < 0 || w <= 0 || h <= 0
             || static_cast<std::int64_t>(dataLength)
-                < static_cast<std::int64_t>(w) * h * 4)
+                < static_cast<std::int64_t>(w) * h * colorStorage.bytesPerPixel)
             throw std::invalid_argument(
                 "EasyGLRenderTargetRenderer::GetData: invalid destination or range.");
         if (level >= levelCount_)
@@ -2324,10 +2332,10 @@ if (!ProfileIsEs2ApiGeneration())
 }
         ::metagl::glReadPixels(
             x, levelHeight - y - h, w, h,
-            ::metagl::PixelFormat::Rgba,
-            ::metagl::PixelType::UnsignedByte, data);
+            colorStorage.pixelFormat,
+            colorStorage.pixelType, data);
 
-        const int rowBytes = w * 4;
+        const int rowBytes = w * colorStorage.bytesPerPixel;
         auto* pixels = static_cast<std::uint8_t*>(data);
         std::vector<std::uint8_t> row(static_cast<std::size_t>(rowBytes));
         for (int topRow = 0; topRow < h / 2; ++topRow)

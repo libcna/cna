@@ -21,12 +21,14 @@ do not reconstruct the layer's state from the general `NEXT.md`.
 | ✅ | `MOD-14` — this file |
 | ✅ | `MOD-100`/`101`/`103`/`104` — float render-target capabilities, derived from a per-format renderer verdict |
 | ✅ | `MOD-115`/`116`/`117` — EasyGL really allocates RGBA16F/RGBA32F targets, probed at runtime |
+| ✅ | `MOD-105`, `MOD-108`/`124`, `MOD-131` — unsupported formats refused, format-aware readback, and the end-to-end proof that values above 1.0 survive |
+| ⛔ | `MOD-106` — lenient-substitution opt-out, dropped (it would preserve a behaviour that never existed) |
 
-**Next up (critical path to a first HDR frame):** `MOD-105`–`MOD-108` (unsupported-format policy,
-cube-target format, float readback) → `MOD-118`–`MOD-125` (the rest of the EasyGL float work: depth
-combination, MSAA resolve, mips, MRT) → `MOD-131` (a float target that provably keeps values above
-1.0) → `MOD-200`–`MOD-210` (pass infrastructure) → `MOD-300`–`MOD-305` (tonemapping) →
-`MOD-700`–`MOD-712` (`RenderPipeline`). `MOD-5`, `MOD-21`, `MOD-22` remain open from Phase 0.
+**Next up (critical path to a first HDR frame):** `MOD-107` (the same format routing for
+`RenderTargetCube`, which IBL needs) → `MOD-118`–`MOD-123`, `MOD-125` (the rest of the EasyGL float
+work: half-float-only contexts, depth combination, MSAA resolve, mips, linear filtering, MRT) →
+`MOD-200`–`MOD-210` (pass infrastructure) → `MOD-300`–`MOD-305` (tonemapping) → `MOD-700`–`MOD-712`
+(`RenderPipeline`). `MOD-5`, `MOD-21`, `MOD-22` remain open from Phase 0.
 
 **Owner decisions in force** (asked 2026-08-17): start with the HDR spine; EasyGL is the
 reference renderer with Vulkan and D3D11 as the committed follow-ups and the rest opportunistic;
@@ -80,6 +82,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | Date | Build | Suite | Result |
 |---|---|---|---|
 | 2026-08-17 | `cmake-build-cnaext` (OPENGLES3, `CNA_CNAEXT=ON`, Debug), base `origin/next` @ `05a9eab0` | full `CnaTests`, from the repo root, under Xvfb (`MOD-1710`) | **7548 ran · 7484 pass · 64 skip · 0 fail** |
+| 2026-08-17 | same, with `MOD-105`/`108`/`124`/`131` applied | same | 7565 ran · 7501 pass · 64 skip · **0 fail** |
 
 That is a clean run, and it is new. Measuring the first baseline on this branch turned up eight
 failures and a segfault at ~7300 tests, all of them pre-existing on `next` (verified by rebuilding
