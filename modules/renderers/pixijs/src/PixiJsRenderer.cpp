@@ -41,6 +41,12 @@ EM_JS(void, CNA_PixiJs_EnsureApp, (), {
     Module['cnaPixiActiveRenderTexture'] = null;
 });
 
+// REMED-PIXIJS-5 (found by the render-target smoke test, 2026-08-17): a bound render texture's
+// Clear() used to render with `clear: true` but never actually told the renderer WHICH colour to
+// clear to -- `app.renderer.background.color`/`.alpha` is the renderer-wide clear colour PixiJS's
+// own render() call reads for ANY clear (main stage or a renderTexture target alike), and it was
+// being left at whatever a PREVIOUS Clear() call (or the default black) had set it to, silently
+// ignoring this call's own (r,g,b,a). Fixed by setting it unconditionally, before either path.
 EM_JS(void, CNA_PixiJs_Clear, (double r, double g, double b, double a), {
     CNA_PixiJs_EnsureApp();
     const app = Module['cnaPixiApp'];
@@ -52,22 +58,55 @@ EM_JS(void, CNA_PixiJs_Clear, (double r, double g, double b, double a), {
     const container = Module['cnaPixiActiveContainer'];
     if (container && container.children) container.removeChildren();
     const colorHex = (Math.round(r * 255) << 16) | (Math.round(g * 255) << 8) | Math.round(b * 255);
+    app.renderer.background.color = colorHex;
+    app.renderer.background.alpha = a;
     if (Module['cnaPixiActiveRenderTexture']) {
-        app.renderer.render(container, { renderTexture: Module['cnaPixiActiveRenderTexture'], clear: true });
-    } else {
-        app.renderer.background.color = colorHex;
-        app.renderer.background.alpha = a;
+        // REMED-PIXIJS-5 (part 2, found via direct EM_JS trace logging, 2026-08-17):
+        // render(container, {renderTexture, clear:true}) clears a renderTexture target to
+        // transparent black UNCONDITIONALLY -- app.renderer.background (set above) only ever
+        // affects the main canvas's own background, never an arbitrary render-to-texture call.
+        // There is no per-call clear-colour option on PixiJS v7's render() for a renderTexture
+        // target. Painted instead: a reusable 1x1 white sprite, tinted/sized to cover the whole
+        // target and blended with BLEND_MODES.NONE (the same real "unconditional overwrite"
+        // mechanism Opaque already uses, REMED-PIXIJS-3) -- guaranteed to replace every pixel
+        // regardless of prior content, then removed so it isn't left queued for the next real
+        // Draw() flush (Clear() itself already consumed it).
+        if (!Module['cnaPixiClearSprite']) {
+            const whiteBuffer = new Uint8Array([255, 255, 255, 255]);
+            const whiteBase = new PIXI.BaseTexture(new PIXI.BufferResource(whiteBuffer, { width: 1, height: 1 }), {
+                width: 1, height: 1, scaleMode: PIXI.SCALE_MODES.NEAREST, alphaMode: PIXI.ALPHA_MODES.NPM,
+            });
+            Module['cnaPixiClearSprite'] = new PIXI.Sprite(new PIXI.Texture(whiteBase));
+        }
+        const clearSprite = Module['cnaPixiClearSprite'];
+        const target = Module['cnaPixiActiveRenderTexture'];
+        clearSprite.anchor.set(0, 0);
+        clearSprite.position.set(0, 0);
+        clearSprite.scale.set(target.width, target.height);
+        clearSprite.tint = colorHex;
+        clearSprite.alpha = a;
+        clearSprite.blendMode = 20; // PIXI.BLEND_MODES.NONE
+        container.addChild(clearSprite);
+        app.renderer.render(container, { renderTexture: target, clear: true });
+        container.removeChild(clearSprite);
     }
+    // The main-stage path needs no explicit render() here: app.renderer.background is already set
+    // above, and Present()/GetBackBufferData's own force-render (REMED-PIXIJS-1) picks it up on the
+    // next actual render() call.
 });
 
 // plan_pixijs.md PIXIJS-22: the one explicit render() call per CNA frame -- PixiJS's own ticker is
 // never started (autoStart:false/sharedTicker:false above), so nothing renders unless CNA's Game
 // loop asks for it here.
+// REMED-PIXIJS-5 (part 4): `clear: false` on the render-texture branch, same reasoning as
+// CNA_PixiJs_ReadTexturePixels's own fix -- render()'s default clear would otherwise wipe out
+// whatever Clear() itself already painted into the target on every call, including ones where the
+// active container has nothing new queued.
 EM_JS(void, CNA_PixiJs_Render, (), {
     const app = Module['cnaPixiApp'];
     if (!app) return;
     if (Module['cnaPixiActiveRenderTexture']) {
-        app.renderer.render(Module['cnaPixiActiveContainer'], { renderTexture: Module['cnaPixiActiveRenderTexture'] });
+        app.renderer.render(Module['cnaPixiActiveContainer'], { renderTexture: Module['cnaPixiActiveRenderTexture'], clear: false });
     } else {
         app.renderer.render(app.stage);
     }
@@ -88,8 +127,10 @@ EM_JS(void, CNA_PixiJs_Render, (), {
 EM_JS(void, CNA_PixiJs_ReadCurrentPixels, (int x, int y, int w, int h, uint8_t* outPixels), {
     const app = Module['cnaPixiApp'];
     if (!app) return;
+    // REMED-PIXIJS-5 (part 4): clear:false on the render-texture branch -- see CNA_PixiJs_Render's
+    // own identical fix, same reasoning.
     if (Module['cnaPixiActiveRenderTexture']) {
-        app.renderer.render(Module['cnaPixiActiveContainer'], { renderTexture: Module['cnaPixiActiveRenderTexture'] });
+        app.renderer.render(Module['cnaPixiActiveContainer'], { renderTexture: Module['cnaPixiActiveRenderTexture'], clear: false });
     } else {
         app.renderer.render(app.stage);
     }

@@ -15,6 +15,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 
 #include "CNA/Internal/Renderers/PixiJs/PixiJsRenderer.hpp"
 
@@ -27,7 +28,7 @@ using namespace CNA::Internal::Renderers::PixiJs;
 
 namespace
 {
-    constexpr int kExpectedChecks = 12;
+    constexpr int kExpectedChecks = 14;
 }
 
 class PixiJsSmokeTest : public Game
@@ -78,7 +79,7 @@ protected:
             renderer.GetViewportSize(w, h);
             check(w > 0 && h > 0, "GetViewportSize() reports a positive logical size");
         }
-        else if (frame_ == 7)
+        else if (frame_ == 8)
         {
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             result_ = (passCount_ == kExpectedChecks) ? 0 : 1;
@@ -193,6 +194,32 @@ protected:
             dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
             check(pixels[0] == Color(178, 74, 118, 255),
                   "AlphaBlend composites a half-alpha source pixel over the background with correct straight-over math");
+        }
+        else if (frame_ == 7)
+        {
+            // PixiJsRenderTargetRenderer end-to-end: bind a 4x4 render target, Clear() it to a
+            // distinct color (proving Clear() really targets the bound RenderTexture, not the main
+            // stage), unbind, then both (a) sample the render target as an ordinary texture back
+            // onto the main backbuffer, and (b) read it directly via RenderTarget2D::GetData --
+            // both must see the same fill color.
+            RenderTarget2D rt(dev, 4, 4);
+            dev.SetRenderTarget(&rt);
+            dev.Clear(Color(10, 20, 30, 255));
+            dev.SetRenderTarget(nullptr);
+
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+            spriteBatch_->Draw(rt, Rectangle(40, 40, 4, 4), Rectangle(0, 0, 4, 4), Color::White);
+            spriteBatch_->End();
+
+            std::vector<Color> pixels(64 * 64, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
+            check(pixels[40 * 64 + 40] == Color(10, 20, 30, 255),
+                  "a render target's Clear() fill is visible when the target is later sampled as a texture");
+
+            std::vector<Color> rtPixels(16, Color(0, 0, 0, 0));
+            rt.GetData(rtPixels.data(), 0, static_cast<int>(rtPixels.size()));
+            check(rtPixels[0] == Color(10, 20, 30, 255),
+                  "RenderTarget2D::GetData reads back the same fill color directly");
         }
     }
 

@@ -51,11 +51,21 @@ EM_JS(void, CNA_PixiJs_BindRenderTarget, (int id), {
 // Draw() into this target queues sprite-property changes without painting anything. Safe even when
 // this target isn't the currently-bound one: entry.container's children are exactly whatever was
 // last drawn into it, so re-rendering is an idempotent refresh, not a content change.
+//
+// REMED-PIXIJS-5 (part 3, found by the render-target GetData test, 2026-08-17): `clear` was left
+// at its default here, which clears the renderTexture to transparent black before drawing --
+// harmless when the container has pending sprites to draw, but this re-render commonly runs
+// against an EMPTY container (nothing queued since the last Clear()/End()), and an empty render
+// with the default clear WIPED OUT whatever Clear() itself had just painted a moment earlier
+// (REMED-PIXIJS-5 part 2's own clear-sprite fix), discovered because the "sample this target as an
+// ordinary texture" path (which never calls this function) kept the correct colour while
+// GetData() read back blank. `clear: false` makes this purely additive: draw whatever is queued
+// (possibly nothing) ON TOP of the target's existing content instead of erasing it first.
 EM_JS(int, CNA_PixiJs_ReadTexturePixels, (int id, int x, int y, int w, int h, uint8_t* outPixels), {
     const app = Module['cnaPixiApp'];
     const entry = Module['cnaPixiTextures'] && Module['cnaPixiTextures'][id];
     if (!app || !entry) return 0;
-    if (entry.container) app.renderer.render(entry.container, { renderTexture: entry.texture });
+    if (entry.container) app.renderer.render(entry.container, { renderTexture: entry.texture, clear: false });
     const pixels = app.renderer.extract.pixels(entry.texture);
     const fullWidth = entry.texture.width;
     const bytesPerRow = w * 4;
