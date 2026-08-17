@@ -35,7 +35,7 @@ namespace CNA::Internal::Renderers::PixiJs
         /// Canvas2D's own structural conclusion, but for an independently investigated reason.
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
-        /// Id into `Module['cnaPixiTextures']`, used by PixiJsSpriteBatchRenderer and
+        /// Id into `Module['cnaPixi'].textures`, used by PixiJsSpriteBatchRenderer and
         /// PixiJsRenderTargetRenderer's bind/unbind.
         [[nodiscard]] int GetPixiTextureId() const { return id_; }
 
