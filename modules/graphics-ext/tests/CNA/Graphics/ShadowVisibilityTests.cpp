@@ -47,6 +47,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <iostream>
 #include <type_traits>
 #include <vector>
 
@@ -751,6 +752,119 @@ TEST_F(ShadowVisibilityTest, TheShadowLandsWhereTheCasterIs)
         EXPECT_NEAR(gotX, wantX, 2.0f) << "caster at " << offset.name << ": shadow column";
         EXPECT_NEAR(gotY, wantY, 2.0f) << "caster at " << offset.name << ": shadow row";
     }
+}
+
+TEST_F(ShadowVisibilityTest, AnAttachedButDisabledMapChangesNoPixel)
+{
+    // MOD-853. Not "looks the same" -- every one of the 4096 pixels, because the interesting
+    // failure is a lookup that runs anyway and returns something very close to 1.0.
+    ShadowMap shadowMap(device, ShadowQuality::Medium);
+    RenderTarget2D target(device, kFrame, kFrame, false, SurfaceFormat::Color,
+                          DepthFormat::Depth24);
+
+    BasicEffect untouched(device);
+    ConfigureLighting(untouched);
+    RenderScene(device, shadowMap, untouched, target);
+    const Frame before = Capture(target);
+
+    BasicEffect disabled(device);
+    ConfigureLighting(disabled);
+    disabled.setShadowMapEXT(shadowMap.getShadowTexture());
+    disabled.setLightViewProjectionEXT(shadowMap.getLightViewProjection());
+    disabled.setShadowsEnabledEXT(false);
+    RenderScene(device, shadowMap, disabled, target);
+    const Frame after = Capture(target);
+
+    int differing = 0;
+    for (int y = 0; y < kFrame; ++y)
+        for (int x = 0; x < kFrame; ++x)
+            if (!(before.At(x, y) == after.At(x, y)))
+                ++differing;
+
+    EXPECT_EQ(differing, 0) << differing << " pixels changed with shadows merely disabled";
+}
+
+/// Renders the acne scene: a sun at 45 degrees, and a ground plane that is drawn into the shadow
+/// map as well as shaded from it, which is what makes a surface able to shadow itself. Returns the
+/// fraction of the ground that came out darker than fully lit.
+float SelfShadowedFraction(GraphicsDevice& device, ShadowMap& shadowMap, RenderTarget2D& target,
+                           BasicEffect& effect, float bias)
+{
+    DirectionalLightEXT slanted;
+    slanted.Direction = Vector3(-0.7071f, -0.7071f, 0.0f);
+
+    effect.setShadowDepthBiasEXT(bias);
+    const auto ground = Quad(0.0f, kGroundHalfExtent);
+    const auto caster = Quad(kCasterHeight, kCasterHalfExtent);
+
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::Default);
+        device.setBlendStateProperty(BlendState::Opaque);
+
+        shadowMap.begin(slanted, SceneBounds());
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, ground.data(), 0, 2);
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, caster.data(), 0, 2);
+        shadowMap.end();
+        effect.setLightViewProjectionEXT(shadowMap.getLightViewProjection());
+
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        effect.Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, ground.data(), 0, 2);
+        device.SetRenderTarget(nullptr);
+    }
+
+    const Frame frame = Capture(target);
+    int darkened = 0;
+    for (int y = 0; y < kFrame; ++y)
+        for (int x = 0; x < kFrame; ++x)
+            if (frame.BrightnessAt(x, y) < 250)
+                ++darkened;
+    return static_cast<float>(darkened) / static_cast<float>(kFrame * kFrame);
+}
+
+TEST_F(ShadowVisibilityTest, TheDefaultBiasSitsBetweenAcneAndPeterPanning)
+{
+    // MOD-855, as measurements rather than a committed image pair -- a golden PNG of acne records
+    // that it looked wrong on the machine that made it, while a fraction records how wrong and
+    // lets the threshold be argued with. Deviation from the plan's "golden pair", recorded there.
+    //
+    // The scene is the one that can go wrong in both directions: a slanted sun, and a ground plane
+    // that is written into the map as well as read from it, so the plane's own recorded depth sits
+    // a fraction of a texel away from the depth each of its pixels computes.
+    ShadowMap shadowMap(device, ShadowQuality::Medium);
+    RenderTarget2D target(device, kFrame, kFrame, false, SurfaceFormat::Color,
+                          DepthFormat::Depth24);
+
+    BasicEffect effect(device);
+    ConfigureLighting(effect);
+    effect.setShadowMapEXT(shadowMap.getShadowTexture());
+    effect.setShadowsEnabledEXT(true);
+    effect.setShadowFilterRadiusEXT(0);   // one tap, so the number is acne and not a soft edge
+
+    const float withoutBias = SelfShadowedFraction(device, shadowMap, target, effect, 0.0f);
+    const float withDefault = SelfShadowedFraction(device, shadowMap, target, effect, 0.0015f);
+    const float withTooMuch = SelfShadowedFraction(device, shadowMap, target, effect, 0.2f);
+
+    // Printed because the numbers are the evidence this row asks for, and a passing test that
+    // hides them justifies the default no better than taste would.
+    std::cout << "[  SHADOW  ] self-shadowed area -- bias 0: " << withoutBias
+              << ", default 0.0015: " << withDefault
+              << ", 0.2: " << withTooMuch << std::endl;
+
+    // Zero bias: the plane shadows itself over a large part of its own area. That is acne.
+    EXPECT_GT(withoutBias, 0.2f) << "no acne at bias 0, so this scene no longer demonstrates it";
+    // The default: the caster's shadow survives, the self-shadowing does not.
+    EXPECT_LT(withDefault, withoutBias * 0.5f)
+        << "the default bias did not remove most of the acne";
+    EXPECT_GT(withDefault, 0.02f) << "the caster's own shadow disappeared along with the acne";
+    // Far too much bias: the shadow detaches from its caster and shrinks away. That is
+    // peter-panning, and it is the cost of treating a larger bias as free.
+    EXPECT_LT(withTooMuch, withDefault)
+        << "a 130x bias did not shrink the shadow, so the trade-off this default sits on is not "
+           "the one documented";
 }
 
 TEST_F(ShadowVisibilityTest, TheQualityToRadiusTableIsWhatTheEffectIsGiven)
