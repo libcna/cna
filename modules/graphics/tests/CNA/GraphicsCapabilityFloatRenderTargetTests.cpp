@@ -8,33 +8,93 @@
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 using CNA::GraphicsCapability;
+using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
 namespace {
 
-TEST(GraphicsCapabilityFloatRenderTargetTest, FloatRenderTargetsIsAnsweredAndIsCurrentlyFalse)
+TEST(GraphicsCapabilityFloatRenderTargetTest, TheFloatCapabilitiesAreAnsweredWithoutThrowing)
 {
-    // No renderer in the tree creates float colour attachments yet -- every one of them falls
-    // through to CreateRenderTarget2D, which produces an 8-bit Color target whatever SurfaceFormat
-    // was requested. Note this is answered by GraphicsDevice from the renderer's per-format query,
-    // not by the renderer's own SupportsCapability switch, whose `default: return true` would
-    // otherwise claim it. The expectation flips per renderer as the Phase 1 rollout lands (EasyGL
-    // in MOD-115, the committed follow-ups in MOD-1600/MOD-1604).
+    // Deliberately not asserting a fixed answer: whether a float colour buffer is renderable is a
+    // property of the runtime driver, not of the renderer's name -- an ES 3.0 device without
+    // GL_EXT_color_buffer_float answers false where an ES 3.2 one answers true, and both are
+    // correct. What must hold everywhere is that the question is answered rather than guessed, and
+    // that the answers stay internally consistent (see the agreement tests below).
     GraphicsDevice gd;
 
-    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::FloatRenderTargets));
+    EXPECT_NO_THROW({ (void)gd.SupportsCapability(GraphicsCapability::FloatRenderTargets); });
+    EXPECT_NO_THROW({ (void)gd.SupportsCapability(GraphicsCapability::HalfFloatRenderTargets); });
 }
 
-TEST(GraphicsCapabilityFloatRenderTargetTest, HalfFloatRenderTargetsIsAnsweredAndIsCurrentlyFalse)
+TEST(GraphicsCapabilityFloatRenderTargetTest, FormatsOfTheSamePrecisionAnswerTogether)
 {
+    // The three 32-bit float formats stand or fall together, as do the four 16-bit ones: they are
+    // the same class of colour buffer differing only in channel count. A renderer answering one of
+    // a group differently from its siblings would make the coarse capability meaningless.
     GraphicsDevice gd;
 
-    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::HalfFloatRenderTargets));
+    const bool full = gd.SupportsCapability(GraphicsCapability::FloatRenderTargets);
+    EXPECT_EQ(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Single), full);
+    EXPECT_EQ(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector2), full);
+    EXPECT_EQ(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4), full);
+
+    const bool half = gd.SupportsCapability(GraphicsCapability::HalfFloatRenderTargets);
+    EXPECT_EQ(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfSingle), half);
+    EXPECT_EQ(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfVector2), half);
+    EXPECT_EQ(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfVector4), half);
+    EXPECT_EQ(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable), half);
+}
+
+TEST(GraphicsCapabilityFloatRenderTargetTest, NonColourNonFloatFormatsAreNotRenderTargets)
+{
+    // The compressed and packed formats are texture formats; nothing in CNA renders into them, and
+    // claiming otherwise would put the caller back in the position MOD-100 exists to end -- asking
+    // for one format and silently receiving another.
+    GraphicsDevice gd;
+
+    EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Dxt1));
+    EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Dxt5));
+    EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Bgr565));
+    EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Rgba64));
+    EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Alpha8));
+}
+
+TEST(GraphicsCapabilityFloatRenderTargetTest, ASupportedFloatFormatReallyConstructsARenderTarget)
+{
+    // MOD-115: the capability is a promise about RenderTarget2D, so the test has to be about
+    // RenderTarget2D. Where the answer is true, an HDR target must construct and report the format
+    // it was asked for; where it is false, this asserts nothing and the case below covers it.
+    GraphicsDevice gd;
+    if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable))
+        GTEST_SKIP() << "This renderer/driver does not support half-float render targets.";
+
+    RenderTarget2D target(gd, 16, 16, false, SurfaceFormat::HdrBlendable, DepthFormat::None);
+
+    EXPECT_EQ(target.getFormatProperty(), SurfaceFormat::HdrBlendable);
+    EXPECT_EQ(target.getWidthProperty(), 16);
+    EXPECT_EQ(target.getHeightProperty(), 16);
+}
+
+TEST(GraphicsCapabilityFloatRenderTargetTest, AnUnsupportedFormatIsRefusedRatherThanSubstituted)
+{
+    // The failure mode this whole change removes: asking for a format the renderer cannot make and
+    // receiving an 8-bit Color target that looks like success.
+    GraphicsDevice gd;
+    if (gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Dxt1))
+        GTEST_SKIP() << "This renderer claims a compressed render-target format; test not applicable.";
+
+    EXPECT_ANY_THROW({
+        RenderTarget2D target(gd, 16, 16, false, SurfaceFormat::Dxt1, DepthFormat::None);
+        (void)target.getFormatProperty();
+    });
 }
 
 TEST(GraphicsCapabilityFloatRenderTargetTest, TheTwoFloatCapabilitiesAreIndependentEnumerators)
@@ -86,21 +146,6 @@ TEST(GraphicsCapabilityFloatRenderTargetTest, ColourRenderTargetsAreAlwaysSuppor
     GraphicsDevice gd;
 
     EXPECT_TRUE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Color));
-}
-
-TEST(GraphicsCapabilityFloatRenderTargetTest, FloatFormatsAreNotYetSupportedAsRenderTargets)
-{
-    // MOD-103: per-format truth, which is stricter than the coarse capability. Flips format by
-    // format as the Phase 1 rollout lands (EasyGL in MOD-115/MOD-116).
-    GraphicsDevice gd;
-
-    EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Single));
-    EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector2));
-    EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4));
-    EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfSingle));
-    EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfVector2));
-    EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfVector4));
-    EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable));
 }
 
 TEST(GraphicsCapabilityFloatRenderTargetTest, EachCapabilityAgreesWithItsRepresentativeFormat)

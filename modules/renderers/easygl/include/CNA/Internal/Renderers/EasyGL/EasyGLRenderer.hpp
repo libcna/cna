@@ -14,6 +14,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -185,10 +186,17 @@ namespace CNA::Internal::Renderers::EasyGL
          *                         from nothing instead of touching freed storage.
          * @param mipMap           Whether a full mip chain is allocated and regenerated on unbind.
          * @param multiSampleCount Requested sample count, clamped to `GL_MAX_SAMPLES`.
+         * @param surfaceFormat    plan_modern.md MOD-115: raw
+         *                         `Microsoft::Xna::Framework::Graphics::SurfaceFormat` ordinal for
+         *                         the colour attachment. `Color` (the default) keeps the historical
+         *                         8-bit RGBA storage exactly as it was; the float formats allocate
+         *                         real R/RG/RGBA 16F/32F storage, which is what lets an HDR scene
+         *                         keep values above 1.0 instead of clamping them at draw time.
          */
         EasyGLRenderTargetRenderer(int w, int h, int depthFormat, ::easygl::ResourceRegistry* registry,
                                    std::weak_ptr<EasyGLBoundTargetEXT> binding,
-                                   bool mipMap = false, int multiSampleCount = 0);
+                                   bool mipMap = false, int multiSampleCount = 0,
+                                   int surfaceFormat = 0);
         ~EasyGLRenderTargetRenderer() override;
 
         int GetWidth()  const override { return width_; }
@@ -206,6 +214,10 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] unsigned int GetColorGLHandle() const override;
         [[nodiscard]] const ::easygl::Texture& GetEasyGLColorTexture() const { return colorTex_; }
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+        /// plan_modern.md MOD-115: the raw SurfaceFormat ordinal this target's colour storage was
+        /// actually created with. Equal to what was requested -- an unsupported format is refused at
+        /// creation rather than substituted, so this can never disagree with the caller's request.
+        [[nodiscard]] int GetSurfaceFormatEXT() const { return surfaceFormat_; }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
         {
             return depthFormatWasRequested && depthFormat_ != 0;
@@ -237,6 +249,7 @@ namespace CNA::Internal::Renderers::EasyGL
         int  width_            = 0;
         int  height_           = 0;
         int  depthFormat_      = 0;  ///< Raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal.
+        int  surfaceFormat_    = 0;  ///< Raw Microsoft::Xna::Framework::Graphics::SurfaceFormat ordinal.
         bool mipMap_           = false;
         int  levelCount_       = 1;
         int  multiSampleCount_ = 0;
@@ -796,6 +809,17 @@ namespace CNA::Internal::Renderers::EasyGL
         /// which is precisely what the trace exists to record.
         [[nodiscard]] std::string TraceBindingDetailEXT() const;
 
+        /// plan_modern.md MOD-117: asks GL, once per kind, whether a colour attachment of the
+        /// 32-bit (@p fullFloat) or 16-bit float format is framebuffer-complete on this context.
+        /// Restores the previously bound framebuffer and drains the error queue before returning.
+        [[nodiscard]] bool ProbeFloatRenderTargetSupportEXT(bool fullFloat) const;
+
+        /// Cached results of that probe. Mutable because the query is const and a caller may make
+        /// it per frame; the answer cannot change without a new GL context, and a new context means
+        /// a new renderer.
+        mutable std::optional<bool> probedFullFloatRenderable_;
+        mutable std::optional<bool> probedHalfFloatRenderable_;
+
         // FillMode::WireFrame emulation (OpenGL ES has no glPolygonMode):
         // when active, triangle draws are re-expanded into GL_LINES.
         bool wireframe_ = false;
@@ -984,6 +1008,19 @@ namespace CNA::Internal::Renderers::EasyGL
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
         std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2D(int w, int h, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
+        /// plan_modern.md MOD-115: creates the colour attachment in the requested SurfaceFormat --
+        /// real R/RG/RGBA 16F/32F storage for the float formats, unchanged 8-bit RGBA for Color.
+        /// Throws for a format this GL context cannot render to, rather than substituting Color the
+        /// way the shared default does; ask SupportsRenderTargetFormat() first.
+        std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2DEXT(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
+        /// plan_modern.md MOD-104/MOD-117: this renderer's own verdict on a render-target
+        /// SurfaceFormat. Color is Supported unconditionally; the float formats are answered by a
+        /// cached runtime framebuffer-completeness probe, because their availability is a property
+        /// of the driver and its extensions rather than of the compile-time GL profile. Every other
+        /// format defers to the framework rule, unchanged.
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
         std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;

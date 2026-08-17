@@ -19,11 +19,14 @@ do not reconstruct the layer's state from the general `NEXT.md`.
 | ✅ | `MOD-3` — `scripts/check_cnaext_guards.sh` |
 | ✅ | `MOD-4` — `docs/cnaext-engine-layer.md` |
 | ✅ | `MOD-14` — this file |
+| ✅ | `MOD-100`/`101`/`103`/`104` — float render-target capabilities, derived from a per-format renderer verdict |
+| ✅ | `MOD-115`/`116`/`117` — EasyGL really allocates RGBA16F/RGBA32F targets, probed at runtime |
 
-**Next up (critical path to a first HDR frame):** `MOD-5` → `MOD-21`/`MOD-22` (the remaining
-Phase 0 items) → `MOD-100`–`MOD-107` (capabilities + `RenderTarget2D` format policy) →
-`MOD-115`–`MOD-125` (EasyGL float FBOs) → `MOD-200`–`MOD-210` (pass infrastructure) →
-`MOD-300`–`MOD-305` (tonemapping) → `MOD-700`–`MOD-712` (`RenderPipeline`).
+**Next up (critical path to a first HDR frame):** `MOD-105`–`MOD-108` (unsupported-format policy,
+cube-target format, float readback) → `MOD-118`–`MOD-125` (the rest of the EasyGL float work: depth
+combination, MSAA resolve, mips, MRT) → `MOD-131` (a float target that provably keeps values above
+1.0) → `MOD-200`–`MOD-210` (pass infrastructure) → `MOD-300`–`MOD-305` (tonemapping) →
+`MOD-700`–`MOD-712` (`RenderPipeline`). `MOD-5`, `MOD-21`, `MOD-22` remain open from Phase 0.
 
 **Owner decisions in force** (asked 2026-08-17): start with the HDR spine; EasyGL is the
 reference renderer with Vulkan and D3D11 as the committed follow-ups and the rest opportunistic;
@@ -76,14 +79,25 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 
 | Date | Build | Suite | Result |
 |---|---|---|---|
-| 2026-08-17 | `cmake-build-cnaext` (OPENGLES3, `CNA_CNAEXT=ON`, Debug) | `CnaTests --gtest_filter='CnaExtMasterInclude*'` | 4/4 pass |
-| 2026-08-17 | same | full `CnaTests`, **from the repo root**, under Xvfb (`MOD-1710`) | 6360 ran · 6351 pass · 8 skip · 1 fail |
+| 2026-08-17 | `cmake-build-cnaext` (OPENGLES3, `CNA_CNAEXT=ON`, Debug), branch base `origin/next` | full `CnaTests`, from the repo root, under Xvfb (`MOD-1710`) | **7292 pass · 8 fail · aborts** at `GraphicsDeviceManagerPlatformTest.ADefaultManagerConstructsWithNoGame` |
+| 2026-08-17 | same, with `MOD-115`–`MOD-117` applied | same | 7294 pass (+2 = the new tests) · same 8 fail · same abort point |
 
-The single failure is `EffectApplyTest.DisposeIsIdempotentAndDoesNotThrow`, which died on
-`SDL_InitSubSystem(SDL_INIT_VIDEO) failed: x11 not available` after ~5000 preceding tests had each
-created and destroyed a window against the same Xvfb — an environment hiccup, not a code failure
-(the test passes when run on its own). Treat 6351/8/1 as the reference numbers and re-check any new
-failure against this list before calling it a regression.
+**The 8 failures and the abort are pre-existing on `next`** — measured by rebuilding the branch
+without the engine-layer changes and getting the identical set, not assumed:
+
+- `GltfRendererPbrFallbackPolicy.InventoryCoversEveryRendererThatConsumesPbrMaps`,
+  `…SpecularTextureInventoryClassifiesEveryPbrRenderer`,
+  `GltfRendererIndexWidthPolicy.InventoryClassifiesEveryRenderer` — renderer inventories that have
+  not caught up with the identities `next` added.
+- `GraphicsDeviceRendererTest.StartupDiagnosticNeverWritesToStdout` — EasyGL's capability line is
+  written with `std::cout`; the test wants stderr. Untouched here deliberately: fixing it is a
+  one-line change in someone else's area, unrelated to this plan.
+- `GamePlatformOwnershipTest` (4 cases).
+- The abort: the suite segfaults entering `GraphicsDeviceManagerPlatformTest`; that suite passes on
+  its own, so it is a full-run ordering/teardown issue, again present without any of this work.
+
+An earlier baseline in this file recorded 6360/6351 — that was measured on the **develop**-based
+tree before the rebase onto `next` and does not describe this branch; it has been replaced above.
 
 Two things about how the suite is run matter more than they look:
 

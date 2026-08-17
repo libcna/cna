@@ -30,6 +30,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #include "CNA/Platform/PlatformException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/NotSupportedException.hpp"
 #include <cstdint>
 #include <cstdlib>
@@ -1900,12 +1901,74 @@ else
         }
     }
 
+    // plan_modern.md MOD-116: maps a Microsoft::Xna::Framework::Graphics::SurfaceFormat ordinal to
+    // the GL colour storage a render target of that format needs. Data, not a switch chain buried in
+    // the allocation code, because the identical triple is needed in three places: the texture's
+    // per-level storage, the multisample colour renderbuffer, and the probe that decides whether
+    // this GL context can render to the format at all.
+    //
+    // Only the formats CNA's HDR pipeline actually allocates are listed. Everything else is
+    // deliberately absent and refused rather than silently substituted -- a caller who asks for
+    // Rgba64 and is handed 8-bit Color has no way to find out, which is the exact failure mode
+    // MOD-100 exists to end.
+    struct RenderTargetColorStorage
+    {
+        ::metagl::InternalFormat internalFormat;
+        ::metagl::PixelFormat    pixelFormat;
+        ::metagl::PixelType      pixelType;
+        bool                     isFloat;      ///< Needs a float-renderable colour buffer.
+        bool                     isFullFloat;  ///< 32-bit per channel (vs 16-bit half float).
+    };
+
+    static bool MapRenderTargetColorFormat(int surfaceFormat, RenderTargetColorStorage& out)
+    {
+        using ::Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+        case SurfaceFormat::Color:
+            out = {RgbaTexImageInternalFormat(), ::metagl::PixelFormat::Rgba,
+                   ::metagl::PixelType::UnsignedByte, false, false};
+            return true;
+        case SurfaceFormat::Single:
+            out = {::metagl::InternalFormat::R32F, ::metagl::PixelFormat::Red,
+                   ::metagl::PixelType::Float, true, true};
+            return true;
+        case SurfaceFormat::Vector2:
+            out = {::metagl::InternalFormat::Rg32F, ::metagl::PixelFormat::Rg,
+                   ::metagl::PixelType::Float, true, true};
+            return true;
+        case SurfaceFormat::Vector4:
+            out = {::metagl::InternalFormat::Rgba32F, ::metagl::PixelFormat::Rgba,
+                   ::metagl::PixelType::Float, true, true};
+            return true;
+        case SurfaceFormat::HalfSingle:
+            out = {::metagl::InternalFormat::R16F, ::metagl::PixelFormat::Red,
+                   ::metagl::PixelType::HalfFloat, true, false};
+            return true;
+        case SurfaceFormat::HalfVector2:
+            out = {::metagl::InternalFormat::Rg16F, ::metagl::PixelFormat::Rg,
+                   ::metagl::PixelType::HalfFloat, true, false};
+            return true;
+        case SurfaceFormat::HalfVector4:
+        case SurfaceFormat::HdrBlendable:
+            // HdrBlendable is XNA's "float format for HDR data"; on Windows it was RGBA16F, and CNA
+            // makes that equivalence explicit rather than inventing a third meaning for it.
+            out = {::metagl::InternalFormat::Rgba16F, ::metagl::PixelFormat::Rgba,
+                   ::metagl::PixelType::HalfFloat, true, false};
+            return true;
+        default:
+            return false;
+        }
+    }
+
     EasyGLRenderTargetRenderer::EasyGLRenderTargetRenderer(int w, int h, int depthFormat,
                                                           ::easygl::ResourceRegistry* registry,
                                                           std::weak_ptr<EasyGLBoundTargetEXT> binding,
-                                                          bool mipMap, int multiSampleCount)
-        : width_(w), height_(h), depthFormat_(depthFormat), mipMap_(mipMap),
-          multiSampleCount_(multiSampleCount), registry_(registry), binding_(std::move(binding))
+                                                          bool mipMap, int multiSampleCount,
+                                                          int surfaceFormat)
+        : width_(w), height_(h), depthFormat_(depthFormat), surfaceFormat_(surfaceFormat),
+          mipMap_(mipMap), multiSampleCount_(multiSampleCount), registry_(registry),
+          binding_(std::move(binding))
     {
         levelCount_ = mipMap_ ? CalculateRenderTargetMipLevels(w, h) : 1;
         CreateResources();
@@ -1997,6 +2060,17 @@ if (ProfileIsEs2ApiGeneration())
         // GetMultiSampleCount() then reports 0, keeping the public applied count truthful.
         multiSampleCount_ = 0;
 }
+        // plan_modern.md MOD-115: the colour storage this target's SurfaceFormat calls for. The
+        // request is validated before construction (EasyGLRenderer::CreateRenderTarget2DEXT refuses
+        // a format this context cannot render to), so an unmapped ordinal here would be a caller
+        // bypassing that route; fall back to Color rather than leaving the storage undefined.
+        RenderTargetColorStorage colorStorage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat_, colorStorage))
+        {
+            MapRenderTargetColorFormat(0, colorStorage);
+            surfaceFormat_ = 0;
+        }
+
         colorTex_.create();
         // The 6-parameter set_image_2d overload does not call glBindTexture first;
         // bind the texture explicitly so glTexImage2D targets our handle.
@@ -2011,10 +2085,10 @@ if (ProfileIsEs2ApiGeneration())
             for (int level = 0; level < levelCount_; ++level)
             {
                 colorTex_.set_image_2d(::easygl::TextureTarget::Texture2D, level,
-                                       RgbaTexImageInternalFormat(),
+                                       colorStorage.internalFormat,
                                        levelW, levelH,
-                                       ::metagl::PixelFormat::Rgba,
-                                       ::metagl::PixelType::UnsignedByte,
+                                       colorStorage.pixelFormat,
+                                       colorStorage.pixelType,
                                        nullptr);
                 levelW = std::max(1, levelW / 2);
                 levelH = std::max(1, levelH / 2);
@@ -2086,8 +2160,11 @@ else
             // target, written by UnbindAsRenderTarget()'s blit, never rendered into directly.
             msaaColorRbo_.create();
             msaaColorRbo_.bind();
+            // MOD-115: the multisample buffer must carry the same colour format as the resolve
+            // texture -- glBlitFramebuffer requires compatible formats, and a float target whose
+            // multisample side stayed Rgba8 would clamp exactly the values HDR exists to keep.
             msaaColorRbo_.set_storage_multisample(multiSampleCount_,
-                                                   ::metagl::InternalFormat::Rgba8,
+                                                   colorStorage.internalFormat,
                                                    width_, height_);
             fbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
                                      ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
@@ -3247,7 +3324,12 @@ if (ProfileUsesGlslEs100())
                          "anisotropic filtering: "
                       << (hasAniso ? ("supported (Task 918, up to " + std::to_string(static_cast<int>(maxAnisoCap)) + "x)")
                                    : std::string("NOT supported (falls back to trilinear)"))
-                      << "; SurfaceFormat: Color only (Task 176)";
+                      << "; texture SurfaceFormat: Color only (Task 176)"
+                      // plan_modern.md MOD-117: render targets are no longer Color-only, and the
+                      // answer is driver-dependent, so it is probed rather than asserted.
+                      << "; render-target SurfaceFormat: Color"
+                      << (ProbeFloatRenderTargetSupportEXT(false) ? " + half-float (RGBA16F)" : "")
+                      << (ProbeFloatRenderTargetSupportEXT(true) ? " + float (RGBA32F)" : "");
             CNA::Logger::Info(capabilityMessage.str(), CNA::LogCategory::RENDER);
         }
 
@@ -3733,6 +3815,101 @@ if (!ProfileIsEs2ApiGeneration())
         // renderer's binding record alive past the renderer itself.
         return std::make_unique<EasyGLRenderTargetRenderer>(w, h, depthFormat, RegistryPtr(), bound_,
                                                            mipMap, multiSampleCount);
+    }
+
+    std::unique_ptr<IRenderTargetRenderer> EasyGLRenderer::CreateRenderTarget2DEXT(
+        int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
+        // plan_modern.md MOD-115: refuse rather than substitute. The shared default of this factory
+        // drops the format and hands back a Color target, which is invisible to the caller; a
+        // renderer that has genuinely implemented formats owes an honest answer instead, and
+        // GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT() is the way to ask in advance.
+        if (ClassifyRenderTargetFormatEXT(surfaceFormat) == RendererFormatVerdict::Unsupported)
+        {
+            throw std::runtime_error(
+                "EasyGL: SurfaceFormat ordinal " + std::to_string(surfaceFormat) +
+                " is not supported as a render target on this GL context. Query "
+                "GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT() first.");
+        }
+        return std::make_unique<EasyGLRenderTargetRenderer>(w, h, depthFormat, RegistryPtr(), bound_,
+                                                           mipMap, multiSampleCount, surfaceFormat);
+    }
+
+    RendererFormatVerdict EasyGLRenderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
+    {
+        // plan_modern.md MOD-104/MOD-117. Color and the float formats are this renderer's own
+        // answer; everything else defers to the framework rule, exactly as before this change --
+        // widening the verdict beyond what CreateResources can actually allocate would put the
+        // caller back in the "asked for one format, silently got another" position.
+        RenderTargetColorStorage storage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat, storage))
+            return RendererFormatVerdict::Defer;
+        if (!storage.isFloat)
+            return RendererFormatVerdict::Supported;   // Color: every profile, always.
+        return ProbeFloatRenderTargetSupportEXT(storage.isFullFloat)
+            ? RendererFormatVerdict::Supported
+            : RendererFormatVerdict::Unsupported;
+    }
+
+    bool EasyGLRenderer::ProbeFloatRenderTargetSupportEXT(bool fullFloat) const
+    {
+        // MOD-117: probed, not inferred. Whether a float colour buffer is renderable depends on the
+        // runtime context, not on the compile-time profile: ES 3.0 needs GL_EXT_color_buffer_float
+        // (or _half_float for the 16-bit case), ES 3.2 has half-float in core, desktop GL has had
+        // both since 3.0, and WebGL 2 gates them behind an extension the browser may not expose.
+        // Rather than encode that matrix -- and be wrong on the driver that disagrees with it --
+        // this creates a 1x1 attachment of the real format and asks GL whether the framebuffer is
+        // complete. That is the same question CreateResources will ask for real, so the probe cannot
+        // be optimistic about something that then fails.
+        //
+        // Cached because SupportsRenderTargetFormat() is a query a caller may make per frame.
+        auto& cache = fullFloat ? probedFullFloatRenderable_ : probedHalfFloatRenderable_;
+        if (cache.has_value())
+            return *cache;
+
+        if (ProfileIsEs2ApiGeneration())
+        {
+            // The float internal formats used here (R/RG/RGBA 16F/32F) are sized formats that do
+            // not exist in the ES 2.0 / WebGL 1 API generation at all.
+            cache = false;
+            return false;
+        }
+
+        using ::Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        RenderTargetColorStorage storage{};
+        MapRenderTargetColorFormat(static_cast<int>(fullFloat ? SurfaceFormat::Vector4
+                                                              : SurfaceFormat::HdrBlendable),
+                                   storage);
+
+        int previousFbo = 0;
+        metagl::glGetIntegerv(::metagl::GetParameter::FramebufferBinding, &previousFbo);
+
+        ::easygl::Texture     probeTex;
+        ::easygl::Framebuffer probeFbo;
+        probeTex.create();
+        probeTex.bind(::easygl::TextureTarget::Texture2D);
+        probeTex.set_image_2d(::easygl::TextureTarget::Texture2D, 0, storage.internalFormat,
+                              1, 1, storage.pixelFormat, storage.pixelType, nullptr);
+        probeFbo.create();
+        probeFbo.bind(::easygl::FramebufferTarget::Framebuffer);
+        probeFbo.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
+                                   ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+                                   ::easygl::TextureTarget::Texture2D, probeTex, 0);
+        const bool complete =
+            probeFbo.check_status(::easygl::FramebufferTarget::Framebuffer) ==
+            ::metagl::FramebufferStatus::Complete;
+
+        // Leave GL exactly as the probe found it -- this runs on demand, possibly mid-frame with a
+        // render target bound, so restoring the previous binding is not optional.
+        metagl::glBindFramebuffer(::metagl::FramebufferTarget::Framebuffer,
+                                  ::metagl::FramebufferId{static_cast<unsigned int>(previousFbo)});
+        // A refused format leaves a GL error queued behind it; drain it so the next real call is not
+        // blamed for this one.
+        DrainGlErrors();
+
+        cache = complete;
+        return complete;
     }
 
     std::unique_ptr<IRenderTargetCubeRenderer> EasyGLRenderer::CreateRenderTargetCube(int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)

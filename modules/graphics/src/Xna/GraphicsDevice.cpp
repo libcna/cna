@@ -2153,7 +2153,23 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat format) const
     {
-        return GetRenderer().SupportsRenderTargetFormat(static_cast<int>(format));
+        // plan_modern.md MOD-103/MOD-104: asks the same question RenderTarget2D's constructor asks
+        // (plan_runtimerenderer.md design decision 9's tri-state verdict), so the two can never
+        // disagree -- a format this returns true for is a format RenderTarget2D will accept, and one
+        // it returns false for is one the constructor refuses.
+        switch (GetRenderer().ClassifyRenderTargetFormatEXT(static_cast<int>(format)))
+        {
+            case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
+                return true;
+            case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported:
+                return false;
+            case CNA::Internal::Renderers::RendererFormatVerdict::Defer:
+                break;
+        }
+        // Defer means "the framework's own rule applies", and that rule (Texture::ValidateFormat)
+        // admits Color alone -- which is the literal truth for a renderer that has not implemented
+        // any other render-target format.
+        return format == SurfaceFormat::Color;
     }
 
     int GraphicsDevice::GetMaxTextureDimension() const
