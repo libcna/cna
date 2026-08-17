@@ -119,12 +119,17 @@ Still open before the FNA3D slice can satisfy every aspirational exit criterion 
   still asserts on shader bytecode in places no campaign has reached;
 - additional renderers consuming `SamplerState.AddressW` (`FX-026` carried it through the shared
   contract and FNA3D consumes it; the rest keep the documented no-op default);
-- additional renderer implementations (`FX-061`–`FX-071`), including EasyGL/OpenGL/OpenGL ES
-  (`FX-062`), Vulkan (`FX-064`–`FX-065`) and DirectX 9 (`FX-070`, structurally the smallest of them
-  because it consumes the effect's shader bytecode untranslated). Every renderer identity is now
-  classified as planned, assessed-feasible or unsupported-by-design in section 10.3 (`FX-067`). The
-  shared contract a backend must pass exists (`FX-060`); until it passes, that backend's correct
-  behavior is an explicit `NotSupportedException`, never a silent stock-shader fallback.
+- additional renderer implementations (`FX-061`–`FX-071`). SDL_GPU (`FX-061`, `FX-071`) and
+  EasyGL/OpenGL/OpenGL ES (`FX-062`) are both **done** -- real draw routes through the public
+  `Effect`/`GraphicsDevice` API, golden-pixel tests, `SupportsCompiledEffects()` true. Still open:
+  DirectX 11 (`FX-063`, Windows-gated), Vulkan (`FX-064` prototyped -- a standalone probe proves a
+  hand-rolled SPIR-V/descriptor-set backend renders real golden pixels on a real device, but no code
+  exists yet in `modules/renderers/vulkan/` itself, which is `FX-065`), Metal (`FX-066`) and
+  DirectX 9 (`FX-070`, structurally the smallest of them because it consumes the effect's shader
+  bytecode untranslated). Every renderer identity is now classified as planned, assessed-feasible or
+  unsupported-by-design in section 10.3 (`FX-067`). The shared contract a backend must pass exists
+  (`FX-060`); until it passes, that backend's correct behavior is an explicit
+  `NotSupportedException`, never a silent stock-shader fallback.
 
 ## 1. Executive conclusion
 
