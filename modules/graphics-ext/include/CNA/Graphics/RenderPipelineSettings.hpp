@@ -59,10 +59,57 @@ namespace CNA::Graphics {
         /** @brief Sets the bloom intensity multiplier. */
         void setBloomIntensity(float value);
 
+        /** @brief Returns the luminance above which a pixel contributes to bloom. */
+        [[nodiscard]] float getBloomThreshold() const;
+        /**
+         * @brief Sets the bloom luminance threshold.
+         *
+         * Values at or below zero make every pixel bloom, which is a legitimate stylistic choice
+         * rather than an error, so the value is not clamped.
+         */
+        void setBloomThreshold(float value);
+
+        /** @brief Returns the bloom blur radius in half-resolution steps (the mip chain depth). */
+        [[nodiscard]] int getBloomIterations() const;
+        /**
+         * @brief Sets how many half-resolution steps the bloom pyramid uses.
+         *
+         * Clamped to 1..8 when applied: a chain deeper than the target allows is not an error, and
+         * the pass reduces it to what the viewport can actually hold.
+         */
+        void setBloomIterations(int value);
+
         /** @brief Returns true if SSAO is enabled. */
         [[nodiscard]] bool isSSAOEnabled() const;
         /** @brief Enables or disables the SSAO post-process pass. */
         void setSSAOEnabled(bool value);
+
+        /** @brief Returns the SSAO hemisphere sampling radius, in world units. */
+        [[nodiscard]] float getSSAORadius() const;
+        /** @brief Sets the SSAO hemisphere sampling radius, in world units. */
+        void setSSAORadius(float value);
+
+        /** @brief Returns the SSAO occlusion strength multiplier. */
+        [[nodiscard]] float getSSAOIntensity() const;
+        /** @brief Sets the SSAO occlusion strength multiplier. */
+        void setSSAOIntensity(float value);
+
+        /** @brief Returns the number of SSAO samples per pixel. */
+        [[nodiscard]] int getSSAOSampleCount() const;
+        /**
+         * @brief Sets the number of SSAO samples per pixel.
+         *
+         * The pass clamps this to the range its kernel generator supports (8..64) rather than
+         * rejecting a value, so a quality preset can set it without knowing that range.
+         */
+        void setSSAOSampleCount(int value);
+
+        // ── Anti-aliasing ────────────────────────────────────────────────────
+
+        /** @brief Returns true if the FXAA post-process pass is enabled. */
+        [[nodiscard]] bool isFXAAEnabled() const;
+        /** @brief Enables or disables FXAA, which runs after tonemapping. */
+        void setFXAAEnabled(bool value);
 
         // ── Quality ──────────────────────────────────────────────────────────
 
@@ -90,7 +137,15 @@ namespace CNA::Graphics {
         bool            bloomEnabled_    = false;
         float           bloomIntensity_  = 1.0f;
 
+        float           bloomThreshold_  = 1.0f;
+        int             bloomIterations_ = 4;
+
         bool            ssaoEnabled_     = false;
+        float           ssaoRadius_      = 0.5f;
+        float           ssaoIntensity_   = 1.0f;
+        int             ssaoSampleCount_ = 16;
+
+        bool            fxaaEnabled_     = false;
 
         RenderQuality   renderQuality_   = RenderQuality::Medium;
         ShadowQuality   shadowQuality_   = ShadowQuality::Disabled;

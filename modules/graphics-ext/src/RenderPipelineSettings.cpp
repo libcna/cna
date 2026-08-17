@@ -24,8 +24,26 @@ namespace CNA::Graphics {
     float           RenderPipelineSettings::getBloomIntensity()   const { return bloomIntensity_; }
     void            RenderPipelineSettings::setBloomIntensity(float v)  { bloomIntensity_ = v; }
 
+    float           RenderPipelineSettings::getBloomThreshold()  const { return bloomThreshold_; }
+    void            RenderPipelineSettings::setBloomThreshold(float v)  { bloomThreshold_ = v; }
+
+    int             RenderPipelineSettings::getBloomIterations() const { return bloomIterations_; }
+    void            RenderPipelineSettings::setBloomIterations(int v)   { bloomIterations_ = v; }
+
     bool            RenderPipelineSettings::isSSAOEnabled()       const { return ssaoEnabled_; }
     void            RenderPipelineSettings::setSSAOEnabled(bool v)      { ssaoEnabled_ = v; }
+
+    float           RenderPipelineSettings::getSSAORadius()       const { return ssaoRadius_; }
+    void            RenderPipelineSettings::setSSAORadius(float v)      { ssaoRadius_ = v; }
+
+    float           RenderPipelineSettings::getSSAOIntensity()    const { return ssaoIntensity_; }
+    void            RenderPipelineSettings::setSSAOIntensity(float v)   { ssaoIntensity_ = v; }
+
+    int             RenderPipelineSettings::getSSAOSampleCount()  const { return ssaoSampleCount_; }
+    void            RenderPipelineSettings::setSSAOSampleCount(int v)   { ssaoSampleCount_ = v; }
+
+    bool            RenderPipelineSettings::isFXAAEnabled()       const { return fxaaEnabled_; }
+    void            RenderPipelineSettings::setFXAAEnabled(bool v)      { fxaaEnabled_ = v; }
 
     RenderQuality   RenderPipelineSettings::getRenderQuality()    const { return renderQuality_; }
     void            RenderPipelineSettings::setRenderQuality(RenderQuality q) { renderQuality_ = q; }

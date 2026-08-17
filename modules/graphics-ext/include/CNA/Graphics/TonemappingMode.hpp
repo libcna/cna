@@ -16,6 +16,14 @@ namespace CNA::Graphics {
         Filmic,
         /** @brief ACES filmic tonemapping (physically-based, cinema standard). */
         Aces,
+        /**
+         * @brief Uncharted 2 filmic tonemapping (Hable's curve), normalized against a white point.
+         *
+         * Appended rather than inserted: the preceding values are stored in settings and compared
+         * by ordinal elsewhere. Unlike Filmic, this one does not bake gamma into its curve, so the
+         * pipeline's gamma step still applies to its output.
+         */
+        Uncharted2
     };
 
 } // namespace CNA::Graphics
