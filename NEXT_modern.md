@@ -79,25 +79,27 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 
 | Date | Build | Suite | Result |
 |---|---|---|---|
-| 2026-08-17 | `cmake-build-cnaext` (OPENGLES3, `CNA_CNAEXT=ON`, Debug), branch base `origin/next` | full `CnaTests`, from the repo root, under Xvfb (`MOD-1710`) | **7292 pass · 8 fail · aborts** at `GraphicsDeviceManagerPlatformTest.ADefaultManagerConstructsWithNoGame` |
-| 2026-08-17 | same, with `MOD-115`–`MOD-117` applied | same | 7294 pass (+2 = the new tests) · same 8 fail · same abort point |
+| 2026-08-17 | `cmake-build-cnaext` (OPENGLES3, `CNA_CNAEXT=ON`, Debug), base `origin/next` @ `05a9eab0` | full `CnaTests`, from the repo root, under Xvfb (`MOD-1710`) | **7548 ran · 7484 pass · 64 skip · 0 fail** |
 
-**The 8 failures and the abort are pre-existing on `next`** — measured by rebuilding the branch
-without the engine-layer changes and getting the identical set, not assumed:
+That is a clean run, and it is new. Measuring the first baseline on this branch turned up eight
+failures and a segfault at ~7300 tests, all of them pre-existing on `next` (verified by rebuilding
+the branch without any engine-layer change and getting the identical set). They were fixed on
+`next` itself rather than worked around here — `next` @ `05a9eab0`:
 
-- `GltfRendererPbrFallbackPolicy.InventoryCoversEveryRendererThatConsumesPbrMaps`,
-  `…SpecularTextureInventoryClassifiesEveryPbrRenderer`,
-  `GltfRendererIndexWidthPolicy.InventoryClassifiesEveryRenderer` — renderer inventories that have
-  not caught up with the identities `next` added.
-- `GraphicsDeviceRendererTest.StartupDiagnosticNeverWritesToStdout` — EasyGL's capability line is
-  written with `std::cout`; the test wants stderr. Untouched here deliberately: fixing it is a
-  one-line change in someone else's area, unrelated to this plan.
-- `GamePlatformOwnershipTest` (4 cases).
-- The abort: the suite segfaults entering `GraphicsDeviceManagerPlatformTest`; that suite passes on
-  its own, so it is a full-run ordering/teardown issue, again present without any of this work.
+- **`PLAT-46`** — a `Game` whose construction throws never ran `~Game`, so its platform stayed
+  installed process-wide while the unwind destroyed it. Every later `Keyboard::GetState` /
+  `StorageDevice` / `TitleContainer` call read freed memory through the ambient accessor; that was
+  the segfault. Fixed with a scope guard that undoes the installation on the failed-construction
+  path only.
+- **`GLTF-374`** — filling in the renderer inventories for `igl`/`pixijs` exposed that IGL bound an
+  opaque-white 1×1 stand-in into the *normal-map* slot, lighting every PBR material without a
+  normal map as though its pixels were tilted 55°. It now binds the flat-normal texel.
+- **EasyGL diagnostics** — the GL banner and capability dump moved off `std::cout` onto the logger.
+- Two `GameEventSemanticsGoldenTest` cases (only reachable once the segfault was gone) now skip
+  where the parameterised platform cannot back the build's renderer.
 
-An earlier baseline in this file recorded 6360/6351 — that was measured on the **develop**-based
-tree before the rebase onto `next` and does not describe this branch; it has been replaced above.
+An earlier baseline in this file recorded 6360/6351 — measured on the **develop**-based tree before
+the rebase onto `next`, so it never described this branch; replaced above.
 
 Two things about how the suite is run matter more than they look:
 
