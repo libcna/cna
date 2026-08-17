@@ -90,7 +90,12 @@ namespace
     // These fragments name the actual null branch (or the preselected default for Wicked) for
     // each semantic. Whitespace is ignored, but the map/fallback pairing is not: changing a normal
     // slot to white, or any other slot to the flat-normal texture, fails this table.
-    constexpr std::array<RendererAudit, 15> kAudits{{
+    constexpr std::array<RendererAudit, 16> kAudits{{
+        {"igl",
+         "bindUnitNeutral(TextureUnit::NormalMap, textureOf(params.pbrNormalMap), NeutralTextureKind::FlatNormal2D)",
+         "bindUnit(TextureUnit::MetallicRoughnessMap, textureOf(params.pbrMetallicRoughnessMap), false)",
+         "bindUnit(TextureUnit::EmissiveMap, textureOf(params.pbrEmissiveMap), false)",
+         "bindUnit(TextureUnit::OcclusionMap, textureOf(params.pbrOcclusionMap), false)"},
         {"bgfx",
          "params.pbrNormalMap, defaultFlatNormalTexture3D_",
          "params.pbrMetallicRoughnessMap, defaultWhiteTexture3D_",
@@ -1240,7 +1245,13 @@ namespace
     // GLTF-231/232/379: doubleSided deliberately stays application-owned RasterizerState. This
     // inventory locks the renderer half of that boundary: CullMode::None reaches native no-cull
     // state, and the PBR rigid/skinned route consumes that same dynamic state or pipeline key.
-    constexpr std::array<RendererPbrCullAudit, 15> kPbrCullAudits{{
+    constexpr std::array<RendererPbrCullAudit, 16> kPbrCullAudits{{
+        {"igl", {{
+            "case 1: return igl::CullMode::Front",
+            "case 2: return igl::CullMode::Back",
+            "default: return igl::CullMode::Disabled",
+            "key.cullMode = static_cast<std::uint8_t>(ToIglCullMode(cullMode_))",
+            "desc.cullMode = static_cast<igl::CullMode>(key.cullMode)"}}},
         {"bgfx", {{
             "default: cullFlags_ = 0; break",
             "kMsaaRasterState | blendFlags_ | depthFlags_ | cullFlags_",
@@ -1760,15 +1771,17 @@ TEST(GltfRendererPbrFallbackPolicy, SpecularTextureInventoryClassifiesEveryPbrRe
         "bgfx", "diligent", "directx9", "directx11", "directx12", "easygl",
         "llgl", "magnum", "opengl2", "opengl4", "sdl-gpu", "vulkan",
     }};
-    // Factor-only is not a capability decision -- it is unfinished work, and the reason is the
-    // same for all three: the binding contract is defined per map with its own UV selector, and
-    // none of these three carries a second UV stream at all. The dual-UV foundation comes first.
-    constexpr std::array<const char*, 3> factorOnly{{"metal", "webgpu", "wicked"}};
+    // Factor-only is not a capability decision -- it is unfinished work. For metal, webgpu and
+    // wicked the reason is shared: the binding contract is defined per map with its own UV
+    // selector, and none of them carries a second UV stream at all, so the dual-UV foundation
+    // comes first. IGL is unfinished for a plainer reason -- it binds the four core PBR maps and
+    // has no specular sampler slots at all yet.
+    constexpr std::array<const char*, 4> factorOnly{{"igl", "metal", "webgpu", "wicked"}};
 
     std::set<std::string> expected;
     for (const char* name : sampling) { expected.insert(name); }
     for (const char* name : factorOnly) { expected.insert(name); }
-    ASSERT_EQ(15u, expected.size()) << "the two sets must be disjoint";
+    ASSERT_EQ(16u, expected.size()) << "the two sets must be disjoint";
 
     const std::filesystem::path renderers = RepositoryRoot() / "modules" / "renderers";
     ASSERT_TRUE(std::filesystem::is_directory(renderers));
@@ -2598,24 +2611,24 @@ TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
     // remaining 2D/no-3D backends deliberately inherit the shared, unconditionally throwing
     // default. Keeping the three sets disjoint makes a new renderer an audit failure, not an
     // accidental 16-bit fallback.
-    constexpr std::array<const char*, 32> providers{{
+    constexpr std::array<const char*, 33> providers{{
         "bgfx", "diligent", "directx10", "directx11", "directx12", "directx2",
         "directx3", "directx5", "directx6", "directx7", "directx8", "directx9",
-        "easygl", "fna3d", "glide", "headless", "llgl", "magnum", "metal",
+        "easygl", "fna3d", "glide", "headless", "igl", "llgl", "magnum", "metal",
         "opengl1", "opengl2", "opengl4", "opengles1", "portablegl", "sdl-gpu",
         "software", "sokol", "stub", "tinygl", "vulkan", "webgpu", "wicked",
     }};
     constexpr std::array<const char*, 2> explicitRejecters{{"gdi", "skia"}};
-    constexpr std::array<const char*, 9> inheritedRejecters{{
+    constexpr std::array<const char*, 10> inheritedRejecters{{
         "blend2d", "canvas", "direct2d", "directx1", "freedirect", "html-dom",
-        "openvg", "sdl-renderer", "svg-dom",
+        "openvg", "pixijs", "sdl-renderer", "svg-dom",
     }};
 
     std::set<std::string> expected;
     for (const char* name : providers) { expected.insert(name); }
     for (const char* name : explicitRejecters) { expected.insert(name); }
     for (const char* name : inheritedRejecters) { expected.insert(name); }
-    ASSERT_EQ(43u, expected.size()) << "the policy sets must be disjoint";
+    ASSERT_EQ(45u, expected.size()) << "the policy sets must be disjoint";
 
     const std::filesystem::path renderers =
         RepositoryRoot() / "modules" / "renderers";
@@ -2635,16 +2648,16 @@ TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
 
 TEST(GltfRendererIndexWidthPolicy, ProvidersOptInAndUnsupportedRenderersCannotFallBackToSixteenBits)
 {
-    constexpr std::array<const char*, 32> providers{{
+    constexpr std::array<const char*, 33> providers{{
         "bgfx", "diligent", "directx10", "directx11", "directx12", "directx2",
         "directx3", "directx5", "directx6", "directx7", "directx8", "directx9",
-        "easygl", "fna3d", "glide", "headless", "llgl", "magnum", "metal",
+        "easygl", "fna3d", "glide", "headless", "igl", "llgl", "magnum", "metal",
         "opengl1", "opengl2", "opengl4", "opengles1", "portablegl", "sdl-gpu",
         "software", "sokol", "stub", "tinygl", "vulkan", "webgpu", "wicked",
     }};
-    constexpr std::array<const char*, 9> inheritedRejecters{{
+    constexpr std::array<const char*, 10> inheritedRejecters{{
         "blend2d", "canvas", "direct2d", "directx1", "freedirect", "html-dom",
-        "openvg", "sdl-renderer", "svg-dom",
+        "openvg", "pixijs", "sdl-renderer", "svg-dom",
     }};
 
     const std::filesystem::path root = RepositoryRoot();

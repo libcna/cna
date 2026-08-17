@@ -272,12 +272,19 @@ namespace CNA::Internal::Renderers::Igl
         encoder.bindBuffer(UniformBufferBinding::Bones, boneAllocation.buffer,
                            boneAllocation.offset, sizeof(IglBoneUniforms));
 
-        const auto bindUnit = [&](const std::uint32_t unit, igl::ITexture* texture,
-                                  const bool cube) {
-            igl::ITexture* resolved = texture != nullptr ? texture : ResolveDummyTexture(cube);
+        const auto bindUnitNeutral = [&](const std::uint32_t unit, igl::ITexture* texture,
+                                         const NeutralTextureKind neutral) {
+            igl::ITexture* resolved =
+                texture != nullptr ? texture : ResolveNeutralTexture(neutral);
             encoder.bindTexture(unit, igl::BindTarget::kFragment, resolved);
             encoder.bindSamplerState(unit, igl::BindTarget::kFragment,
                                      AcquireSamplerState(static_cast<int>(unit)).get());
+        };
+
+        const auto bindUnit = [&](const std::uint32_t unit, igl::ITexture* texture,
+                                  const bool cube) {
+            bindUnitNeutral(unit, texture,
+                            cube ? NeutralTextureKind::WhiteCube : NeutralTextureKind::White2D);
         };
 
         const auto textureOf = [](const ITextureRenderer* texture) -> igl::ITexture* {
@@ -303,7 +310,10 @@ namespace CNA::Internal::Renderers::Igl
         bindUnit(TextureUnit::Texture0, textureOf(params.texture0), false);
         bindUnit(TextureUnit::Texture1, textureOf(params.texture1), false);
         bindUnit(TextureUnit::EnvironmentMap, cubeOf(params.envMap), true);
-        bindUnit(TextureUnit::NormalMap, textureOf(params.pbrNormalMap), false);
+        // GLTF-374: the normal slot's neutral value is the flat-normal texel, not white -- an
+        // unbound white normal map tilts every pixel of an otherwise unperturbed surface.
+        bindUnitNeutral(TextureUnit::NormalMap, textureOf(params.pbrNormalMap),
+                        NeutralTextureKind::FlatNormal2D);
         bindUnit(TextureUnit::MetallicRoughnessMap, textureOf(params.pbrMetallicRoughnessMap),
                  false);
         bindUnit(TextureUnit::EmissiveMap, textureOf(params.pbrEmissiveMap), false);
