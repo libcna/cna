@@ -103,6 +103,30 @@ namespace CNA::Internal::Graphics
     static_assert(offsetof(PositionNormalTangentTextureStream, tx) == 24);
     static_assert(offsetof(PositionNormalTangentTextureStream, u) == 40);
 
+    /**
+     * @brief GPU stream for a rigid PBR vertex carrying two texture-coordinate sets.
+     *
+     * The useful fields occupy 56 bytes, but stride 56 already identifies the skinned+colour
+     * layout. Four explicit padding bytes keep the stride-keyed renderer ABI unambiguous while
+     * preserving the complete stride-48 PBR record as a byte-for-byte prefix.
+     */
+    struct PositionNormalTangentTexture2PaddedStream
+    {
+        float x, y, z;
+        float nx, ny, nz;
+        float tx, ty, tz, tw;
+        float u0, v0;
+        float u1, v1;
+        std::uint32_t padding;
+    };
+    static_assert(sizeof(PositionNormalTangentTexture2PaddedStream) == 60);
+    static_assert(offsetof(PositionNormalTangentTexture2PaddedStream, x) == 0);
+    static_assert(offsetof(PositionNormalTangentTexture2PaddedStream, nx) == 12);
+    static_assert(offsetof(PositionNormalTangentTexture2PaddedStream, tx) == 24);
+    static_assert(offsetof(PositionNormalTangentTexture2PaddedStream, u0) == 40);
+    static_assert(offsetof(PositionNormalTangentTexture2PaddedStream, u1) == 48);
+    static_assert(offsetof(PositionNormalTangentTexture2PaddedStream, padding) == 56);
+
     /** @brief GPU stream for VertexPositionNormalTangentTextureSkinned. */
     struct PositionNormalTangentTextureSkinnedStream
     {
@@ -120,6 +144,26 @@ namespace CNA::Internal::Graphics
     static_assert(offsetof(PositionNormalTangentTextureSkinnedStream, u) == 40);
     static_assert(offsetof(PositionNormalTangentTextureSkinnedStream, w0) == 48);
     static_assert(offsetof(PositionNormalTangentTextureSkinnedStream, i0) == 64);
+
+    /** @brief GPU stream for a skinned PBR vertex carrying two texture-coordinate sets. */
+    struct PositionNormalTangentTextureSkinned2Stream
+    {
+        float x, y, z;
+        float nx, ny, nz;
+        float tx, ty, tz, tw;
+        float u0, v0;
+        float w0, w1, w2, w3;
+        std::uint8_t i0, i1, i2, i3;
+        float u1, v1;
+    };
+    static_assert(sizeof(PositionNormalTangentTextureSkinned2Stream) == 76);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2Stream, x) == 0);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2Stream, nx) == 12);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2Stream, tx) == 24);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2Stream, u0) == 40);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2Stream, w0) == 48);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2Stream, i0) == 64);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2Stream, u1) == 68);
 
     /**
      * @brief Maps a built-in vertex structure to the GPU stream that carries its values.

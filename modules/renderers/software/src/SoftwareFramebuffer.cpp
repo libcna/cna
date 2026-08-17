@@ -114,7 +114,7 @@ namespace CNA::Internal::Renderers::Software
         }
     }
 
-    void SoftwareFramebuffer::ResolveColor()
+    void SoftwareFramebuffer::ResolveColor() const
     {
         if (!HasMultiSampleColor())
             return;

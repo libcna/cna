@@ -1,4 +1,8 @@
-build*
+# Root-level build output directories only. This was once an unanchored 'build*', which matched
+# ANY path whose basename began with "build" -- it silently swallowed
+# tools/gltf_fixtures/builder.py, the fixture generator's core module, so the generator could not
+# run on a clean checkout at all (GLTF-003/GLTF-011). Keep this anchored and directory-only.
+/build*/
 cmake-build-*/
 .idea/*
 cmake-build-debug/*

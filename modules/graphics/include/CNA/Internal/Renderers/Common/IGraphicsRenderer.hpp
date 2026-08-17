@@ -1040,12 +1040,78 @@ namespace CNA::Internal::Renderers
         /// PbrEffect: occlusion map (R channel, 1=fully lit .. 0=fully occluded), or null
         /// (no occlusion darkening applied).
         const ITextureRenderer* pbrOcclusionMap = nullptr;
+        /// KHR_materials_specular scalar strength map; only alpha is meaningful and is linear.
+        const ITextureRenderer* pbrSpecularMap = nullptr;
+        /// KHR_materials_specular colour map; RGB is sRGB-encoded by default.
+        const ITextureRenderer* pbrSpecularColorMap = nullptr;
+        /// plan_gltf.md GLTF-182/GLTF-183: bit i selects packed TextureCoordinate1 for PBR
+        /// texture slot i (base colour, normal, metallic-roughness, emissive, occlusion,
+        /// specular strength, specular colour); a clear
+        /// bit selects TextureCoordinate0. The importer maps arbitrary glTF source TEXCOORD_n
+        /// indices onto these two collision-free renderer channels before filling the effect.
+        std::uint32_t pbrTextureCoordinateSetMask = 0;
+        /// plan_gltf.md GLTF-184: two affine rows per core PBR map, in base-colour, normal,
+        /// metallic-roughness, emissive, occlusion order. For row vectors `r0` and `r1`, the
+        /// transformed coordinate is `{dot(float3(uv,1),r0.xyz),
+        /// dot(float3(uv,1),r1.xyz)}`. The fourth component is deterministic padding for native
+        /// constant-buffer alignment. Identity defaults preserve old callers and old content.
+        float pbrTextureTransformRows[10][4] = {
+            {1,0,0,0}, {0,1,0,0}, {1,0,0,0}, {0,1,0,0},
+            {1,0,0,0}, {0,1,0,0}, {1,0,0,0}, {0,1,0,0},
+            {1,0,0,0}, {0,1,0,0}};
+        /// GLTF-344: the same representation for specular strength then specular colour. Kept in
+        /// a separate additive block so existing native renderer structs that copy the ten core
+        /// rows by `sizeof(pbrTextureTransformRows)` retain their exact size and cannot overflow.
+        float pbrSpecularTextureTransformRows[4][4] = {
+            {1,0,0,0}, {0,1,0,0}, {1,0,0,0}, {0,1,0,0}};
         /// PbrEffect: metallic factor [0,1], multiplied with pbrMetallicRoughnessMap's B channel
         /// when bound (or used alone as a constant when it isn't).
         float pbrMetallicFactor = 1.0f;
         /// PbrEffect: roughness factor [0,1], multiplied with pbrMetallicRoughnessMap's G channel
         /// when bound (or used alone as a constant when it isn't).
         float pbrRoughnessFactor = 1.0f;
+        /// plan_gltf.md GLTF-343/GLTF-344: dielectric normal-incidence reflectance after applying
+        /// KHR_materials_ior and the factor-only part of KHR_materials_specular. Core glTF's
+        /// default is 0.04 in every channel. Kept separate from the metallic F0, which remains the
+        /// material's base colour, and from F90 below because specularFactor can reduce grazing
+        /// reflectance independently. Every PBR-capable renderer consumes both endpoints; the
+        /// repository-wide renderer audit keeps those CPU uploads and Schlick terms in lockstep.
+        float pbrDielectricF0[3] = {0.04f, 0.04f, 0.04f};
+        /// Dielectric grazing reflectance after KHR_materials_specular's scalar strength (default 1).
+        float pbrDielectricF90 = 1.0f;
+        /// GLTF-344: IOR F0 times specularColorFactor before clamping/weighting. A colour-map
+        /// sample must multiply this value before the specification's per-channel clamp.
+        float pbrDielectricF0Unclamped[3] = {0.04f, 0.04f, 0.04f};
+        /// GLTF-344: authored scalar strength, retained separately for texture-driven evaluation.
+        float pbrSpecularFactor = 1.0f;
+        /// plan_gltf.md GLTF-224: glTF `normalTexture.scale`. Scales the sampled tangent-space
+        /// normal's x and y before the tangent basis is applied -- 0 flattens the map to the
+        /// geometric normal, 1 is the map as authored, and glTF puts no upper bound on it. Only
+        /// meaningful when `pbrNormalMap` is bound.
+        float pbrNormalScale = 1.0f;
+        /// plan_gltf.md GLTF-225: glTF `occlusionTexture.strength`, applied as the specification's
+        /// own `1 + strength * (sampled - 1)`. At 0 the result is 1 -- no occlusion at all,
+        /// whatever the map holds -- and at 1 it is the map unchanged. Only meaningful when
+        /// `pbrOcclusionMap` is bound.
+        float pbrOcclusionStrength = 1.0f;
+        /// plan_gltf.md GLTF-210: the base-colour texture's samples are sRGB-ENCODED and must be
+        /// decoded to linear before lighting (glTF §3.9.2). The `DiffuseColor` FACTOR is already
+        /// linear and must NOT be decoded -- the two multiply, and decoding both would apply the
+        /// transfer twice to one of them. Renderers that do not implement colour management ignore
+        /// this, the established accepted-and-ignored pattern for a field they do not yet honour.
+        bool pbrBaseColorTextureIsSrgb = true;
+        /// plan_gltf.md GLTF-210: the emissive texture is sRGB-encoded, on the same terms as
+        /// `pbrBaseColorTextureIsSrgb`. `emissiveColor` (the factor, possibly scaled above 1 by
+        /// KHR_materials_emissive_strength) is linear and is not decoded.
+        bool pbrEmissiveTextureIsSrgb = true;
+        /// KHR_materials_specular colour-map RGB follows glTF's sRGB encoding rule.
+        bool pbrSpecularColorTextureIsSrgb = true;
+        /// plan_gltf.md GLTF-212: encode the fragment's RGB from linear back to sRGB before it
+        /// reaches the framebuffer. Alpha is never encoded -- glTF §3.9.4 makes it coverage, not
+        /// colour. Normal, occlusion and metallic-roughness maps carry no flag at all because
+        /// §3.9.2 declares them linear unconditionally; a flag would imply a choice that does not
+        /// exist.
+        bool pbrEncodeOutputToSrgb = true;
     };
 
     /**
@@ -1861,11 +1927,12 @@ namespace CNA::Internal::Renderers
          * @brief Creates a renderer-specific 16-bit index buffer.
          */
         virtual std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int index_capacity) = 0;
-        /// Creates a 32-bit index buffer. Default delegates to CreateIndexBuffer16 for
-        /// renderers that do not yet support 32-bit indices.
-        virtual std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int index_capacity)
+        /// Creates a 32-bit index buffer. A renderer must opt in explicitly: delegating to the
+        /// 16-bit factory makes a valid uint32 upload look successful until draw-time truncation.
+        virtual std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int /*index_capacity*/)
         {
-            return CreateIndexBuffer16(index_capacity);
+            throw std::runtime_error(
+                "IGraphicsRenderer::CreateIndexBuffer32: 32-bit index buffers are not supported by this renderer");
         }
 
         /**

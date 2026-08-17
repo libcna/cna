@@ -29,6 +29,7 @@ void main() {
     vec4 pos = pc.mvp * vec4(inPos, 1.0);
     pos.y = -pos.y;
     gl_Position = pos;
+    gl_PointSize = 1.0;
     fragUV   = inUV;
     fragTint = (pc.vertexColorEnabled > 0.5) ? inColor * pc.diffuseColor : pc.diffuseColor;
     // Task 888: fog factor from raw object-space Z. REMED-GFX-005: corrected to FNA/EasyGL

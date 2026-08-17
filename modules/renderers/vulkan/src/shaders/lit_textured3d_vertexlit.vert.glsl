@@ -56,6 +56,7 @@ void main() {
     vec4 pos = pc.mvp * vec4(inPos, 1.0);
     pos.y = -pos.y;
     gl_Position = pos;
+    gl_PointSize = 1.0;
     fragUV = inUV;
     fragFogFactor = 1.0 - clamp(dot(vec4(inPos, 1.0), lp.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
 

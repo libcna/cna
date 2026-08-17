@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="icon" href="data:,">
+  <title>CNA glTF reference capture</title>
+</head>
+<body style="margin:0;background:transparent;overflow:hidden">
+<canvas id="canvas" width="512" height="512"></canvas>
+<script src="./draco/draco_wasm_wrapper_gltf.js"></script>
+<script src="./libs/libktx.js"></script>
+<script type="module">
+import { GltfView, GltfState, ResourceLoader } from "./gltf-viewer.module.js";
+
+const canvas = document.getElementById("canvas");
+const gl = canvas.getContext("webgl2", {
+    antialias: false,
+    alpha: true,
+    preserveDrawingBuffer: true
+});
+if (!gl) throw new Error("WebGL2 is unavailable");
+
+const query = new URLSearchParams(location.search);
+const asset = query.get("asset");
+const camera = JSON.parse(query.get("camera"));
+const dracoFactory = (options = {}) => DracoDecoderModule({
+    ...options,
+    locateFile: (name) => `./draco/${name}`
+});
+
+const view = new GltfView(gl);
+const state = view.createState();
+const loader = new ResourceLoader(view, "./libs/");
+loader.initKtxLib();
+await loader.initDracoLib(dracoFactory);
+state.gltf = await loader.loadGltf(`./corpus/${asset}`);
+state.sceneIndex = 0;
+state.cameraNodeIndex = undefined;
+const animationTime = camera.animationTime ?? 0;
+if (camera.animationName === undefined) {
+    state.animationIndices = [];
+    state.animationTimer.pause();
+} else {
+    const animationIndex = state.gltf.animations?.findIndex(
+        animation => animation.name === camera.animationName
+    ) ?? -1;
+    if (animationIndex < 0) {
+        throw new Error(`Animation '${camera.animationName}' was not found`);
+    }
+    state.animationIndices = [animationIndex];
+    state.animationTimer.setFixedTime(animationTime);
+}
+state.userCamera.setVerticalFoV(Math.PI / 4);
+state.userCamera.perspective.znear = camera.near;
+state.userCamera.perspective.zfar = camera.far;
+
+// Match cna-gltf-viewer's orbit camera exactly. UserCamera.transform is a camera-to-world
+// matrix; spelling the basis out avoids depending on either renderer's look-at convention.
+const yaw = 0.7;
+const pitch = 0.35;
+const horizontal = Math.cos(pitch) * camera.distance;
+const eye = [
+    camera.target[0] + Math.sin(yaw) * horizontal,
+    camera.target[1] + Math.sin(pitch) * camera.distance,
+    camera.target[2] + Math.cos(yaw) * horizontal
+];
+const normalize = (v) => {
+    const length = Math.hypot(...v);
+    return v.map(x => x / length);
+};
+const cross = (a, b) => [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0]
+];
+const backward = normalize(eye.map((x, i) => x - camera.target[i]));
+const right = normalize(cross([0, 1, 0], backward));
+const up = cross(backward, right);
+state.userCamera.transform = new Float32Array([
+    right[0], right[1], right[2], 0,
+    up[0], up[1], up[2], 0,
+    backward[0], backward[1], backward[2], 0,
+    eye[0], eye[1], eye[2], 1
+]);
+state.userCamera.distance = camera.distance;
+
+const p = state.renderingParameters;
+p.morphing = true;
+p.skinning = true;
+p.clearColor = [0, 0, 0, 0];
+p.exposure = 1;
+p.useIBL = false;
+p.usePunctual = true;
+p.useDirectionalLightsWithDisabledIBL = true;
+p.renderEnvironmentMap = false;
+p.toneMap = GltfState.ToneMaps.KHR_PBR_NEUTRAL;
+p.internalMSAA = 1;
+p.floatingPointFramebuffer = false;
+// The pinned renderer's initial framebuffer setup reads this historical top-level spelling.
+state.internalMSAA = 1;
+
+view.renderFrame(state, 512, 512);
+view.renderFrame(state, 512, 512);
+gl.finish();
+
+const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+globalThis.cnaReferenceResult = {
+    ready: true,
+    asset,
+    camera: {...camera, position: eye, yaw, pitch, verticalFov: Math.PI / 4},
+    browser: navigator.userAgent,
+    webglVendor: gl.getParameter(gl.VENDOR),
+    webglRenderer: gl.getParameter(gl.RENDERER),
+    unmaskedVendor: debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : null,
+    unmaskedRenderer: debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : null,
+    state: {
+        canvas: [512, 512], deviceScaleFactor: 1, webgl: 2, antialias: false,
+        preserveDrawingBuffer: true, sceneIndex: 0,
+        animationName: camera.animationName ?? null, animationTime,
+        morphing: true, skinning: true, variant: null, clearColor: [0, 0, 0, 0],
+        exposure: 1, useIBL: false, usePunctual: true,
+        useDirectionalLightsWithDisabledIBL: true, renderEnvironmentMap: false,
+        toneMap: GltfState.ToneMaps.KHR_PBR_NEUTRAL, internalMSAA: 1,
+        floatingPointFramebuffer: false, warmupFrames: 1, evidenceFrame: 2
+    }
+};
+</script>
+</body>
+</html>

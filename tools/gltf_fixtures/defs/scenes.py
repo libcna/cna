@@ -65,5 +65,70 @@ def scene_default_selection() -> Fixture:
                                decoy_mesh: list(TRIANGLE_POSITIONS)}),
     )
 
+def scene_two_roots() -> Fixture:
+    """One scene with two roots, neither of which contains the other."""
+    b = GltfBuilder("scene-two-roots")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{"attributes": {"POSITION": position, "NORMAL": normal},
+                        "indices": indices, "mode": TRIANGLES}], name="RootTri")
+    # A child under the first root, so the scene is not merely two flat nodes: a reader that
+    # imported `scene.nodes` without descending would produce two of the three placements and look
+    # almost right.
+    child = b.add_node(name="ChildOfFirst", mesh=mesh, translation=[0.0, 4.0, 0.0])
+    first = b.add_node(name="FirstRoot", mesh=mesh, children=[child])
+    second = b.add_node(name="SecondRoot", mesh=mesh, translation=[8.0, 0.0, 0.0])
+    b.add_scene([first, second], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="scene-two-roots", audit_fixture=None, owning_group="scenes",
+        description="A scene listing two roots, one of which has a child. Three placements from "
+                    "two scene.nodes entries -- so an importer that reads the root list without "
+                    "descending produces two thirds of the model, which looks almost right and is "
+                    "the shape of the failure this fixture exists to catch.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        referencing_groups=["transforms"],
+        features=["two scene roots", "root with a child"],
+        spec_anchors=["scenes", "nodes-and-hierarchy"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="RootTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
 
-FIXTURES = [scene_default_selection]
+
+def scene_no_scenes() -> Fixture:
+    """A file with nodes and meshes and **no** `scenes` array at all."""
+    b = GltfBuilder("scene-no-scenes")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{"attributes": {"POSITION": position, "NORMAL": normal},
+                        "indices": indices, "mode": TRIANGLES}], name="OrphanTri")
+    b.add_node(name="OrphanNode", mesh=mesh, translation=[0.0, 0.0, 2.0])
+    # No add_scene, no set_default_scene: §3.5 permits it, and defines the result as "nothing is
+    # required to be rendered". CNA falls back to every node, which is the pragmatic reading every
+    # viewer takes -- stated here as an expectation rather than left to be discovered.
+    return Fixture(
+        id="scene-no-scenes", audit_fixture=None, owning_group="scenes",
+        description="A file with a node and a mesh and no `scenes` array at all. §3.5 allows this "
+                    "and defines it as 'nothing is required to be rendered', which is not the same "
+                    "as 'nothing may be'. CNA falls back to importing every node -- the reading "
+                    "every viewer takes -- and this fixture is what makes that a stated decision "
+                    "rather than an accident of a loop that never checked.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["no scenes array", "scene-less fallback"],
+        spec_anchors=["scenes"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="OrphanTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
+FIXTURES = [scene_default_selection, scene_two_roots, scene_no_scenes]

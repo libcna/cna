@@ -1,6 +1,6 @@
 {
   "id": "mode-points",
-  "description": "A non-indexed POINTS primitive with four vertices. A conforming importer draws four points and no triangles at all.",
+  "description": "A non-indexed POINTS primitive with four vertices, whose implicit indices are [0,count). A conforming importer draws four points and no triangles at all; read as a triangle list those four implicit indices became one triangle.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -23,7 +23,9 @@
     "validatedLayers": [
       "L1",
       "L2",
-      "L3"
+      "L3",
+      "L4",
+      "L5"
     ],
     "features": [
       "primitive.mode = POINTS",
@@ -39,6 +41,9 @@
     "nodeCount": 1,
     "meshCount": 1,
     "materialCount": 0,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
     "skinCount": 0,
     "animationCount": 0,
     "accessorCount": 1,
@@ -46,7 +51,8 @@
     "bufferCount": 1,
     "bufferByteLength": 48,
     "extensionsUsed": [],
-    "extensionsRequired": []
+    "extensionsRequired": [],
+    "punctualLightCount": 0
   },
   "l2": {
     "accessors": [
@@ -114,6 +120,7 @@
           ]
         ],
         "normals": [],
+        "tangents": [],
         "texcoords": [],
         "colors": [],
         "joints": [],
@@ -125,6 +132,19 @@
           3
         ],
         "triangles": [],
+        "importPolicy": {
+          "imported": true,
+          "topologyMode": 0,
+          "topologyName": "POINTS",
+          "indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "converted": false,
+          "primitiveCount": 4
+        },
         "material": null
       }
     ]
@@ -192,80 +212,49 @@
     }
   },
   "l5": {
-    "supported": false,
-    "reason": "GLTF-071 rejects a POINTS primitive rather than reinterpreting it, so no vertex or index buffer is produced at all. What a point list becomes on the GPU is GLTF-072/GLTF-077's decision.",
-    "blockedBy": [
-      "GLTF-072",
-      "GLTF-077"
-    ],
-    "parts": []
-  },
-  "defects": [
-    {
-      "id": "D5",
-      "summary": "primitive.mode was never read, so a POINTS primitive became a triangle list built from its own implicit index range. GLTF-071 reads and classifies the mode and rejects it explicitly; GLTF-072 still owns deciding what a point primitive becomes, so the fixture does not import.",
-      "firstDivergentLayer": "L3",
-      "divergentFields": [
-        "import",
-        "mode",
-        "modeName",
-        "triangles"
-      ],
-      "divergentFieldsByLayer": {
-        "L3": [
-          "import",
-          "mode",
-          "modeName",
-          "triangles"
+    "supported": true,
+    "parts": [
+      {
+        "mesh": 0,
+        "primitive": 0,
+        "stride": 48,
+        "vertexCount": 4,
+        "fields": [
+          {
+            "name": "Position",
+            "offset": 0,
+            "size": 12
+          },
+          {
+            "name": "Normal",
+            "offset": 12,
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
+            "size": 8
+          }
         ],
-        "L4": [
-          "worldPositions",
-          "worldBounds"
-        ]
-      },
-      "owner": "GLTF-MESH",
-      "owningTasks": [
-        "GLTF-071",
-        "GLTF-072"
-      ],
-      "closedTasks": [
-        "GLTF-071"
-      ],
-      "remainingTasks": [
-        "GLTF-072"
-      ],
-      "status": "partially-remediated",
-      "currentActual": {
-        "importRejected": true,
-        "topologyCarried": true,
-        "classifiedMode": 0,
-        "classifiedModeName": "POINTS",
-        "errorContains": [
-          "POINTS",
-          "mode 0"
-        ],
-        "indices": [],
-        "triangles": [],
-        "note": "ExtractMesh classifies mode 0 and throws with POINTS named, before the implicit index range is even synthesised. GLTF-077 decides whether a point list becomes a CNAEXT point topology or a documented per-renderer rejection; either way the expected output stays four points and zero triangles."
-      },
-      "priorActual": {
-        "indices": [
-          0,
-          1,
-          2,
-          3
-        ],
-        "topologyCarried": false,
-        "triangles": [
-          [
-            0,
-            1,
-            2
-          ]
-        ],
-        "measuredOn": "fb3728267e8f2179d43b96357ff372ae712b7e7f",
-        "note": "What the forensic audit measured before GLTF-071: implicit indices [0,1,2,3] were generated correctly for the non-indexed primitive and then interpreted as TRIANGLES, yielding one triangle where the expected output is four points and zero triangles."
+        "vertexBufferFile": "mode-points.vb.bin",
+        "vertexBufferBytes": 192,
+        "vertexBufferSha256": "d45c2a7b330952e43844558a80a8f860e3499d85b41d0a7111c1a964de25ee43",
+        "indexElementSize": 2,
+        "indexCount": 4,
+        "indexBufferFile": "mode-points.ib.bin",
+        "indexBufferBytes": 8,
+        "indexBufferSha256": "245bbd9d484dcf27c714e2690cd6544973de5d54aa9cd82eab23d6046a65faa8",
+        "sourceTopology": "POINTS",
+        "topology": "POINTS",
+        "primitiveCount": 4
       }
-    }
-  ]
+    ]
+  },
+  "rejection": null,
+  "defects": []
 }

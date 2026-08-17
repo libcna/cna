@@ -990,6 +990,15 @@ namespace CNA::Internal::Renderers::TinyGL
         return std::make_unique<TinyGLIndexBufferRenderer>(index_capacity);
     }
 
+    // One buffer type serves both widths: indices are stored widened to uint32_t and the draw path
+    // reads them through IndexAt(), so nothing downstream depends on the upload width. TinyGL walks
+    // indices with glArrayElement rather than glDrawElements, so there is no native index-type enum
+    // that would have to agree with the buffer either.
+    std::unique_ptr<IIndexBufferRenderer> TinyGLRenderer::CreateIndexBuffer32(int index_capacity)
+    {
+        return std::make_unique<TinyGLIndexBufferRenderer>(index_capacity);
+    }
+
     // ---- Draw path ------------------------------------------------------------------------------
 
     TinyGLRenderer::FixedFunctionDrawState

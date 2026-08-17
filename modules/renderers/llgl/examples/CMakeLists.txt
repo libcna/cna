@@ -265,6 +265,36 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # GLTF-213: mid-grey sRGB decode/encode and linear factor/composition witnesses for both PBR
+    # programs. The same binary is registered against LLGL's Vulkan and OpenGL modules.
+    cna_llgl_test(cna_test_llgl_pbr_srgb_transfer
+                  ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
+    cna_register_renderer_test(NAME Llgl_Pbr_SrgbTransfer COMMAND cna_test_llgl_pbr_srgb_transfer
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # GLTF-343/344: IOR-derived dielectric F0 and factor-only KHR_materials_specular F0/F90,
+    # repeated on both rigid and identity-skinned PBR programs and both LLGL modules.
+    cna_llgl_test(cna_test_llgl_pbr_fresnel_factors
+                  ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
+    cna_register_renderer_test(NAME Llgl_Pbr_FresnelFactors COMMAND cna_test_llgl_pbr_fresnel_factors
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # GLTF-344/373: seven distinct material maps, channel semantics, independent UV transforms,
+    # TEXCOORD_1 selection, and KHR_materials_specular texture factors on rigid/skinned programs.
+    cna_llgl_test(cna_test_llgl_pbr_material_maps
+                  ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_material_maps_test.cpp)
+    cna_register_renderer_test(NAME Llgl_Pbr_MaterialMaps COMMAND cna_test_llgl_pbr_material_maps
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_llgl_test(cna_test_llgl_pbr_texture_slots
+                  ${CNA_GRAPHICS_EXAMPLES_DIR}/pbr_texture_slot_mapping_test.cpp)
+    cna_register_renderer_test(NAME Llgl_Pbr_TextureSlots COMMAND cna_test_llgl_pbr_texture_slots
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # LLGL-26 MSAA follow-up: real multisampling into a RenderTarget2D's own colour attachment,
     # resolved automatically by LLGL at the end of each render pass this renderer replays. Mirrors
     # llgl_msaa_test.cpp's own diagonal-hypotenuse antialiasing technique. Plain RenderTarget2D
@@ -377,6 +407,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
     cna_register_renderer_test(NAME Llgl_PbrEffect_HandDerived_OpenGL COMMAND cna_test_llgl_pbreffect_handderived
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
+    cna_register_renderer_test(NAME Llgl_Pbr_SrgbTransfer_OpenGL COMMAND cna_test_llgl_pbr_srgb_transfer
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
+    cna_register_renderer_test(NAME Llgl_Pbr_FresnelFactors_OpenGL COMMAND cna_test_llgl_pbr_fresnel_factors
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
+    cna_register_renderer_test(NAME Llgl_Pbr_MaterialMaps_OpenGL COMMAND cna_test_llgl_pbr_material_maps
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
+    cna_register_renderer_test(NAME Llgl_Pbr_TextureSlots_OpenGL COMMAND cna_test_llgl_pbr_texture_slots
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
     cna_register_renderer_test(NAME Llgl_Msaa_RenderTarget_OpenGL COMMAND cna_test_llgl_msaa_rendertarget

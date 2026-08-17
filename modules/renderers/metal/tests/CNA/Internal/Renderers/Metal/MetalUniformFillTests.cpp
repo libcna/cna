@@ -78,6 +78,19 @@ namespace
         p.vertexColorEnabled = true;
         p.pbrMetallicFactor = 61;
         p.pbrRoughnessFactor = 62;
+        p.pbrNormalScale = 63;
+        p.pbrOcclusionStrength = 64;
+        p.pbrBaseColorTextureIsSrgb = false;
+        p.pbrEmissiveTextureIsSrgb = true;
+        p.pbrEncodeOutputToSrgb = false;
+        p.pbrDielectricF0[0] = 65;
+        p.pbrDielectricF0[1] = 66;
+        p.pbrDielectricF0[2] = 67;
+        p.pbrDielectricF90 = 68;
+        for (int row = 0; row < 10; ++row)
+            for (int component = 0; component < 4; ++component)
+                p.pbrTextureTransformRows[row][component] =
+                    static_cast<float>(69 + row * 4 + component);
         p.lightingEnabled = true;
         return p;
     }
@@ -266,10 +279,16 @@ TEST(MetalUniformFill, PbrUniformsMapEveryFieldCorrectly)
     ExpectVec4Eq(pu.light2Dir, 20,21,22,0);
     ExpectVec4Eq(pu.light2Diffuse, 23,24,25,0);
     ExpectVec4Eq(pu.eyePosition, 36,37,38,0);
-    ExpectVec4Eq(pu.pbrFactors, 61,62,0,0);
+    ExpectVec4Eq(pu.pbrFactors, 61,62,63,64);
     ExpectVec4Eq(pu.alphaTest, 26,27,28,29);
     ExpectVec4Eq(pu.fogColorEnabled, 54,55,56,1);
     ExpectVec4Eq(pu.fogVector, 57,58,59,60);
+    ExpectVec4Eq(pu.srgbFlags, 0,1,0,0);
+    ExpectVec4Eq(pu.dielectricFresnel, 65,66,67,68);
+    for (int row = 0; row < 10; ++row)
+        for (int component = 0; component < 4; ++component)
+            EXPECT_NEAR(pu.textureTransformRows[row][component],
+                        69 + row * 4 + component, kEps);
 }
 
 TEST(MetalUniformFill, SkinnedPbrUniformsDelegatesFragmentFieldsAndFillsOwnTransform)
@@ -293,11 +312,20 @@ TEST(MetalUniformFill, SkinnedPbrUniformsDelegatesFragmentFieldsAndFillsOwnTrans
         EXPECT_NEAR(pu.ambientColor[i], referencePu.ambientColor[i], kEps);
         EXPECT_NEAR(pu.pbrFactors[i], referencePu.pbrFactors[i], kEps);
         EXPECT_NEAR(pu.fogColorEnabled[i], referencePu.fogColorEnabled[i], kEps);
+        EXPECT_NEAR(pu.srgbFlags[i], referencePu.srgbFlags[i], kEps);
+        EXPECT_NEAR(pu.dielectricFresnel[i], referencePu.dielectricFresnel[i], kEps);
     }
+    for (int row = 0; row < 10; ++row)
+        for (int component = 0; component < 4; ++component)
+            EXPECT_NEAR(pu.textureTransformRows[row][component],
+                        referencePu.textureTransformRows[row][component], kEps);
 
-    // SkinnedPbrTransform's own fields: wvp/world copied verbatim, plus skinParams (which plain
-    // PbrTransform has no equivalent of).
+    // SkinnedPbrTransform's own fields: wvp/world and the world inverse-transpose copied from the
+    // rigid PBR fill, plus skinParams (which plain PbrTransform has no equivalent of).
     ExpectWvpAndWorldCopiedVerbatim(t.wvp, t.world, wvp, p);
+    ExpectVec4Eq(t.normalCol0, referenceT.normalCol0[0], referenceT.normalCol0[1], referenceT.normalCol0[2], referenceT.normalCol0[3]);
+    ExpectVec4Eq(t.normalCol1, referenceT.normalCol1[0], referenceT.normalCol1[1], referenceT.normalCol1[2], referenceT.normalCol1[3]);
+    ExpectVec4Eq(t.normalCol2, referenceT.normalCol2[0], referenceT.normalCol2[1], referenceT.normalCol2[2], referenceT.normalCol2[3]);
     ExpectVec4Eq(t.skinParams, 2,0,0,0);
 }
 

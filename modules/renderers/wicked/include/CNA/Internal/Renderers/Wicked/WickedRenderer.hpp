@@ -230,7 +230,10 @@ namespace CNA::Internal::Renderers::Wicked
         float worldInverseTranspose[16] = {}; ///< Columns of the world inverse-transpose.
         float envMapParams[4] = {};      ///< x=amount, y=Fresnel enabled, z=Fresnel factor.
         float envMapSpecular[4] = {};    ///< `EnvironmentMapEffect.EnvironmentMapSpecular` RGB.
-        float pbrFactors[4] = {1.0f, 1.0f, 0.0f, 0.0f}; ///< x=metallic factor, y=roughness factor.
+        float pbrFactors[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< metallic, roughness, normal scale, occlusion strength.
+        float pbrSrgb[4] = {};           ///< decode base, decode emissive, encode PBR output.
+        float pbrDielectricFresnel[4] = {}; ///< xyz=dielectric F0, w=dielectric F90.
+        float pbrTextureTransformRows[10][4] = {}; ///< Two affine UV rows per PBR map.
     };
 
     /**

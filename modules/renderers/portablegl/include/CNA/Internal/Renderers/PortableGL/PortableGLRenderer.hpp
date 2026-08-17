@@ -81,8 +81,9 @@ namespace CNA::Internal::Renderers::PortableGL
          *
          * @param pglContext See `PortableGLVertexBufferRenderer`'s identical parameter.
          * @param indexCapacity Initial index capacity.
+         * @param thirtyTwoBit  Declared element width; uploads must use the same width.
          */
-        PortableGLIndexBufferRenderer(void* pglContext, int indexCapacity);
+        PortableGLIndexBufferRenderer(void* pglContext, int indexCapacity, bool thirtyTwoBit);
         /** @brief Deletes the underlying PortableGL buffer object. */
         ~PortableGLIndexBufferRenderer() override;
 
@@ -630,6 +631,8 @@ namespace CNA::Internal::Renderers::PortableGL
          * @return The new index-buffer handle.
          */
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int index_capacity) override;
+        /** Creates a real PortableGL buffer object declared for 32-bit index data. */
+        std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int index_capacity) override;
 
         /**
          * @brief Draws vertex-colored primitives with the built-in unlit program.

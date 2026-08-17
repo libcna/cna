@@ -76,6 +76,27 @@ TEST(ModelMeshPartTest, DefaultTagIsNull)
     EXPECT_EQ(part.getTagProperty(), nullptr);
 }
 
+TEST(ModelMeshPartTest, SpecularSamplerSlotsAreSeparateAndValidateForwardCompatibly)
+{
+    ModelMeshPart part;
+    ASSERT_EQ(part.getSamplerStatesEXTProperty().size(), 5u);
+    ASSERT_EQ(part.getSpecularSamplerStatesEXTProperty().size(), 2u);
+
+    SamplerState strength;
+    strength.setAddressUProperty(TextureAddressMode::Clamp);
+    SamplerState color;
+    color.setAddressVProperty(TextureAddressMode::Mirror);
+    part.setSpecularSamplerStateEXTProperty(0, strength);
+    part.setSpecularSamplerStateEXTProperty(1, color);
+    part.setSpecularSamplerStateEXTProperty(2, SamplerState::PointClamp);
+
+    EXPECT_EQ(part.getSpecularSamplerStatesEXTProperty()[0].getAddressUProperty(),
+              TextureAddressMode::Clamp);
+    EXPECT_EQ(part.getSpecularSamplerStatesEXTProperty()[1].getAddressVProperty(),
+              TextureAddressMode::Mirror);
+    EXPECT_EQ(part.getSamplerStatesEXTProperty().size(), 5u);
+}
+
 // --- Parameterized constructor ---
 
 TEST(ModelMeshPartTest, CtorSetsVertexBuffer)

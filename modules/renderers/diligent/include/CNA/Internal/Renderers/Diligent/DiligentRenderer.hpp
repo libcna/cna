@@ -1371,7 +1371,9 @@ namespace CNA::Internal::Renderers::Diligent
             LitTexturedVertexLit3D, ///< stride 32: LitTextured3D's PreferPerPixelLighting==false sibling
             SkinnedVertexLit3D,     ///< stride 52: Skinned3D's PreferPerPixelLighting==false sibling
             Pbr3D,                  ///< stride 48: PbrEffect's glTF metallic-roughness BRDF
+            PbrDualUv3D,            ///< stride 60: Pbr3D plus importer-appended TEXCOORD_1
             SkinnedPbr3D,           ///< stride 68: Pbr3D combined with Skinned3D's bone palette
+            SkinnedPbrDualUv3D,     ///< stride 76: skinned PBR plus TEXCOORD_1
         };
 
         /** @brief Everything that distinguishes one Diligent pipeline state object from another. */
@@ -1460,6 +1462,8 @@ namespace CNA::Internal::Renderers::Diligent
             Dg::IShaderResourceVariable* metallicRoughnessVariable = nullptr;
             Dg::IShaderResourceVariable* emissiveMapVariable = nullptr;
             Dg::IShaderResourceVariable* occlusionMapVariable = nullptr;
+            Dg::IShaderResourceVariable* specularMapVariable = nullptr;
+            Dg::IShaderResourceVariable* specularColorMapVariable = nullptr;
         };
 
         /** @brief Constant buffer contents shared by every built-in shader. */
@@ -1486,6 +1490,7 @@ namespace CNA::Internal::Renderers::Diligent
             float flags[4];
             float alphaTest[4];
             float fogVector[4];
+            /// xyz = FogColor; w = PBR output sRGB encode flag (zero for every non-PBR shader).
             float fogColor[4];
             float envMapParams[4];
             float envMapSpecular[4];

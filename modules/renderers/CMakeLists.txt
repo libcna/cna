@@ -58,7 +58,7 @@ function(cna_renderer_common_setup target)
     # SDL3 implementation edge. This remains PRIVATE so the platform implementation tree never
     # becomes part of the renderer or framework include contract; every other family is SDL-free.
     target_include_directories(${RENDERER_TARGET} PRIVATE
-        "${CMAKE_SOURCE_DIR}/modules/platform/src")
+        "${CNA_SOURCE_DIR}/modules/platform/src")
     # D3D11's/D3D12's SpriteBatch renderer (plan_dx.md DX-70/DX-71) calls back into
     # Microsoft::Xna::Framework::Graphics::Effect::Apply() for SpriteBatch::Begin(effect)'s
     # custom-Effect path -- a genuine, honest circular dependency between the renderer static

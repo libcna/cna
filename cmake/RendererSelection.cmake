@@ -679,8 +679,9 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "BGFX")
         GIT_SHALLOW FALSE
         GIT_PROGRESS TRUE
         GIT_SUBMODULES_RECURSE TRUE
-        PATCH_COMMAND git -C bgfx apply --unidiff-zero --whitespace=nowarn
-            ${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/bgfx-max-render-target-msaa.patch
+        PATCH_COMMAND "${CMAKE_COMMAND}"
+            "-DCNA_BGFX_PATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/bgfx-max-render-target-msaa.patch"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/apply-bgfx-max-render-target-msaa-patch.cmake"
     )
     FetchContent_MakeAvailable(bgfx_cmake)
 

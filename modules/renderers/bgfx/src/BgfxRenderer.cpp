@@ -1796,10 +1796,18 @@ namespace CNA::Internal::Renderers::Bgfx
 
                 // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: PbrEffect/SkinnedPbrEffect uniforms.
                 metallicRoughnessFactorUnif_ = bgfx::createUniform("u_metallicRoughnessFactor", bgfx::UniformType::Vec4);
+                pbrSrgbUnif_                  = bgfx::createUniform("u_srgb",                    bgfx::UniformType::Vec4);
+                dielectricFresnelUnif_        = bgfx::createUniform("u_dielectricFresnel",      bgfx::UniformType::Vec4);
+                pbrSpecularStateUnif_         = bgfx::createUniform("u_specularState",           bgfx::UniformType::Vec4);
+                pbrTextureTransformUnif_      = bgfx::createUniform("u_pbrTextureTransform",    bgfx::UniformType::Vec4, 10);
+                pbrSpecularTextureTransformUnif_ = bgfx::createUniform(
+                    "u_pbrSpecularTextureTransform", bgfx::UniformType::Vec4, 4);
                 normalMapSampler_            = bgfx::createUniform("s_texNormal",             bgfx::UniformType::Sampler);
                 metallicRoughnessSampler_    = bgfx::createUniform("s_texMetallicRoughness",  bgfx::UniformType::Sampler);
                 emissiveMapSampler_          = bgfx::createUniform("s_texEmissive",           bgfx::UniformType::Sampler);
                 occlusionMapSampler_         = bgfx::createUniform("s_texOcclusion",          bgfx::UniformType::Sampler);
+                specularMapSampler_          = bgfx::createUniform("s_texSpecular",           bgfx::UniformType::Sampler);
+                specularColorMapSampler_     = bgfx::createUniform("s_texSpecularColor",      bgfx::UniformType::Sampler);
                 // REMED-GFX-078: per-slot render-target V-flip flags (see rtFlipV_ / BindSamplerSlot).
                 rtFlipVUnif_                 = bgfx::createUniform("u_rtFlipV",               bgfx::UniformType::Vec4);
 
@@ -1950,10 +1958,17 @@ namespace CNA::Internal::Renderers::Bgfx
         destroyU(envMapSpecularUnif_);
         destroyU(envMapSampler_);
         destroyU(metallicRoughnessFactorUnif_);
+        destroyU(pbrSrgbUnif_);
+        destroyU(dielectricFresnelUnif_);
+        destroyU(pbrSpecularStateUnif_);
+        destroyU(pbrTextureTransformUnif_);
+        destroyU(pbrSpecularTextureTransformUnif_);
         destroyU(normalMapSampler_);
         destroyU(metallicRoughnessSampler_);
         destroyU(emissiveMapSampler_);
         destroyU(occlusionMapSampler_);
+        destroyU(specularMapSampler_);
+        destroyU(specularColorMapSampler_);
         if (bgfx::isValid(defaultWhiteTexture3D_)) { bgfx::destroy(defaultWhiteTexture3D_); defaultWhiteTexture3D_ = BGFX_INVALID_HANDLE; }
         if (bgfx::isValid(defaultFlatNormalTexture3D_)) { bgfx::destroy(defaultFlatNormalTexture3D_); defaultFlatNormalTexture3D_ = BGFX_INVALID_HANDLE; }
         destroyP(colored3DProgram_);
@@ -3263,6 +3278,17 @@ namespace CNA::Internal::Renderers::Bgfx
             layout.add(bgfx::Attrib::Tangent,   4, bgfx::AttribType::Float);
             layout.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float);
         }
+        else if (stride == 60)
+        {
+            // GLTF-182/344: rigid PBR with the importer-appended TEXCOORD_1 at offset 48.
+            // The public vertex declaration includes four bytes of tail padding.
+            layout.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Normal,    3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Tangent,   4, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::TexCoord1, 2, bgfx::AttribType::Float);
+            layout.skip(4);
+        }
         else if (stride == 56)
         {
             // CNB-67 (Phase 13C) Bgfx port: the stride-52 SkinnedVertex layout with a per-vertex
@@ -3287,6 +3313,17 @@ namespace CNA::Internal::Renderers::Bgfx
             layout.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float);
             layout.add(bgfx::Attrib::Weight,    4, bgfx::AttribType::Float);
             layout.add(bgfx::Attrib::Indices,   4, bgfx::AttribType::Uint8);
+        }
+        else if (stride == 76)
+        {
+            // GLTF-183/344: skinned PBR with TEXCOORD_1 after blend indices at offset 68.
+            layout.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Normal,    3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Tangent,   4, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Weight,    4, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Indices,   4, bgfx::AttribType::Uint8);
+            layout.add(bgfx::Attrib::TexCoord1, 2, bgfx::AttribType::Float);
         }
         else
         {
@@ -3496,15 +3533,21 @@ namespace CNA::Internal::Renderers::Bgfx
     }
 
     // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: binds the base color map (unit 0, shared
-    // texColor3DSampler_) plus PbrEffect's 4 additional maps (units 1-4, bound before unit 0 to
+    // texColor3DSampler_) plus PbrEffect's 6 additional maps (units 1-6, bound before unit 0 to
     // leave it active last, matching EasyGLRenderer::BindDrawParams()'s established
     // envMap/texture2 unit-ordering precedent). Each fallback texture is the correct "map
     // absent" constant for its own semantic -- see EnsureDefaultFlatNormalTexture()'s doc
     // comment (mirrored on defaultFlatNormalTexture3D_ above) for the normal-map case; the other
-    // 3 all reuse defaultWhiteTexture3D_ since their respective factor/no-op semantics already
+    // 5 all reuse defaultWhiteTexture3D_ since their respective factor/no-op semantics already
     // make (1,1,1,1) the correct "map absent" value.
     void BgfxRenderer::BindPbrTextures(const GpuDrawParams& params)
     {
+        bgfx::setUniform(pbrTextureTransformUnif_, params.pbrTextureTransformRows, 10);
+        bgfx::setUniform(pbrSpecularTextureTransformUnif_,
+                         params.pbrSpecularTextureTransformRows, 4);
+        const float specularState[4] = {
+            static_cast<float>(params.pbrTextureCoordinateSetMask & 0x7fu), 0.0f, 0.0f, 0.0f};
+        bgfx::setUniform(pbrSpecularStateUnif_, specularState);
         // REMED-GFX-078: each slot resolved through IBgfxSamplable (see BindSamplerSlot) so a
         // RenderTarget2D set as any PBR map binds its real handle instead of UB-casting to
         // BgfxTextureRenderer. Slots 1-4 are bound before slot 0 so slot 0 stays active last
@@ -3513,6 +3556,8 @@ namespace CNA::Internal::Renderers::Bgfx
         BindSamplerSlot(2, metallicRoughnessSampler_,   params.pbrMetallicRoughnessMap, defaultWhiteTexture3D_);
         BindSamplerSlot(3, emissiveMapSampler_,         params.pbrEmissiveMap,          defaultWhiteTexture3D_);
         BindSamplerSlot(4, occlusionMapSampler_,        params.pbrOcclusionMap,         defaultWhiteTexture3D_);
+        BindSamplerSlot(5, specularMapSampler_,         params.pbrSpecularMap,          defaultWhiteTexture3D_);
+        BindSamplerSlot(6, specularColorMapSampler_,    params.pbrSpecularColorMap,     defaultWhiteTexture3D_);
         BindSamplerSlot(0, texColor3DSampler_,          params.texture0,                defaultWhiteTexture3D_);
     }
 
@@ -4004,8 +4049,18 @@ namespace CNA::Internal::Renderers::Bgfx
             float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
                                    params.emissiveColor[2], 0.0f };
             bgfx::setUniform(emissiveColor3DUnif_, emissive);
-            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor, 0.0f, 0.0f };
+            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor,
+                                  params.pbrNormalScale, params.pbrOcclusionStrength };
             bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
+            float srgb[4] = { params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f,
+                              params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f };
+            bgfx::setUniform(pbrSrgbUnif_, srgb);
+            float dielectricFresnel[4] = {
+                params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
+                params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor };
+            bgfx::setUniform(dielectricFresnelUnif_, dielectricFresnel);
             float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
             bgfx::setUniform(light0Dir3DUnif_, dir0);
             float diff0[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
@@ -4052,8 +4107,18 @@ namespace CNA::Internal::Renderers::Bgfx
             float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
                                    params.emissiveColor[2], 0.0f };
             bgfx::setUniform(emissiveColor3DUnif_, emissive);
-            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor, 0.0f, 0.0f };
+            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor,
+                                  params.pbrNormalScale, params.pbrOcclusionStrength };
             bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
+            float srgb[4] = { params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f,
+                              params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f };
+            bgfx::setUniform(pbrSrgbUnif_, srgb);
+            float dielectricFresnel[4] = {
+                params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
+                params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor };
+            bgfx::setUniform(dielectricFresnelUnif_, dielectricFresnel);
             float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
             bgfx::setUniform(light0Dir3DUnif_, dir0);
             float diff0[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
@@ -4449,8 +4514,18 @@ namespace CNA::Internal::Renderers::Bgfx
             float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
                                    params.emissiveColor[2], 0.0f };
             bgfx::setUniform(emissiveColor3DUnif_, emissive);
-            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor, 0.0f, 0.0f };
+            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor,
+                                  params.pbrNormalScale, params.pbrOcclusionStrength };
             bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
+            float srgb[4] = { params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f,
+                              params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f };
+            bgfx::setUniform(pbrSrgbUnif_, srgb);
+            float dielectricFresnel[4] = {
+                params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
+                params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor };
+            bgfx::setUniform(dielectricFresnelUnif_, dielectricFresnel);
             float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
             bgfx::setUniform(light0Dir3DUnif_, dir0);
             float diff0[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
@@ -4497,8 +4572,18 @@ namespace CNA::Internal::Renderers::Bgfx
             float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
                                    params.emissiveColor[2], 0.0f };
             bgfx::setUniform(emissiveColor3DUnif_, emissive);
-            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor, 0.0f, 0.0f };
+            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor,
+                                  params.pbrNormalScale, params.pbrOcclusionStrength };
             bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
+            float srgb[4] = { params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f,
+                              params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f };
+            bgfx::setUniform(pbrSrgbUnif_, srgb);
+            float dielectricFresnel[4] = {
+                params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
+                params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor };
+            bgfx::setUniform(dielectricFresnelUnif_, dielectricFresnel);
             float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
             bgfx::setUniform(light0Dir3DUnif_, dir0);
             float diff0[4] = { params.light0Diffuse[0], params.light0Diffuse[1],

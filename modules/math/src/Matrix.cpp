@@ -191,11 +191,18 @@ namespace Microsoft::Xna::Framework
         translation.Y = M42;
         translation.Z = M43;
 
-        // FNA uses Math.Sign() which returns 0 for negative zero; std::signbit returns true for
-        // negative zero, giving xs=-1 instead of xs=1. Edge case with no practical impact.
-        const float xs = std::signbit(M11 * M12 * M13 * M14) ? -1.0f : 1.0f;
-        const float ys = std::signbit(M21 * M22 * M23 * M24) ? -1.0f : 1.0f;
-        const float zs = std::signbit(M31 * M32 * M33 * M34) ? -1.0f : 1.0f;
+        // FNA's test is `Math.Sign(row product) < 0`, and Math.Sign returns 0 -- not -1 -- for
+        // negative zero, so FNA takes the +1 branch there. A previous version of this used
+        // std::signbit, which IS true for negative zero, and called the difference an edge case
+        // with no practical impact. It is not an edge case: every axis-aligned quarter turn has
+        // exact zeros in each row, and (-1) * 0 is -0.0, so signbit fired and flipped that row's
+        // sign. With unit scale that turns m1 below into a reflection, and
+        // CreateFromRotationMatrix of a reflection is not a rotation at all -- a node authored
+        // with a 90-degree rotation decomposed to the identity quaternion, silently losing its
+        // orientation. `x < 0.0f` reproduces Math.Sign(x) < 0 exactly, including for -0.0f.
+        const float xs = (M11 * M12 * M13 * M14) < 0.0f ? -1.0f : 1.0f;
+        const float ys = (M21 * M22 * M23 * M24) < 0.0f ? -1.0f : 1.0f;
+        const float zs = (M31 * M32 * M33 * M34) < 0.0f ? -1.0f : 1.0f;
 
         scale.X = xs * std::sqrt(M11 * M11 + M12 * M12 + M13 * M13);
         scale.Y = ys * std::sqrt(M21 * M21 + M22 * M22 + M23 * M23);

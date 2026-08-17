@@ -38,8 +38,10 @@ namespace CNA::Internal::Renderers::DirectX11
             case PrimitiveType::TriangleStrip: return primitiveCount + 2;
             case PrimitiveType::LineList:      return primitiveCount * 2;
             case PrimitiveType::LineStrip:     return primitiveCount + 1;
+            case PrimitiveType::PointListEXT:  return primitiveCount;
             }
-            return 0;
+            throw std::runtime_error(
+                "DirectX11 renderer does not support the requested PrimitiveType value");
         }
 
         D3D11_PRIMITIVE_TOPOLOGY ToD3D11Topology(PrimitiveType pt)
@@ -50,8 +52,10 @@ namespace CNA::Internal::Renderers::DirectX11
             case PrimitiveType::TriangleStrip: return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
             case PrimitiveType::LineList:      return D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
             case PrimitiveType::LineStrip:     return D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP;
+            case PrimitiveType::PointListEXT:  return D3D11_PRIMITIVE_TOPOLOGY_POINTLIST;
             }
-            return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+            throw std::runtime_error(
+                "DirectX11 renderer does not support the requested PrimitiveType value");
         }
 
         /// DX-62: resolves the real SRV to bind for a GpuDrawParams texture slot. Two concrete
@@ -1282,7 +1286,11 @@ namespace CNA::Internal::Renderers::DirectX11
         const auto& d3dVb = static_cast<const D3D11VertexBufferRenderer&>(vb);
         const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
 
-        const bool needsAlphaTest   = (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
+        // A PBR MASK draw keeps the PBR shader and evaluates alpha coverage there. The standalone
+        // AlphaTestEffect path only accepts stride 20/24 and cannot carry a tangent-space basis.
+        const bool needsPbr         = params.pbr;
+        const bool needsAlphaTest   = !needsPbr &&
+                                      (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
         const bool needsDualTex     = params.dualTexture && !needsAlphaTest;
         const bool needsEnvMap      = params.envMapping  && !needsAlphaTest && !needsDualTex;
         // plan_cnj.md CNB-58 follow-up: PbrEffect/SkinnedPbrEffect -- `params.skinned` further
@@ -1290,7 +1298,6 @@ namespace CNA::Internal::Renderers::DirectX11
         // own `if (params.pbr && params.skinned) ... else if (params.pbr) ...` priority (PBR takes
         // precedence over the plain-skinned bucket so SkinnedPbrEffect draws don't fall through to
         // skinned3d's non-PBR shader).
-        const bool needsPbr         = params.pbr && !needsAlphaTest && !needsDualTex && !needsEnvMap;
         const bool needsSkinned     = params.skinned && !needsPbr
                                      && !needsAlphaTest && !needsDualTex && !needsEnvMap;
         // stride==32 always uses lit_textured3d (BasicEffect's VertexPositionNormalTexture path,
@@ -1330,14 +1337,14 @@ namespace CNA::Internal::Renderers::DirectX11
         // plan_cnj.md CNB-58 follow-up: pbr3d.vert.hlsl (unskinned) is stride 48
         // (VertexPositionNormalTangentTexture); pbr_skinned3d.vert.hlsl (SkinnedPbrEffect) is
         // stride 68 (VertexPositionNormalTangentTextureSkinned).
-        if (needsPbr && !params.skinned && stride != 48)
+        if (needsPbr && !params.skinned && stride != 48 && stride != 60)
             throw std::runtime_error(
-                "DirectX11Renderer::DrawPrimitivesEx: PbrEffect (pbr3d) requires stride 48 "
-                "(VertexPositionNormalTangentTexture)");
-        if (needsPbr && params.skinned && stride != 68)
+                "DirectX11Renderer::DrawPrimitivesEx: PbrEffect (pbr3d) requires stride 48 or 60 "
+                "(VertexPositionNormalTangentTexture with optional TEXCOORD_1)");
+        if (needsPbr && params.skinned && stride != 68 && stride != 76)
             throw std::runtime_error(
                 "DirectX11Renderer::DrawPrimitivesEx: SkinnedPbrEffect (pbr_skinned3d) requires "
-                "stride 68 (VertexPositionNormalTangentTextureSkinned)");
+                "stride 68 or 76 (VertexPositionNormalTangentTextureSkinned with optional TEXCOORD_1)");
 
         D3DCommon::D3DShaderVariant variant;
         if (needsAlphaTest)
@@ -1348,8 +1355,11 @@ namespace CNA::Internal::Renderers::DirectX11
         else if (needsEnvMap)
             variant = D3DCommon::D3DShaderVariant::EnvMap3d;
         else if (needsPbr)
-            variant = params.skinned ? D3DCommon::D3DShaderVariant::PbrSkinned3d
-                                      : D3DCommon::D3DShaderVariant::Pbr3d;
+            variant = params.skinned
+                ? ((stride == 76) ? D3DCommon::D3DShaderVariant::PbrSkinned3dDualUv
+                                  : D3DCommon::D3DShaderVariant::PbrSkinned3d)
+                : ((stride == 60) ? D3DCommon::D3DShaderVariant::Pbr3dDualUv
+                                  : D3DCommon::D3DShaderVariant::Pbr3d);
         else if (needsSkinned)
             // plan_graphics.md Phase 80 (Task 1106): real XNA renders SkinnedEffect's lit path
             // per-vertex by default (PreferPerPixelLighting == false), not per-pixel. CNB-67:
@@ -1393,13 +1403,13 @@ namespace CNA::Internal::Renderers::DirectX11
         const Matrix wvp = world * view * projection;
 
         // DX-65/DX-66: dual_texture3d needs t0+t1 (both Texture2D); env_map3d needs t0 (Texture2D)
-        // + t1 (TextureCube). plan_cnj.md CNB-58 follow-up: pbr3d/pbr_skinned3d need 5 (t0 base
-        // color + t1 normal + t2 metallic-roughness + t3 emissive + t4 occlusion). Every other
-        // variant only ever binds t0 -- srvs[1..4] stay null, which is harmless for a shader that
-        // declares no t1-t4 registers. Always the full 5-wide range (unused slots explicitly
-        // null) so no variant can see a stale SRV binding left by a previous, differently-shaped
-        // draw call (same discipline this file's own cbs[3] comment below already documents).
-        ID3D11ShaderResourceView* srvs[5] = { nullptr, nullptr, nullptr, nullptr, nullptr };
+        // + t1 (TextureCube). PBR needs seven slots: the five core maps plus KHR_materials_specular
+        // strength/colour at t5/t6. Every other variant only ever binds t0 -- higher entries stay
+        // null, which is harmless for a shader that does not declare them. Always bind the full
+        // seven-wide range (unused slots explicitly null) so no variant can see a stale SRV left
+        // by a previous, differently-shaped draw call (same discipline as cbs[3] below).
+        ID3D11ShaderResourceView* srvs[7] = {
+            nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
         if (needsDualTex)
         {
             srvs[0] = GetSrvForTextureEXT(params.texture0);
@@ -1418,11 +1428,27 @@ namespace CNA::Internal::Renderers::DirectX11
             // (flat tangent-space normal for the normal map; factor-only/no-emissive/fully-lit
             // white for the other three), so "map absent" reads as the correct BRDF input here too
             // rather than sampling an unbound (all-zero) shader resource.
-            srvs[0] = GetSrvForTextureEXT(params.texture0);
+            // GLTF-386: glTF baseColorTexture is optional. Sampling an unbound D3D11 SRV returns
+            // transparent black, which zeroed the material alpha and made every factor-only PBR
+            // primitive disappear from transparent reference captures. Match the other four PBR
+            // slots and every other full PBR renderer: an absent base-colour map is opaque white.
+            srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
+                                      : GetOrCreateDefaultWhiteSrvEXT();
             srvs[1] = params.pbrNormalMap ? GetSrvForTextureEXT(params.pbrNormalMap) : GetOrCreateDefaultFlatNormalSrvEXT();
             srvs[2] = params.pbrMetallicRoughnessMap ? GetSrvForTextureEXT(params.pbrMetallicRoughnessMap) : GetOrCreateDefaultWhiteSrvEXT();
             srvs[3] = params.pbrEmissiveMap ? GetSrvForTextureEXT(params.pbrEmissiveMap) : GetOrCreateDefaultWhiteSrvEXT();
             srvs[4] = params.pbrOcclusionMap ? GetSrvForTextureEXT(params.pbrOcclusionMap) : GetOrCreateDefaultWhiteSrvEXT();
+            srvs[5] = params.pbrSpecularMap ? GetSrvForTextureEXT(params.pbrSpecularMap) : GetOrCreateDefaultWhiteSrvEXT();
+            srvs[6] = params.pbrSpecularColorMap ? GetSrvForTextureEXT(params.pbrSpecularColorMap) : GetOrCreateDefaultWhiteSrvEXT();
+        }
+        else if (needsSkinned)
+        {
+            // GLTF-386: SkinnedEffect always enables and samples its texture, including for an
+            // untextured KHR_materials_unlit skin. D3D11 samples an unbound SRV as transparent
+            // black, so preserve SkinnedEffect's established renderer contract by substituting
+            // opaque white. Vulkan, EasyGL and OpenGL use the same semantic fallback.
+            srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
+                                      : GetOrCreateDefaultWhiteSrvEXT();
         }
         else
         {
@@ -1576,6 +1602,31 @@ namespace CNA::Internal::Renderers::DirectX11
             perDraw.EmissiveRoughness[1] = params.emissiveColor[1];
             perDraw.EmissiveRoughness[2] = params.emissiveColor[2];
             perDraw.EmissiveRoughness[3] = params.pbrRoughnessFactor;
+            perDraw.AlphaTest[0] = params.alphaTest[0];
+            perDraw.AlphaTest[1] = params.alphaTest[1];
+            perDraw.AlphaTest[2] = params.alphaTest[2];
+            perDraw.AlphaTest[3] = params.alphaTest[3];
+            perDraw.PbrMapScales[0] = params.pbrNormalScale;
+            perDraw.PbrMapScales[1] = params.pbrOcclusionStrength;
+            perDraw.PbrMapScales[2] = params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f;
+            perDraw.PbrMapScales[3] = params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f;
+            perDraw.DielectricFresnel[0] = params.pbrDielectricF0[0];
+            perDraw.DielectricFresnel[1] = params.pbrDielectricF0[1];
+            perDraw.DielectricFresnel[2] = params.pbrDielectricF0[2];
+            perDraw.DielectricFresnel[3] = params.pbrDielectricF90;
+            std::memcpy(perDraw.TextureTransformRows, params.pbrTextureTransformRows,
+                        sizeof(perDraw.TextureTransformRows));
+            perDraw.TextureCoordinateSets[0] =
+                static_cast<float>(params.pbrTextureCoordinateSetMask & 0x7fu);
+            perDraw.SpecularFresnelInputs[0] = params.pbrDielectricF0Unclamped[0];
+            perDraw.SpecularFresnelInputs[1] = params.pbrDielectricF0Unclamped[1];
+            perDraw.SpecularFresnelInputs[2] = params.pbrDielectricF0Unclamped[2];
+            perDraw.SpecularFresnelInputs[3] = params.pbrSpecularFactor;
+            perDraw.SpecularMapFlags[0] =
+                params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f;
+            std::memcpy(perDraw.SpecularTextureTransformRows,
+                        params.pbrSpecularTextureTransformRows,
+                        sizeof(perDraw.SpecularTextureTransformRows));
 
             D3DCommon::D3DPbrLightConstants lights{};
             lights.EyePosWeights[0] = params.eyePositionWorld[0];
@@ -1605,6 +1656,7 @@ namespace CNA::Internal::Renderers::DirectX11
             lights.FogColor[0] = params.fogColor[0];
             lights.FogColor[1] = params.fogColor[1];
             lights.FogColor[2] = params.fogColor[2];
+            lights.FogColor[3] = params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f;
             // REMED-GFX-005/010/061: upload the authoritative FNA view-space fog vector; the
             // shader dots it with the object or post-skin position.
             lights.FogVector[0] = params.fogVector[0];
@@ -1850,12 +1902,12 @@ namespace CNA::Internal::Renderers::DirectX11
         context_->VSSetShader(vs.Get(), nullptr, 0);
         context_->PSSetShader(ps.Get(), nullptr, 0);
 
-        // Always rebind the full 3-slot-cbuffer/5-slot-SRV range (unused slots explicitly null,
+        // Always rebind the full 3-slot-cbuffer/7-slot-SRV range (unused slots explicitly null,
         // see cbs'/srvs' own declaration comments above) -- no variant can see a stale binding
         // left by whatever differently-shaped draw call ran immediately before this one.
         context_->VSSetConstantBuffers(0, 3, cbs);
         context_->PSSetConstantBuffers(0, 3, cbs);
-        context_->PSSetShaderResources(0, 5, srvs);
+        context_->PSSetShaderResources(0, 7, srvs);
 
         if (ib != nullptr)
         {

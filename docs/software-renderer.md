@@ -119,13 +119,22 @@ real rendering discrepancy. The comparator was also checked against a deliberate
 (one channel of one pixel flipped) to confirm it actually fails when the images genuinely differ,
 rather than always passing.
 
-## Known limitations (2026-07-13)
+## Known limitations (2026-08-15)
 
-- **`TriangleList` only.** `TriangleStrip`/`LineList`/`LineStrip`/`PointListEXT` all throw a clear
-  "only TriangleList is supported in v1" error rather than silently misrendering.
-- **Vertex strides 16/20/24/32/52** (`VertexPositionColor`/`VertexPositionTexture`/
-  `VertexPositionColorTexture`/`VertexPositionNormalTexture`/`VertexPositionNormalTextureSkinned`).
-  Any other stride throws a clear "unsupported vertex stride" error.
+- **`TriangleStrip` remains unsupported.** The effect-aware indexed and non-indexed paths render
+  `TriangleList`, `LineList`, `LineStrip` and `PointListEXT`; points and clipped line segments use
+  the same depth, blend and fragment-shading path as triangles. A strip still throws a clear
+  "only TriangleList is supported in v1" compatibility error rather than being silently
+  reinterpreted. The older coloured-draw convenience paths remain triangle-list-only too.
+- **Vertex strides 16/20/24/32/48/52/56/60/68/76.** These are the complete canonical CNA table,
+  including dual-UV rigid/skinned PBR records. The reduced PBR fallback selects UV0 or UV1 for the
+  base-colour map and applies that map's affine transform. Tangents are consumed at their declared
+  offsets but remain shading-inert, and the normal/MR/emissive/occlusion maps are not evaluated by
+  this CPU renderer. Any other stride throws a clear "unsupported vertex stride" error.
+- **An unbound optional base texture is white.** `PbrEffect`, `SkinnedPbrEffect` and
+  `SkinnedEffect` deliberately keep their textured program selected with no base map; SOFTWARE
+  preserves the vertex/factor colour in that case, matching the white fallback used by native
+  shader renderers. A missing second DualTexture map or environment cube remains a clear error.
 - **No per-light diffuse lighting, no fog.** `BasicEffect`'s `EnableDefaultLighting()`/fog
   properties (and the equivalent lighting inputs on `EnvironmentMapEffect`/`SkinnedEffect`) have no
   effect on this renderer's output — only `VertexColorEnabled`, `TextureEnabled`/`Texture`, and
@@ -147,7 +156,11 @@ rather than always passing.
   - `SkinnedEffect`: real per-vertex bone-transform blending (up to 4 weighted bones,
     `WeightsPerVertex`-gated) applied to the vertex position before the standard
     World\*View\*Projection transform.
-- **No MRT, no MSAA, no mipmapping, no 3D textures, no render-target cube maps.**
+- **No MRT, no ordinary-texture mipmapping, no 3D textures, no render-target cube maps.**
+  `RenderTarget2D` does implement an actual four-sample CPU colour plane and generated mip levels.
+  Unbind resolves the samples before mip generation; a level-zero `GetData` while the target is
+  active snapshots the live samples without unbinding it, while generated levels remain unavailable
+  until the pass ends. Requests other than 0 or 4 samples still fall back to single-sample storage.
   `CreateRenderTargetCube`/`CreateTexture3D` still return `nullptr` (the shared `IGraphicsRenderer`
   default — this renderer doesn't override them); only plain (non-render-target) `TextureCube`s are
   real.
@@ -173,12 +186,12 @@ rather than always passing.
 - **`SpriteBatch` honors a custom `GraphicsDevice.Viewport`** (`REMED-GFX-073`) — sprite
   coordinates are viewport-local (sprite `(0,0)` = the viewport's top-left), the result is placed at
   `Viewport.X/Y`, and pixels outside the viewport rectangle are clipped, matching real XNA/FNA and
-  the GPU renderers' GFX-072 contract. The default full-target viewport is byte-identical to the
-  previous behavior. Two related gaps remain (their own tasks): the **3D** raster path still maps NDC
-  over the full framebuffer and ignores a custom viewport's origin/size/depth-range
-  (`REMED-GFX-079`), and `ScissorRectangle` is not yet honored on any path
-  (`SetScissorRect` is a no-op — `REMED-GFX-080`). `Viewport.MinDepth/MaxDepth` are stored but not
-  consumed (the sprite path uses `layerDepth` directly).
+  the GPU renderers' GFX-072 contract. The **3D** path also honors X/Y, Width/Height, raster clipping
+  and `MinDepth/MaxDepth` (`REMED-GFX-079`, 25/25 focused checks), and an enabled
+  `ScissorRectangle` intersects both paths in target space (`REMED-GFX-080`). The default
+  full-target viewport remains byte-identical to the earlier behavior. SOFTWARE's homogeneous
+  clipping is still limited to the eye plane described above; viewport clipping does not turn that
+  into a complete six-plane frustum clip.
 - **Custom `ShaderEffect` (arbitrary GLSL/HLSL/WGSL source) compiles but doesn't actually execute**
   — mirrors `HEADLESS-16`'s own precedent exactly: the source is accepted without compiling, and
   only effects whose `FillGpuDrawParams()` output matches this renderer's fixed `BasicEffect`-subset

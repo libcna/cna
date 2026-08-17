@@ -1,0 +1,548 @@
+{
+  "id": "anim-nonzero-start",
+  "description": "A LINEAR rotation channel whose first keyframe is at t=1.5, on a node whose rest rotation differs from that first key. Separates the clip's duration (the last sample, 3.0) from the key span (1.5), and 'holds the first key before it' from 'falls back to the rest pose'.",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "animations",
+    "interpolation-cubic",
+    "transformations"
+  ],
+  "inventory": {
+    "id": "anim-nonzero-start",
+    "owningGroup": "animation",
+    "referencingGroups": [],
+    "validatedLayers": [
+      "L1",
+      "L2",
+      "L3",
+      "L4"
+    ],
+    "features": [
+      "animation with a non-zero first key time",
+      "clip duration",
+      "pre-first-key clamping",
+      "rotation path",
+      "no skin"
+    ],
+    "auditFixture": null
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 1,
+    "meshCount": 1,
+    "materialCount": 0,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
+    "skinCount": 0,
+    "animationCount": 1,
+    "accessorCount": 5,
+    "bufferViewCount": 5,
+    "bufferCount": 1,
+    "bufferByteLength": 120,
+    "extensionsUsed": [],
+    "extensionsRequired": [],
+    "punctualLightCount": 0
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 0,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      {
+        "index": 1,
+        "usage": "NORMAL",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 36,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 2,
+        "usage": "indices",
+        "type": "SCALAR",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 3,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 2,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 72,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          2
+        ]
+      },
+      {
+        "index": 3,
+        "usage": "animation input (time)",
+        "type": "SCALAR",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 2,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 3,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 80,
+        "bufferViewByteStride": null,
+        "values": [
+          1.5,
+          3.0
+        ]
+      },
+      {
+        "index": 4,
+        "usage": "animation output (rotation)",
+        "type": "VEC4",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 2,
+        "componentsPerElement": 4,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 4,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 88,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.7071067811865476,
+          0.7071067811865476,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": [
+      {
+        "mesh": 0,
+        "meshName": "LateStartTri",
+        "primitive": 0,
+        "mode": 4,
+        "modeName": "TRIANGLES",
+        "indexed": true,
+        "vertexCount": 3,
+        "positions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "normals": [
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "tangents": [],
+        "texcoords": [],
+        "colors": [],
+        "joints": [],
+        "weights": [],
+        "indices": [
+          0,
+          1,
+          2
+        ],
+        "triangles": [
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        "importPolicy": {
+          "imported": true,
+          "topologyMode": 4,
+          "topologyName": "TRIANGLES",
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "converted": false,
+          "primitiveCount": 1
+        },
+        "material": null
+      }
+    ]
+  },
+  "l4": {
+    "instances": [
+      {
+        "node": 0,
+        "nodeName": "LateStartMesh",
+        "mesh": 0,
+        "parentNodePath": [],
+        "worldMatrixColumnMajor": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "worldPositions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      }
+    ],
+    "worldBounds": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        1.0,
+        1.0,
+        0.0
+      ]
+    },
+    "animation": {
+      "animationCount": 1,
+      "clipNames": [
+        "LateSpin"
+      ],
+      "duration": 3.0,
+      "firstKeyTime": 1.5,
+      "durationRule": "the last input sample across every channel, on glTF's own absolute timeline anchored at 0 -- NOT the span between the first and last keys, which would be 1.5 here and would shift every authored time by the offset.",
+      "restPoseRotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "posesBeforeFirstKey": [
+        {
+          "time": 0.0,
+          "nodeLocalColumnMajor": [
+            -2.220446049250313e-16,
+            1.0000000000000002,
+            0.0,
+            0.0,
+            -1.0000000000000002,
+            -2.220446049250313e-16,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.75,
+          "nodeLocalColumnMajor": [
+            -2.220446049250313e-16,
+            1.0000000000000002,
+            0.0,
+            0.0,
+            -1.0000000000000002,
+            -2.220446049250313e-16,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        {
+          "time": 1.5,
+          "nodeLocalColumnMajor": [
+            -2.220446049250313e-16,
+            1.0000000000000002,
+            0.0,
+            0.0,
+            -1.0000000000000002,
+            -2.220446049250313e-16,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        }
+      ],
+      "startRule": "Appendix C clamps a sampler below its first key to that key's value, so the pose anywhere in [0, 1.5] is the FIRST KEY's -- not the node's rest pose, which is a different rotation here on purpose.",
+      "channels": [
+        {
+          "animation": 0,
+          "channel": 0,
+          "targetNode": 0,
+          "targetNodeName": "LateStartMesh",
+          "path": "rotation",
+          "interpolation": "LINEAR",
+          "targetsSkinJoint": false,
+          "times": [
+            1.5,
+            3.0
+          ],
+          "values": [
+            [
+              0.0,
+              0.0,
+              0.7071067811865476,
+              0.7071067811865476
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ]
+        }
+      ],
+      "posesAtKeyTimes": [
+        {
+          "time": 1.5,
+          "nodeLocalColumnMajor": [
+            -2.220446049250313e-16,
+            1.0000000000000002,
+            0.0,
+            0.0,
+            -1.0000000000000002,
+            -2.220446049250313e-16,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "worldPositions": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -2.220446049250313e-16,
+              1.0000000000000002,
+              0.0
+            ],
+            [
+              -1.0000000000000002,
+              -2.220446049250313e-16,
+              0.0
+            ]
+          ]
+        },
+        {
+          "time": 3.0,
+          "nodeLocalColumnMajor": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "worldPositions": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ]
+          ]
+        }
+      ]
+    }
+  },
+  "l5": {
+    "supported": true,
+    "parts": [
+      {
+        "mesh": 0,
+        "primitive": 0,
+        "stride": 48,
+        "vertexCount": 3,
+        "fields": [
+          {
+            "name": "Position",
+            "offset": 0,
+            "size": 12
+          },
+          {
+            "name": "Normal",
+            "offset": 12,
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
+            "size": 8
+          }
+        ],
+        "vertexBufferFile": "anim-nonzero-start.vb.bin",
+        "vertexBufferBytes": 144,
+        "vertexBufferSha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683",
+        "indexElementSize": 2,
+        "indexCount": 3,
+        "indexBufferFile": "anim-nonzero-start.ib.bin",
+        "indexBufferBytes": 6,
+        "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "sourceTopology": "TRIANGLES",
+        "topology": "TRIANGLES",
+        "primitiveCount": 1
+      }
+    ]
+  },
+  "rejection": null,
+  "defects": []
+}

@@ -510,13 +510,19 @@ struct PbrUniforms {
     float4 light1Dir; float4 light1Diffuse;
     float4 light2Dir; float4 light2Diffuse;
     float4 eyePosition;
-    float4 pbrFactors;      // x=MetallicFactor, y=RoughnessFactor
+    float4 pbrFactors;      // x=MetallicFactor, y=RoughnessFactor, z=NormalScale, w=OcclusionStrength
     float4 alphaTest;
     float4 fogColorEnabled;
     float4 fogVector;
+    float4 srgbFlags;          // x=base decode, y=emissive decode, z=output encode
+    float4 dielectricFresnel;  // xyz=dielectric F0, w=dielectric F90
+    float4 textureTransformRows[10];
 };
 struct VPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; };
 struct VPbrOut { float4 position [[position]]; float3 normal; float3 tangent; float bitangentSign; float2 uv; float fogFactor; float3 worldPos; };
+float cna_direction_handedness(float3x3 m) {
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
 vertex VPbrOut cna_v3d_pbr(VPbrIn in [[stage_in]], constant PbrTransform& t [[buffer(1)]], constant PbrUniforms& pu [[buffer(2)]]) {
     VPbrOut o;
     o.position = t.wvp * float4(in.position, 1.0);
@@ -524,13 +530,13 @@ vertex VPbrOut cna_v3d_pbr(VPbrIn in [[stage_in]], constant PbrTransform& t [[bu
     o.normal = normalMat * in.normal;
     float3x3 world3 = float3x3(t.world[0].xyz, t.world[1].xyz, t.world[2].xyz);
     o.tangent = world3 * in.tangent.xyz;
-    o.bitangentSign = in.tangent.w;
+    o.bitangentSign = in.tangent.w * cna_direction_handedness(world3);
     o.uv = in.uv;
     o.worldPos = (t.world * float4(in.position, 1.0)).xyz;
     o.fogFactor = 1.0 - clamp(dot(float4(in.position, 1.0), pu.fogVector), 0.0, 1.0);
     return o;
 }
-inline float3 cna_pbr_light(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0, float roughness, float metallic) {
+inline float3 cna_pbr_light(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0, float3 F90, float roughness, float metallic) {
     float3 H = normalize(V + L);
     float NdotL = max(dot(N, L), 0.0);
     float NdotV = max(dot(N, V), 1e-4);
@@ -541,11 +547,26 @@ inline float3 cna_pbr_light(float3 N, float3 V, float3 L, float3 lightColor, flo
     float D = a2 / (3.14159265*dTerm*dTerm + 1e-7);
     float k = (roughness+1.0); k = k*k/8.0;
     float G = (NdotV/(NdotV*(1.0-k)+k)) * (NdotL/(NdotL*(1.0-k)+k));
-    float3 F = F0 + (float3(1.0)-F0) * pow(clamp(1.0-VdotH, 0.0, 1.0), 5.0);
+    float3 F = F0 + (F90-F0) * pow(clamp(1.0-VdotH, 0.0, 1.0), 5.0);
     float3 specular = (D*G*F) / max(4.0*NdotV*NdotL, 1e-4);
     float3 diffuseColor = albedo * (1.0-metallic);
     float3 kd = float3(1.0) - F;
     return (kd*diffuseColor/3.14159265 + specular) * lightColor * NdotL;
+}
+inline float3 cna_srgb_to_linear(float3 c) {
+    float3 lo = c / 12.92;
+    float3 hi = pow((c + 0.055) / 1.055, float3(2.4));
+    return mix(lo, hi, step(float3(0.04045), c));
+}
+inline float3 cna_linear_to_srgb(float3 c) {
+    float3 lo = c * 12.92;
+    float3 hi = 1.055 * pow(max(c, float3(0.0)), float3(1.0 / 2.4)) - 0.055;
+    return mix(lo, hi, step(float3(0.0031308), c));
+}
+inline float2 cna_pbr_transform_uv(float2 uv, int slot, constant PbrUniforms& pu) {
+    float3 value = float3(uv, 1.0);
+    return float2(dot(value, pu.textureTransformRows[slot * 2].xyz),
+                  dot(value, pu.textureTransformRows[slot * 2 + 1].xyz));
 }
 fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]],
@@ -555,41 +576,54 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     texture2d<float> occlusionMap [[texture(4)]], sampler occlusionSmp [[sampler(4)]],
     constant PbrUniforms& pu [[buffer(2)]])
 {
-    float4 baseColorTex = tex.sample(smp, in.uv);
-    float3 albedo = baseColorTex.rgb * pu.diffuseColor.rgb;
+    float4 baseColorTex = tex.sample(smp, cna_pbr_transform_uv(in.uv, 0, pu));
+    float3 baseColor = mix(baseColorTex.rgb, cna_srgb_to_linear(baseColorTex.rgb), pu.srgbFlags.x);
+    float3 albedo = baseColor * pu.diffuseColor.rgb;
     float alpha = baseColorTex.a * pu.diffuseColor.a;
     float3 N = normalize(in.normal);
     float3 T = normalize(in.tangent - N*dot(N, in.tangent));
     float3 B = cross(N, T) * in.bitangentSign;
     float3x3 TBN = float3x3(T, B, N);
-    float3 sampledNormal = normalMap.sample(normalSmp, in.uv).rgb*2.0 - 1.0;
+    float3 sampledNormal = normalMap.sample(normalSmp, cna_pbr_transform_uv(in.uv, 1, pu)).rgb*2.0 - 1.0;
+    sampledNormal.xy *= pu.pbrFactors.z;
     float3 finalNormal = normalize(TBN * sampledNormal);
-    float4 mr = mrMap.sample(mrSmp, in.uv);
+    float4 mr = mrMap.sample(mrSmp, cna_pbr_transform_uv(in.uv, 2, pu));
     float roughness = clamp(mr.g * pu.pbrFactors.y, 0.045, 1.0);
     float metallic = clamp(mr.b * pu.pbrFactors.x, 0.0, 1.0);
     float3 V = normalize(pu.eyePosition.xyz - in.worldPos);
-    float3 F0 = mix(float3(0.04), albedo, metallic);
+    float3 F0 = mix(pu.dielectricFresnel.xyz, albedo, metallic);
+    float3 F90 = mix(float3(pu.dielectricFresnel.w), float3(1.0), metallic);
     float3 Lo = float3(0.0);
-    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light0Dir.xyz), pu.light0Diffuse.xyz, albedo, F0, roughness, metallic);
-    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light1Dir.xyz), pu.light1Diffuse.xyz, albedo, F0, roughness, metallic);
-    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light2Dir.xyz), pu.light2Diffuse.xyz, albedo, F0, roughness, metallic);
-    float occlusion = occlusionMap.sample(occlusionSmp, in.uv).r;
+    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light0Dir.xyz), pu.light0Diffuse.xyz, albedo, F0, F90, roughness, metallic);
+    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light1Dir.xyz), pu.light1Diffuse.xyz, albedo, F0, F90, roughness, metallic);
+    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light2Dir.xyz), pu.light2Diffuse.xyz, albedo, F0, F90, roughness, metallic);
+    float occlusionSample = occlusionMap.sample(occlusionSmp, cna_pbr_transform_uv(in.uv, 4, pu)).r;
+    float occlusion = 1.0 + pu.pbrFactors.w * (occlusionSample - 1.0);
     float3 ambient = pu.ambientColor.xyz * albedo * occlusion;
-    float3 emissive = pu.emissiveColor.xyz * emissiveMap.sample(emissiveSmp, in.uv).rgb;
+    float3 emissiveSample = emissiveMap.sample(emissiveSmp, cna_pbr_transform_uv(in.uv, 3, pu)).rgb;
+    emissiveSample = mix(emissiveSample, cna_srgb_to_linear(emissiveSample), pu.srgbFlags.y);
+    float3 emissive = pu.emissiveColor.xyz * emissiveSample;
     float4 c = float4(ambient + Lo + emissive, alpha);
     if (cna_alpha_test_fails(c.a, pu.alphaTest)) discard_fragment();
-    c.rgb = mix(pu.fogColorEnabled.xyz, c.rgb, in.fogFactor);
+    float3 fogLinear = mix(pu.fogColorEnabled.xyz,
+                           cna_srgb_to_linear(pu.fogColorEnabled.xyz), pu.srgbFlags.z);
+    c.rgb = mix(fogLinear, c.rgb, in.fogFactor);
+    c.rgb = mix(c.rgb, cna_linear_to_srgb(c.rgb), pu.srgbFlags.z);
     return c;
 }
 
-// CNAEXT SkinnedPbrEffect (plan_metal.md METAL-82): combines cna_skin_common's real GPU-skinning
-// blend (position+normal+tangent all transformed by the same per-vertex weighted bone matrix sum,
-// mat3(skinMat) directly -- no separate inverse-transpose normal-matrix step, matching
-// SkinnedEffect's own established precedent, not PBR's unskinned inverse-transpose path) with
-// cna_f3d_pbr's existing fragment shader unchanged -- both emit/consume the same VPbrOut, so no new
-// fragment shader is needed, only a new vertex shader producing that same interpolant struct.
-struct SkinnedPbrTransform { float4x4 wvp; float4x4 world; float4 skinParams; }; // skinParams.x = weightsPerVertex
+// CNAEXT SkinnedPbrEffect (plan_metal.md METAL-82, GLTF-264): GPU skinning plus the same PBR
+// interpolants as cna_v3d_pbr. Normals use inverse-transpose joint and world matrices while
+// tangents remain ordinary directions.
+struct SkinnedPbrTransform { float4x4 wvp; float4x4 world; float4 normalCol0; float4 normalCol1; float4 normalCol2; float4 skinParams; }; // skinParams.x = weightsPerVertex
 struct VSkinnedPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; float4 boneWeights [[attribute(4)]]; uchar4 boneIndices [[attribute(5)]]; };
+float3 cna_skin_normal(float3x3 m, float3 n) {
+    float3 c0=m[0], c1=m[1], c2=m[2];
+    float3 co0=cross(c1,c2), co1=cross(c2,c0), co2=cross(c0,c1);
+    float det=dot(c0,co0);
+    float3 transformed=float3x3(co0,co1,co2)*n;
+    return (abs(det)>1e-6) ? transformed*((det<0.0)?-1.0:1.0) : m*n;
+}
 vertex VPbrOut cna_v3d_skinned_pbr(VSkinnedPbrIn in [[stage_in]], constant SkinnedPbrTransform& t [[buffer(1)]], constant PbrUniforms& pu [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
     VPbrOut o;
     int weightsPerVertex = int(t.skinParams.x);
@@ -599,14 +633,18 @@ vertex VPbrOut cna_v3d_skinned_pbr(VSkinnedPbrIn in [[stage_in]], constant Skinn
     float4 skinnedPos = skinMat * float4(in.position, 1.0);
     o.position = t.wvp * skinnedPos;
     float3x3 skinMat3 = float3x3(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
-    float3 skinnedNormal = skinMat3 * in.normal;
+    float3 skinnedNormal = cna_skin_normal(skinMat3, in.normal);
     float skinnedNormalLen = length(skinnedNormal);
-    o.normal = (skinnedNormalLen > 1e-6) ? (skinnedNormal / skinnedNormalLen) : in.normal;
+    float3 boneNormal = (skinnedNormalLen > 1e-6) ? (skinnedNormal / skinnedNormalLen) : in.normal;
+    float3x3 normalMat = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz);
+    o.normal = normalize(normalMat * boneNormal);
     // Not renormalized here (matches the unskinned cna_v3d_pbr's own o.tangent = world3*tangent.xyz,
     // which is also left unnormalized) -- cna_f3d_pbr's Gram-Schmidt orthogonalization against the
     // interpolated normal already renormalizes it per-pixel regardless.
-    o.tangent = skinMat3 * in.tangent.xyz;
-    o.bitangentSign = in.tangent.w;
+    float3x3 world3 = float3x3(t.world[0].xyz, t.world[1].xyz, t.world[2].xyz);
+    o.tangent = world3 * (skinMat3 * in.tangent.xyz);
+    o.bitangentSign = in.tangent.w * cna_direction_handedness(world3)
+                                   * cna_direction_handedness(skinMat3);
     o.uv = in.uv;
     o.worldPos = (t.world * skinnedPos).xyz;
     o.fogFactor = 1.0 - clamp(dot(skinnedPos, pu.fogVector), 0.0, 1.0);

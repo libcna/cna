@@ -32,7 +32,9 @@ namespace CNA::Internal::Renderers::D3DCommon
                 case D3DShaderVariant::LitTextured3dVertexLit: return {kLitTextured3dVertexLitVertDxbc, kLitTextured3dVertexLitVertDxbc_size};
                 case D3DShaderVariant::Skinned3dVertexLit:     return {kSkinned3dVertexLitVertDxbc, kSkinned3dVertexLitVertDxbc_size};
                 case D3DShaderVariant::Pbr3d:                  return {kPbr3dVertDxbc, kPbr3dVertDxbc_size};
+                case D3DShaderVariant::Pbr3dDualUv:            return {kPbr3dDualUvVertDxbc, kPbr3dDualUvVertDxbc_size};
                 case D3DShaderVariant::PbrSkinned3d:           return {kPbrSkinned3dVertDxbc, kPbrSkinned3dVertDxbc_size};
+                case D3DShaderVariant::PbrSkinned3dDualUv:     return {kPbrSkinned3dDualUvVertDxbc, kPbrSkinned3dDualUvVertDxbc_size};
                 case D3DShaderVariant::Skinned3dColored:       return {kSkinned3dColoredVertDxbc, kSkinned3dColoredVertDxbc_size};
                 case D3DShaderVariant::Skinned3dVertexLitColored: return {kSkinned3dVertexLitColoredVertDxbc, kSkinned3dVertexLitColoredVertDxbc_size};
             }
@@ -58,7 +60,9 @@ namespace CNA::Internal::Renderers::D3DCommon
                 case D3DShaderVariant::LitTextured3dVertexLit: return {kLitTextured3dVertexLitFragDxbc, kLitTextured3dVertexLitFragDxbc_size};
                 case D3DShaderVariant::Skinned3dVertexLit:     return {kSkinned3dVertexLitFragDxbc, kSkinned3dVertexLitFragDxbc_size};
                 case D3DShaderVariant::Pbr3d:                  return {kPbr3dFragDxbc, kPbr3dFragDxbc_size};
+                case D3DShaderVariant::Pbr3dDualUv:            return {kPbr3dDualUvFragDxbc, kPbr3dDualUvFragDxbc_size};
                 case D3DShaderVariant::PbrSkinned3d:           return {kPbrSkinned3dFragDxbc, kPbrSkinned3dFragDxbc_size};
+                case D3DShaderVariant::PbrSkinned3dDualUv:     return {kPbrSkinned3dDualUvFragDxbc, kPbrSkinned3dDualUvFragDxbc_size};
                 case D3DShaderVariant::Skinned3dColored:       return {kSkinned3dColoredFragDxbc, kSkinned3dColoredFragDxbc_size};
                 case D3DShaderVariant::Skinned3dVertexLitColored: return {kSkinned3dVertexLitColoredFragDxbc, kSkinned3dVertexLitColoredFragDxbc_size};
             }

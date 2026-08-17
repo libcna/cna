@@ -56,6 +56,121 @@ exists purely as the smallest possible complete `IGraphicsRenderer` implementati
 reference and a dependency-free placeholder, not a pixel-parity or diagnostic tool. See
 `docs/stub-renderer.md` for its current capability boundary.
 
+## glTF campaign companion matrix (`GLTF-393`)
+
+The glTF differential campaign has a deliberately narrower executable renderer set than the
+project-wide tables below: STUB establishes importer independence, HEADLESS observes the native
+draw boundary without rasterising, and OPENGLES3 plus Vulkan provide independent real graphics APIs
+and framebuffer evidence. This table records the four renderer-sensitive features named by
+`plan_gltf.md`; it does not turn a boundary-only result into pixel support.
+
+Status here is specific: ✅ means a real native draw or framebuffer assertion; ◇ means the complete
+value/topology reaches an observable non-rasterising boundary; ❌ means the renderer explicitly has
+no such route. The general feature tables remain authoritative for renderers outside this campaign,
+while `gltf-renderer-pbr-fallbacks.md` carries the separate 15-PBR-renderer shader inventory.
+
+| Renderer | 32-bit index draw | `POINTS` | line modes | MRT | glTF PBR sRGB contract | Evidence boundary |
+|---|---:|---:|---:|---:|---:|---|
+| STUB | ❌ | ❌ | ❌ | ❌ | ◇ | Imports and L1–L6 effect capture run, but `SupportsCapability(ThreeD)` is false and no draw is submitted. |
+| HEADLESS | ◇ | ◇ | ◇ | ◇ | ◇ | `HeadlessIndexBufferRenderer`, topology/MRT trace and `GpuDrawParams` are observable; no pixel is produced. |
+| OPENGLES3 / EasyGL | ✅ | ✅ | ✅ | ✅ | ✅ | Full glTF selection 520/520; `PointListPrimitiveTest`, its interleaved line control, EasyGL MRT tests and `EasyGL_Pbr_SrgbTransfer`. |
+| Vulkan | ✅ | ✅ | ✅ | ✅ | ✅ | Full glTF selection 520/520; 15/15 `PointListPrimitiveTest` cases include a 32-bit indexed point and the real PBR point pipeline, assert zero validation messages, and sit beside Vulkan MRT and `Vulkan_Pbr_SrgbTransfer` tests. |
+
+MRT is recorded because a conformance/viewer harness may render diagnostic outputs to several
+attachments; core glTF itself has one material colour result and does not require MRT. Likewise,
+“sRGB” here means the glTF semantic contract — decode only base-colour/emissive samples, keep
+normal/MR/occlusion and factors linear, mix fog in linear space, then optionally encode the final
+RGB. It is not a claim that every native texture or swap-chain format is sRGB. The ordinary
+`GltfRendererPbrFallbackPolicy.EveryPbrShaderHonorsColorSpaceDeclarations` source audit prevents the
+other eleven PBR implementations from silently diverging even when this machine cannot execute
+them.
+
+### All-renderer 32-bit index audit (`GLTF-163`)
+
+This is a source-capability matrix, not a claim that all platform APIs were executed on this Linux
+host. It covers every one of the **42** renderer directories that implements
+`CreateIndexBuffer16`. ✅ means the renderer owns an explicit 32-bit factory and preserves uint32
+values to its draw boundary; ◇ means the exact width is observable but that renderer deliberately
+does not rasterise; `conditional` means the native device extension decides; ❌ means construction
+is rejected clearly because the renderer has no corresponding 3D route.
+
+The shared `IGraphicsRenderer::CreateIndexBuffer32` no longer delegates to
+`CreateIndexBuffer16`: it throws `32-bit index buffers are not supported by this renderer`.
+Therefore a backend outside the ✅/◇ set cannot return a plausible 16-bit handle and later truncate
+a glTF mesh. `GltfRendererIndexWidthPolicy` derives the complete directory inventory and locks the
+provider/rejecter partition; adding a 43rd renderer without a disposition fails L0. The public
+runtime contract is independently exercised by
+`IndexBufferEmptyDataTest.SharedThirtyTwoBitFactoryRejectsInsteadOfDelegatingToSixteenBits`.
+
+| Renderer | Status | 32-bit route / refusal boundary |
+|---|---:|---|
+| Bgfx | ✅ | Explicit factory; bgfx 32-bit index buffer flag. |
+| Blend2D | ❌ | 2D-only; inherits the shared construction-time refusal. |
+| Canvas | ❌ | HTML Canvas 2D; inherits the shared refusal. |
+| Diligent | ✅ | Explicit factory; declared uint32 buffer format. |
+| Direct2D | ❌ | 2D-only; inherits the shared refusal. |
+| DirectX 1 | ❌ | No 3D implementation; inherits the shared refusal. |
+| DirectX 10 | ✅ | Explicit factory; native 32-bit index format. |
+| DirectX 11 | ✅ | Explicit factory; `DXGI_FORMAT_R32_UINT`. |
+| DirectX 12 | ✅ | Explicit factory; `DXGI_FORMAT_R32_UINT`. |
+| DirectX 2 | ✅ | Exact uint32 CPU index stream consumed by the legacy draw route. |
+| DirectX 3 | ✅ | Exact uint32 CPU index stream consumed by the legacy draw route. |
+| DirectX 5 | ✅ | Exact uint32 CPU index stream consumed by the legacy draw route. |
+| DirectX 6 | ✅ | Exact uint32 CPU index stream consumed by the legacy draw route. |
+| DirectX 7 | ✅ | Exact uint32 CPU index stream consumed by the legacy draw route. |
+| DirectX 8 | ✅ | Width-locked uint32 stream; draw reads each index as uint32. |
+| DirectX 9 | ✅ | Explicit factory; `D3DFMT_INDEX32`. |
+| EasyGL | ✅ | Explicit factory; draw selects `GL_UNSIGNED_INT`. |
+| FNA3D | ✅ | Explicit factory; FNA3D 32-bit index element size. |
+| FreeDirect | ❌ | DirectDraw-only; inherits the shared refusal. |
+| GDI | ❌ | Local, explicit `32-bit index buffers` unsupported error. |
+| Glide | ✅ | Uint32 values are expanded through the CPU command stream before `grDrawTriangle`. |
+| Headless | ◇ | Width-locked uint32 shadow and validated indexed-draw trace; no pixels. |
+| HTML DOM | ❌ | 2D DOM renderer; inherits the shared refusal. |
+| LLGL | ✅ | Explicit factory; native uint32 index format. |
+| Magnum | ✅ | Explicit factory; `MeshIndexType::UnsignedInt`. |
+| Metal | ✅ | Explicit factory; `MTLIndexTypeUInt32`. |
+| OpenGL 1 | ✅ | Explicit factory; draw selects `GL_UNSIGNED_INT`. |
+| OpenGL 2 | ✅ | Explicit factory; draw selects `GL_UNSIGNED_INT`. |
+| OpenGL 4 | ✅ | Explicit factory; draw selects `GL_UNSIGNED_INT`. |
+| OpenGL ES 1 | conditional | `GL_OES_element_index_uint` → real `GL_UNSIGNED_INT`; absent → shared clear refusal. |
+| OpenVG | ❌ | 2D-only; inherits the shared refusal. |
+| PortableGL | ✅ | Explicit width-locked factory; real PortableGL `GL_UNSIGNED_INT` draw. |
+| SDL_GPU | ✅ | Explicit width-locked factory; `SDL_GPU_INDEXELEMENTSIZE_32BIT`. |
+| SDL_Renderer | ❌ | 2D-only; inherits the shared refusal. |
+| Skia | ❌ | Local `CreateIndexBuffer32` unsupported-3D error. |
+| Software | ✅ | Width-locked uint32 CPU buffer and raster path (2D-only GDI build rejects locally). |
+| Sokol | ✅ | Explicit factory; `SG_INDEXTYPE_UINT32`. |
+| Stub | ◇ | Explicit width-locked handle accepts uint32 exactly; renderer intentionally draws nothing. |
+| SVG DOM | ❌ | 2D DOM renderer; inherits the shared refusal. |
+| Vulkan | ✅ | Explicit factory; `VK_INDEX_TYPE_UINT32`. |
+| WebGPU | ✅ | Explicit factory; `WGPUIndexFormat_Uint32`. |
+| Wicked Engine | ✅ | Explicit factory; native uint32 index-buffer descriptor. |
+
+PortableGL, SDL_GPU and Stub were the three exact-width implementations that previously relied on
+the unsafe shared delegation. They now own explicit factories; PortableGL and Stub also reject a
+direct renderer-level upload whose width disagrees with the factory declaration. OpenGL ES 1 was
+the important unsupported-device case: its pre-existing extension check now reaches the throwing
+base method instead of manufacturing a 16-bit buffer.
+
+### Explicit unsupported paths (`GLTF-394`)
+
+An unsupported cell is not permission to submit a different primitive or a narrower index. STUB's
+campaign contract ends at `GraphicsCapability::ThreeD == false`, and draw-requiring glTF tests name
+that capability when they skip; HEADLESS exposes a trace and never calls it a framebuffer result.
+The shared uint32 factory throws the width-specific message above for every renderer without an
+explicit 32-bit route.
+
+The Direct3D comparison audit found the remaining silent point-topology defaults. D3D9's five draw
+implementations and the D3D10/D3D11 count/native mappers now select their APIs' real point-list
+topologies. D3D12 does not pretend: its current pipeline-state cache fixes
+`PrimitiveTopologyType` to `TRIANGLE`, so all four draw paths reject `LineList`, `LineStrip` and
+`PointListEXT` at entry with `DirectX12 renderer does not support PrimitiveType::<name>` before
+target, layout or PSO validation can obscure the cause. `GltfRendererPointTopologyPolicy` locks those dispositions from
+the renderer sources; D3D9, D3D10 and D3D11 additionally participate in the shared point framebuffer
+suite. No Direct3D mapper retains an unnamed default that can turn a future topology into a
+triangle list.
+
 The **Wicked Engine** renderer (`CNA_GRAPHICS_RENDERER=WICKED`, tracked in `../plan_wicked.md`) is
 **not** a column here for the same reason WebGPU is not: its feature surface is a first baseline,
 and — more importantly — nothing in it has been executed on real hardware yet, so it has no cell

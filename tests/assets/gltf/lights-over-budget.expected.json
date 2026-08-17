@@ -1,0 +1,404 @@
+{
+  "id": "lights-over-budget",
+  "description": "Five directional lights where XNA binds three, with the light-definition array authored in reverse of the node order so the tie-break is observable, and one light at 683 lux so the photometric clamp is too.",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "lights-punctual",
+    "nodes-and-hierarchy"
+  ],
+  "inventory": {
+    "id": "lights-over-budget",
+    "owningGroup": "lights",
+    "referencingGroups": [],
+    "validatedLayers": [
+      "L1",
+      "L2",
+      "L3",
+      "L4"
+    ],
+    "features": [
+      "KHR_lights_punctual",
+      "more lights than XNA can bind",
+      "light ordering",
+      "photometric intensity clamped"
+    ],
+    "auditFixture": null
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 6,
+    "meshCount": 1,
+    "materialCount": 0,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
+    "skinCount": 0,
+    "animationCount": 0,
+    "accessorCount": 3,
+    "bufferViewCount": 3,
+    "bufferCount": 1,
+    "bufferByteLength": 78,
+    "extensionsUsed": [
+      "KHR_lights_punctual"
+    ],
+    "extensionsRequired": [],
+    "punctualLightCount": 5
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 0,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      {
+        "index": 1,
+        "usage": "NORMAL",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 36,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 2,
+        "usage": "indices",
+        "type": "SCALAR",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 3,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 2,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 72,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          2
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": [
+      {
+        "mesh": 0,
+        "meshName": "OverlitTri",
+        "primitive": 0,
+        "mode": 4,
+        "modeName": "TRIANGLES",
+        "indexed": true,
+        "vertexCount": 3,
+        "positions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "normals": [
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "tangents": [],
+        "texcoords": [],
+        "colors": [],
+        "joints": [],
+        "weights": [],
+        "indices": [
+          0,
+          1,
+          2
+        ],
+        "triangles": [
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        "importPolicy": {
+          "imported": true,
+          "topologyMode": 4,
+          "topologyName": "TRIANGLES",
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "converted": false,
+          "primitiveCount": 1
+        },
+        "material": null
+      }
+    ]
+  },
+  "l4": {
+    "instances": [
+      {
+        "node": 0,
+        "nodeName": "OverlitSubject",
+        "mesh": 0,
+        "parentNodePath": [],
+        "worldMatrixColumnMajor": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "worldPositions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      }
+    ],
+    "worldBounds": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        1.0,
+        1.0,
+        0.0
+      ]
+    },
+    "lights": {
+      "declaredCount": 5,
+      "importedCount": 3,
+      "droppedCount": 2,
+      "approximatedPointCount": 0,
+      "approximatedSpotCount": 0,
+      "clampedIntensityCount": 1,
+      "worstPreClampChannel": 683.0,
+      "ignoredRangeCount": 0,
+      "ignoredConeAngleCount": 0,
+      "orderRule": "Node array order, restricted to the default scene -- the only ordering the file defines over light PLACEMENTS. The extension's own lights array orders light DEFINITIONS, which is a different thing; it is authored in reverse here so a reader using it keeps a visibly different three.",
+      "importedDiffuseColors": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0
+        ]
+      ],
+      "droppedNodeNames": [
+        "Fourth",
+        "Fifth"
+      ],
+      "entries": [
+        {
+          "node": 1,
+          "nodeName": "First",
+          "light": 4,
+          "imported": true,
+          "diffuseColor": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "node": 2,
+          "nodeName": "Second",
+          "light": 3,
+          "imported": true,
+          "diffuseColor": [
+            0.0,
+            1.0,
+            0.0
+          ]
+        },
+        {
+          "node": 3,
+          "nodeName": "Third",
+          "light": 2,
+          "imported": true,
+          "intensity": 683.0,
+          "preClamp": [
+            683.0,
+            683.0,
+            683.0
+          ],
+          "diffuseColor": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "note": "683 lux is an ordinary photometric value, not an absurd one -- it is the lumens-per-watt constant. It imports as plain white, which is not fixable inside XNA's lighting model and must therefore be reported."
+        },
+        {
+          "node": 4,
+          "nodeName": "Fourth",
+          "light": 1,
+          "imported": false
+        },
+        {
+          "node": 5,
+          "nodeName": "Fifth",
+          "light": 0,
+          "imported": false
+        }
+      ],
+      "walkRule": "Extraction does NOT stop at three: it keeps walking to count what it drops, because '3 of 5 imported' is actionable and '3 imported' is not."
+    }
+  },
+  "l5": {
+    "supported": true,
+    "parts": [
+      {
+        "mesh": 0,
+        "primitive": 0,
+        "stride": 48,
+        "vertexCount": 3,
+        "fields": [
+          {
+            "name": "Position",
+            "offset": 0,
+            "size": 12
+          },
+          {
+            "name": "Normal",
+            "offset": 12,
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
+            "size": 8
+          }
+        ],
+        "vertexBufferFile": "lights-over-budget.vb.bin",
+        "vertexBufferBytes": 144,
+        "vertexBufferSha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683",
+        "indexElementSize": 2,
+        "indexCount": 3,
+        "indexBufferFile": "lights-over-budget.ib.bin",
+        "indexBufferBytes": 6,
+        "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "sourceTopology": "TRIANGLES",
+        "topology": "TRIANGLES",
+        "primitiveCount": 1
+      }
+    ]
+  },
+  "rejection": null,
+  "defects": []
+}

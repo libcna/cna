@@ -349,7 +349,17 @@ namespace Microsoft::Xna::Framework::Graphics
          * Use this overload when uploading GPU-compact vertex layouts that have no
          * corresponding typed XNA vertex struct (e.g. the 52-byte skinned layout).
          *
-         * @param data   Pointer to the raw vertex data.
+         * The contract is exactly `count * stride` bytes read from @p data, and **the source
+         * extent is the caller's promise**: this buffer's own capacity is in vertices, so a
+         * stride wider than the data behind @p data cannot be detected here. Compute the two from
+         * one place — the morph re-upload path takes both from the same `MeshOut` for that reason.
+         * A `count` above the buffer's capacity, a null @p data, a negative `count` and a zero
+         * `stride` are all rejected; a `count` of zero uploads nothing.
+         *
+         * When the buffer carries a `VertexDeclaration`, @p stride must equal its own stride and
+         * every declared element must fit inside it.
+         *
+         * @param data   Pointer to the raw vertex data; at least `count * stride` readable bytes.
          * @param count  Number of vertices.
          * @param stride Size of one vertex in bytes.
          */

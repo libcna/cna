@@ -39,6 +39,9 @@
     "nodeCount": 1,
     "meshCount": 1,
     "materialCount": 0,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
     "skinCount": 0,
     "animationCount": 0,
     "accessorCount": 2,
@@ -46,7 +49,8 @@
     "bufferCount": 1,
     "bufferByteLength": 34,
     "extensionsUsed": [],
-    "extensionsRequired": []
+    "extensionsRequired": [],
+    "punctualLightCount": 0
   },
   "l2": {
     "accessors": [
@@ -73,6 +77,17 @@
           0.0,
           0.0,
           7.0,
+          0.0
+        ],
+        "baseValuesIfSparseIgnored": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
           0.0
         ]
       },
@@ -126,6 +141,7 @@
           ]
         ],
         "normals": [],
+        "tangents": [],
         "texcoords": [],
         "colors": [],
         "joints": [],
@@ -142,6 +158,18 @@
             2
           ]
         ],
+        "importPolicy": {
+          "imported": true,
+          "topologyMode": 4,
+          "topologyName": "TRIANGLES",
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "converted": false,
+          "primitiveCount": 1
+        },
         "material": null
       }
     ]
@@ -209,7 +237,7 @@
       {
         "mesh": 0,
         "primitive": 0,
-        "stride": 32,
+        "stride": 48,
         "vertexCount": 3,
         "fields": [
           {
@@ -223,23 +251,30 @@
             "size": 12
           },
           {
-            "name": "TextureCoordinate",
+            "name": "Tangent",
             "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
             "size": 8
           }
         ],
         "vertexBufferFile": "sparse-position.vb.bin",
-        "vertexBufferBytes": 96,
-        "vertexBufferSha256": "1b178445447902ef2987d3c49d9a94da26532595fc9832d499551155b5686694",
+        "vertexBufferBytes": 144,
+        "vertexBufferSha256": "f31bfd60f9003ff800cc162a6f1702d02a0461fad2513ed714943d5fc6ba05cd",
         "indexElementSize": 2,
         "indexCount": 3,
         "indexBufferFile": "sparse-position.ib.bin",
         "indexBufferBytes": 6,
         "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "sourceTopology": "TRIANGLES",
         "topology": "TRIANGLES",
         "primitiveCount": 1
       }
     ]
   },
+  "rejection": null,
   "defects": []
 }

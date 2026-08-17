@@ -6,12 +6,12 @@
 // "they share the same DrawPrimitivesEx/DrawIndexedPrimitivesEx path already proven for
 // BasicEffect", not individually verified.
 //
-// Each of DualTextureEffect/EnvironmentMapEffect/SkinnedEffect unconditionally sets
-// TextureEnabled (plus its own extra flag) in FillGpuDrawParams() regardless of whether a texture
-// was actually assigned -- so HeadlessRenderer::DrawPrimitivesEx's HEADLESS-22 validation
-// (Require(!(textureEnabled && texture0==nullptr), ...) etc.) genuinely trips if the game forgot
-// to set one, and does not trip once it's set. AlphaTestEffect only sets TextureEnabled when a
-// texture was actually assigned, so it degrades gracefully either way.
+// DualTextureEffect/EnvironmentMapEffect/SkinnedEffect unconditionally set TextureEnabled (plus
+// their own extra flag) in FillGpuDrawParams() regardless of whether a texture was assigned.
+// DualTextureEffect's second texture and EnvironmentMapEffect's cube map remain required by this
+// validation harness. SkinnedEffect is different: native renderers deliberately bind a neutral
+// white primary texture when it is absent, so HEADLESS accepts that same stock-effect contract.
+// AlphaTestEffect only enables texturing when a texture was assigned and also degrades gracefully.
 //
 // Check A -- AlphaTestEffect draws without a texture set: does not throw (texture is optional).
 // Check B -- AlphaTestEffect draws with a texture set: does not throw.
@@ -23,9 +23,8 @@
 // Check E -- EnvironmentMapEffect draws without setEnvironmentMapProperty(): throws.
 // Check F -- EnvironmentMapEffect draws with both setTextureProperty()/setEnvironmentMapProperty()
 //   set: does not throw.
-// Check G -- SkinnedEffect draws without setTextureProperty(): throws (bone count is fine by
-//   default -- the constructor seeds 72 identity bone transforms -- but TextureEnabled is still
-//   unconditionally true).
+// Check G -- SkinnedEffect draws without setTextureProperty(): succeeds through the renderer's
+//   neutral-white fallback contract (bone count is fine by default: 72 identity transforms).
 // Check H -- SkinnedEffect draws with a texture set: does not throw.
 // Check I -- a procedurally-built Model (2 ModelBones, 1 ModelMesh, 1 ModelMeshPart, BasicEffect)
 //   draws via Model::Draw() -> ModelMesh::Draw() -> GraphicsDevice::DrawIndexedPrimitives() without
@@ -178,8 +177,8 @@ protected:
             check(!ThrowsOnDraw(dev, vbBoth), "EnvironmentMapEffect draws with texture and environment map set");
         }
 
-        // Checks G/H: SkinnedEffect -- bone transforms default to 72 identities (never the
-        // problem), but the texture is still effectively mandatory (TextureEnabled unconditional).
+        // Checks G/H: SkinnedEffect -- bone transforms default to 72 identities, and a missing
+        // optional texture is the same neutral-white input native renderers bind.
         {
             const Vector4 fullWeight(1.0f, 0.0f, 0.0f, 0.0f);
             const std::array<std::uint8_t, 4> boneZero{0, 0, 0, 0};
@@ -194,8 +193,8 @@ protected:
             SkinnedEffect fxMissing(dev);
             // setTextureProperty() deliberately not called.
             fxMissing.Apply();
-            check(ThrowsOnDraw(dev, vbMissing),
-                  "SkinnedEffect draws without a texture set throws under HeadlessValidation");
+            check(!ThrowsOnDraw(dev, vbMissing),
+                  "SkinnedEffect draws without a texture through the neutral-white contract");
 
             VertexBuffer vbTex(dev, VertexPositionNormalTextureSkinned::getVertexDeclarationStatic(), 3,
                                BufferUsage::None);

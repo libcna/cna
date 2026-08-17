@@ -702,6 +702,12 @@ namespace CNA::Internal::Renderers::TinyGL
          * @return The new index-buffer handle.
          */
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int index_capacity) override;
+        /**
+         * @brief Creates a 32-bit index buffer handle.
+         * @param index_capacity Initial index capacity.
+         * @return The new index-buffer handle.
+         */
+        std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int index_capacity) override;
 
         /**
          * @brief Draws vertex-colored primitives through TinyGL's fixed-function pipeline.

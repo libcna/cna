@@ -52,6 +52,11 @@ CATEGORY_RATIONALES = {
         "Deliberately spells native header guards or API names to prove they are absent from a "
         "public/neutral surface; it does not call or include the native API."
     ),
+    "text-evidence-assertion": (
+        "Reads committed text -- renderer source, a generator script, or a recorded evidence "
+        "artifact -- and asserts on SDL tokens found inside it. The tokens exist only as string "
+        "literals to search for; the test neither includes nor calls the native API."
+    ),
 }
 
 
@@ -85,6 +90,12 @@ def classify(record: FileRecord) -> str | None:
         "modules/platform/tests/CNA/Platform/TerminalPresenterTests.cpp",
     }:
         return "containment-assertion"
+
+    if path in {
+        "modules/content/tests/CNA/Internal/GltfImport/GltfFixtureCorpusTests.cpp",
+        "modules/content/tests/CNA/Internal/GltfImport/GltfRendererPbrFallbackPolicyTests.cpp",
+    }:
+        return "text-evidence-assertion"
 
     return None
 

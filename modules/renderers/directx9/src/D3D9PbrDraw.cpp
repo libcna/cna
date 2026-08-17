@@ -52,8 +52,10 @@ namespace CNA::Internal::Renderers::DirectX9
             case PrimitiveType::TriangleStrip: return D3DPT_TRIANGLESTRIP;
             case PrimitiveType::LineList:      return D3DPT_LINELIST;
             case PrimitiveType::LineStrip:     return D3DPT_LINESTRIP;
+            case PrimitiveType::PointListEXT:  return D3DPT_POINTLIST;
             }
-            return D3DPT_TRIANGLELIST;
+            throw std::runtime_error(
+                "DirectX9 PBR draw does not support the requested PrimitiveType value");
         }
 
         std::string FormatHr(HRESULT hr)
@@ -253,9 +255,16 @@ namespace CNA::Internal::Renderers::DirectX9
         }
 
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "DiffuseColor", params.diffuseColor);
-        TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "AmbientColor", Pad3(params.ambientColor).v);
-        TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "EmissiveColor", Pad3(params.emissiveColor).v);
-        const float metallicRoughness[4] = {params.pbrMetallicFactor, params.pbrRoughnessFactor, 0.0f, 0.0f};
+        const float ambientColor[4] = {params.ambientColor[0], params.ambientColor[1],
+                                       params.ambientColor[2],
+                                       params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f};
+        const float emissiveColor[4] = {params.emissiveColor[0], params.emissiveColor[1],
+                                        params.emissiveColor[2],
+                                        params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f};
+        TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "AmbientColor", ambientColor);
+        TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "EmissiveColor", emissiveColor);
+        const float metallicRoughness[4] = {params.pbrMetallicFactor, params.pbrRoughnessFactor,
+                                            params.pbrNormalScale, params.pbrOcclusionStrength};
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "MetallicRoughnessFactor", metallicRoughness);
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "Light0Dir", Pad3(params.light0Dir).v);
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "Light0Diffuse", Pad3(params.light0Diffuse).v);
@@ -265,11 +274,28 @@ namespace CNA::Internal::Renderers::DirectX9
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "Light2Diffuse", Pad3(params.light2Diffuse).v);
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "EyePosition", Pad3(params.eyePositionWorld).v);
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "AlphaTest", params.alphaTest);
-        TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "FogColor", Pad3(params.fogColor).v);
+        const float fogColor[4] = {params.fogColor[0], params.fogColor[1], params.fogColor[2],
+                                   params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f};
+        TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "FogColor", fogColor);
+        const float dielectricFresnel[4] = {
+            params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
+            params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor};
+        TryUploadPixelShaderConstantEXT(
+            device_.Get(), psRegs, psCount, "SpecularFresnelInputs", dielectricFresnel);
+        const float specularMapFlags[4] = {
+            params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f};
+        TryUploadPixelShaderConstantEXT(
+            device_.Get(), psRegs, psCount, "SpecularMapFlags", specularMapFlags);
+        TryUploadPixelShaderConstantEXT(
+            device_.Get(), psRegs, psCount, "TextureTransformRows",
+            &params.pbrTextureTransformRows[0][0]);
+        TryUploadPixelShaderConstantEXT(
+            device_.Get(), psRegs, psCount, "SpecularTextureTransformRows",
+            &params.pbrSpecularTextureTransformRows[0][0]);
 
         // Texture units: s0=base color, s1=NormalMap, s2=MetallicRoughnessMap, s3=EmissiveMap,
-        // s4=OcclusionMap -- matches EnsurePbrProgram()'s own unit assignment and GpuDrawParams'
-        // own field order. Base color falls back to opaque white (matches EasyGL's own
+        // s4=OcclusionMap, s5=specular strength, s6=specular colour. Base color falls back to
+        // opaque white (matches EasyGL's own
         // BindDrawParams() -- PbrEffect never requires a bound texture0, unlike the Stock Effects'
         // own DrawXxxEffectEXT "requires non-null texture0" checks).
         BindPbrSampler(device_.Get(), 0, params.texture0, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
@@ -277,6 +303,8 @@ namespace CNA::Internal::Renderers::DirectX9
         BindPbrSampler(device_.Get(), 2, params.pbrMetallicRoughnessMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
         BindPbrSampler(device_.Get(), 3, params.pbrEmissiveMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
         BindPbrSampler(device_.Get(), 4, params.pbrOcclusionMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
+        BindPbrSampler(device_.Get(), 5, params.pbrSpecularMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
+        BindPbrSampler(device_.Get(), 6, params.pbrSpecularColorMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);

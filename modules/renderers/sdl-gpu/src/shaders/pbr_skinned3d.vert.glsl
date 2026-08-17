@@ -63,6 +63,18 @@ layout(set = 1, binding = 2) uniform FogParams {
     vec4 fogVector;        // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
 } fog;
 
+vec3 cnaSkinNormal(mat3 m, vec3 n) {
+    vec3 c0 = m[0], c1 = m[1], c2 = m[2];
+    vec3 co0 = cross(c1, c2), co1 = cross(c2, c0), co2 = cross(c0, c1);
+    float det = dot(c0, co0);
+    vec3 transformed = mat3(co0, co1, co2) * n;
+    return abs(det) > 1e-6 ? transformed * sign(det) : m * n;
+}
+
+float cnaDirectionHandedness(mat3 m) {
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
+
 void main() {
     // Matches skinned3d.vert.glsl: FNA's real Skin(vin, boneCount) only sums the first
     // WeightsPerVertex (1, 2, or 4) weight/index pairs.
@@ -83,9 +95,10 @@ void main() {
     // transform as directions, not as normals (glTF convention, unchanged).
     mat3 skinNormalMat = mat3(skinMat);
     mat3 worldNormalMat = transpose(inverse(mat3(lp.world)));
-    fragNormal = normalize(worldNormalMat * (skinNormalMat * inNormal));
+    fragNormal = normalize(worldNormalMat * cnaSkinNormal(skinNormalMat, inNormal));
     fragTangent = mat3(lp.world) * (skinNormalMat * inTangent.xyz);
-    fragBitangentSign = inTangent.w;
+    fragBitangentSign = inTangent.w * cnaDirectionHandedness(mat3(lp.world))
+                                   * cnaDirectionHandedness(skinNormalMat);
     fragWorldPos = (lp.world * skinnedPos).xyz;
     // REMED-GFX-009: keep-factor from raw object-space Z (GFX-005 corrected form
     // (z+FogEnd)/(FogEnd-FogStart)); FogStart==FogEnd -> fully fogged (FNA SetFogVector). keep=1 ->

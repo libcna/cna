@@ -143,18 +143,18 @@ protected:
         const int H = dev.getViewportProperty().getHeightProperty();
         const int sampleY = H / 2;
 
-        // Values reused verbatim from easygl_pbreffect_golden_test.cpp's own independently
-        // hand-derived+captured oracle (see that file's header comment for the full BRDF
-        // derivation against this exact scene) -- generous tolerance accounts for GLSL ES 300 vs
-        // 410 core float-math and driver-level rounding differences, not formula uncertainty.
+        // The original linear BRDF oracle was (64,74,87), (56,65,80), (45,1,1), and
+        // (63,2,2). PbrEffect now correctly encodes that linear result for the UNORM backbuffer,
+        // giving the sRGB values below. Generous tolerance accounts for GLSL ES 300 vs 410 core
+        // float math and driver-level rounding differences, not formula uncertainty.
         ExpectPixel("Check A: white/rough/non-metallic/flat-normal is a non-black, non-clamped lit result",
-                    Rectangle(W * 1 / 8, sampleY, 1, 1), Color(64, 74, 87, 255), /*tolerance=*/30);
+                    Rectangle(W * 1 / 8, sampleY, 1, 1), Color(137, 146, 158, 255), /*tolerance=*/30);
         ExpectPixel("Check B: a tilted normal map renders measurably darker than the flat-normal baseline",
-                    Rectangle(W * 3 / 8, sampleY, 1, 1), Color(56, 65, 80, 255), /*tolerance=*/30);
+                    Rectangle(W * 3 / 8, sampleY, 1, 1), Color(129, 139, 152, 255), /*tolerance=*/30);
         ExpectPixel("Check C: fully metallic red (diffuse collapses to a red-tinted specular lobe only)",
-                    Rectangle(W * 5 / 8, sampleY, 1, 1), Color(45, 1, 1, 255), /*tolerance=*/30);
+                    Rectangle(W * 5 / 8, sampleY, 1, 1), Color(117, 12, 10, 255), /*tolerance=*/30);
         ExpectPixel("Check D: fully dielectric red (Lambertian diffuse + thin achromatic specular)",
-                    Rectangle(W * 7 / 8, sampleY, 1, 1), Color(63, 2, 2, 255), /*tolerance=*/35);
+                    Rectangle(W * 7 / 8, sampleY, 1, 1), Color(137, 23, 20, 255), /*tolerance=*/35);
     }
 
 public:

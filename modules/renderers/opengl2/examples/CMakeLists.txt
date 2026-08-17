@@ -137,6 +137,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "OPENGL2")
     cna_register_renderer_test(NAME OpenGL2_PbrEffect COMMAND cna_test_opengl2_pbreffect
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # GLTF-343/344: IOR-derived dielectric F0 and factor-only KHR_materials_specular F0/F90,
+    # repeated on both rigid and identity-skinned OpenGL2 PBR programs.
+    cna_opengl2_test(cna_test_opengl2_pbr_fresnel_factors
+                     ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
+    cna_register_renderer_test(NAME OpenGL2_Pbr_FresnelFactors COMMAND cna_test_opengl2_pbr_fresnel_factors
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_opengl2.md: genuine cross-renderer visual-parity proof -- compares OpenGL2's own
     # rendered pixels against EasyGL's own checked-in golden PNG for the identical scene.
     cna_opengl2_test(cna_test_opengl2_environmentmapeffect_golden opengl2_environmentmapeffect_golden_test.cpp)

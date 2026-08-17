@@ -71,11 +71,12 @@ namespace CNA::Internal::Renderers::Llgl
         constexpr std::size_t kSkinnedBoneFloats = 72 * 16;
 
         /// Floats in PbrEffect's own dedicated uniform block (see shaders/pbr3d.vert.glsl's
-        /// PbrParams for the byte layout): 84 floats = 336 bytes. This effect's field set (base
+        /// PbrParams for the byte layout): 152 floats = 608 bytes. This effect's field set (base
         /// colour factor kept independent from alpha, raw AmbientLightColor, metallic/roughness
-        /// factors, no alpha test) doesn't fit the shared 100-float Transform block, and its
+        /// factors, normal/occlusion map scales and alpha coverage) doesn't fit the shared
+        /// 100-float Transform block, and its
         /// shader pair is never linked with any other shader here.
-        constexpr std::size_t kPbrUniformFloats = 84;
+        constexpr std::size_t kPbrUniformFloats = 152;
 
         /// Floats per sprite vertex: position (2), texture coordinate (2), colour (4).
         constexpr std::size_t kSpriteVertexFloats = 8;
@@ -317,8 +318,17 @@ namespace CNA::Internal::Renderers::Llgl
         /// still feed the same shader inputs. Only the usages the 3D shaders actually declare are
         /// mapped; anything else is refused rather than silently bound to a location the shader
         /// reads as something different.
-        bool MapVertexUsage(XnaVertexElementUsage usage, const char*& name, std::uint32_t& location)
+        bool MapVertexUsage(XnaVertexElementUsage usage, int usageIndex,
+                            const char*& name, std::uint32_t& location)
         {
+            if (usage == XnaVertexElementUsage::TextureCoordinate && usageIndex == 1)
+            {
+                name = "texCoord1";
+                location = 7;
+                return true;
+            }
+            if (usageIndex != 0)
+                return false;
             switch (usage)
             {
                 case XnaVertexElementUsage::Position:          name = "position"; location = 0; return true;
@@ -1458,7 +1468,8 @@ namespace CNA::Internal::Renderers::Llgl
             {
                 const char* name = nullptr;
                 std::uint32_t location = 0;
-                if (!MapVertexUsage(element.getVertexElementUsageProperty(), name, location))
+                if (!MapVertexUsage(element.getVertexElementUsageProperty(),
+                                    element.getUsageIndexProperty(), name, location))
                 {
                     // Deliberately skipped rather than assigned some spare location: a usage no
                     // shader in this renderer declares has no correct location, and inventing one
@@ -2291,12 +2302,12 @@ namespace CNA::Internal::Renderers::Llgl
         };
         primitiveSkinnedLayout_ = renderer_->CreatePipelineLayout(skinnedLayoutDesc);
 
-        // PbrEffect: its own dedicated uniform block (PbrParams, see pbr3d.vert.glsl) plus 5
+        // PbrEffect: its own dedicated uniform block (PbrParams, see pbr3d.vert.glsl) plus 7
         // texture/sampler pairs -- base colour, normal map, metallic-roughness map, emissive map,
         // and occlusion map. Every slot is always bound (a null game-side map resolves to a 1x1
         // default texture in QueuePrimitives/EnsureDefaultPbrTexturesEXT rather than being left
         // unbound), so unlike EnvironmentMapEffect there is no "throw if missing" branch for the
-        // 4 optional maps.
+        // 6 optional maps.
         LLGL::PipelineLayoutDescriptor pbrLayoutDesc;
         pbrLayoutDesc.bindings =
         {
@@ -2323,6 +2334,14 @@ namespace CNA::Internal::Renderers::Llgl
                                     LLGL::BindFlags::Sampled, LLGL::StageFlags::FragmentStage, 10},
             LLGL::BindingDescriptor{"occlusionMapSampler", LLGL::ResourceType::Sampler,
                                     0, LLGL::StageFlags::FragmentStage, 11},
+            LLGL::BindingDescriptor{"specularMap", LLGL::ResourceType::Texture,
+                                    LLGL::BindFlags::Sampled, LLGL::StageFlags::FragmentStage, 12},
+            LLGL::BindingDescriptor{"specularMapSampler", LLGL::ResourceType::Sampler,
+                                    0, LLGL::StageFlags::FragmentStage, 13},
+            LLGL::BindingDescriptor{"specularColorMap", LLGL::ResourceType::Texture,
+                                    LLGL::BindFlags::Sampled, LLGL::StageFlags::FragmentStage, 14},
+            LLGL::BindingDescriptor{"specularColorMapSampler", LLGL::ResourceType::Sampler,
+                                    0, LLGL::StageFlags::FragmentStage, 15},
         };
         pbrLayoutDesc.combinedTextureSamplers =
         {
@@ -2332,12 +2351,15 @@ namespace CNA::Internal::Renderers::Llgl
                                                    "metallicRoughnessMapSampler", 6},
             LLGL::CombinedTextureSamplerDescriptor{"emissiveMap", "emissiveMap", "emissiveMapSampler", 8},
             LLGL::CombinedTextureSamplerDescriptor{"occlusionMap", "occlusionMap", "occlusionMapSampler", 10},
+            LLGL::CombinedTextureSamplerDescriptor{"specularMap", "specularMap", "specularMapSampler", 12},
+            LLGL::CombinedTextureSamplerDescriptor{"specularColorMap", "specularColorMap",
+                                                   "specularColorMapSampler", 14},
         };
         primitivePbrLayout_ = renderer_->CreatePipelineLayout(pbrLayoutDesc);
 
-        // SkinnedPbrEffect: the EXACT SAME PbrParams block and 5 texture/sampler pairs as
-        // primitivePbrLayout_ above (bindings 1-11, unchanged), plus a SEPARATE BoneBlock (72
-        // mat4s) at binding 12 -- deliberately AFTER every texture binding rather than shifting
+        // SkinnedPbrEffect: the EXACT SAME PbrParams block and 7 texture/sampler pairs as
+        // primitivePbrLayout_ above (bindings 1-15, unchanged), plus a SEPARATE BoneBlock (72
+        // mat4s) at binding 16 -- deliberately AFTER every texture binding rather than shifting
         // them, so primitivePbrFragmentShader_ (compiled against those exact binding numbers) is
         // reusable verbatim; only the vertex shader differs.
         LLGL::PipelineLayoutDescriptor pbrSkinnedLayoutDesc;
@@ -2366,8 +2388,16 @@ namespace CNA::Internal::Renderers::Llgl
                                     LLGL::BindFlags::Sampled, LLGL::StageFlags::FragmentStage, 10},
             LLGL::BindingDescriptor{"occlusionMapSampler", LLGL::ResourceType::Sampler,
                                     0, LLGL::StageFlags::FragmentStage, 11},
+            LLGL::BindingDescriptor{"specularMap", LLGL::ResourceType::Texture,
+                                    LLGL::BindFlags::Sampled, LLGL::StageFlags::FragmentStage, 12},
+            LLGL::BindingDescriptor{"specularMapSampler", LLGL::ResourceType::Sampler,
+                                    0, LLGL::StageFlags::FragmentStage, 13},
+            LLGL::BindingDescriptor{"specularColorMap", LLGL::ResourceType::Texture,
+                                    LLGL::BindFlags::Sampled, LLGL::StageFlags::FragmentStage, 14},
+            LLGL::BindingDescriptor{"specularColorMapSampler", LLGL::ResourceType::Sampler,
+                                    0, LLGL::StageFlags::FragmentStage, 15},
             LLGL::BindingDescriptor{"BoneBlock", LLGL::ResourceType::Buffer,
-                                    LLGL::BindFlags::ConstantBuffer, LLGL::StageFlags::VertexStage, 12},
+                                    LLGL::BindFlags::ConstantBuffer, LLGL::StageFlags::VertexStage, 16},
         };
         pbrSkinnedLayoutDesc.combinedTextureSamplers =
         {
@@ -2377,6 +2407,9 @@ namespace CNA::Internal::Renderers::Llgl
                                                    "metallicRoughnessMapSampler", 6},
             LLGL::CombinedTextureSamplerDescriptor{"emissiveMap", "emissiveMap", "emissiveMapSampler", 8},
             LLGL::CombinedTextureSamplerDescriptor{"occlusionMap", "occlusionMap", "occlusionMapSampler", 10},
+            LLGL::CombinedTextureSamplerDescriptor{"specularMap", "specularMap", "specularMapSampler", 12},
+            LLGL::CombinedTextureSamplerDescriptor{"specularColorMap", "specularColorMap",
+                                                   "specularColorMapSampler", 14},
         };
         primitivePbrSkinnedLayout_ = renderer_->CreatePipelineLayout(pbrSkinnedLayoutDesc);
 
@@ -2718,11 +2751,13 @@ namespace CNA::Internal::Renderers::Llgl
         // AcquirePrimitiveEnvMapVertexShader() there is only one shader variant -- just the vertex
         // layout (and hence caching) varies.
         bool hasTexCoord = false;
+        bool hasTexCoord1 = false;
         bool hasNormal = false;
         bool hasTangent = false;
         for (const LLGL::VertexAttribute& attribute : attributes)
         {
             if (attribute.location == 2) hasTexCoord = true;
+            if (attribute.location == 7) hasTexCoord1 = true;
             if (attribute.location == 3) hasNormal = true;
             if (attribute.location == 6) hasTangent = true;
         }
@@ -2747,13 +2782,16 @@ namespace CNA::Internal::Renderers::Llgl
         vertexDesc.type = LLGL::ShaderType::Vertex;
         if (SupportsShadingLanguage(caps, LLGL::ShadingLanguage::GLSL))
         {
-            vertexDesc.source = Shaders::kPbr3dVertGlsl;
+            vertexDesc.source = hasTexCoord1 ? Shaders::kPbr3dDualUvVertGlsl
+                                             : Shaders::kPbr3dVertGlsl;
             vertexDesc.sourceType = LLGL::ShaderSourceType::CodeString;
         }
         else
         {
-            vertexDesc.source = reinterpret_cast<const char*>(Shaders::kPbr3dVertSpv);
-            vertexDesc.sourceSize = sizeof(Shaders::kPbr3dVertSpv);
+            vertexDesc.source = reinterpret_cast<const char*>(
+                hasTexCoord1 ? Shaders::kPbr3dDualUvVertSpv : Shaders::kPbr3dVertSpv);
+            vertexDesc.sourceSize = hasTexCoord1 ? sizeof(Shaders::kPbr3dDualUvVertSpv)
+                                                 : sizeof(Shaders::kPbr3dVertSpv);
             vertexDesc.sourceType = LLGL::ShaderSourceType::BinaryBuffer;
             vertexDesc.entryPoint = "main";
         }
@@ -2788,6 +2826,7 @@ namespace CNA::Internal::Renderers::Llgl
             return cached->second;
 
         bool hasTexCoord = false;
+        bool hasTexCoord1 = false;
         bool hasNormal = false;
         bool hasTangent = false;
         bool hasBoneWeights = false;
@@ -2795,6 +2834,7 @@ namespace CNA::Internal::Renderers::Llgl
         for (const LLGL::VertexAttribute& attribute : attributes)
         {
             if (attribute.location == 2) hasTexCoord = true;
+            if (attribute.location == 7) hasTexCoord1 = true;
             if (attribute.location == 3) hasNormal = true;
             if (attribute.location == 4) hasBoneWeights = true;
             if (attribute.location == 5) hasBoneIndices = true;
@@ -2822,13 +2862,17 @@ namespace CNA::Internal::Renderers::Llgl
         vertexDesc.type = LLGL::ShaderType::Vertex;
         if (SupportsShadingLanguage(caps, LLGL::ShadingLanguage::GLSL))
         {
-            vertexDesc.source = Shaders::kPbr3dSkinnedVertGlsl;
+            vertexDesc.source = hasTexCoord1 ? Shaders::kPbr3dSkinnedDualUvVertGlsl
+                                             : Shaders::kPbr3dSkinnedVertGlsl;
             vertexDesc.sourceType = LLGL::ShaderSourceType::CodeString;
         }
         else
         {
-            vertexDesc.source = reinterpret_cast<const char*>(Shaders::kPbr3dSkinnedVertSpv);
-            vertexDesc.sourceSize = sizeof(Shaders::kPbr3dSkinnedVertSpv);
+            vertexDesc.source = reinterpret_cast<const char*>(
+                hasTexCoord1 ? Shaders::kPbr3dSkinnedDualUvVertSpv
+                             : Shaders::kPbr3dSkinnedVertSpv);
+            vertexDesc.sourceSize = hasTexCoord1 ? sizeof(Shaders::kPbr3dSkinnedDualUvVertSpv)
+                                                 : sizeof(Shaders::kPbr3dSkinnedVertSpv);
             vertexDesc.sourceType = LLGL::ShaderSourceType::BinaryBuffer;
             vertexDesc.entryPoint = "main";
         }
@@ -2988,7 +3032,7 @@ namespace CNA::Internal::Renderers::Llgl
         // dedicated layout (its own uniform block plus a texture/sampler pair AND a cube map
         // texture/sampler pair); a skinned draw needs its own dedicated layout too (its own
         // parameter uniform block, a separate bone transform block, and a texture/sampler pair); a
-        // PBR draw needs its own dedicated layout with its own uniform block and 5 texture/sampler
+        // PBR draw needs its own dedicated layout with its own uniform block and 7 texture/sampler
         // pairs (base colour, normal, metallic-roughness, emissive, occlusion); a skinned PBR draw
         // needs that SAME PBR layout plus a bone transform block appended at its own binding.
         pipelineDesc.pipelineLayout = pbrSkinned ? primitivePbrSkinnedLayout_
@@ -3242,6 +3286,10 @@ namespace CNA::Internal::Renderers::Llgl
             uniforms[82] = params.fogVector[2];
             uniforms[83] = params.fogVector[3];
         }
+        uniforms[84] = params.alphaTest[0];
+        uniforms[85] = params.alphaTest[1];
+        uniforms[86] = params.alphaTest[2];
+        uniforms[87] = params.alphaTest[3];
     }
 
     void LlglRenderer::FillSkinnedUniforms(float (&uniforms)[kSkinnedUniformFloats],
@@ -3339,6 +3387,7 @@ namespace CNA::Internal::Renderers::Llgl
         uniforms[36] = params.ambientColor[0];
         uniforms[37] = params.ambientColor[1];
         uniforms[38] = params.ambientColor[2];
+        uniforms[39] = params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f;
 
         uniforms[40] = params.emissiveColor[0];
         uniforms[41] = params.emissiveColor[1];
@@ -3347,10 +3396,13 @@ namespace CNA::Internal::Renderers::Llgl
 
         uniforms[44] = params.pbrRoughnessFactor;
         uniforms[45] = static_cast<float>(params.weightsPerVertex);
+        uniforms[46] = params.pbrNormalScale;
+        uniforms[47] = params.pbrOcclusionStrength;
 
         uniforms[48] = params.light0Dir[0];
         uniforms[49] = params.light0Dir[1];
         uniforms[50] = params.light0Dir[2];
+        uniforms[51] = params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f;
         uniforms[52] = params.light0Diffuse[0];
         uniforms[53] = params.light0Diffuse[1];
         uniforms[54] = params.light0Diffuse[2];
@@ -3372,6 +3424,7 @@ namespace CNA::Internal::Renderers::Llgl
         uniforms[72] = params.eyePositionWorld[0];
         uniforms[73] = params.eyePositionWorld[1];
         uniforms[74] = params.eyePositionWorld[2];
+        uniforms[75] = params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f;
 
         if (params.fogEnabled)
         {
@@ -3386,6 +3439,21 @@ namespace CNA::Internal::Renderers::Llgl
             uniforms[82] = params.fogVector[2];
             uniforms[83] = params.fogVector[3];
         }
+
+        uniforms[88] = params.pbrDielectricF0Unclamped[0];
+        uniforms[89] = params.pbrDielectricF0Unclamped[1];
+        uniforms[90] = params.pbrDielectricF0Unclamped[2];
+        uniforms[91] = params.pbrSpecularFactor;
+        for (int row = 0; row < 10; ++row)
+            for (int component = 0; component < 4; ++component)
+                uniforms[92 + row * 4 + component] =
+                    params.pbrTextureTransformRows[row][component];
+        uniforms[132] = static_cast<float>(params.pbrTextureCoordinateSetMask & 0x7fu);
+        uniforms[133] = params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f;
+        for (int row = 0; row < 4; ++row)
+            for (int component = 0; component < 4; ++component)
+                uniforms[136 + row * 4 + component] =
+                    params.pbrSpecularTextureTransformRows[row][component];
     }
 
     void LlglRenderer::EnsureDefaultPbrTexturesEXT()
@@ -3574,6 +3642,8 @@ namespace CNA::Internal::Renderers::Llgl
         LLGL::Texture* resolvedPbrMetallicRoughnessMap = nullptr;
         LLGL::Texture* resolvedPbrEmissiveMap = nullptr;
         LLGL::Texture* resolvedPbrOcclusionMap = nullptr;
+        LLGL::Texture* resolvedPbrSpecularMap = nullptr;
+        LLGL::Texture* resolvedPbrSpecularColorMap = nullptr;
         if (pbr)
         {
             EnsureDefaultPbrTexturesEXT();
@@ -3599,6 +3669,10 @@ namespace CNA::Internal::Renderers::Llgl
                                                       "EmissiveMap");
             resolvedPbrOcclusionMap = resolveOrDefault(params->pbrOcclusionMap, defaultWhitePbrTexture_,
                                                        "OcclusionMap");
+            resolvedPbrSpecularMap = resolveOrDefault(params->pbrSpecularMap, defaultWhitePbrTexture_,
+                                                      "SpecularMapEXT");
+            resolvedPbrSpecularColorMap = resolveOrDefault(
+                params->pbrSpecularColorMap, defaultWhitePbrTexture_, "SpecularColorMapEXT");
         }
 
         float uniforms[kEffectUniformFloats] = {};
@@ -3697,9 +3771,9 @@ namespace CNA::Internal::Renderers::Llgl
         }
         if (pbr)
         {
-            // LLGL-49: PbrEffect's 5 maps occupy SamplerStates[0..4] (base=0, already captured
+            // PbrEffect's 7 maps occupy SamplerStates[0..6] (base=0, already captured
             // above via the `textured` branch; matches the Vulkan renderer's own
-            // PbrSlotSamplersRawEXT() convention) -- each of the remaining 4 needs its OWN
+            // PbrSlotSamplersRawEXT() convention) -- each of the remaining 6 needs its OWN
             // captured sampler rather than reusing slot 0's.
             command.pbrNormalTexture = resolvedPbrNormalMap;
             command.pbrNormalSampler = AcquireSampler(samplerFilter_[1], samplerAddressU_[1],
@@ -3713,6 +3787,12 @@ namespace CNA::Internal::Renderers::Llgl
             command.pbrOcclusionTexture = resolvedPbrOcclusionMap;
             command.pbrOcclusionSampler = AcquireSampler(samplerFilter_[4], samplerAddressU_[4],
                                                          samplerAddressV_[4], samplerMaxAnisotropy_[4]);
+            command.pbrSpecularTexture = resolvedPbrSpecularMap;
+            command.pbrSpecularSampler = AcquireSampler(samplerFilter_[5], samplerAddressU_[5],
+                                                        samplerAddressV_[5], samplerMaxAnisotropy_[5]);
+            command.pbrSpecularColorTexture = resolvedPbrSpecularColorMap;
+            command.pbrSpecularColorSampler = AcquireSampler(
+                samplerFilter_[6], samplerAddressU_[6], samplerAddressV_[6], samplerMaxAnisotropy_[6]);
         }
         command.envMapping = envMapping;
         command.transformIndex = transformIndex;
@@ -5152,9 +5232,8 @@ namespace CNA::Internal::Renderers::Llgl
                     else if (command.pbr)
                     {
                         commands_->SetResource(0, *pbrUniformBuffers_[command.pbrUniformIndex]);
-                        // LLGL-49: each of the 5 texture units now binds its OWN captured sampler
-                        // (SamplerStates[0..4], matching the Vulkan renderer's own
-                        // PbrSlotSamplersRawEXT() convention) instead of all 5 sharing slot 0's.
+                        // Each of the 7 texture units binds its OWN captured sampler
+                        // (SamplerStates[0..6]) instead of all of them sharing slot 0's.
                         if (command.texture != nullptr && command.sampler != nullptr)
                         {
                             commands_->SetResource(1, *command.texture);
@@ -5180,12 +5259,22 @@ namespace CNA::Internal::Renderers::Llgl
                             commands_->SetResource(9, *command.pbrOcclusionTexture);
                             commands_->SetResource(10, *command.pbrOcclusionSampler);
                         }
+                        if (command.pbrSpecularTexture != nullptr && command.pbrSpecularSampler != nullptr)
+                        {
+                            commands_->SetResource(11, *command.pbrSpecularTexture);
+                            commands_->SetResource(12, *command.pbrSpecularSampler);
+                        }
+                        if (command.pbrSpecularColorTexture != nullptr && command.pbrSpecularColorSampler != nullptr)
+                        {
+                            commands_->SetResource(13, *command.pbrSpecularColorTexture);
+                            commands_->SetResource(14, *command.pbrSpecularColorSampler);
+                        }
                         // SkinnedPbrEffect: the bone transform array, reused verbatim from
                         // SkinnedEffect's own pool -- bone data is effect-agnostic. Bound at
-                        // resource index 11, matching primitivePbrSkinnedLayout_'s own BoneBlock
+                        // resource index 15, matching primitivePbrSkinnedLayout_'s own BoneBlock
                         // binding placed AFTER every PBR texture pair rather than shifting them.
                         if (command.skinned)
-                            commands_->SetResource(11, *skinnedBoneBuffers_[command.skinnedBoneIndex]);
+                            commands_->SetResource(15, *skinnedBoneBuffers_[command.skinnedBoneIndex]);
                     }
                     else if (command.skinned)
                     {
@@ -6099,7 +6188,7 @@ namespace CNA::Internal::Renderers::Llgl
                                                  int maxAnisotropy)
     {
         // LLGL-49: any slot beyond kTrackedSamplerSlotCount has no shader binding to reach on this
-        // renderer (every stock effect's own texture units fit in slots 0..4 -- see
+        // renderer (every stock effect's own texture units fit in slots 0..6 -- see
         // samplerFilter_'s own doc comment for the exact mapping).
         if (slot < 0 || slot >= kTrackedSamplerSlotCount)
             return;

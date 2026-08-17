@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
+#include "CNA/Internal/Graphics/SrgbTransfer.hpp"
 #include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
 
 namespace CNA::Internal::Renderers::EasyGL
@@ -24,6 +25,7 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] inline bool ProfileIs(GlProfile expected) { return ActiveGlProfile() == expected; }
     }
 }
+
 #include "CNA/Platform/PlatformException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -101,7 +103,7 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 // the rows), which is why the public GetData contract has always been top-down. Sampling did not,
 // so a rendered texture arrived vertically mirrored while an uploaded one did not.
 //
-// uRtFlipV.x/.y/.z/.w carry texture units 0-3 and uRtFlipVHi.x carries unit 4: 1 when the source
+// uRtFlipV.x/.y/.z/.w carry texture units 0-3 and uRtFlipVHi.x/.y/.z carry units 4-6: 1 when the source
 // bound there is a render-target colour attachment, 0 for an ordinary texture (and 0 always on a
 // renderer whose framebuffer origin is top-left). Exactly one correction is applied, at sample
 // time, per bound source -- nothing is copied, read back or re-uploaded, and no shader variant is
@@ -112,9 +114,40 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 "uniform vec4 uRtFlipV;\n" \
 "vec2 cnaSampleUV(vec2 uv,float flip){return vec2(uv.x,mix(uv.y,1.0-uv.y,flip));}\n"
 
-/// REMED-GFX-147: unit 4's flag, declared only by the shaders that reach that far (PbrEffect).
+/// REMED-GFX-147: units 4-6, declared only by the shaders that reach that far (PbrEffect).
 #define CNA_GL_RT_SAMPLE_UV_HI_DECL \
 "uniform vec4 uRtFlipVHi;\n"
+
+/// plan_gltf.md GLTF-210/GLTF-212: the sRGB transfer, pasted into the PbrEffect shaders. The text
+/// is not written here -- it comes from CNA/Internal/Graphics/SrgbTransfer.hpp, which is also
+/// where the C++ implementation of the same formula lives, so the two cannot drift into two
+/// slightly different curves.
+#define CNA_GL_SRGB_TRANSFER_DECL CNA_GLSL_SRGB_TRANSFER
+
+// plan_gltf.md GLTF-264: a normal follows the inverse transpose of the blended skin matrix.
+// All EasyGL profiles, including GLSL ES 1.00, support cross/dot but ES 1.00 has no inverse() for
+// matrices. The three cross products are the columns of det(m)*inverseTranspose(m). Normalisation
+// cancels abs(det); multiplying by sign(det) retains the orientation under a mirrored joint. A
+// nearly singular blend falls back to the historical direct transform, after which each caller's
+// existing zero-length guard prevents a NaN from poisoning the lighting calculation.
+#define CNA_GL_SKIN_NORMAL_DECL \
+"vec3 cnaSkinNormal(mat3 m,vec3 n){\n" \
+"    vec3 c0=m[0],c1=m[1],c2=m[2];\n" \
+"    vec3 co0=cross(c1,c2),co1=cross(c2,c0),co2=cross(c0,c1);\n" \
+"    float det=dot(c0,co0);\n" \
+"    vec3 transformed=mat3(co0,co1,co2)*n;\n" \
+"    return (abs(det)>1e-6)?transformed*sign(det):m*n;\n" \
+"}\n"
+
+// plan_gltf.md GLTF-176: a tangent frame changes orientation under a negative-determinant
+// direction transform. GLSL ES 1.00 has no determinant(mat3), so compute the scalar triple product
+// shared by both PBR vertex programs. A singular transform has no meaningful tangent frame; +1 is
+// the stable fallback and, unlike sign(0), does not erase an otherwise valid authored sign.
+#define CNA_GL_DIRECTION_HANDEDNESS_DECL \
+"float cnaDirectionHandedness(mat3 m){\n" \
+"    float det=dot(m[0],cross(m[1],m[2]));\n" \
+"    return (det<0.0)?-1.0:1.0;\n" \
+"}\n"
 
 // REMED-GFX-122: stock EasyGL effects share one optional per-instance world matrix input. Locations
 // 12-15 reserve the final four slots of GLES 3's guaranteed 16-attribute floor. That leaves the
@@ -3436,20 +3469,38 @@ if (ProfileIsEs2ApiGeneration())
         prog_env_mapped_.reset_no_gl();
         prog_skinned_.reset_no_gl();
         prog_skinned_vertexlit_.reset_no_gl();
+        prog_pbr_.reset_no_gl();
+        prog_pbr_dual_uv_.reset_no_gl();
+        prog_pbr_skinned_.reset_no_gl();
+        prog_pbr_skinned_dual_uv_.reset_no_gl();
         default_white_texture_.reset_handle_no_gl();
         default_white_texture_ready_ = false;
+        default_flat_normal_texture_.reset_handle_no_gl();
+        default_flat_normal_texture_ready_ = false;
 
         // 2. Recreate the native context through the platform-owned transaction.
         platformContext_->Recreate();
 
-        // 3. Reload GL function pointers and increment context generation.
+        // 3. Reload GL function pointers and increment context generation. The fresh context
+        // brings a fresh loader, so re-take it from the platform rather than reusing the one
+        // that belonged to the destroyed context.
         glProcAddressLoader = platformContext_->GetLoader();
         if (glProcAddressLoader == nullptr)
         {
             throw CNA::Platform::PlatformException(
                 "EasyGLRenderer::LoadGl", "platform returned a null GL loader");
         }
-        device.initialize(glProcAddressLoader);
+        // `easygl::Device` is already initialized and its initialize() method is deliberately
+        // one-shot, so calling it here returns without touching meta-gl. Context loss invalidated
+        // meta-gl's function table above; the next GL wrapper would consequently call
+        // std::terminate(). Reload the context-facing table directly while retaining Device's
+        // context-independent facade.
+        if (!metagl::LoadCurrentContext(
+                reinterpret_cast<metagl::GlGetProcAddressFn>(glProcAddressLoader)))
+        {
+            throw std::runtime_error(
+                "meta-gl failed to reload GL entry points after debug context loss");
+        }
         if (ProfileIsDesktopCore())
             EnableVertexProgramPointSize();
 
@@ -4786,6 +4837,20 @@ else
             vao.enable_attribute(3);
             vao.set_attribute_pointer(3, 2, ::easygl::DataType::Float, false, s, (void*)40);
             break;
+        case 60:
+            // GLTF-182/183: collision-free rigid PBR dual-UV layout. Bytes 0..47 are the
+            // established stride-48 prefix, UV1 is appended at 48 and bytes 56..59 are padding.
+            vao.enable_attribute(0);
+            vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
+            vao.enable_attribute(1);
+            vao.set_attribute_pointer(1, 3, ::easygl::DataType::Float, false, s, (void*)12);
+            vao.enable_attribute(2);
+            vao.set_attribute_pointer(2, 4, ::easygl::DataType::Float, false, s, (void*)24);
+            vao.enable_attribute(3);
+            vao.set_attribute_pointer(3, 2, ::easygl::DataType::Float, false, s, (void*)40);
+            vao.enable_attribute(4);
+            vao.set_attribute_pointer(4, 2, ::easygl::DataType::Float, false, s, (void*)48);
+            break;
         case 52:
             // Task 11.10: this layout is independently duplicated (magic stride 52) in
             // BgfxRenderer.cpp's MakeBgfxLayout and VulkanRenderer.cpp's
@@ -4854,12 +4919,36 @@ else
             vao.enable_attribute(5);
             SetBoneIndicesAttributePointer(vao, 5, s, (void*)64);
             break;
-        default:
-            // Unknown layout: bind position-only as a safe fallback
+        case 76:
+            // GLTF-182/183: the stride-68 skinned PBR record with packed UV1 appended at 68.
+            // Keeping the original six locations byte-for-byte stable lets both layouts share
+            // one shader; location 6 is unused/defaulted when an old stride-68 buffer is bound.
             vao.enable_attribute(0);
             vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
-            CNA_RENDER_LOG("ApplyLayout: unknown stride=" << stride << ", using position-only fallback");
+            vao.enable_attribute(1);
+            vao.set_attribute_pointer(1, 3, ::easygl::DataType::Float, false, s, (void*)12);
+            vao.enable_attribute(2);
+            vao.set_attribute_pointer(2, 4, ::easygl::DataType::Float, false, s, (void*)24);
+            vao.enable_attribute(3);
+            vao.set_attribute_pointer(3, 2, ::easygl::DataType::Float, false, s, (void*)40);
+            vao.enable_attribute(4);
+            vao.set_attribute_pointer(4, 4, ::easygl::DataType::Float, false, s, (void*)48);
+            vao.enable_attribute(5);
+            SetBoneIndicesAttributePointer(vao, 5, s, (void*)64);
+            vao.enable_attribute(6);
+            vao.set_attribute_pointer(6, 2, ::easygl::DataType::Float, false, s, (void*)68);
             break;
+        default:
+            // plan_gltf.md GLTF-157: a byte stride does not describe which attributes exist.
+            // Treating every unknown record as position-only left the other locations in stale
+            // VAO state and rendered normals, UVs or skin weights from unrelated buffers. Refuse
+            // it loudly; a genuinely custom layout reaches the generic declaration path above.
+            vao.unbind();
+            throw System::NotSupportedException(
+                "EasyGLRenderer::ApplyLayout: unsupported vertex stride " +
+                std::to_string(stride) +
+                " without a VertexDeclaration; the upload is refused rather than bound as "
+                "position-only.");
         }
         vao.unbind();
     }
@@ -5324,6 +5413,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "in vec3 vWorldPos;\n"
 "uniform sampler2D uTexture;\n"
 "uniform vec4 uDiffuseColor;\n"
+"uniform float uLightingEnabled;\n"
 "uniform vec3 uAmbientColor;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
@@ -5343,17 +5433,24 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out vec4 FragColor;\n"
 CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
-"    vec3 N=normalize(vNormal);\n"
-"    vec3 E=normalize(uEyePosition-vWorldPos);\n"
-"    float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
-"    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
-"    float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
-"    vec3 lightSum=uAmbientColor+uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
-"    vec3 litRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
-"    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
-"    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
-"    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
-"    vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
+// XNA uses a separate unlit shader variant. Do not merely zero the light colours and continue
+// through the lit math here: an unlit vertex at the default eye position makes normalize(0)
+// undefined, and NaN*zero is still NaN, turning the otherwise-correct diffuse result black.
+"    vec3 litRGB=uDiffuseColor.rgb;\n"
+"    vec3 specularRGB=vec3(0.0);\n"
+"    if(uLightingEnabled>0.5){\n"
+"        vec3 N=normalize(vNormal);\n"
+"        vec3 E=normalize(uEyePosition-vWorldPos);\n"
+"        float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
+"        float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
+"        float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
+"        vec3 lightSum=uAmbientColor+uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
+"        litRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
+"        vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
+"        vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
+"        vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
+"        specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
+"    }\n"
 "    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*vec4(litRGB,uDiffuseColor.a);\n"
 "    FragColor.rgb+=specularRGB*FragColor.a;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
@@ -5367,6 +5464,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
         prog_lit_textured_.loc_world       = prog_lit_textured_.prog.uniform_location("uWorld");
         prog_lit_textured_.loc_normalmat   = prog_lit_textured_.prog.uniform_location("uNormalMatrix");
         prog_lit_textured_.loc_diffuse     = prog_lit_textured_.prog.uniform_location("uDiffuseColor");
+        prog_lit_textured_.loc_lighting_enabled = prog_lit_textured_.prog.uniform_location("uLightingEnabled");
         prog_lit_textured_.loc_ambient     = prog_lit_textured_.prog.uniform_location("uAmbientColor");
         prog_lit_textured_.loc_l0dir       = prog_lit_textured_.prog.uniform_location("uLight0Dir");
         prog_lit_textured_.loc_l0diff      = prog_lit_textured_.prog.uniform_location("uLight0Diffuse");
@@ -5796,6 +5894,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out float vFogFactor;\n"
 "out vec3 vWorldPos;\n"
 "out vec4 vColor;\n"
+CNA_GL_SKIN_NORMAL_DECL
 "void main(){\n"
 // Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2, or 4)
 // weight/index pairs -- matches XNA's own validated property range, so >=2/>=4 gating suffices.
@@ -5816,15 +5915,16 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // normal for just that vertex rather than propagating NaN; XNA/FNA's own Skin() was
 // never validated against this degenerate case, so this is a numerical-safety guard,
 // not a deviation from its intended per-vertex transform.
-"    vec3 skinnedNormal=mat3(skinMat)*aNormal;\n"
+"    vec3 skinnedNormal=cnaSkinNormal(mat3(skinMat),aNormal);\n"
 "    float skinnedNormalLen=length(skinnedNormal);\n"
 "    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
 // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
 // (uNormalMatrix = transpose(inverse(World3x3)), CPU-precomputed in BindDrawParams() exactly as
-// every non-skinned lit program here already receives it). FNA's SkinnedEffect.fx Skin() applies
-// the bone 3x3, then Lighting.fxh applies mul(normal, WorldInverseTranspose); this shader dropped
-// the outer world factor entirely (audit Variant A), so any rotated or non-uniformly-scaled
-// skinned model was lit as if World were identity. The fragment stage re-normalizes vNormal.
+// every non-skinned lit program here already receives it). FNA's SkinnedEffect.fx establishes the
+// composition order; GLTF-264 strengthens its direct bone 3x3 to inverse-transpose because glTF
+// joints may carry non-uniform scale. This shader also used to drop the outer world factor entirely
+// (audit Variant A), so any rotated or non-uniformly-scaled skinned model was lit as if World were
+// identity. The fragment stage re-normalizes vNormal.
 "    vNormal=uNormalMatrix*cnaInstanceDirection(boneNormal);\n"
 "    vUV=aUV;\n"
 "    vWorldPos=(uWorld*cnaPos).xyz;\n"
@@ -5994,6 +6094,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out vec3 vLitRGB;\n"
 "out vec3 vSpecularRGB;\n"
 "out vec4 vColor;\n"
+CNA_GL_SKIN_NORMAL_DECL
 "void main(){\n"
 "    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x;\n"
 "    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
@@ -6014,7 +6115,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // Same degenerate-blend-normal guard as EnsureSkinnedProgram() above (see its own
 // comment for the root cause) -- this vertex-lit sibling does the identical skinning
 // and normal transform, just with lighting evaluated per-vertex instead of per-pixel.
-"    vec3 skinnedNormal=mat3(skinMat)*aNormal;\n"
+"    vec3 skinnedNormal=cnaSkinNormal(mat3(skinMat),aNormal);\n"
 "    float skinnedNormalLen=length(skinnedNormal);\n"
 "    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
 // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix (uNormalMatrix =
@@ -6103,23 +6204,30 @@ CNA_GL_RT_SAMPLE_UV_DECL
     // rather than image-based lighting (a much larger, separate feature: irradiance/prefiltered
     // environment maps + a BRDF LUT). Normal mapping via a per-pixel TBN basis built from the
     // vertex tangent (re-orthogonalized against the interpolated normal) and glTF's own
-    // bitangent-handedness-sign convention (Bitangent = cross(Normal,Tangent.xyz)*Tangent.w).
-    // Only the EasyGL renderer implements this program (CNB-58 explicitly scopes other renderers to
-    // separate follow-ups, CNB-61) -- PbrEffect::FillGpuDrawParams() still fills GpuDrawParams
-    // completely, so a non-EasyGL renderer simply ignores the new pbr*/texture fields already,
-    // matching this codebase's established "unimplemented field is safely ignored" convention.
-    void EasyGLRenderer::EnsurePbrProgram()
+    // bitangent-handedness-sign convention (Bitangent = cross(Normal,Tangent.xyz)*Tangent.w),
+    // including GLTF-176's per-draw determinant correction under mirrored direction transforms.
+    // This was CNA's first PBR program (CNB-58); the same normalized GpuDrawParams contract and
+    // reference BRDF are now implemented by every PBR-capable renderer, with a cross-renderer
+    // source audit guarding the fields whose native bindings necessarily differ by backend.
+    void EasyGLRenderer::EnsurePbrProgram(bool dualUv)
     {
-        if (prog_pbr_.ready) return;
+        // GLTF-182/183: keep the stride-48 program source byte-equivalent to the established
+        // single-UV shader. Merely adding an unused varying/selector changed thousands of
+        // llvmpipe fragments by one RGB unit, violating the zero-tolerance L7 oracle. Stride 60
+        // alone pays for the dual-UV variant, so existing content keeps its exact pixel path.
+        Prog3D& program = dualUv ? prog_pbr_dual_uv_ : prog_pbr_;
+        if (program.ready) return;
 
-        static const char* vsrc =
-"#version 300 es\n"
+        const std::string vsrc =
+std::string("#version 300 es\n") +
 "precision highp float;\n"
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec3 aNormal;\n"
 "layout(location=2) in vec4 aTangent;\n"
 "layout(location=3) in vec2 aUV;\n"
++ (dualUv ? "layout(location=4) in vec2 aUV1;\n" : "") +
 CNA_GL_INSTANCE_TRANSFORM_DECL
+CNA_GL_DIRECTION_HANDEDNESS_DECL
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
@@ -6128,6 +6236,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out vec3 vTangent;\n"
 "out float vBitangentSign;\n"
 "out vec2 vUV;\n"
++ (dualUv ? "out vec2 vUV1;\n" : "") +
 "out float vFogFactor;\n"
 "out vec3 vWorldPos;\n"
 "void main(){\n"
@@ -6138,20 +6247,34 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // uNormalMatrix use for the normal) -- correct for uniform-scale World transforms, a documented
 // simplification for non-uniform scale shared with most real-time engines lacking a full
 // per-tangent inverse-transpose.
-"    vTangent=mat3(uWorld)*cnaInstanceDirection(aTangent.xyz);\n"
-"    vBitangentSign=aTangent.w;\n"
+"    mat3 worldDirectionMat=mat3(uWorld);\n"
+"    vTangent=worldDirectionMat*cnaInstanceDirection(aTangent.xyz);\n"
+"    float instanceHandedness=(uCnaInstanced>0.5)?cnaDirectionHandedness(mat3(cnaInstanceMatrix())):1.0;\n"
+"    vBitangentSign=aTangent.w*cnaDirectionHandedness(worldDirectionMat)*instanceHandedness;\n"
 "    vUV=aUV;\n"
++ (dualUv ? "    vUV1=aUV1;\n" : "") +
 "    vWorldPos=(uWorld*cnaPos).xyz;\n"
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
 "}\n";
 
-        static const char* fsrc =
-"#version 300 es\n"
+        const char* const baseUv = dualUv ? "cnaPbrUV(uTextureCoordinateSets.x)" : "vUV";
+        const char* const normalUv = dualUv ? "cnaPbrUV(uTextureCoordinateSets.y)" : "vUV";
+        const char* const mrUv = dualUv ? "cnaPbrUV(uTextureCoordinateSets.z)" : "vUV";
+        const char* const emissiveUv = dualUv ? "cnaPbrUV(uTextureCoordinateSets.w)" : "vUV";
+        const char* const occlusionUv =
+            dualUv ? "cnaPbrUV(uOcclusionTextureCoordinateSet)" : "vUV";
+        const char* const specularUv =
+            dualUv ? "cnaPbrUV(uSpecularTextureCoordinateSets.x)" : "vUV";
+        const char* const specularColorUv =
+            dualUv ? "cnaPbrUV(uSpecularTextureCoordinateSets.y)" : "vUV";
+        const std::string fsrc =
+std::string("#version 300 es\n") +
 "precision mediump float;\n"
 "in vec3 vNormal;\n"
 "in vec3 vTangent;\n"
 "in float vBitangentSign;\n"
 "in vec2 vUV;\n"
++ (dualUv ? "in vec2 vUV1;\n" : "") +
 "in float vFogFactor;\n"
 "in vec3 vWorldPos;\n"
 "uniform sampler2D uTexture;\n"
@@ -6159,11 +6282,35 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform sampler2D uMetallicRoughnessMap;\n"
 "uniform sampler2D uEmissiveMap;\n"
 "uniform sampler2D uOcclusionMap;\n"
+"uniform sampler2D uSpecularMap;\n"
+"uniform sampler2D uSpecularColorMap;\n"
 "uniform vec4 uDiffuseColor;\n"
 "uniform vec3 uAmbientColor;\n"
 "uniform vec3 uEmissiveColor;\n"
 "uniform float uMetallicFactor;\n"
 "uniform float uRoughnessFactor;\n"
+// plan_gltf.md GLTF-343/344: factor-only KHR_materials_ior/specular state, already reduced by
+// FillGpuDrawParams to the exact shader-ready Fresnel endpoints. xyz is dielectric F0; w is F90.
+"uniform vec4 uDielectricFresnel;\n"
+// GLTF-344: the colour texture is multiplied before clamping, so this must retain the pre-clamp
+// value instead of attempting to reconstruct it from uDielectricFresnel.
+"uniform vec4 uSpecularFresnelInputs;\n"
+// plan_gltf.md GLTF-210/GLTF-212: x = decode the base-colour sample from sRGB, y = decode the
+// emissive sample, z = encode the fragment's RGB back. Each is 0 or 1 and drives a mix() rather
+// than a branch, so every fragment costs the same whichever way it is set.
+"uniform vec4 uSrgb;\n"
+// plan_gltf.md GLTF-224/GLTF-225: normalTexture.scale and occlusionTexture.strength. Two scalar
+// uniforms rather than one vec2, to stay on the single-float set_uniform overload this file
+// already uses everywhere.
+"uniform float uNormalScale;\n"
+"uniform float uOcclusionStrength;\n"
++ (dualUv ? "uniform vec4 uTextureCoordinateSets;\n"
+          "uniform float uOcclusionTextureCoordinateSet;\n"
+          "uniform vec2 uSpecularTextureCoordinateSets;\n" : "") +
+// GLTF-184: two precomputed affine rows per texture map. The selected vertex stream is transformed
+// before cnaSampleUV applies the storage-origin adjustment for a render-target texture.
+"uniform vec4 uTextureTransformRows[10];\n"
+"uniform vec4 uSpecularTextureTransformRows[4];\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
 "uniform vec3 uLight1Dir;\n"
@@ -6176,7 +6323,8 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out vec4 FragColor;\n"
 // GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility (direct-lighting k=(roughness+1)^2/8), and
 // Schlick Fresnel -- the glTF 2.0 spec's own reference BRDF (Appendix B.3.3/B.3.4/B.3.2).
-"vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic){\n"
+CNA_GL_SRGB_TRANSFER_DECL
+"vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec3 F90, float roughness, float metallic){\n"
 "    vec3 H=normalize(V+L);\n"
 "    float NdotL=max(dot(N,L),0.0);\n"
 "    float NdotV=max(dot(N,V),1e-4);\n"
@@ -6187,7 +6335,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    float D=a2/(3.14159265*dTerm*dTerm+1e-7);\n"
 "    float k=(roughness+1.0); k=k*k/8.0;\n"
 "    float G=(NdotV/(NdotV*(1.0-k)+k))*(NdotL/(NdotL*(1.0-k)+k));\n"
-"    vec3 F=F0+(vec3(1.0)-F0)*pow(clamp(1.0-VdotH,0.0,1.0),5.0);\n"
+"    vec3 F=F0+(F90-F0)*pow(clamp(1.0-VdotH,0.0,1.0),5.0);\n"
 "    vec3 specular=(D*G*F)/max(4.0*NdotV*NdotL,1e-4);\n"
 "    vec3 diffuseColor=albedo*(1.0-metallic);\n"
 "    vec3 kd=vec3(1.0)-F;\n"
@@ -6195,37 +6343,72 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "}\n"
 CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
++ (dualUv ? "vec2 cnaPbrUV(float setIndex){return setIndex<0.5?vUV:vUV1;}\n" : "") +
+"vec2 cnaPbrTransformUV(vec2 uv,int slot){\n"
+"    vec3 value=vec3(uv,1.0);\n"
+"    return vec2(dot(value,uTextureTransformRows[slot*2].xyz),dot(value,uTextureTransformRows[slot*2+1].xyz));\n"
+"}\n"
+"vec2 cnaPbrSpecularTransformUV(vec2 uv,int slot){\n"
+"    vec3 value=vec3(uv,1.0);\n"
+"    return vec2(dot(value,uSpecularTextureTransformRows[slot*2].xyz),dot(value,uSpecularTextureTransformRows[slot*2+1].xyz));\n"
+"}\n"
 "void main(){\n"
-"    vec4 baseColorTex=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
-"    vec3 albedo=baseColorTex.rgb*uDiffuseColor.rgb;\n"
+"    vec4 baseColorTex=texture(uTexture,cnaSampleUV(cnaPbrTransformUV(" + baseUv + ",0),uRtFlipV.x));\n"
+// glTF §3.9.2: the base-colour TEXTURE is sRGB-encoded, the base-colour FACTOR is linear. Only
+// the sample is decoded -- transferring both would apply it twice to one of them.
+"    vec3 baseRGB=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),uSrgb.x);\n"
+"    vec3 albedo=baseRGB*uDiffuseColor.rgb;\n"
 "    float alpha=baseColorTex.a*uDiffuseColor.a;\n"
 "    vec3 N=normalize(vNormal);\n"
 "    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
 "    mat3 TBN=mat3(T,B,N);\n"
-"    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(vUV,uRtFlipV.y)).rgb*2.0-1.0;\n"
+"    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(cnaPbrTransformUV(" + normalUv + ",1),uRtFlipV.y)).rgb*2.0-1.0;\n"
+// glTF §3.9.3: normalTexture.scale scales the tangent-space X and Y only. Scaling Z as well would
+// merely rescale the whole vector, which normalization then undoes -- the perturbation would not
+// change at all.
+"    sampledNormal.xy*=uNormalScale;\n"
 "    vec3 finalNormal=normalize(TBN*sampledNormal);\n"
-"    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(vUV,uRtFlipV.z));\n"
+"    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(cnaPbrTransformUV(" + mrUv + ",2),uRtFlipV.z));\n"
 "    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
 "    float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);\n"
 "    vec3 V=normalize(uEyePosition-vWorldPos);\n"
-"    vec3 F0=mix(vec3(0.04),albedo,metallic);\n"
+"    float specularWeight=uSpecularFresnelInputs.w*texture(uSpecularMap,cnaSampleUV(cnaPbrSpecularTransformUV(" + specularUv + ",0),uRtFlipVHi.y)).a;\n"
+"    vec3 specularColorTex=texture(uSpecularColorMap,cnaSampleUV(cnaPbrSpecularTransformUV(" + specularColorUv + ",1),uRtFlipVHi.z)).rgb;\n"
+"    specularColorTex=mix(specularColorTex,cnaSrgbToLinear(specularColorTex),uSrgb.w);\n"
+"    vec3 dielectricF0=min(uSpecularFresnelInputs.xyz*specularColorTex,vec3(1.0))*specularWeight;\n"
+"    vec3 F0=mix(dielectricF0,albedo,metallic);\n"
+"    vec3 F90=mix(vec3(specularWeight),vec3(1.0),metallic);\n"
 "    vec3 Lo=vec3(0.0);\n"
-"    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,roughness,metallic);\n"
-"    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,roughness,metallic);\n"
-"    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,roughness,metallic);\n"
-"    float occlusion=texture(uOcclusionMap,cnaSampleUV(vUV,uRtFlipVHi.x)).r;\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);\n"
+"    float occlusion=texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(" + occlusionUv + ",4),uRtFlipVHi.x)).r;\n"
+// §3.9.3's own formula: 1 + strength * (sampled - 1). At strength 0 this is 1 whatever the map
+// holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
+// darken everything to black.
+"    occlusion=1.0+uOcclusionStrength*(occlusion-1.0);\n"
 "    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
-"    vec3 emissive=uEmissiveColor*texture(uEmissiveMap,cnaSampleUV(vUV,uRtFlipV.w)).rgb;\n"
+"    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(cnaPbrTransformUV(" + emissiveUv + ",3),uRtFlipV.w)).rgb;\n"
+// Same split as the base colour. The factor is additionally allowed above 1 by
+// KHR_materials_emissive_strength, which is a second reason never to transfer it.
+"    vec3 emissive=uEmissiveColor*mix(emissiveTex,cnaSrgbToLinear(emissiveTex),uSrgb.y);\n"
 "    FragColor=vec4(ambient+Lo+emissive,alpha);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+// Fog is mixed in LINEAR space, so uFogColor -- an ordinary application-supplied sRGB
+// colour -- is decoded first. Mixing an encoded colour into a linear result would tint
+// the fade toward the wrong shade as it thickens.
+"    vec3 fogLinear=mix(uFogColor,cnaSrgbToLinear(uFogColor),uSrgb.z);\n"
+"    FragColor.rgb=mix(fogLinear,FragColor.rgb,vFogFactor);\n"
+// GLTF-212: encode last, and RGB only -- §3.9.4 makes alpha coverage, never colour.
+"    FragColor.rgb=mix(FragColor.rgb,cnaLinearToSrgb(FragColor.rgb),uSrgb.z);\n"
 "}\n";
 
-        CompileAndLink(prog_pbr_.prog, vsrc, fsrc, "pbr");
-        ResolveRenderTargetOrientationUniforms(prog_pbr_);
-        auto& p = prog_pbr_;
+        CompileAndLink(program.prog, vsrc.c_str(), fsrc.c_str(),
+                       dualUv ? "pbr_dual_uv" : "pbr");
+        ResolveRenderTargetOrientationUniforms(program);
+        auto& p = program;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
         p.loc_normalmat = p.prog.uniform_location("uNormalMatrix");
@@ -6244,8 +6427,31 @@ CNA_GL_RT_SAMPLE_UV_DECL
         p.loc_pbr_mr            = p.prog.uniform_location("uMetallicRoughnessMap");
         p.loc_pbr_emissivemap   = p.prog.uniform_location("uEmissiveMap");
         p.loc_pbr_occlusionmap  = p.prog.uniform_location("uOcclusionMap");
+        p.loc_pbr_specularmap   = p.prog.uniform_location("uSpecularMap");
+        p.loc_pbr_specularcolormap = p.prog.uniform_location("uSpecularColorMap");
         p.loc_pbr_metallic      = p.prog.uniform_location("uMetallicFactor");
         p.loc_pbr_roughness     = p.prog.uniform_location("uRoughnessFactor");
+        p.loc_pbr_dielectric_fresnel = p.prog.uniform_location("uDielectricFresnel");
+        p.loc_pbr_specular_fresnel_inputs =
+            p.prog.uniform_location("uSpecularFresnelInputs");
+        p.loc_pbr_srgb          = p.prog.uniform_location("uSrgb");
+        p.loc_pbr_normalscale   = p.prog.uniform_location("uNormalScale");
+        p.loc_pbr_occlstrength  = p.prog.uniform_location("uOcclusionStrength");
+        p.loc_pbr_texcoordsets  = p.prog.uniform_location("uTextureCoordinateSets");
+        p.loc_pbr_occlusiontexcoordset =
+            p.prog.uniform_location("uOcclusionTextureCoordinateSet");
+        p.loc_pbr_specular_texcoordsets =
+            p.prog.uniform_location("uSpecularTextureCoordinateSets");
+        for (std::size_t row = 0; row < p.loc_pbr_texture_transform_rows.size(); ++row)
+        {
+            p.loc_pbr_texture_transform_rows[row] = p.prog.uniform_location(
+                "uTextureTransformRows[" + std::to_string(row) + "]");
+        }
+        for (std::size_t row = 0; row < p.loc_pbr_specular_texture_transform_rows.size(); ++row)
+        {
+            p.loc_pbr_specular_texture_transform_rows[row] = p.prog.uniform_location(
+                "uSpecularTextureTransformRows[" + std::to_string(row) + "]");
+        }
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
         p.loc_fog_vector = p.prog.uniform_location("uFogVector");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
@@ -6257,12 +6463,15 @@ CNA_GL_RT_SAMPLE_UV_DECL
     // Position, Normal, and now also Tangent, since a skinned normal map needs a skinned TBN
     // basis too) feeding EnsurePbrProgram()'s own fragment-stage BRDF unchanged -- the two
     // programs' logic is additive, not a new algorithm (SkinnedPbrEffect, PBR+skinning combo).
-    void EasyGLRenderer::EnsurePbrSkinnedProgram()
+    void EasyGLRenderer::EnsurePbrSkinnedProgram(bool dualUv)
     {
-        if (prog_pbr_skinned_.ready) return;
+        // Match the rigid program's compatibility split: stride 68 retains the old shader shape,
+        // while only stride 76 declares and samples aUV1.
+        Prog3D& program = dualUv ? prog_pbr_skinned_dual_uv_ : prog_pbr_skinned_;
+        if (program.ready) return;
 
-        static const char* vsrc =
-"#version 300 es\n"
+        const std::string vsrc =
+std::string("#version 300 es\n") +
 "precision highp float;\n"
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec3 aNormal;\n"
@@ -6270,7 +6479,9 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=3) in vec2 aUV;\n"
 "layout(location=4) in vec4 aBoneWeights;\n"
 "layout(location=5) in uvec4 aBoneIndices;\n"
++ (dualUv ? "layout(location=6) in vec2 aUV1;\n" : "") +
 CNA_GL_INSTANCE_TRANSFORM_DECL
+CNA_GL_DIRECTION_HANDEDNESS_DECL
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
@@ -6281,8 +6492,10 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out vec3 vTangent;\n"
 "out float vBitangentSign;\n"
 "out vec2 vUV;\n"
++ (dualUv ? "out vec2 vUV1;\n" : "") +
 "out float vFogFactor;\n"
 "out vec3 vWorldPos;\n"
+CNA_GL_SKIN_NORMAL_DECL
 "void main(){\n"
 "    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x;\n"
 "    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
@@ -6290,27 +6503,44 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
 "    vec4 cnaPos=cnaInstancePosition(skinnedPos);\n"
 "    gl_Position=uWVP*cnaPos;\n"
-"    mat3 skinNormalMat=mat3(skinMat);\n"
+"    mat3 skinDirectionMat=mat3(skinMat);\n"
 // REMED-GFX-006 (Variant B): the normal takes the inverse-transpose world matrix (uNormalMatrix),
 // not raw mat3(uWorld). Raw World is only correct for rotation and uniform scale and diverges from
 // FNA's mul(normal, WorldInverseTranspose) under non-uniform scale; it also contradicted this
 // file's own unskinned EnsurePbrProgram, which already uses uNormalMatrix. The tangent stays on
 // raw World: tangents transform as directions, not as normals (glTF convention, unchanged).
-"    vNormal=normalize(uNormalMatrix*cnaInstanceDirection(skinNormalMat*aNormal));\n"
-"    vTangent=mat3(uWorld)*cnaInstanceDirection(skinNormalMat*aTangent.xyz);\n"
-"    vBitangentSign=aTangent.w;\n"
+"    vec3 skinnedNormal=cnaSkinNormal(skinDirectionMat,aNormal);\n"
+"    float skinnedNormalLen=length(skinnedNormal);\n"
+"    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
+"    vNormal=normalize(uNormalMatrix*cnaInstanceDirection(boneNormal));\n"
+"    mat3 worldDirectionMat=mat3(uWorld);\n"
+"    vTangent=worldDirectionMat*cnaInstanceDirection(skinDirectionMat*aTangent.xyz);\n"
+"    float instanceHandedness=(uCnaInstanced>0.5)?cnaDirectionHandedness(mat3(cnaInstanceMatrix())):1.0;\n"
+"    vBitangentSign=aTangent.w*cnaDirectionHandedness(worldDirectionMat)*instanceHandedness*cnaDirectionHandedness(skinDirectionMat);\n"
 "    vUV=aUV;\n"
++ (dualUv ? "    vUV1=aUV1;\n" : "") +
 "    vWorldPos=(uWorld*cnaPos).xyz;\n"
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
 "}\n";
 
-        static const char* fsrc =
-"#version 300 es\n"
+        const char* const baseUv = dualUv ? "cnaPbrUV(uTextureCoordinateSets.x)" : "vUV";
+        const char* const normalUv = dualUv ? "cnaPbrUV(uTextureCoordinateSets.y)" : "vUV";
+        const char* const mrUv = dualUv ? "cnaPbrUV(uTextureCoordinateSets.z)" : "vUV";
+        const char* const emissiveUv = dualUv ? "cnaPbrUV(uTextureCoordinateSets.w)" : "vUV";
+        const char* const occlusionUv =
+            dualUv ? "cnaPbrUV(uOcclusionTextureCoordinateSet)" : "vUV";
+        const char* const specularUv =
+            dualUv ? "cnaPbrUV(uSpecularTextureCoordinateSets.x)" : "vUV";
+        const char* const specularColorUv =
+            dualUv ? "cnaPbrUV(uSpecularTextureCoordinateSets.y)" : "vUV";
+        const std::string fsrc =
+std::string("#version 300 es\n") +
 "precision mediump float;\n"
 "in vec3 vNormal;\n"
 "in vec3 vTangent;\n"
 "in float vBitangentSign;\n"
 "in vec2 vUV;\n"
++ (dualUv ? "in vec2 vUV1;\n" : "") +
 "in float vFogFactor;\n"
 "in vec3 vWorldPos;\n"
 "uniform sampler2D uTexture;\n"
@@ -6318,11 +6548,30 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform sampler2D uMetallicRoughnessMap;\n"
 "uniform sampler2D uEmissiveMap;\n"
 "uniform sampler2D uOcclusionMap;\n"
+"uniform sampler2D uSpecularMap;\n"
+"uniform sampler2D uSpecularColorMap;\n"
 "uniform vec4 uDiffuseColor;\n"
 "uniform vec3 uAmbientColor;\n"
 "uniform vec3 uEmissiveColor;\n"
 "uniform float uMetallicFactor;\n"
 "uniform float uRoughnessFactor;\n"
+// plan_gltf.md GLTF-343/344: same shader-ready dielectric Fresnel endpoints as unskinned PBR.
+"uniform vec4 uDielectricFresnel;\n"
+"uniform vec4 uSpecularFresnelInputs;\n"
+// plan_gltf.md GLTF-210/GLTF-212: x = decode the base-colour sample from sRGB, y = decode the
+// emissive sample, z = encode the fragment's RGB back. Each is 0 or 1 and drives a mix() rather
+// than a branch, so every fragment costs the same whichever way it is set.
+"uniform vec4 uSrgb;\n"
+// plan_gltf.md GLTF-224/GLTF-225: normalTexture.scale and occlusionTexture.strength. Two scalar
+// uniforms rather than one vec2, to stay on the single-float set_uniform overload this file
+// already uses everywhere.
+"uniform float uNormalScale;\n"
+"uniform float uOcclusionStrength;\n"
++ (dualUv ? "uniform vec4 uTextureCoordinateSets;\n"
+          "uniform float uOcclusionTextureCoordinateSet;\n"
+          "uniform vec2 uSpecularTextureCoordinateSets;\n" : "") +
+"uniform vec4 uTextureTransformRows[10];\n"
+"uniform vec4 uSpecularTextureTransformRows[4];\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
 "uniform vec3 uLight1Dir;\n"
@@ -6333,7 +6582,8 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
-"vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic){\n"
+CNA_GL_SRGB_TRANSFER_DECL
+"vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec3 F90, float roughness, float metallic){\n"
 "    vec3 H=normalize(V+L);\n"
 "    float NdotL=max(dot(N,L),0.0);\n"
 "    float NdotV=max(dot(N,V),1e-4);\n"
@@ -6344,7 +6594,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    float D=a2/(3.14159265*dTerm*dTerm+1e-7);\n"
 "    float k=(roughness+1.0); k=k*k/8.0;\n"
 "    float G=(NdotV/(NdotV*(1.0-k)+k))*(NdotL/(NdotL*(1.0-k)+k));\n"
-"    vec3 F=F0+(vec3(1.0)-F0)*pow(clamp(1.0-VdotH,0.0,1.0),5.0);\n"
+"    vec3 F=F0+(F90-F0)*pow(clamp(1.0-VdotH,0.0,1.0),5.0);\n"
 "    vec3 specular=(D*G*F)/max(4.0*NdotV*NdotL,1e-4);\n"
 "    vec3 diffuseColor=albedo*(1.0-metallic);\n"
 "    vec3 kd=vec3(1.0)-F;\n"
@@ -6352,37 +6602,72 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "}\n"
 CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
++ (dualUv ? "vec2 cnaPbrUV(float setIndex){return setIndex<0.5?vUV:vUV1;}\n" : "") +
+"vec2 cnaPbrTransformUV(vec2 uv,int slot){\n"
+"    vec3 value=vec3(uv,1.0);\n"
+"    return vec2(dot(value,uTextureTransformRows[slot*2].xyz),dot(value,uTextureTransformRows[slot*2+1].xyz));\n"
+"}\n"
+"vec2 cnaPbrSpecularTransformUV(vec2 uv,int slot){\n"
+"    vec3 value=vec3(uv,1.0);\n"
+"    return vec2(dot(value,uSpecularTextureTransformRows[slot*2].xyz),dot(value,uSpecularTextureTransformRows[slot*2+1].xyz));\n"
+"}\n"
 "void main(){\n"
-"    vec4 baseColorTex=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
-"    vec3 albedo=baseColorTex.rgb*uDiffuseColor.rgb;\n"
+"    vec4 baseColorTex=texture(uTexture,cnaSampleUV(cnaPbrTransformUV(" + baseUv + ",0),uRtFlipV.x));\n"
+// glTF §3.9.2: the base-colour TEXTURE is sRGB-encoded, the base-colour FACTOR is linear. Only
+// the sample is decoded -- transferring both would apply it twice to one of them.
+"    vec3 baseRGB=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),uSrgb.x);\n"
+"    vec3 albedo=baseRGB*uDiffuseColor.rgb;\n"
 "    float alpha=baseColorTex.a*uDiffuseColor.a;\n"
 "    vec3 N=normalize(vNormal);\n"
 "    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
 "    mat3 TBN=mat3(T,B,N);\n"
-"    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(vUV,uRtFlipV.y)).rgb*2.0-1.0;\n"
+"    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(cnaPbrTransformUV(" + normalUv + ",1),uRtFlipV.y)).rgb*2.0-1.0;\n"
+// glTF §3.9.3: normalTexture.scale scales the tangent-space X and Y only. Scaling Z as well would
+// merely rescale the whole vector, which normalization then undoes -- the perturbation would not
+// change at all.
+"    sampledNormal.xy*=uNormalScale;\n"
 "    vec3 finalNormal=normalize(TBN*sampledNormal);\n"
-"    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(vUV,uRtFlipV.z));\n"
+"    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(cnaPbrTransformUV(" + mrUv + ",2),uRtFlipV.z));\n"
 "    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
 "    float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);\n"
 "    vec3 V=normalize(uEyePosition-vWorldPos);\n"
-"    vec3 F0=mix(vec3(0.04),albedo,metallic);\n"
+"    float specularWeight=uSpecularFresnelInputs.w*texture(uSpecularMap,cnaSampleUV(cnaPbrSpecularTransformUV(" + specularUv + ",0),uRtFlipVHi.y)).a;\n"
+"    vec3 specularColorTex=texture(uSpecularColorMap,cnaSampleUV(cnaPbrSpecularTransformUV(" + specularColorUv + ",1),uRtFlipVHi.z)).rgb;\n"
+"    specularColorTex=mix(specularColorTex,cnaSrgbToLinear(specularColorTex),uSrgb.w);\n"
+"    vec3 dielectricF0=min(uSpecularFresnelInputs.xyz*specularColorTex,vec3(1.0))*specularWeight;\n"
+"    vec3 F0=mix(dielectricF0,albedo,metallic);\n"
+"    vec3 F90=mix(vec3(specularWeight),vec3(1.0),metallic);\n"
 "    vec3 Lo=vec3(0.0);\n"
-"    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,roughness,metallic);\n"
-"    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,roughness,metallic);\n"
-"    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,roughness,metallic);\n"
-"    float occlusion=texture(uOcclusionMap,cnaSampleUV(vUV,uRtFlipVHi.x)).r;\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);\n"
+"    float occlusion=texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(" + occlusionUv + ",4),uRtFlipVHi.x)).r;\n"
+// §3.9.3's own formula: 1 + strength * (sampled - 1). At strength 0 this is 1 whatever the map
+// holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
+// darken everything to black.
+"    occlusion=1.0+uOcclusionStrength*(occlusion-1.0);\n"
 "    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
-"    vec3 emissive=uEmissiveColor*texture(uEmissiveMap,cnaSampleUV(vUV,uRtFlipV.w)).rgb;\n"
+"    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(cnaPbrTransformUV(" + emissiveUv + ",3),uRtFlipV.w)).rgb;\n"
+// Same split as the base colour. The factor is additionally allowed above 1 by
+// KHR_materials_emissive_strength, which is a second reason never to transfer it.
+"    vec3 emissive=uEmissiveColor*mix(emissiveTex,cnaSrgbToLinear(emissiveTex),uSrgb.y);\n"
 "    FragColor=vec4(ambient+Lo+emissive,alpha);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+// Fog is mixed in LINEAR space, so uFogColor -- an ordinary application-supplied sRGB
+// colour -- is decoded first. Mixing an encoded colour into a linear result would tint
+// the fade toward the wrong shade as it thickens.
+"    vec3 fogLinear=mix(uFogColor,cnaSrgbToLinear(uFogColor),uSrgb.z);\n"
+"    FragColor.rgb=mix(fogLinear,FragColor.rgb,vFogFactor);\n"
+// GLTF-212: encode last, and RGB only -- §3.9.4 makes alpha coverage, never colour.
+"    FragColor.rgb=mix(FragColor.rgb,cnaLinearToSrgb(FragColor.rgb),uSrgb.z);\n"
 "}\n";
 
-        CompileAndLink(prog_pbr_skinned_.prog, vsrc, fsrc, "pbr_skinned");
-        ResolveRenderTargetOrientationUniforms(prog_pbr_skinned_);
-        auto& p = prog_pbr_skinned_;
+        CompileAndLink(program.prog, vsrc.c_str(), fsrc.c_str(),
+                       dualUv ? "pbr_skinned_dual_uv" : "pbr_skinned");
+        ResolveRenderTargetOrientationUniforms(program);
+        auto& p = program;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
         p.loc_normalmat = p.prog.uniform_location("uNormalMatrix");
@@ -6403,8 +6688,31 @@ CNA_GL_RT_SAMPLE_UV_DECL
         p.loc_pbr_mr            = p.prog.uniform_location("uMetallicRoughnessMap");
         p.loc_pbr_emissivemap   = p.prog.uniform_location("uEmissiveMap");
         p.loc_pbr_occlusionmap  = p.prog.uniform_location("uOcclusionMap");
+        p.loc_pbr_specularmap   = p.prog.uniform_location("uSpecularMap");
+        p.loc_pbr_specularcolormap = p.prog.uniform_location("uSpecularColorMap");
         p.loc_pbr_metallic      = p.prog.uniform_location("uMetallicFactor");
         p.loc_pbr_roughness     = p.prog.uniform_location("uRoughnessFactor");
+        p.loc_pbr_dielectric_fresnel = p.prog.uniform_location("uDielectricFresnel");
+        p.loc_pbr_specular_fresnel_inputs =
+            p.prog.uniform_location("uSpecularFresnelInputs");
+        p.loc_pbr_srgb          = p.prog.uniform_location("uSrgb");
+        p.loc_pbr_normalscale   = p.prog.uniform_location("uNormalScale");
+        p.loc_pbr_occlstrength  = p.prog.uniform_location("uOcclusionStrength");
+        p.loc_pbr_texcoordsets  = p.prog.uniform_location("uTextureCoordinateSets");
+        p.loc_pbr_occlusiontexcoordset =
+            p.prog.uniform_location("uOcclusionTextureCoordinateSet");
+        p.loc_pbr_specular_texcoordsets =
+            p.prog.uniform_location("uSpecularTextureCoordinateSets");
+        for (std::size_t row = 0; row < p.loc_pbr_texture_transform_rows.size(); ++row)
+        {
+            p.loc_pbr_texture_transform_rows[row] = p.prog.uniform_location(
+                "uTextureTransformRows[" + std::to_string(row) + "]");
+        }
+        for (std::size_t row = 0; row < p.loc_pbr_specular_texture_transform_rows.size(); ++row)
+        {
+            p.loc_pbr_specular_texture_transform_rows[row] = p.prog.uniform_location(
+                "uSpecularTextureTransformRows[" + std::to_string(row) + "]");
+        }
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
         p.loc_fog_vector = p.prog.uniform_location("uFogVector");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
@@ -6487,9 +6795,11 @@ CNA_GL_RT_SAMPLE_UV_DECL
         switch (SelectStockProgramShape(stride, params))
         {
         case StockProgramShape::PbrSkinned:
-            EnsurePbrSkinnedProgram();          return prog_pbr_skinned_;
+            EnsurePbrSkinnedProgram(stride == 76);
+            return stride == 76 ? prog_pbr_skinned_dual_uv_ : prog_pbr_skinned_;
         case StockProgramShape::Pbr:
-            EnsurePbrProgram();                 return prog_pbr_;
+            EnsurePbrProgram(stride == 60);
+            return stride == 60 ? prog_pbr_dual_uv_ : prog_pbr_;
         case StockProgramShape::SkinnedVertexLit:
             EnsureSkinnedVertexLitProgram();    return prog_skinned_vertexlit_;
         case StockProgramShape::Skinned:
@@ -6535,6 +6845,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
             VertexElementUsage::Color, 0, VertexElementFormat::Color, "aColor"};
         static constexpr StockProgramInput kUv{
             VertexElementUsage::TextureCoordinate, 0, VertexElementFormat::Vector2, "aUV"};
+        static constexpr StockProgramInput kUv1{
+            VertexElementUsage::TextureCoordinate, 1, VertexElementFormat::Vector2, "aUV1"};
         static constexpr StockProgramInput kNormal{
             VertexElementUsage::Normal, 0, VertexElementFormat::Vector3, "aNormal"};
         static constexpr StockProgramInput kTangent{
@@ -6551,8 +6863,12 @@ CNA_GL_RT_SAMPLE_UV_DECL
         static constexpr StockProgramInput kSkinned[]        = {kPos, kNormal, kUv, kWeights,
                                                                 kIndices, kColor};
         static constexpr StockProgramInput kPbr[]            = {kPos, kNormal, kTangent, kUv};
+        static constexpr StockProgramInput kPbrDualUv[]      = {kPos, kNormal, kTangent, kUv,
+                                                                kUv1};
         static constexpr StockProgramInput kPbrSkinned[]     = {kPos, kNormal, kTangent, kUv,
                                                                 kWeights, kIndices};
+        static constexpr StockProgramInput kPbrSkinnedDualUv[] = {
+            kPos, kNormal, kTangent, kUv, kWeights, kIndices, kUv1};
 
         const StockProgramInput* inputs = kColored;
         std::size_t count = std::size(kColored);
@@ -6560,9 +6876,25 @@ CNA_GL_RT_SAMPLE_UV_DECL
         switch (SelectStockProgramShape(stride, params))
         {
         case StockProgramShape::PbrSkinned:
-            inputs = kPbrSkinned; count = std::size(kPbrSkinned); name = "pbr_skinned3d"; break;
+            if (stride == 76)
+            {
+                inputs = kPbrSkinnedDualUv; count = std::size(kPbrSkinnedDualUv);
+            }
+            else
+            {
+                inputs = kPbrSkinned; count = std::size(kPbrSkinned);
+            }
+            name = "pbr_skinned3d"; break;
         case StockProgramShape::Pbr:
-            inputs = kPbr; count = std::size(kPbr); name = "pbr3d"; break;
+            if (stride == 60)
+            {
+                inputs = kPbrDualUv; count = std::size(kPbrDualUv);
+            }
+            else
+            {
+                inputs = kPbr; count = std::size(kPbr);
+            }
+            name = "pbr3d"; break;
         case StockProgramShape::SkinnedVertexLit:
             inputs = kSkinned; count = std::size(kSkinned); name = "skinned3d_vertexlit"; break;
         case StockProgramShape::Skinned:
@@ -6609,7 +6941,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
         // A render target's GL texel memory is bottom-up; an uploaded texture's is not. Cube maps
         // are deliberately absent -- REMED-GFX-137 owns rendered cube faces, and uEnvMap is sampled
         // with a direction vector, not a UV.
-        float rtFlipV[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+        float rtFlipV[7] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
         // WVP
         const Matrix wvp = world * view * projection;
@@ -6650,6 +6982,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
             p.prog.set_uniform(p.loc_diffuse,
                 params.diffuseColor[0], params.diffuseColor[1],
                 params.diffuseColor[2], params.diffuseColor[3]);
+        if (p.loc_lighting_enabled >= 0)
+            p.prog.set_uniform(p.loc_lighting_enabled, params.lightingEnabled ? 1.0f : 0.0f);
 
         // VertexColorEnabled gate (colored3D / BasicEffect no-texture path only — Task 364).
         if (p.loc_vertexcolor >= 0)
@@ -6861,10 +7195,105 @@ CNA_GL_RT_SAMPLE_UV_DECL
                                                    ::easygl::TextureTarget::Texture2D);
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
+        // GLTF-344: both KHR_materials_specular inputs use white as their identity fallback.
+        // The strength texture consumes alpha; the colour texture consumes RGB in sRGB space.
+        if (p.loc_pbr_specularmap >= 0)
+        {
+            EnsureDefaultWhiteTexture();
+            p.prog.set_uniform(p.loc_pbr_specularmap, 5);
+            rtFlipV[5] = SampledRowOrderIsBottomUp(params.pbrSpecularMap) ? 1.0f : 0.0f;
+            if (params.pbrSpecularMap)
+                params.pbrSpecularMap->BindGL(5);
+            else
+                default_white_texture_.active_bind(::easygl::TextureUnit::Texture5,
+                                                   ::easygl::TextureTarget::Texture2D);
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+        }
+        if (p.loc_pbr_specularcolormap >= 0)
+        {
+            EnsureDefaultWhiteTexture();
+            p.prog.set_uniform(p.loc_pbr_specularcolormap, 6);
+            rtFlipV[6] = SampledRowOrderIsBottomUp(params.pbrSpecularColorMap) ? 1.0f : 0.0f;
+            if (params.pbrSpecularColorMap)
+                params.pbrSpecularColorMap->BindGL(6);
+            else
+                default_white_texture_.active_bind(::easygl::TextureUnit::Texture6,
+                                                   ::easygl::TextureTarget::Texture2D);
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+        }
         if (p.loc_pbr_metallic >= 0)
             p.prog.set_uniform(p.loc_pbr_metallic, params.pbrMetallicFactor);
         if (p.loc_pbr_roughness >= 0)
             p.prog.set_uniform(p.loc_pbr_roughness, params.pbrRoughnessFactor);
+        if (p.loc_pbr_dielectric_fresnel >= 0)
+        {
+            p.prog.set_uniform(
+                p.loc_pbr_dielectric_fresnel,
+                params.pbrDielectricF0[0], params.pbrDielectricF0[1],
+                params.pbrDielectricF0[2], params.pbrDielectricF90);
+        }
+        if (p.loc_pbr_specular_fresnel_inputs >= 0)
+        {
+            p.prog.set_uniform(
+                p.loc_pbr_specular_fresnel_inputs,
+                params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
+                params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor);
+        }
+        // plan_gltf.md GLTF-210/GLTF-212. Three independent decisions, so three independent
+        // components: two about what a bound texture contains, one about where the fragment is
+        // going. A renderer that ignored this field entirely would keep the pre-GLTF-209
+        // behaviour exactly, which is what makes adopting it a per-renderer step.
+        if (p.loc_pbr_normalscale >= 0)
+            p.prog.set_uniform(p.loc_pbr_normalscale, params.pbrNormalScale);
+        if (p.loc_pbr_occlstrength >= 0)
+            p.prog.set_uniform(p.loc_pbr_occlstrength, params.pbrOcclusionStrength);
+        if (p.loc_pbr_texcoordsets >= 0)
+        {
+            const std::uint32_t mask = params.pbrTextureCoordinateSetMask;
+            p.prog.set_uniform(
+                p.loc_pbr_texcoordsets,
+                (mask & (std::uint32_t{1} << 0)) != 0 ? 1.0f : 0.0f,
+                (mask & (std::uint32_t{1} << 1)) != 0 ? 1.0f : 0.0f,
+                (mask & (std::uint32_t{1} << 2)) != 0 ? 1.0f : 0.0f,
+                (mask & (std::uint32_t{1} << 3)) != 0 ? 1.0f : 0.0f);
+        }
+        if (p.loc_pbr_occlusiontexcoordset >= 0)
+        {
+            p.prog.set_uniform(
+                p.loc_pbr_occlusiontexcoordset,
+                (params.pbrTextureCoordinateSetMask & (std::uint32_t{1} << 4)) != 0
+                    ? 1.0f : 0.0f);
+        }
+        if (p.loc_pbr_specular_texcoordsets >= 0)
+        {
+            const std::uint32_t mask = params.pbrTextureCoordinateSetMask;
+            p.prog.set_uniform(
+                p.loc_pbr_specular_texcoordsets,
+                (mask & (std::uint32_t{1} << 5)) != 0 ? 1.0f : 0.0f,
+                (mask & (std::uint32_t{1} << 6)) != 0 ? 1.0f : 0.0f);
+        }
+        for (std::size_t row = 0; row < p.loc_pbr_texture_transform_rows.size(); ++row)
+        {
+            const int location = p.loc_pbr_texture_transform_rows[row];
+            if (location < 0) { continue; }
+            const float* values = params.pbrTextureTransformRows[row];
+            p.prog.set_uniform(location, values[0], values[1], values[2], values[3]);
+        }
+        for (std::size_t row = 0; row < p.loc_pbr_specular_texture_transform_rows.size(); ++row)
+        {
+            const int location = p.loc_pbr_specular_texture_transform_rows[row];
+            if (location < 0) { continue; }
+            const float* values = params.pbrSpecularTextureTransformRows[row];
+            p.prog.set_uniform(location, values[0], values[1], values[2], values[3]);
+        }
+        if (p.loc_pbr_srgb >= 0)
+        {
+            p.prog.set_uniform(p.loc_pbr_srgb,
+                params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                params.pbrEmissiveTextureIsSrgb  ? 1.0f : 0.0f,
+                params.pbrEncodeOutputToSrgb     ? 1.0f : 0.0f,
+                params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f);
+        }
 
         // Texture (unit 0)
         if (p.loc_texture >= 0)
@@ -6885,8 +7314,8 @@ if (ProfileIsEs2ApiGeneration())
         // ES 2.0 keeps sampling state on the texture objects -- re-apply each unit's recorded
         // SamplerState onto whatever this draw just bound above (GraphicsDevice applies sampler
         // state BEFORE the draw binds its textures on this route, so the bind is what must pull
-        // the state in). Units 0-4 are the stock effects' complete sampling range.
-        for (int unit = 0; unit < 5; ++unit)
+        // the state in). Units 0-6 are the stock effects' complete sampling range.
+        for (int unit = 0; unit < 7; ++unit)
             Es2ApplyPendingSamplerToUnit(unit);
 }
 
@@ -6914,7 +7343,8 @@ if (ProfileIsEs2ApiGeneration())
         if (p.loc_rt_flip_v >= 0)
             p.prog.set_uniform(p.loc_rt_flip_v, rtFlipV[0], rtFlipV[1], rtFlipV[2], rtFlipV[3]);
         if (p.loc_rt_flip_v_hi >= 0)
-            p.prog.set_uniform(p.loc_rt_flip_v_hi, rtFlipV[4], 0.0f, 0.0f, 0.0f);
+            p.prog.set_uniform(
+                p.loc_rt_flip_v_hi, rtFlipV[4], rtFlipV[5], rtFlipV[6], 0.0f);
     }
 
     void EasyGLRenderer::ClearColorAndDepth(float r, float g, float b, float a, float depth)

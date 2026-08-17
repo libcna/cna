@@ -29,6 +29,22 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         endif()
     endmacro()
 
+    macro(cna_wicked_game_test target src)
+        add_executable(${target} ${src})
+        target_include_directories(${target} PRIVATE
+            ${CMAKE_SOURCE_DIR}/modules/graphics/examples)
+        target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+        if(CNA_WICKED_DXCOMPILER)
+            add_custom_command(TARGET ${target} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${CNA_WICKED_DXCOMPILER}" "$<TARGET_FILE_DIR:${target}>"
+                VERBATIM)
+        endif()
+    endmacro()
+
     # plan_wicked.md WICKED-70. Device-independent: the pipeline cache key is the one piece of this
     # renderer that can be tested without a GPU, and also the piece where a mistake is silent -- a
     # key that compares or hashes two different render states as equal makes the cache return a
@@ -69,6 +85,20 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         modules/renderers/wicked/tests/CNA/Internal/Renderers/Wicked/WickedTexture3DStagedTransferTest.cpp)
     add_test(NAME Wicked_Texture3DStagedTransfer COMMAND cna_test_wicked_texture3d_staged_transfer)
     set_tests_properties(Wicked_Texture3DStagedTransfer PROPERTIES LABELS "GraphicsSmoke;Wicked"
+        TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # GLTF-213: exact mid-grey transfer witnesses on Wicked's rigid and skinned PBR pipelines.
+    cna_wicked_game_test(cna_test_wicked_pbr_srgb_transfer
+        modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
+    add_test(NAME Wicked_Pbr_SrgbTransfer COMMAND cna_test_wicked_pbr_srgb_transfer)
+    set_tests_properties(Wicked_Pbr_SrgbTransfer PROPERTIES LABELS "GraphicsSmoke;Wicked"
+        TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # GLTF-343/344: dielectric F0/F90 witnesses on Wicked's rigid and skinned PBR pipelines.
+    cna_wicked_game_test(cna_test_wicked_pbr_fresnel_factors
+        modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
+    add_test(NAME Wicked_Pbr_FresnelFactors COMMAND cna_test_wicked_pbr_fresnel_factors)
+    set_tests_properties(Wicked_Pbr_FresnelFactors PROPERTIES LABELS "GraphicsSmoke;Wicked"
         TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_wicked.md WICKED-74. Everything else in this renderer needs a real Vulkan device, a

@@ -147,6 +147,9 @@ class DiligentPbrTest : public Game
                     const Vector3& light0Dir, const Vector3& light0Diffuse)
     {
         PbrEffect effect(device);
+        effect.setBaseColorTextureIsSrgbEXTProperty(false);
+        effect.setEmissiveTextureIsSrgbEXTProperty(false);
+        effect.setEncodeOutputToSrgbEXTProperty(false);
         effect.setTextureProperty(&albedo);
         effect.setNormalMapProperty(nullptr);
         effect.setMetallicFactorProperty(metallic);
@@ -184,6 +187,9 @@ class DiligentPbrTest : public Game
     Color RenderSkinnedPbrIdentity(GraphicsDevice& device, Texture2D& albedo)
     {
         SkinnedPbrEffect effect(device);
+        effect.setBaseColorTextureIsSrgbEXTProperty(false);
+        effect.setEmissiveTextureIsSrgbEXTProperty(false);
+        effect.setEncodeOutputToSrgbEXTProperty(false);
         effect.setTextureProperty(&albedo);
         effect.setNormalMapProperty(nullptr);
         effect.setMetallicFactorProperty(0.0f);

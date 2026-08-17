@@ -263,7 +263,9 @@ protected:
         {
             const Color got = ReadPixel(kSize / 2, kSize / 2);
             Check("null Texture/NormalMap/maps fall back without crashing: got=" + ColorStr(got),
-                  Matches(got, Color(128, 128, 128, 255), 20));
+                  // The neutral .5 linear ambient result is encoded to byte 188 for the UNORM
+                  // backbuffer; byte 128 was the pre-colour-management oracle.
+                  Matches(got, Color(188, 188, 188, 255), 20));
         }
 
         // Check F: SkinnedPbrEffect bone-palette position skinning.

@@ -3260,6 +3260,18 @@ namespace CNA::Internal::Renderers::Wicked
                                    constants.worldInverseTranspose);
                 constants.pbrFactors[0] = params->pbrMetallicFactor;
                 constants.pbrFactors[1] = params->pbrRoughnessFactor;
+                constants.pbrFactors[2] = params->pbrNormalScale;
+                constants.pbrFactors[3] = params->pbrOcclusionStrength;
+                constants.pbrSrgb[0] = params->pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f;
+                constants.pbrSrgb[1] = params->pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f;
+                constants.pbrSrgb[2] = params->pbrEncodeOutputToSrgb ? 1.0f : 0.0f;
+                constants.pbrDielectricFresnel[0] = params->pbrDielectricF0[0];
+                constants.pbrDielectricFresnel[1] = params->pbrDielectricF0[1];
+                constants.pbrDielectricFresnel[2] = params->pbrDielectricF0[2];
+                constants.pbrDielectricFresnel[3] = params->pbrDielectricF90;
+                std::memcpy(constants.pbrTextureTransformRows,
+                            params->pbrTextureTransformRows,
+                            sizeof(params->pbrTextureTransformRows));
             }
         }
         else

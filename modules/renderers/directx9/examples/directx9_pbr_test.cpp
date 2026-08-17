@@ -45,9 +45,11 @@
 #include "CNA/Internal/Renderers/DirectX9/D3D9Textures.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
+#include "../src/shaders/d3d9_pbr_shaders.hpp"
 
 #include <cstdint>
 #include <cstdio>
+#include <exception>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
@@ -65,6 +67,7 @@ namespace
     {
         ++totalCount;
         std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
+        std::fflush(stdout);
         if (ok) ++passCount;
     }
 
@@ -239,6 +242,7 @@ protected:
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);
+        std::fflush(stdout);
         Exit();
     }
 
@@ -249,14 +253,40 @@ public:
         gdm_->setPreferredBackBufferWidthProperty(64);
         gdm_->setPreferredBackBufferHeightProperty(64);
         gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
+
+        // Validate both generated pixel-shader blobs before the first resize/present. This keeps
+        // shader-bytecode acceptance visible even on WineD3D configurations whose swap-chain
+        // resize fails before Draw() is reached.
+        auto& renderer = static_cast<DirectX9Renderer&>(getGraphicsDeviceProperty().GetRenderer());
+        auto* device = renderer.GetDeviceEXT();
+        IDirect3DPixelShader9* rigid = nullptr;
+        IDirect3DPixelShader9* skinned = nullptr;
+        const HRESULT rigidHr = device->CreatePixelShader(
+            reinterpret_cast<const DWORD*>(Shaders::kPbr3DPSBytecode), &rigid);
+        const HRESULT skinnedHr = device->CreatePixelShader(
+            reinterpret_cast<const DWORD*>(Shaders::kPbrSkinned3DPSBytecode), &skinned);
+        check(SUCCEEDED(rigidHr), "CreatePixelShader accepts the generated rigid PBR blob");
+        check(SUCCEEDED(skinnedHr), "CreatePixelShader accepts the generated skinned PBR blob");
+        if (rigid != nullptr) rigid->Release();
+        if (skinned != nullptr) skinned->Release();
     }
 };
 
 int main()
 {
-    D3D9PbrTest game;
-    game.Run();
+    try
+    {
+        D3D9PbrTest game;
+        game.Run();
+    }
+    catch (const std::exception& error)
+    {
+        std::fprintf(stderr, "[FAIL] DirectX9 PBR test threw: %s\n", error.what());
+        std::fflush(stderr);
+        return 2;
+    }
 
     std::printf("=== %d/%d PASS (total) ===\n", passCount, totalCount);
+    std::fflush(stdout);
     return (passCount == totalCount) ? 0 : 1;
 }

@@ -1,5 +1,18 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
+
+#include <algorithm>
+#include <stdexcept>
+
+#include "Microsoft/Xna/Framework/Graphics/Model.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "System/ArgumentException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -168,4 +181,96 @@ namespace Microsoft::Xna::Framework::Graphics
                 skinningData_->InverseBindPose[static_cast<std::size_t>(i)] * worldTransforms_[static_cast<std::size_t>(i)];
         }
     }
+
+    const std::string& ModelAnimationsEXT::GetTypeName() const
+    {
+        static const std::string name = "Microsoft.Xna.Framework.Graphics.ModelAnimationsEXT";
+        return name;
+    }
+
+    void ApplyClipToBonesEXT(Model& model, const AnimationClip& clip, System::TimeSpan time)
+    {
+        // plan_gltf.md GLTF-294. Refusing a palette clip here is the whole reason
+        // AnimationClipEXT carries a target space at all: its indices name joint slots, and
+        // applying them to Model::Bones would pose the wrong bones with no symptom but wrong
+        // motion -- a silent corruption in place of the silent drop GLTF-293 removed.
+        if (clip.TargetSpace != ClipTargetSpaceEXT::SceneNode)
+        {
+            throw std::invalid_argument(
+                "ApplyClipToBonesEXT: this clip's tracks index a joint palette, not Model::Bones. "
+                "Play it through AnimationPlayer instead -- applying palette indices to bones "
+                "would pose the wrong bones silently.");
+        }
+
+        if (time < System::TimeSpan::Zero) { time = System::TimeSpan::Zero; }
+        if (time > clip.Duration) { time = clip.Duration; }
+
+        // The collection is const, but a bone it hands back is not: posing a model changes its
+        // bones' transforms, not which bones it has.
+        const ModelBoneCollection& bones = model.getBonesProperty();
+        for (const BoneTrackEXT& track : clip.Tracks)
+        {
+            if (track.Keys.empty()) { continue; }
+            if (track.BoneIndex < 0 || track.BoneIndex >= bones.getCountProperty()) { continue; }
+            // Only tracked bones are written. A clip animating one node of a large model must not
+            // reset every other bone to a pose it never mentioned.
+            bones[track.BoneIndex]->setTransformProperty(SampleTrack(track, time));
+        }
+    }
+
+
+    std::size_t ApplyBindPoseBoneTransformsEXT(Model& model, const SkinningData& skinningData)
+    {
+        // No clip started, so RecomputeTransforms() leaves every bone at its bind pose -- which is
+        // exactly the palette an application would push on its first frame.
+        AnimationPlayer player(skinningData);
+        player.Update(System::TimeSpan::Zero, false, false);
+        const std::vector<Matrix>& palette = player.GetSkinTransforms();
+        if (palette.empty()) { return 0; }
+
+        std::size_t posed = 0;
+        const ModelMeshCollection& meshes = model.getMeshesProperty();
+        for (int mi = 0; mi < meshes.getCountProperty(); ++mi)
+        {
+            const ModelMesh* mesh = meshes[mi];
+            if (mesh == nullptr) { continue; }
+
+            // GLTF-265: a runtime glTF Model can carry several independent skins. When its
+            // explicit mapping is present, applying skin A must not overwrite skin B's effect
+            // palette merely because both effects live in the same Model. Models built by older
+            // or non-glTF paths have no mapping and retain the historical apply-to-all behavior.
+            const std::vector<ModelSkinEXT>& skins = model.getSkinsEXTProperty();
+            if (!skins.empty())
+            {
+                bool belongsToSkin = false;
+                for (const ModelSkinEXT& skin : skins)
+                {
+                    if (skin.Data != &skinningData) { continue; }
+                    belongsToSkin = std::find(skin.Meshes.begin(), skin.Meshes.end(), mesh) !=
+                                    skin.Meshes.end();
+                    if (belongsToSkin) { break; }
+                }
+                if (!belongsToSkin) { continue; }
+            }
+            const ModelMeshPartCollection& parts = mesh->getMeshPartsProperty();
+            for (int pi = 0; pi < parts.getCountProperty(); ++pi)
+            {
+                ModelMeshPart* part = parts[pi];
+                if (part == nullptr) { continue; }
+                Effect* effect = part->getEffectProperty();
+                if (auto* skinnedPbr = dynamic_cast<SkinnedPbrEffect*>(effect))
+                {
+                    skinnedPbr->SetBoneTransforms(palette);
+                    ++posed;
+                }
+                else if (auto* skinned = dynamic_cast<SkinnedEffect*>(effect))
+                {
+                    skinned->SetBoneTransforms(palette);
+                    ++posed;
+                }
+            }
+        }
+        return posed;
+    }
+
 }

@@ -12,13 +12,14 @@
 > `EnvironmentMapEffect` (real cube-map reflection)/`SkinnedEffect` (real bone-transform skinning)
 > support, and a real pixel-correct `SpriteBatch` path reusing the same rasterizer core -- all
 > without any per-light diffuse lighting (design decision 6, still out of v1 scope for every
-> effect). Six CTests, 29 checks total: `Software_Smoke` (6/6), `Software_Rasterizer` (5/5,
+> effect). The original six focused CTests now contain 34 checks: `Software_Smoke` (6/6), `Software_Rasterizer` (10/10,
 > **order-independent depth occlusion**), `Software_Effects` (5/5), `Software_Culling` (5/5),
 > `Software_Clipping` (4/4), `Software_DualEnvmapSkinned` (4/4) -- all with **no window, no GPU, no
 > display server**. Plus a manually-run cross-backend diagnostic (`SOFTWARE-84`) confirming this
 > backend's output matches `EASYGL`'s within a max per-channel diff of 1 on a canonical scene.
-> `TriangleList` only in v1; no per-light lighting/fog, no MRT/cube-render-target/3D textures (see
-> Boundaries).
+> Effect-aware draws support `TriangleList`, `LineList`, `LineStrip` and `PointListEXT`;
+> `TriangleStrip` remains an explicit unsupported boundary. No per-light lighting/fog, no
+> MRT/cube-render-target/3D textures (see Boundaries).
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
@@ -151,7 +152,7 @@ without both.
 |---|---|---|---|
 | SOFTWARE-20 | `SoftwareVertexBufferBackend`: stores raw bytes + stride (real storage, not discarded, mirroring `HeadlessVertexBufferBackend`'s own `ShadowData()` pattern) | ✅ | Verified 2026-07-13 (`Software_Smoke` Check D): real `VertexBuffer`s at strides 16 (`VertexPositionColor`)/20 (`VertexPositionTexture`)/24 (`VertexPositionColorTexture`) all round-trip real vertex data through `SetData()` without throwing. `Data()`/`Stride()` accessors exist for Phase S4's rasterizer to read from directly. |
 | SOFTWARE-21 | `SoftwareIndexBufferBackend`: 16- and 32-bit, real storage | ✅ | Verified 2026-07-13 (`Software_Smoke` Check E): both a 16-bit and a 32-bit `IndexBuffer` round-trip real index data without throwing. A genuine bit-width mismatch (`SetData16` on a buffer declared 32-bit or vice versa) throws `std::runtime_error`, mirroring `HeadlessIndexBufferBackend`'s own precedent. |
-| SOFTWARE-22 | Stride-based vertex format inference (design decision 2): 16→`VertexPositionColor`, 20→`VertexPositionTexture`, 24→`VertexPositionColorTexture`. 32-byte (`VertexPositionNormalTexture`) explicitly deferred (needs lighting, out of scope for v1) | ✅ | **Closed** (dispatch logic landed with Phase S4's rasterizer, `BuildGenericClipVertex`/`BuildPositionColorClipVertex`, verified by `Software_Rasterizer`/`Software_Effects`). The 32-byte deferral was itself later lifted by `SOFTWARE-82` (Phase S9, 2026-07-13), which added real stride-32 (`VertexPositionNormalTexture`, `EnvironmentMapEffect`) and stride-52 (`VertexPositionNormalTextureSkinned`, `SkinnedEffect`) dispatch once a real (if lighting-free) use for the normal existed. |
+| SOFTWARE-22 | Stride-based vertex format inference (design decision 2): 16→`VertexPositionColor`, 20→`VertexPositionTexture`, 24→`VertexPositionColorTexture`. 32-byte (`VertexPositionNormalTexture`) explicitly deferred (needs lighting, out of scope for v1) | ✅ | **Closed** (dispatch logic landed with Phase S4's rasterizer, `BuildGenericClipVertex`/`BuildPositionColorClipVertex`, verified by `Software_Rasterizer`/`Software_Effects`). The 32-byte deferral was itself later lifted by `SOFTWARE-82` (Phase S9, 2026-07-13), which added real stride-32 (`VertexPositionNormalTexture`, `EnvironmentMapEffect`) and stride-52 (`VertexPositionNormalTextureSkinned`, `SkinnedEffect`) dispatch once a real (if lighting-free) use for the normal existed. `GLTF-387` completed the canonical table with 48/60-byte rigid PBR, 56-byte coloured skinning and 68/76-byte skinned PBR, all reached by the glTF native-boundary sweep. The 60/76 forms carry UV1; SOFTWARE consumes bit 0 of the shared PBR selector and slot zero's transform for its base-colour-only fallback. |
 
 ---
 
@@ -182,7 +183,7 @@ without both.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| SOFTWARE-50 | Wire `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` to the Phase S4/S5 rasterizer using `GpuDrawParams`' `vertexColorEnabled`/`textureEnabled`/`texture0`/`diffuseColor`/`worldColMajor` fields; `lightingEnabled`/`fogEnabled`/`dualTexture`/`envMapping`/`skinned` explicitly out of scope for v1 | ✅ | Verified 2026-07-13 via `Software_Effects` (5/5) and re-verified `Software_Rasterizer` (5/5) still passing through the now-real `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` overrides (previously only reachable via `IGraphicsBackend`'s own default fallback to `DrawColoredPrimitives`). Stride validated (16/20/24 only; other strides throw a clear error); `params.textureEnabled && texture0==nullptr` throws, mirroring `HEADLESS-22`'s own precedent. **Real bug caught by this exact wiring**: `Software_Rasterizer`'s existing checks briefly went 0/5 the moment this override landed, because `BasicEffect.VertexColorEnabled` defaults to `false` in real XNA/FNA (verified directly in `BasicEffect.hpp`) — the fallback path `DrawColoredPrimitives` had been implicitly always treating color as enabled, masking this. Fixed by updating the test to explicitly set `VertexColorEnabled = true` (matching how a real game would), not by changing the (correct) new behavior. |
+| SOFTWARE-50 | Wire `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` to the Phase S4/S5 rasterizer using `GpuDrawParams`' `vertexColorEnabled`/`textureEnabled`/`texture0`/`diffuseColor`/`worldColMajor` fields; `lightingEnabled`/`fogEnabled`/`dualTexture`/`envMapping`/`skinned` explicitly out of scope for v1 | ✅ | Verified 2026-07-13 via `Software_Effects` (5/5) and re-verified `Software_Rasterizer` (5/5) still passing through the now-real `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` overrides (previously only reachable via `IGraphicsBackend`'s own default fallback to `DrawColoredPrimitives`). Stride validated (16/20/24 only at closure; later extended by SOFTWARE-82 and `GLTF-387`). The original `textureEnabled && texture0==nullptr` refusal was deliberately replaced by `GLTF-387`'s white optional-base-map fallback: stock PBR and Skinned effects select a textured program without requiring a base map, and the native shader renderers bind white. Missing mandatory DualTexture/environment maps still refuse. **Real bug caught by this exact wiring**: `Software_Rasterizer`'s existing checks briefly went 0/5 the moment this override landed, because `BasicEffect.VertexColorEnabled` defaults to `false` in real XNA/FNA (verified directly in `BasicEffect.hpp`) — the fallback path `DrawColoredPrimitives` had been implicitly always treating color as enabled, masking this. Fixed by updating the test to explicitly set `VertexColorEnabled = true` (matching how a real game would), not by changing the (correct) new behavior. |
 | SOFTWARE-51 | `SpriteBatch` reuses the same rasterizer for its quad draws (design decision 5) — a real, pixel-correct CPU `SpriteBatch` path | ✅ | `SoftwareSpriteBatchBackend::Draw()` builds its quad corners using the exact same formula as `EasyGLGraphicsBackend::EasyGLSpriteBatchBackend::Draw()` (destination/source rectangle, origin, rotation, `SpriteEffects` flip), then feeds two triangles directly into `RasterizeTriangleShaded()` in screen-pixel space (no `World*View*Projection` — SpriteBatch never uses one). `transformMatrix_` is applied as a 2D point transform on the already-placed corners. Verified via `Software_Effects` Check E: a solid-color texture drawn via `SpriteBatch::Draw()` lands at the exact requested screen position. Rotation/origin/`SpriteEffects` flip are implemented (reusing the proven formula) but not yet covered by a dedicated test — a real, acknowledged gap. |
 | SOFTWARE-52 | Custom `ShaderEffect` (arbitrary GLSL/HLSL/WGSL source): accept without compiling (mirrors `HEADLESS-16`), document that only effects whose `FillGpuDrawParams()` output matches v1's fixed pixel-shading path will render correctly (design decision 8) | ✅ | Already implemented since Phase S1 (`SoftwareEffectBackend::CompileProgram()`): accepts any non-empty vertex/fragment source without compiling, mirroring `HEADLESS-16`. Not yet exercised by a dedicated Software test (Headless has one via `Headless_ResourceBackends`); the underlying behavior is identical and low-risk, so this is a documentation/test-coverage gap, not an implementation gap. |
 
@@ -233,7 +234,7 @@ in an approved batch. Ordered roughly by value-for-effort, cheapest/highest-valu
   init fails) — a separate, larger, cross-cutting feature, not part of this backend's own scope.
   Flag it as a possible follow-up plan if wanted later; do not fold it into this one.
 - Full per-light `BasicEffect` lighting/fog (and the equivalent lighting inputs on
-  `EnvironmentMapEffect`/`SkinnedEffect`), MRT, MSAA, automatic mip generation for ordinary
+  `EnvironmentMapEffect`/`SkinnedEffect`), MRT, automatic mip generation for ordinary
   textures, anisotropic filtering, 3D
   textures, and render-target cube maps remain explicitly out of scope for v1, matching the
   owner's own minimal first-version list verbatim (clear; render target; triangle list; basic
@@ -242,6 +243,8 @@ in an approved batch. Ordered roughly by value-for-effort, cheapest/highest-valu
   textures were later lifted out of this out-of-scope list by `SOFTWARE-82`** (Phase S9,
   2026-07-13, minus the per-light lighting caveat above) — see that row and
   `docs/software-backend.md`'s Known Limitations for exactly what's supported.
+  Render-target 4x MSAA was likewise implemented later by the CPU rasteriser; `GLTF-395` locks its
+  active-pass level-zero resolve/readback contract in addition to the existing unbound tests.
   `Model.Draw()` with real skinning specifically hasn't been separately verified end-to-end
   (only the lower-level `SkinnedEffect`/`DrawPrimitivesEx` path was tested).
 - Performance/SIMD/multithreading work is explicitly not a goal (design decision 1) — do not
@@ -253,12 +256,11 @@ in an approved batch. Ordered roughly by value-for-effort, cheapest/highest-valu
 - If Phase S4's rasterizer core turns out to need real polygon near-plane clipping sooner than
   expected (visible artifacts in even simple test scenes), treat that as a legitimate scope
   addition to flag and discuss, not something to silently skip or silently half-implement.
-- **`TriangleList` only in v1** (already called out in the top status banner, restated here since
-  this is the section meant to be the durable reference): `TriangleStrip`/`LineList`/`LineStrip`/
-  `PointListEXT` all throw a clear "only TriangleList is supported in v1" error instead of silently
-  misrendering. Not tracked as its own `SOFTWARE-NN` row because it was never implemented in the
-  first place (Phase S4's rasterizer core was scoped to triangles from the start) — see
-  `docs/software-backend.md`'s Known Limitations for the exact error text.
+- **`TriangleStrip` remains unsupported.** `GLTF-387` extended the effect-aware indexed and
+  non-indexed path to `LineList`, `LineStrip` and `PointListEXT`; near-plane-clipped lines and
+  points share the established depth/blend/shading fragment path. Strips and the legacy coloured
+  convenience paths retain the clear TriangleList-only refusal rather than silently misrendering.
+  See `docs/software-renderer.md`'s Known Limitations for the current boundary.
 - **Bilinear texture sampling (`SOFTWARE-80`) is always on, regardless of `SamplerState.Filter`**,
   and there is no real texture address-mode support — `Wrap`/`Mirror` are not implemented, UVs are
   simply clamped to `[0,1]` at the texture bounds regardless of what `SamplerState.AddressU/V`

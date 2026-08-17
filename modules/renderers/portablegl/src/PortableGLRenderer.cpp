@@ -510,8 +510,9 @@ namespace CNA::Internal::Renderers::PortableGL
     // PortableGLIndexBufferRenderer
     // =========================================================================================
 
-    PortableGLIndexBufferRenderer::PortableGLIndexBufferRenderer(void* pglContext, int indexCapacity)
-        : pglContext_(pglContext), indexCount_(indexCapacity)
+    PortableGLIndexBufferRenderer::PortableGLIndexBufferRenderer(
+        void* pglContext, int indexCapacity, bool thirtyTwoBit)
+        : pglContext_(pglContext), indexCount_(indexCapacity), thirtyTwoBit_(thirtyTwoBit)
     {
         MakeCurrent(pglContext_);
         GLuint buf = 0;
@@ -535,10 +536,12 @@ namespace CNA::Internal::Renderers::PortableGL
     {
         if (index_count < 0)
             throw std::runtime_error("PortableGLIndexBufferRenderer::SetData16: negative index count");
+        if (thirtyTwoBit_)
+            throw std::runtime_error(
+                "PortableGLIndexBufferRenderer::SetData16: upload width does not match the declared 32-bit buffer");
 
         MakeCurrent(pglContext_);
         indexCount_ = index_count;
-        thirtyTwoBit_ = false;
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, glBuffer_);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER,
                     static_cast<GLsizeiptr>(sizeof(std::uint16_t) * static_cast<std::size_t>(index_count)),
@@ -549,10 +552,12 @@ namespace CNA::Internal::Renderers::PortableGL
     {
         if (index_count < 0)
             throw std::runtime_error("PortableGLIndexBufferRenderer::SetData32: negative index count");
+        if (!thirtyTwoBit_)
+            throw std::runtime_error(
+                "PortableGLIndexBufferRenderer::SetData32: upload width does not match the declared 16-bit buffer");
 
         MakeCurrent(pglContext_);
         indexCount_ = index_count;
-        thirtyTwoBit_ = true;
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, glBuffer_);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER,
                     static_cast<GLsizeiptr>(sizeof(std::uint32_t) * static_cast<std::size_t>(index_count)),
@@ -1381,7 +1386,14 @@ namespace CNA::Internal::Renderers::PortableGL
 
     std::unique_ptr<IIndexBufferRenderer> PortableGLRenderer::CreateIndexBuffer16(int index_capacity)
     {
-        return std::make_unique<PortableGLIndexBufferRenderer>(&impl_->context, index_capacity);
+        return std::make_unique<PortableGLIndexBufferRenderer>(
+            &impl_->context, index_capacity, /*thirtyTwoBit=*/false);
+    }
+
+    std::unique_ptr<IIndexBufferRenderer> PortableGLRenderer::CreateIndexBuffer32(int index_capacity)
+    {
+        return std::make_unique<PortableGLIndexBufferRenderer>(
+            &impl_->context, index_capacity, /*thirtyTwoBit=*/true);
     }
 
     void PortableGLRenderer::DrawColoredCommon(const IVertexBufferRenderer& vbIn,

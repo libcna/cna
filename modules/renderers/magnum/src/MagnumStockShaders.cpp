@@ -356,10 +356,20 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             source += "uniform mat4 uWorld;\n";
             source += "uniform mat3 uNormalMatrix;\n";
             source += "uniform vec4 uFogVector;\n";
+            source += "float cnaDirectionHandedness(mat3 m){\n";
+            source += "    return dot(m[0],cross(m[1],m[2]))<0.0?-1.0:1.0;\n";
+            source += "}\n";
             if (skinned)
             {
                 source += "uniform mat4 uBones[" + std::to_string(kMagnumMaxBones) + "];\n";
                 source += "uniform int uWeightsPerVertex;\n";
+                source += "vec3 cnaSkinNormal(mat3 m,vec3 n){\n";
+                source += "    vec3 c0=m[0],c1=m[1],c2=m[2];\n";
+                source += "    vec3 co0=cross(c1,c2),co1=cross(c2,c0),co2=cross(c0,c1);\n";
+                source += "    float det=dot(c0,co0);\n";
+                source += "    vec3 transformed=mat3(co0,co1,co2)*n;\n";
+                source += "    return (abs(det)>1e-6)?transformed*sign(det):m*n;\n";
+                source += "}\n";
             }
             source += "out vec3 vNormal;\n";
             source += "out vec3 vTangent;\n";
@@ -379,7 +389,7 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
                 source += "    vec4 cnaPosition = cnaInstancePosition(skin * vec4(aPosition, 1.0));\n";
                 // The tangent frame is skinned too: leaving it in bind pose would light a deformed
                 // surface with the normal map of an undeformed one.
-                source += "    vec3 skinnedNormal = mat3(skin) * aNormal;\n";
+                source += "    vec3 skinnedNormal = cnaSkinNormal(mat3(skin), aNormal);\n";
                 source += "    float skinnedNormalLength = length(skinnedNormal);\n";
                 source += "    vec3 boneNormal = (skinnedNormalLength > 1e-6)\n";
                 source += "        ? (skinnedNormal / skinnedNormalLength) : aNormal;\n";
@@ -393,8 +403,14 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             }
             source += "    gl_Position = uWVP * cnaPosition;\n";
             source += "    vNormal = uNormalMatrix * cnaInstanceDirection(boneNormal);\n";
-            source += "    vTangent = mat3(uWorld) * cnaInstanceDirection(boneTangent);\n";
-            source += "    vBitangentSign = aTangent.w;\n";
+            source += "    mat3 cnaWorldDirection = mat3(uWorld);\n";
+            source += "    vTangent = cnaWorldDirection * cnaInstanceDirection(boneTangent);\n";
+            source += "    float cnaInstanceSign = (uCnaInstanced > 0.5)\n";
+            source += "        ? cnaDirectionHandedness(mat3(cnaInstanceMatrix())) : 1.0;\n";
+            if (skinned)
+                source += "    vBitangentSign = aTangent.w*cnaDirectionHandedness(cnaWorldDirection)*cnaInstanceSign*cnaDirectionHandedness(mat3(skin));\n";
+            else
+                source += "    vBitangentSign = aTangent.w*cnaDirectionHandedness(cnaWorldDirection)*cnaInstanceSign;\n";
             source += "    vTexCoord = aTexCoord;\n";
             source += "    vWorldPosition = (uWorld * cnaPosition).xyz;\n";
             source += kFogVertexTerm;
@@ -416,11 +432,15 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             source += "uniform sampler2D uMetallicRoughnessMap;\n";
             source += "uniform sampler2D uEmissiveMap;\n";
             source += "uniform sampler2D uOcclusionMap;\n";
+            source += "uniform sampler2D uSpecularMap;\n";
+            source += "uniform sampler2D uSpecularColorMap;\n";
             source += "uniform vec4 uDiffuseColor;\n";
             source += "uniform vec3 uAmbientColor;\n";
             source += "uniform vec3 uEmissiveColor;\n";
             source += "uniform float uMetallicFactor;\n";
             source += "uniform float uRoughnessFactor;\n";
+            source += "uniform float uNormalScale;\n";
+            source += "uniform float uOcclusionStrength;\n";
             source += "uniform vec3 uLight0Dir;\n";
             source += "uniform vec3 uLight0Diffuse;\n";
             source += "uniform vec3 uLight1Dir;\n";
@@ -430,6 +450,11 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             source += "uniform vec3 uEyePosition;\n";
             source += "uniform vec4 uAlphaTest;\n";
             source += "uniform vec3 uFogColor;\n";
+            source += "uniform vec3 uSrgb;\n";
+            source += "uniform vec4 uSpecularFresnelInputs;\n";
+            source += "uniform vec3 uSpecularMapFlags;\n";
+            source += "uniform vec4 uTextureTransformRows[10];\n";
+            source += "uniform vec4 uSpecularTextureTransformRows[4];\n";
             // Unit 4 (the occlusion map) needs a fifth flag, which does not fit in uRtFlipV's four
             // components -- this is the only program that samples that far.
             source += "uniform vec4 uRtFlipVHi;\n";
@@ -438,8 +463,18 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             // The glTF metallic-roughness BRDF: GGX distribution, Smith-Schlick geometry and a
             // Schlick Fresnel, with the diffuse lobe scaled away as the surface becomes metallic.
             source += R"(
+vec3 cnaSrgbToLinear(vec3 c){
+    vec3 lo = c / 12.92;
+    vec3 hi = pow((c + 0.055) / 1.055, vec3(2.4));
+    return mix(lo, hi, step(vec3(0.04045), c));
+}
+vec3 cnaLinearToSrgb(vec3 c){
+    vec3 lo = c * 12.92;
+    vec3 hi = 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
+    return mix(lo, hi, step(vec3(0.0031308), c));
+}
 vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
-                 vec3 albedo, vec3 f0, float roughness, float metallic){
+                 vec3 albedo, vec3 f0, vec3 f90, float roughness, float metallic){
     vec3 halfway = normalize(view + light);
     float nDotL = max(dot(normal, light), 0.0);
     float nDotV = max(dot(normal, view), 1e-4);
@@ -451,15 +486,28 @@ vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
     float k = (roughness + 1.0);
     k = k * k / 8.0;
     float geometry = (nDotV / (nDotV * (1.0 - k) + k)) * (nDotL / (nDotL * (1.0 - k) + k));
-    vec3 fresnel = f0 + (vec3(1.0) - f0) * pow(clamp(1.0 - vDotH, 0.0, 1.0), 5.0);
+    vec3 fresnel = f0 + (f90 - f0) * pow(clamp(1.0 - vDotH, 0.0, 1.0), 5.0);
     vec3 specular = (distribution * geometry * fresnel) / max(4.0 * nDotV * nDotL, 1e-4);
     vec3 diffuse = albedo * (1.0 - metallic);
     return ((vec3(1.0) - fresnel) * diffuse / 3.14159265 + specular) * lightColor * nDotL;
 }
 )";
+            source += R"(
+vec2 cnaPbrTransformUV(vec2 uv, int slot){
+    vec3 value = vec3(uv, 1.0);
+    return vec2(dot(value, uTextureTransformRows[slot * 2].xyz),
+                dot(value, uTextureTransformRows[slot * 2 + 1].xyz));
+}
+vec2 cnaPbrSpecularTransformUV(vec2 uv, int slot){
+    vec3 value = vec3(uv, 1.0);
+    return vec2(dot(value, uSpecularTextureTransformRows[slot * 2].xyz),
+                dot(value, uSpecularTextureTransformRows[slot * 2 + 1].xyz));
+}
+)";
             source += "void main(){\n";
-            source += "    vec4 baseColor = texture(uTexture, cnaSampleUV(vTexCoord, uRtFlipV.x));\n";
-            source += "    vec3 albedo = baseColor.rgb * uDiffuseColor.rgb;\n";
+            source += "    vec4 baseColor = texture(uTexture, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 0), uRtFlipV.x));\n";
+            source += "    vec3 baseLinear = mix(baseColor.rgb, cnaSrgbToLinear(baseColor.rgb), uSrgb.x);\n";
+            source += "    vec3 albedo = baseLinear * uDiffuseColor.rgb;\n";
             source += "    float alpha = baseColor.a * uDiffuseColor.a;\n";
             source += "    vec3 normal = normalize(vNormal);\n";
             // Gram-Schmidt: the interpolated tangent is no longer exactly perpendicular to the
@@ -468,29 +516,39 @@ vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
             source += "    vec3 bitangent = cross(normal, tangent) * vBitangentSign;\n";
             source += "    mat3 tangentBasis = mat3(tangent, bitangent, normal);\n";
             source += "    vec3 sampledNormal =\n";
-            source += "        texture(uNormalMap, cnaSampleUV(vTexCoord, uRtFlipV.y)).rgb * 2.0 - 1.0;\n";
+            source += "        texture(uNormalMap, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 1), uRtFlipV.y)).rgb * 2.0 - 1.0;\n";
+            source += "    sampledNormal.xy *= uNormalScale;\n";
             source += "    vec3 shadingNormal = normalize(tangentBasis * sampledNormal);\n";
             source += "    vec4 metallicRoughness =\n";
-            source += "        texture(uMetallicRoughnessMap, cnaSampleUV(vTexCoord, uRtFlipV.z));\n";
+            source += "        texture(uMetallicRoughnessMap, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 2), uRtFlipV.z));\n";
             // glTF's own packing: green is roughness, blue is metallic. The roughness floor keeps
             // the specular lobe from collapsing into a numerically undefined mirror.
             source += "    float roughness = clamp(metallicRoughness.g * uRoughnessFactor, 0.045, 1.0);\n";
             source += "    float metallic = clamp(metallicRoughness.b * uMetallicFactor, 0.0, 1.0);\n";
             source += "    vec3 view = normalize(uEyePosition - vWorldPosition);\n";
-            source += "    vec3 f0 = mix(vec3(0.04), albedo, metallic);\n";
+            source += "    float specularWeight = uSpecularFresnelInputs.w * texture(uSpecularMap, cnaSampleUV(cnaPbrSpecularTransformUV(vTexCoord, 0), uSpecularMapFlags.y)).a;\n";
+            source += "    vec3 specularColorTex = texture(uSpecularColorMap, cnaSampleUV(cnaPbrSpecularTransformUV(vTexCoord, 1), uSpecularMapFlags.z)).rgb;\n";
+            source += "    specularColorTex = mix(specularColorTex, cnaSrgbToLinear(specularColorTex), uSpecularMapFlags.x);\n";
+            source += "    vec3 dielectricF0 = min(uSpecularFresnelInputs.xyz * specularColorTex, vec3(1.0)) * specularWeight;\n";
+            source += "    vec3 f0 = mix(dielectricF0, albedo, metallic);\n";
+            source += "    vec3 f90 = mix(vec3(specularWeight), vec3(1.0), metallic);\n";
             source += "    vec3 reflected = cnaPbrLight(shadingNormal, view, normalize(-uLight0Dir),\n";
-            source += "                                 uLight0Diffuse, albedo, f0, roughness, metallic)\n";
+            source += "                                 uLight0Diffuse, albedo, f0, f90, roughness, metallic)\n";
             source += "                   + cnaPbrLight(shadingNormal, view, normalize(-uLight1Dir),\n";
-            source += "                                 uLight1Diffuse, albedo, f0, roughness, metallic)\n";
+            source += "                                 uLight1Diffuse, albedo, f0, f90, roughness, metallic)\n";
             source += "                   + cnaPbrLight(shadingNormal, view, normalize(-uLight2Dir),\n";
-            source += "                                 uLight2Diffuse, albedo, f0, roughness, metallic);\n";
-            source += "    float occlusion = texture(uOcclusionMap, cnaSampleUV(vTexCoord, uRtFlipVHi.x)).r;\n";
+            source += "                                 uLight2Diffuse, albedo, f0, f90, roughness, metallic);\n";
+            source += "    float occlusionSample = texture(uOcclusionMap, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 4), uRtFlipVHi.x)).r;\n";
+            source += "    float occlusion = 1.0 + uOcclusionStrength * (occlusionSample - 1.0);\n";
             source += "    vec3 ambient = uAmbientColor * albedo * occlusion;\n";
-            source += "    vec3 emissive =\n";
-            source += "        uEmissiveColor * texture(uEmissiveMap, cnaSampleUV(vTexCoord, uRtFlipV.w)).rgb;\n";
+            source += "    vec3 emissiveSample = texture(uEmissiveMap, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 3), uRtFlipV.w)).rgb;\n";
+            source += "    emissiveSample = mix(emissiveSample, cnaSrgbToLinear(emissiveSample), uSrgb.y);\n";
+            source += "    vec3 emissive = uEmissiveColor * emissiveSample;\n";
             source += "    fragColor = vec4(ambient + reflected + emissive, alpha);\n";
             source += kAlphaTestFragmentTerm;
-            source += kFogFragmentTerm;
+            source += "    vec3 fogLinear = mix(uFogColor, cnaSrgbToLinear(uFogColor), uSrgb.z);\n";
+            source += "    fragColor.rgb = mix(fogLinear, fragColor.rgb, vFogFactor);\n";
+            source += "    fragColor.rgb = mix(fragColor.rgb, cnaLinearToSrgb(fragColor.rgb), uSrgb.z);\n";
             source += "}\n";
             return source;
         }

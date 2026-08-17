@@ -24,7 +24,7 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 | **CURRENT** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **in progress**: six additions — `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`, `PORTABLEGL` — are implemented on their own lanes and integrated on `11branches`. The remaining planned additions are untouched and each still requires its own explicit owner instruction |
 | **FUTURE** | Phase 3 — complete XNA sample campaign | **not started**; blocked on Phases 1–2 |
 | **FUTURE** | Phase 4 — historical plan/audit review | **not started**; blocked on Phase 3 |
-| **FUTURE** | Phase 5 — glTF correctness campaign | **not started**; blocked on Phase 4 |
+| **CURRENT** | Phase 5 — glTF correctness campaign | **in progress on `feature/gltf`, ahead of its stated Phase 4 dependency** (started 2026-08-11 from `gltfissues.md`'s analysis and a forensic audit that reproduced eight defects, D1–D8, every one of which produced a *model that rendered*). The working record is `plan_gltf.md`: 460 rows, **450 closed**, and all eight audit defects `fixed` in the corpus defect ledger. The evidence base is a generated 145-asset corpus, the exact L0–L6 numerical ladder run per commit under ASan+UBSan, a required production-viewer OPENGLES3 L7 gate with 137 deterministic PNGs plus 8 deterministic safe rejections, the 13-case pinned Khronos comparison and the completed 15-case Gate C viewer retake (`docs/gltf-conformance.md`). **`GLTF CORE 2.0 CORRECT` was declared on 2026-08-15** after all 20 §27.1 rows and the fresh four-renderer Gate B were green. Phase 5 remains current, rather than complete: `GLTF-459` (**GLTF ROBUST**), optional-extension/renderer-specific L7 residue and the retrospective are still open |
 
 Explicitly **not** true today, and not to be stated as true anywhere:
 
@@ -40,7 +40,13 @@ Explicitly **not** true today, and not to be stated as true anywhere:
   `SharpRuntime::<Component>` targets; the audit-remediation campaign itself continues on its
   feature branch and later increments merge separately.
 - The XNA samples do **not** all pass. The corpus has not been revisited.
-- glTF is **not** corrected. `cna-gltf-viewer` still displays many assets incorrectly.
+- glTF **ROBUST** is not declared and the broader campaign is not finished. What is true, with a
+  narrower and checkable meaning, is that **GLTF CORE 2.0 CORRECT was declared on 2026-08-15** from
+  all 20 §27.1 requirements and Gate B. The separate `cna-gltf-viewer` completed the pinned Gate C
+  retake, dual UV transport/selection is pixel- and Khronos-proven, and every remaining limitation
+  is enumerated in `docs/gltf-limitations.md` and reported rather than silent. Optional material
+  extensions and renderer-specific whole-corpus L7 policies remain §27.2/ROBUST work; the CORE
+  declaration must not be expanded to cover them.
 
 Phases are sequential. Each depends on its predecessor being completed and stabilized.
 

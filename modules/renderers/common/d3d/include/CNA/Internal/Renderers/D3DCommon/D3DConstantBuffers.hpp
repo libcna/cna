@@ -221,12 +221,12 @@ namespace CNA::Internal::Renderers::D3DCommon
     static_assert(sizeof(D3DSprite2DConstants) == 16, "D3DSprite2DConstants must be a 16-byte buffer (sprite2d's real PerDraw cbuffer is only 8 bytes of shader-visible data)");
     static_assert(sizeof(D3DSprite2DConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
 
-    /// plan_cnj.md CNB-58 follow-up: matches pbr3d.vert.hlsl/pbr3d.frag.hlsl's and
-    /// pbr_skinned3d.vert.hlsl/pbr_skinned3d.frag.hlsl's shared `cbuffer PerDraw : register(b0)`
-    /// byte-for-byte (176 bytes) -- the metallic-roughness BRDF's material-level constants
-    /// (PbrEffect/SkinnedPbrEffect). Includes World (unlike D3DPerDrawConstants) since the PBR
-    /// fragment stage needs a true world-space position/normal for its BRDF, same reasoning
-    /// D3DLightingConstants documents for lit_textured3d.
+    /// plan_cnj.md CNB-58 follow-up: matches pbr3d.frag.hlsl and
+    /// pbr_skinned3d.frag.hlsl's `cbuffer PerDraw : register(b0)` byte-for-byte (496 bytes) -- the
+    /// metallic-roughness BRDF's material-level constants (PbrEffect/SkinnedPbrEffect). The vertex
+    /// stages declare only the prefix they consume. Includes World (unlike D3DPerDrawConstants)
+    /// since the PBR fragment stage needs a true world-space position/normal for its BRDF, same
+    /// reasoning D3DLightingConstants documents for lit_textured3d.
     struct alignas(16) D3DPbrPerDrawConstants
     {
         float Mvp[16];              ///< row_major float4x4, offset 0 (64 bytes).
@@ -234,12 +234,28 @@ namespace CNA::Internal::Renderers::D3DCommon
         float DiffuseColor[4];      ///< offset 128: material base color factor (RGBA)
         float AmbientMetallic[4];   ///< offset 144: xyz = AmbientColor, w = MetallicFactor
         float EmissiveRoughness[4]; ///< offset 160: xyz = EmissiveColor, w = RoughnessFactor
+        float AlphaTest[4];          ///< offset 176: reference, tolerance, pass/fail weights
+        float PbrMapScales[4];       ///< offset 192: x/y = map scales, z/w = base/emissive decode
+        float DielectricFresnel[4];  ///< offset 208: xyz = dielectric F0, w = dielectric F90
+        float TextureTransformRows[10][4]; ///< offset 224: two affine UV rows per PBR map
+        float TextureCoordinateSets[4]; ///< offset 384: x = seven-bit TEXCOORD_1 selector mask
+        float SpecularFresnelInputs[4]; ///< offset 400: xyz = unclamped F0, w = specular factor
+        float SpecularMapFlags[4]; ///< offset 416: x = decode specular-colour sample from sRGB
+        float SpecularTextureTransformRows[4][4]; ///< offset 432: two rows per specular map
     };
-    static_assert(sizeof(D3DPbrPerDrawConstants) == 176, "D3DPbrPerDrawConstants must match pbr3d's real 176-byte PerDraw cbuffer size");
+    static_assert(sizeof(D3DPbrPerDrawConstants) == 496, "D3DPbrPerDrawConstants must match pbr3d's real 496-byte PerDraw cbuffer size");
     static_assert(offsetof(D3DPbrPerDrawConstants, World) == 64, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DPbrPerDrawConstants, DiffuseColor) == 128, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DPbrPerDrawConstants, AmbientMetallic) == 144, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DPbrPerDrawConstants, EmissiveRoughness) == 160, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DPbrPerDrawConstants, AlphaTest) == 176, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DPbrPerDrawConstants, PbrMapScales) == 192, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DPbrPerDrawConstants, DielectricFresnel) == 208, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DPbrPerDrawConstants, TextureTransformRows) == 224, "D3DPbrPerDrawConstants texture-transform offset mismatch vs HLSL");
+    static_assert(offsetof(D3DPbrPerDrawConstants, TextureCoordinateSets) == 384, "D3DPbrPerDrawConstants texture-coordinate selector offset mismatch vs HLSL");
+    static_assert(offsetof(D3DPbrPerDrawConstants, SpecularFresnelInputs) == 400, "D3DPbrPerDrawConstants specular-Fresnel offset mismatch vs HLSL");
+    static_assert(offsetof(D3DPbrPerDrawConstants, SpecularMapFlags) == 416, "D3DPbrPerDrawConstants specular-map-flags offset mismatch vs HLSL");
+    static_assert(offsetof(D3DPbrPerDrawConstants, SpecularTextureTransformRows) == 432, "D3DPbrPerDrawConstants specular-transform offset mismatch vs HLSL");
     static_assert(sizeof(D3DPbrPerDrawConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
 
     /// plan_cnj.md CNB-58 follow-up: matches pbr3d.vert.hlsl/pbr3d.frag.hlsl's shared
@@ -257,7 +273,7 @@ namespace CNA::Internal::Renderers::D3DCommon
         float Light1Diffuse[4];     ///< offset 64
         float Light2Dir[4];         ///< offset 80:  xyz + pad
         float Light2Diffuse[4];     ///< offset 96
-        float FogColor[4];          ///< offset 112: xyz = FogColor, w = reserved padding
+        float FogColor[4];          ///< offset 112: xyz = FogColor, w = PBR output sRGB encode
         float FogVector[4];         ///< offset 128: CPU-prepared FNA view-space fog vector
     };
     static_assert(sizeof(D3DPbrLightConstants) == 144, "D3DPbrLightConstants must match PbrLights's real 144-byte HLSL cbuffer size");

@@ -36,17 +36,27 @@
 //   - kMultiSkinGltf: two independent one-bone skins, each with its own mesh node -- proves the
 //     tool no longer silently imports only the first skin in a file.
 
+#include <algorithm>
 #include <array>
 #include <cerrno>
+#include <optional>
 #include <cstring>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
+#include <sstream>
+
+#include "System/Security/Cryptography/SHA256.hpp"
 #include <gtest/gtest.h>
 #include <spawn.h>
 #include <string>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <vector>
 
+#include "CNA/Internal/CnjMorphSidecarEXT.hpp"
+#include "CNA/Internal/Json.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -64,6 +74,8 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "../../../../CNA/Internal/GltfImport/GltfFixtureCorpus.hpp"
+#include "../../../../CNA/Internal/GltfImport/GltfDrawParamsOracleEXT.hpp"
 
 extern char** environ;
 
@@ -161,14 +173,14 @@ namespace
   "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
   "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 } } ] } ],
   "buffers": [ {
-    "byteLength": 74,
-    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AQAAAABAAABAQAAAgEA="
+    "byteLength": 76,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AQAAAAAAAEAAAEBAAACAQA=="
   } ],
   "bufferViews": [
     { "buffer": 0, "byteOffset": 0,  "byteLength": 36 },
     { "buffer": 0, "byteOffset": 36, "byteLength": 24 },
     { "buffer": 0, "byteOffset": 60, "byteLength": 2 },
-    { "buffer": 0, "byteOffset": 62, "byteLength": 12 }
+    { "buffer": 0, "byteOffset": 64, "byteLength": 12 }
   ],
   "accessors": [
     { "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [2,3,4],
@@ -436,10 +448,10 @@ namespace
   ]
 })GLTF";
 
-    // TEXCOORD_0 is deliberately filled with (9,9) sentinel values the tool must NEVER pick;
-    // the material's baseColorTexture selects "texCoord": 1, so the real UVs must come from
-    // TEXCOORD_1. Also carries a real embedded 1x1 PNG so the texture-extraction step (unrelated
-    // to what this fixture actually tests) succeeds rather than erroring on a missing file.
+    // TEXCOORD_0 is deliberately filled with (9,9) sentinel values while the base-colour map
+    // selects TEXCOORD_1's ordinary triangle UVs. An emissive map independently selects set 0,
+    // making both packed channels and the per-slot selector observable. Also carries a real
+    // embedded 1x1 PNG so texture extraction succeeds rather than masking the UV contract.
     const char* kTexcoordSelectionGltf = R"GLTF({
   "asset": { "version": "2.0" },
   "scene": 0,
@@ -449,7 +461,10 @@ namespace
       "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2, "TEXCOORD_1": 3 },
       "material": 0
   } ] } ],
-  "materials": [ { "pbrMetallicRoughness": { "baseColorTexture": { "index": 0, "texCoord": 1 } } } ],
+  "materials": [ {
+    "pbrMetallicRoughness": { "baseColorTexture": { "index": 0, "texCoord": 1 } },
+    "emissiveTexture": { "index": 0, "texCoord": 0 }
+  } ],
   "textures": [ { "source": 0 } ],
   "images": [ { "bufferView": 4, "mimeType": "image/png" } ],
   "buffers": [ {
@@ -728,30 +743,62 @@ namespace
   ]
 })GLTF";
 
-    // CNB-56/59 (Phase 13A): an unskinned triangle with base-color + normal + metallic-roughness
-    // + emissive maps, an explicit TANGENT accessor, and non-default factor values -- proves the
-    // offline CLI tool's own .cnj/binary-sidecar serialization of PbrEffect (unlike morph targets,
-    // which the CLI tool deliberately does not serialize -- see gltf_to_cnj.cpp's own docs).
+    // CNB-56/59 + plan_gltf.md GLTF-236/237/343/344: an unskinned triangle with all five material
+    // slots, an explicit TANGENT accessor, and deliberately non-default core/Fresnel/alpha/sampler
+    // state -- proves the offline CLI tool's complete factor-only .cnj material serialization.
     const char* kPbrGltf = R"GLTF({
   "asset": { "version": "2.0" },
+  "extensionsUsed": [ "KHR_materials_ior", "KHR_materials_specular", "KHR_texture_transform" ],
   "scene": 0,
   "scenes": [ { "nodes": [0] } ],
   "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
   "meshes": [ { "primitives": [ { "attributes": {
-      "POSITION": 0, "NORMAL": 1, "TANGENT": 2, "TEXCOORD_0": 3
+      "POSITION": 0, "NORMAL": 1, "TANGENT": 2, "TEXCOORD_0": 3,
+      "TEXCOORD_1": 3
   }, "material": 0 } ] } ],
   "materials": [ {
     "pbrMetallicRoughness": {
-      "baseColorTexture": { "index": 0 },
+      "baseColorTexture": { "index": 0, "extensions": { "KHR_texture_transform": {
+        "offset": [0.125, 0.375], "scale": [2.0, 0.5], "rotation": 1.5707963267948966
+      } } },
+      "baseColorFactor": [0.25, 0.5, 0.75, 0.4],
       "metallicRoughnessTexture": { "index": 2 },
       "metallicFactor": 0.5,
       "roughnessFactor": 0.3
     },
-    "normalTexture": { "index": 1 },
+    "normalTexture": { "index": 1, "scale": 0.35, "extensions": {
+      "KHR_texture_transform": {
+        "offset": [0.625, 0.25], "scale": [0.75, 1.5], "rotation": -0.7853981633974483
+      }
+    } },
+    "occlusionTexture": { "index": 3, "strength": 0.65 },
     "emissiveTexture": { "index": 3 },
-    "emissiveFactor": [0.1, 0.2, 0.3]
+    "emissiveFactor": [0.1, 0.2, 0.3],
+    "alphaMode": "MASK",
+    "alphaCutoff": 0.73,
+    "doubleSided": true,
+    "extensions": {
+      "KHR_materials_ior": { "ior": 2.0 },
+      "KHR_materials_specular": {
+        "specularFactor": 0.3,
+        "specularColorFactor": [0.25, 1.0, 12.0],
+        "specularTexture": { "index": 3, "texCoord": 1, "extensions": {
+          "KHR_texture_transform": {
+            "offset": [0.2, 0.4], "scale": [0.3, 0.6], "rotation": 0.25
+          }
+        } },
+        "specularColorTexture": { "index": 0, "texCoord": 0, "extensions": {
+          "KHR_texture_transform": {
+            "offset": [0.7, 0.8], "scale": [1.5, 2.5], "rotation": -0.5
+          }
+        } }
+      }
+    }
   } ],
-  "textures": [ { "source": 0 }, { "source": 1 }, { "source": 2 }, { "source": 3 } ],
+  "textures": [
+    { "source": 0, "sampler": 0 }, { "source": 1 }, { "source": 2 }, { "source": 3 }
+  ],
+  "samplers": [ { "magFilter": 9728, "minFilter": 9728, "wrapS": 33071, "wrapT": 33648 } ],
   "images": [
     { "bufferView": 4, "mimeType": "image/png" },
     { "bufferView": 5, "mimeType": "image/png" },
@@ -786,6 +833,7 @@ namespace
     // back to SkinnedEffect or PbrEffect alone.
     const char* kSkinnedPbrGltf = R"GLTF({
   "asset": { "version": "2.0" },
+  "extensionsUsed": [ "KHR_texture_transform" ],
   "scene": 0,
   "scenes": [ { "nodes": [0, 1] } ],
   "nodes": [
@@ -797,7 +845,9 @@ namespace
   }, "material": 0 } ] } ],
   "materials": [ {
     "pbrMetallicRoughness": { "baseColorTexture": { "index": 0 } },
-    "normalTexture": { "index": 1 }
+    "normalTexture": { "index": 1, "extensions": { "KHR_texture_transform": {
+      "offset": [0.2, 0.4], "scale": [0.5, 0.75], "rotation": 0.3
+    } } }
   } ],
   "textures": [ { "source": 0 }, { "source": 1 } ],
   "images": [
@@ -892,6 +942,103 @@ namespace
         waitpid(pid, &status, 0);
         return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
     }
+
+    int RunGltfOracleDump(const std::string& input, const std::string& outDir)
+    {
+        const std::string mode = "--dump-oracle";
+        char* argv[] = {
+            const_cast<char*>(CNA_GLTF_TO_CNJ_TOOL_PATH),
+            const_cast<char*>(mode.c_str()),
+            const_cast<char*>(input.c_str()),
+            const_cast<char*>(outDir.c_str()),
+            nullptr,
+        };
+
+        pid_t pid = -1;
+        const int rc = posix_spawn(&pid, CNA_GLTF_TO_CNJ_TOOL_PATH, nullptr, nullptr, argv, environ);
+        if (rc != 0)
+        {
+            ADD_FAILURE() << "posix_spawn(" << CNA_GLTF_TO_CNJ_TOOL_PATH
+                          << ") failed: " << std::strerror(rc);
+            return -1;
+        }
+
+        int status = 0;
+        waitpid(pid, &status, 0);
+        return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    }
+
+    // GLTF-237 compares the material contract only. Mesh naming, hierarchy and transforms have
+    // their own runtime/offline parity sweeps; including them here made a perfectly equal material
+    // fail on the offline tool's intentionally different generated mesh name. Floats use the same
+    // 1e-5 tolerance as the L6 oracle: .cnj is decimal JSON, so a float such as 1 - 0.8 may parse
+    // back one ULP away without being a material divergence.
+    void ExpectL6MaterialStateEqual(
+        const CnaTest::GltfOracle::DrawParamsDump& runtime,
+        const CnaTest::GltfOracle::DrawParamsDump& offline)
+    {
+        constexpr float kTolerance = 1e-5f;
+        const auto expectArrayNear = [&](const auto& expected, const auto& actual,
+                                         const char* field)
+        {
+            ASSERT_EQ(expected.size(), actual.size()) << field;
+            for (std::size_t i = 0; i < expected.size(); ++i)
+            {
+                EXPECT_NEAR(expected[i], actual[i], kTolerance) << field << '[' << i << ']';
+            }
+        };
+
+        EXPECT_EQ(runtime.effectTypeName, offline.effectTypeName);
+        ASSERT_EQ(runtime.samplers.size(), offline.samplers.size());
+        for (std::size_t slot = 0; slot < runtime.samplers.size(); ++slot)
+        {
+            EXPECT_EQ(runtime.samplers[slot].filter, offline.samplers[slot].filter)
+                << "sampler slot " << slot;
+            EXPECT_EQ(runtime.samplers[slot].addressU, offline.samplers[slot].addressU)
+                << "sampler slot " << slot;
+            EXPECT_EQ(runtime.samplers[slot].addressV, offline.samplers[slot].addressV)
+                << "sampler slot " << slot;
+        }
+
+        expectArrayNear(runtime.diffuseColor, offline.diffuseColor, "diffuseColor");
+        EXPECT_NEAR(runtime.metallicFactor, offline.metallicFactor, kTolerance);
+        EXPECT_NEAR(runtime.roughnessFactor, offline.roughnessFactor, kTolerance);
+        EXPECT_NEAR(runtime.ior, offline.ior, kTolerance);
+        EXPECT_NEAR(runtime.specularFactor, offline.specularFactor, kTolerance);
+        expectArrayNear(runtime.specularColorFactor, offline.specularColorFactor,
+                        "specularColorFactor");
+        expectArrayNear(runtime.dielectricF0, offline.dielectricF0, "dielectricF0");
+        EXPECT_NEAR(runtime.dielectricF90, offline.dielectricF90, kTolerance);
+        EXPECT_NEAR(runtime.normalScale, offline.normalScale, kTolerance);
+        EXPECT_NEAR(runtime.occlusionStrength, offline.occlusionStrength, kTolerance);
+        EXPECT_EQ(runtime.textureCoordinateSetMask, offline.textureCoordinateSetMask);
+        expectArrayNear(runtime.textureTransformRows, offline.textureTransformRows,
+                        "textureTransformRows");
+        expectArrayNear(runtime.emissiveColor, offline.emissiveColor, "emissiveColor");
+        expectArrayNear(runtime.ambientColor, offline.ambientColor, "ambientColor");
+
+        EXPECT_EQ(runtime.hasBaseColorMap, offline.hasBaseColorMap);
+        EXPECT_EQ(runtime.hasNormalMap, offline.hasNormalMap);
+        EXPECT_EQ(runtime.hasMetallicRoughnessMap, offline.hasMetallicRoughnessMap);
+        EXPECT_EQ(runtime.hasOcclusionMap, offline.hasOcclusionMap);
+        EXPECT_EQ(runtime.hasEmissiveMap, offline.hasEmissiveMap);
+        EXPECT_EQ(runtime.baseColorTextureIsSrgb, offline.baseColorTextureIsSrgb);
+        EXPECT_EQ(runtime.emissiveTextureIsSrgb, offline.emissiveTextureIsSrgb);
+        EXPECT_EQ(runtime.encodeOutputToSrgb, offline.encodeOutputToSrgb);
+
+        expectArrayNear(runtime.alphaTest, offline.alphaTest, "alphaTest");
+        EXPECT_EQ(runtime.carriesAlphaState, offline.carriesAlphaState);
+        EXPECT_EQ(runtime.alphaMode, offline.alphaMode);
+        EXPECT_NEAR(runtime.alphaCutoff, offline.alphaCutoff, kTolerance);
+        EXPECT_EQ(runtime.doubleSided, offline.doubleSided);
+
+        EXPECT_EQ(runtime.pbr, offline.pbr);
+        EXPECT_EQ(runtime.skinned, offline.skinned);
+        EXPECT_EQ(runtime.dualTexture, offline.dualTexture);
+        EXPECT_EQ(runtime.lightingEnabled, offline.lightingEnabled);
+        EXPECT_EQ(runtime.textureEnabled, offline.textureEnabled);
+        EXPECT_EQ(runtime.vertexColorEnabled, offline.vertexColorEnabled);
+    }
 }
 
 TEST(GltfToCnjToolTest, ConvertsIndexlessDualBoneSkinnedFixtureAndLoadsBackThroughContentManager)
@@ -983,9 +1130,117 @@ TEST(GltfToCnjToolTest, MissingInputFileFailsCleanly)
     EXPECT_FALSE(std::filesystem::exists(contentRoot.path() / "wont_happen.cnj"));
 }
 
+TEST(GltfToCnjToolTest, OracleDumpIsDeterministicSafeAndMatchesTheFixtureManifest)
+{
+    using namespace CnaTest::GltfOracle;
+    using CNA::Internal::JsonType;
+    using CNA::Internal::JsonValue;
+
+    const LoadedFixture fixture("xf-translation");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    ScratchDir firstRoot;
+    ScratchDir secondRoot;
+    const std::filesystem::path first = firstRoot.path() / "oracle";
+    const std::filesystem::path second = secondRoot.path() / "oracle";
+
+    ASSERT_EQ(0, RunGltfOracleDump(fixture.AssetPath().string(), first.string()));
+    ASSERT_EQ(0, RunGltfOracleDump(fixture.AssetPath().string(), second.string()));
+
+    const auto readText = [](const std::filesystem::path& path)
+    {
+        std::ifstream file(path, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(file),
+                           std::istreambuf_iterator<char>());
+    };
+    const auto flattenNumberArrays = [](const JsonValue& value)
+    {
+        std::vector<double> result;
+        if (value.type != JsonType::Array) { return result; }
+        for (const JsonValue& element : value.arrayValue)
+        {
+            if (element.type == JsonType::Number) { result.push_back(element.numberValue); }
+            else
+            {
+                const std::vector<double> row = Numbers(element);
+                result.insert(result.end(), row.begin(), row.end());
+            }
+        }
+        return result;
+    };
+    const auto hexText = [](const std::string& bytes)
+    {
+        constexpr char digits[] = "0123456789abcdef";
+        std::string result;
+        result.reserve(bytes.size() * 2);
+        for (const unsigned char byte : bytes)
+        {
+            result.push_back(digits[byte >> 4]);
+            result.push_back(digits[byte & 0x0f]);
+        }
+        return result;
+    };
+    const std::string firstText = readText(first / "oracle.json");
+    ASSERT_FALSE(firstText.empty());
+    EXPECT_EQ(firstText, readText(second / "oracle.json"));
+
+    JsonValue dump;
+    ASSERT_NO_THROW(dump = CNA::Internal::ParseJson(firstText));
+    EXPECT_EQ("CNA-gltf-oracle-v1", StringOr(dump, "schema", ""));
+    EXPECT_EQ("xf-translation.gltf", StringOr(dump, "source", ""));
+
+    const JsonValue& l2 = Member(dump, "l2");
+    ASSERT_EQ(JsonType::Array, l2.type);
+    ASSERT_EQ(Path(fixture.Expected(), "l2.accessors").arrayValue.size(), l2.arrayValue.size());
+    ASSERT_FALSE(l2.arrayValue.empty());
+    EXPECT_EQ(Numbers(Member(Path(fixture.Expected(), "l2.accessors").arrayValue[0], "values")),
+              Numbers(Member(l2.arrayValue[0], "values")));
+
+    const JsonValue& l3 = Member(dump, "l3");
+    ASSERT_EQ(JsonType::Array, l3.type);
+    ASSERT_EQ(1u, l3.arrayValue.size());
+    const JsonValue& expectedPrimitive = Path(fixture.Expected(), "l3.primitives").arrayValue[0];
+    const JsonValue& actualPrimitive = Member(l3.arrayValue[0], "dump");
+    EXPECT_EQ(NumberOr(expectedPrimitive, "vertexCount", -1),
+              NumberOr(actualPrimitive, "vertexCount", -2));
+    EXPECT_EQ(flattenNumberArrays(Member(expectedPrimitive, "positions")),
+              flattenNumberArrays(Member(actualPrimitive, "positions")));
+
+    const JsonValue& expectedInstance = Path(fixture.Expected(), "l4.instances").arrayValue[0];
+    const JsonValue& actualInstance = Path(dump, "l4.expected.instances").arrayValue[0];
+    EXPECT_EQ(Numbers(Member(expectedInstance, "worldMatrixColumnMajor")),
+              Numbers(Member(actualInstance, "worldMatrixColumnMajor")));
+    EXPECT_EQ(flattenNumberArrays(Member(expectedInstance, "worldPositions")),
+              flattenNumberArrays(Member(actualInstance, "worldPositions")));
+
+    const JsonValue& l5 = Member(dump, "l5");
+    ASSERT_EQ(JsonType::Array, l5.type);
+    ASSERT_EQ(1u, l5.arrayValue.size());
+    const JsonValue& expectedPart = Path(fixture.Expected(), "l5.parts").arrayValue[0];
+    EXPECT_EQ(NumberOr(expectedPart, "stride", -1),
+              NumberOr(l5.arrayValue[0], "stride", -2));
+    EXPECT_EQ(NumberOr(expectedPart, "vertexBufferBytes", -1),
+              NumberOr(l5.arrayValue[0], "vertexByteCount", -2));
+    EXPECT_EQ(NumberOr(expectedPart, "indexBufferBytes", -1),
+              NumberOr(l5.arrayValue[0], "indexByteCount", -2));
+    const std::filesystem::path corpus = CorpusDirectory();
+    EXPECT_EQ(hexText(readText(corpus / StringOr(expectedPart, "vertexBufferFile", ""))),
+              StringOr(l5.arrayValue[0], "vertexBytesHex", ""));
+    EXPECT_EQ(hexText(readText(corpus / StringOr(expectedPart, "indexBufferFile", ""))),
+              StringOr(l5.arrayValue[0], "indexBytesHex", ""));
+
+    EXPECT_NE(0, RunGltfOracleDump(fixture.AssetPath().string(), first.string()))
+        << "an existing non-empty output directory must never be overwritten";
+}
+
 // Vertex 1's POSITION comes entirely from a sparse override on an accessor with no base
 // bufferView -- proves cgltf_accessor_unpack_floats (sparse-safe) is used, not
 // cgltf_accessor_read_float (rejects sparse accessors outright, which would fail this conversion).
+//
+// plan_gltf.md GLTF-036: the sparse values bufferView sits at byteOffset 64, not 62 as originally
+// authored. 62 is not a multiple of a float's 4 bytes, and cgltf reads a component with a raw
+// `*(const float*)` cast, so the old fixture made the parser perform a misaligned load -- the
+// undefined behaviour UBSan flagged as REMED-NA-016. The fixture was the defect, not the parser;
+// ValidateGltfEXT now refuses such a file, so this document would be rejected unchanged.
 TEST(GltfToCnjToolTest, ResolvesSparseAccessorOverride)
 {
     ScratchDir gltfDir;
@@ -1002,11 +1257,14 @@ TEST(GltfToCnjToolTest, ResolvesSparseAccessorOverride)
 
     std::ifstream f(vertsPath, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    ASSERT_EQ(bytes.size(), 3u * 32u); // stride 32, unskinned
+    // Stride 48, not 32: GLTF-215 selects PBR for any metallic-roughness material, and a
+    // primitive with no material declared gets glTF's default material, which is exactly that.
+    // Position still begins each vertex, which is all this test is about.
+    ASSERT_EQ(bytes.size(), 3u * 48u); // stride 48, unskinned PBR
 
     auto readVec3 = [&](std::size_t vertexIndex) {
         float v[3];
-        std::memcpy(v, bytes.data() + vertexIndex * 32, sizeof(v));
+        std::memcpy(v, bytes.data() + vertexIndex * 48, sizeof(v));
         return Vector3(v[0], v[1], v[2]);
     };
 
@@ -1042,8 +1300,15 @@ TEST(GltfToCnjToolTest, ExtractsEmbeddedBaseColorTextureAndLoadsIt)
     ModelMesh* mesh = model.getMeshesProperty()[0];
     ASSERT_EQ(mesh->getMeshPartsProperty().getCountProperty(), 1);
 
-    auto* skinnedFx = dynamic_cast<SkinnedEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
-    ASSERT_NE(skinnedFx, nullptr);
+    // SkinnedPbrEffect, not SkinnedEffect: the primitive is skinned AND its material is
+    // metallic-roughness, and GLTF-215 made the effect follow the material MODEL the file declares
+    // rather than which texture maps happen to be present. This assertion said `SkinnedEffect`
+    // until the first run on a renderer that reports ThreeD -- STUB does not, so the whole block
+    // below the skip had never executed since GLTF-215 landed (plan_gltf.md GLTF-383).
+    auto* skinnedFx =
+        dynamic_cast<SkinnedPbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(skinnedFx, nullptr)
+        << "a skinned primitive with a metallic-roughness material must select SkinnedPbrEffect";
     Texture2D* tex = skinnedFx->getTextureProperty();
     ASSERT_NE(tex, nullptr);
     EXPECT_EQ(tex->getWidthProperty(), 1);
@@ -1085,6 +1350,53 @@ TEST(GltfToCnjToolTest, ImportsAllSkinsAsSeparateModels)
     ASSERT_NE(dataB, nullptr);
     EXPECT_EQ(dataA->BoneCount, 1);
     EXPECT_EQ(dataB->BoneCount, 1);
+
+    // GLTF-265's runtime half: one direct Load<Model>() must retain both skins rather than
+    // silently dropping every group after the first. Model::Tag remains the first SkinningData
+    // for source compatibility; SkinsEXT is the complete mapping.
+    ContentManager directCm(nullptr, gltfDir.path().string());
+    directCm.setGraphicsDevice(gd);
+    Model direct = directCm.Load<Model>("multiskin");
+    ASSERT_EQ(2, direct.getMeshesProperty().getCountProperty());
+    const std::vector<ModelSkinEXT>& skins = direct.getSkinsEXTProperty();
+    ASSERT_EQ(2u, skins.size());
+    EXPECT_EQ("SkinA", skins[0].Name);
+    EXPECT_EQ("SkinB", skins[1].Name);
+    ASSERT_NE(nullptr, skins[0].Data);
+    ASSERT_NE(nullptr, skins[1].Data);
+    EXPECT_NE(skins[0].Data, skins[1].Data);
+    EXPECT_EQ(direct.getTagProperty(), skins[0].Data)
+        << "the legacy Model::Tag alias must remain the first skin";
+    ASSERT_EQ(1u, skins[0].Meshes.size());
+    ASSERT_EQ(1u, skins[1].Meshes.size());
+    EXPECT_NE(skins[0].Meshes[0], skins[1].Meshes[0]);
+
+    Effect* effectA = skins[0].Meshes[0]->getMeshPartsProperty()[0]->getEffectProperty();
+    Effect* effectB = skins[1].Meshes[0]->getMeshPartsProperty()[0]->getEffectProperty();
+    ASSERT_TRUE(dynamic_cast<SkinnedEffect*>(effectA) != nullptr ||
+                dynamic_cast<SkinnedPbrEffect*>(effectA) != nullptr);
+    ASSERT_TRUE(dynamic_cast<SkinnedEffect*>(effectB) != nullptr ||
+                dynamic_cast<SkinnedPbrEffect*>(effectB) != nullptr);
+    EXPECT_NE(effectA, effectB)
+        << "two skins cannot share one effect's mutable bone palette";
+
+    const auto paletteX = [](Effect* effect)
+    {
+        if (auto* skinned = dynamic_cast<SkinnedEffect*>(effect))
+            return skinned->GetBoneTransforms(1)[0].M41;
+        return dynamic_cast<SkinnedPbrEffect*>(effect)->GetBoneTransforms(1)[0].M41;
+    };
+
+    // Make the otherwise-identity bind poses intentionally distinct after import. Applying one
+    // skin must touch exactly its mapped mesh and leave the other palette unchanged.
+    skins[0].Data->BindPose[0] = Matrix::CreateTranslation(3.0f, 0.0f, 0.0f);
+    skins[1].Data->BindPose[0] = Matrix::CreateTranslation(7.0f, 0.0f, 0.0f);
+    EXPECT_EQ(1u, ApplyBindPoseBoneTransformsEXT(direct, *skins[0].Data));
+    EXPECT_FLOAT_EQ(3.0f, paletteX(effectA));
+    EXPECT_FLOAT_EQ(0.0f, paletteX(effectB));
+    EXPECT_EQ(1u, ApplyBindPoseBoneTransformsEXT(direct, *skins[1].Data));
+    EXPECT_FLOAT_EQ(3.0f, paletteX(effectA));
+    EXPECT_FLOAT_EQ(7.0f, paletteX(effectB));
 }
 
 TEST(GltfToCnjToolTest, StepInterpolatedChannelHoldsValueAcrossAForeignResampleTime)
@@ -1159,23 +1471,57 @@ TEST(GltfToCnjToolTest, UsesTexcoordSetSelectedByMaterial)
     const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "texc");
     ASSERT_EQ(exitCode, 0);
 
+    std::ifstream cnjFile(contentRoot.path() / "texc.cnj");
+    const std::string cnj((std::istreambuf_iterator<char>(cnjFile)),
+                          std::istreambuf_iterator<char>());
+    EXPECT_NE(std::string::npos,
+              cnj.find("\"textureCoordinateSets\": [0, 0, 0, 1, 0]"));
+
     const std::filesystem::path vertsPath = contentRoot.path() / "texc_mesh0_verts.bin";
     ASSERT_TRUE(std::filesystem::exists(vertsPath));
     std::ifstream f(vertsPath, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    ASSERT_EQ(bytes.size(), 3u * 32u); // stride 32, unskinned, untextured-color
+    ASSERT_EQ(bytes.size(), 3u * 60u); // collision-free dual-UV unskinned PBR layout
 
-    // UV lives at byte offset 24 within each stride-32 vertex (pos12+normal12+uv8). TEXCOORD_0
-    // was deliberately filled with (9,9) sentinels the tool must never emit; the real values,
-    // from TEXCOORD_1 (the set the material's baseColorTexture actually selects), are (0,0),
-    // (1,0), (0,1).
+    // Packed UV0 lives at byte offset 40 within each stride-60 vertex
+    // (pos12 + normal12 + tangent16 + uv8). TEXCOORD_0 was deliberately filled with (9,9)
+    // sentinels the tool must never emit; the real values, from TEXCOORD_1 (the set the
+    // material's baseColorTexture actually selects), are (0,0), (1,0), (0,1). The emissive map
+    // independently selects TEXCOORD_0, so that source set is preserved as packed UV1 at offset
+    // 48 and the material selector maps only its slot to channel 1.
     float uv0[2], uv1[2], uv2[2];
-    std::memcpy(uv0, bytes.data() + 0 * 32 + 24, sizeof(uv0));
-    std::memcpy(uv1, bytes.data() + 1 * 32 + 24, sizeof(uv1));
-    std::memcpy(uv2, bytes.data() + 2 * 32 + 24, sizeof(uv2));
+    std::memcpy(uv0, bytes.data() + 0 * 60 + 40, sizeof(uv0));
+    std::memcpy(uv1, bytes.data() + 1 * 60 + 40, sizeof(uv1));
+    std::memcpy(uv2, bytes.data() + 2 * 60 + 40, sizeof(uv2));
     EXPECT_FLOAT_EQ(uv0[0], 0.0f); EXPECT_FLOAT_EQ(uv0[1], 0.0f);
     EXPECT_FLOAT_EQ(uv1[0], 1.0f); EXPECT_FLOAT_EQ(uv1[1], 0.0f);
     EXPECT_FLOAT_EQ(uv2[0], 0.0f); EXPECT_FLOAT_EQ(uv2[1], 1.0f);
+
+    float emissiveUv[2];
+    std::memcpy(emissiveUv, bytes.data() + 48, sizeof(emissiveUv));
+    EXPECT_FLOAT_EQ(emissiveUv[0], 9.0f);
+    EXPECT_FLOAT_EQ(emissiveUv[1], 9.0f);
+
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
+    ContentManager runtimeCm(nullptr, gltfDir.path().string());
+    runtimeCm.setGraphicsDevice(gd);
+    Model runtimeModel = runtimeCm.Load<Model>("texc");
+    ContentManager offlineCm(nullptr, contentRoot.path().string());
+    offlineCm.setGraphicsDevice(gd);
+    Model offlineModel = offlineCm.Load<Model>("texc");
+
+    auto selectorsOf = [](Model& model) {
+        auto* effect = dynamic_cast<PbrEffect*>(model.getMeshesProperty()[0]
+            ->getMeshPartsProperty()[0]->getEffectProperty());
+        EXPECT_NE(effect, nullptr);
+        return effect != nullptr ? effect->getTextureCoordinateSetsEXTProperty()
+                                 : std::array<int, 5>{};
+    };
+    EXPECT_EQ(selectorsOf(runtimeModel), (std::array<int, 5>{0, 0, 0, 1, 0}));
+    EXPECT_EQ(selectorsOf(offlineModel), (std::array<int, 5>{0, 0, 0, 1, 0}));
 }
 
 TEST(GltfToCnjToolTest, OnlyImportsNodesReachableFromTheDefaultScene)
@@ -1293,6 +1639,304 @@ TEST(GltfToCnjToolTest, ExtractsVertexColorAndEnablesItOnBasicEffect)
     EXPECT_TRUE(basicFx->VertexColorEnabled);
 }
 
+// plan_gltf.md GLTF-139/GLTF-130: the offline path has to produce the SAME Model shape as the
+// runtime one, or the two loaders disagree about what a mesh is. The .cnj "meshes" array is per
+// primitive, so a multi-primitive mesh carries a "partOfMesh" grouping key and the reader folds
+// those entries back into one ModelMesh with one part each.
+TEST(GltfToCnjToolTest, AMultiPrimitiveMeshRoundTripsAsOneModelMeshWithTwoParts)
+{
+    static const char* kTwoPrimitiveGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "TwoMaterialNode", "mesh": 0, "translation": [10, 20, 30] } ],
+  "materials": [
+    { "name": "Red",  "pbrMetallicRoughness": { "baseColorFactor": [1, 0, 0, 1] } },
+    { "name": "Blue", "pbrMetallicRoughness": { "baseColorFactor": [0, 0, 1, 1] } }
+  ],
+  "meshes": [ { "name": "TwoMaterialMesh", "primitives": [
+    { "attributes": { "POSITION": 0 }, "material": 0 },
+    { "attributes": { "POSITION": 1 }, "material": 1 }
+  ] } ],
+  "buffers": [ { "byteLength": 72, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAACgQAAAAAAAAAAAAADAQAAAAAAAAAAAAACgQAAAgD8AAAAA" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 36 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+      "min": [0, 0, 0], "max": [1, 1, 0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3",
+      "min": [5, 0, 0], "max": [6, 1, 0] }
+  ]
+})GLTF";
+
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+    WriteFile(gltfDir.path() / "two.gltf", kTwoPrimitiveGltf);
+    ASSERT_EQ(0, RunGltfToCnjTool((gltfDir.path() / "two.gltf").string(),
+                                   contentRoot.path().string(), "two"));
+
+    // The grouping key is in the file, and only because this mesh has more than one primitive.
+    std::ifstream cnj(contentRoot.path() / "two.cnj");
+    const std::string text((std::istreambuf_iterator<char>(cnj)), std::istreambuf_iterator<char>());
+    EXPECT_NE(std::string::npos, text.find("\"partOfMesh\""))
+        << "a multi-primitive mesh was written with no way to regroup its parts";
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("two");
+    ASSERT_EQ(1, model.getMeshesProperty().getCountProperty())
+        << "the offline path produced a different Model shape from the runtime one";
+    EXPECT_EQ(2, model.getMeshesProperty()[0]->getMeshPartsProperty().getCountProperty());
+    EXPECT_EQ(2, model.getMeshesProperty()[0]->getEffectsProperty().getCountProperty())
+        << "the two materials collapsed, or an effect never registered on its owning mesh";
+
+    // GLTF-128: bounds are derived independently by the direct loader and the offline .cnj
+    // reader, then transformed through the node hierarchy by Model itself. The non-identity node
+    // makes an implementation that returns only the local mesh sphere fail unmistakably.
+    ContentManager directCm(nullptr, gltfDir.path().string());
+    directCm.setGraphicsDevice(gd);
+    Model direct = directCm.Load<Model>("two");
+    const auto offlineBounds = model.getBoundingSphereEXTProperty();
+    const auto directBounds = direct.getBoundingSphereEXTProperty();
+    ASSERT_TRUE(offlineBounds.has_value());
+    ASSERT_TRUE(directBounds.has_value());
+    EXPECT_EQ(directBounds->Center, offlineBounds->Center);
+    EXPECT_FLOAT_EQ(directBounds->Radius, offlineBounds->Radius);
+
+    const std::vector<Vector3> expectedWorldPositions{
+        Vector3(10.0f, 20.0f, 30.0f), Vector3(11.0f, 20.0f, 30.0f),
+        Vector3(10.0f, 21.0f, 30.0f), Vector3(15.0f, 20.0f, 30.0f),
+        Vector3(16.0f, 20.0f, 30.0f), Vector3(15.0f, 21.0f, 30.0f),
+    };
+    for (const Vector3& position : expectedWorldPositions)
+    {
+        EXPECT_LE(Vector3::Distance(directBounds->Center, position),
+                  directBounds->Radius + 1e-5f);
+    }
+}
+
+// plan_gltf.md GLTF-272: the two loaders must produce the SAME SkinningData.
+//
+// The runtime path builds a skeleton from the glTF directly; the offline path builds the same one,
+// writes it to a .skeleton.bin sidecar, and the .cnj reader reads it back. Those are two
+// independent serialisations of one computation, and GLTF-130 already requires the two paths to
+// place geometry identically -- a skeleton that differed between them would pose that geometry
+// differently while every position assertion still passed.
+//
+// Compared field for field rather than by a digest, so a divergence names the bone and the matrix
+// element rather than "the skeletons differ".
+TEST(GltfToCnjToolTest, TheOfflineAndRuntimePathsProduceIdenticalSkinningDataForEverySkinFixture)
+{
+    // Swept over every `skin-*` fixture in the corpus rather than one, because the ways the two
+    // paths can diverge are per-shape: an armature above the joints, a transformed mesh node, a
+    // declared skeleton root, 73 joints, unnormalised weights, eight influences. One fixture would
+    // prove the serialisation round-trips for one shape.
+    //
+    // The two paths must also agree on REFUSAL: a fixture the runtime path rejects and the offline
+    // path accepts would be a file that imports or not depending on which loader you used.
+    const std::filesystem::path corpus = std::filesystem::path("tests") / "assets" / "gltf";
+    if (!std::filesystem::exists(corpus)) { GTEST_SKIP() << "the fixture corpus is not present"; }
+
+    const auto expectMatrixEqual = [](const Matrix& expected, const Matrix& actual,
+                                       const std::string& what)
+    {
+        const float* e = &expected.M11;
+        const float* a = &actual.M11;
+        for (int i = 0; i < 16; ++i)
+        {
+            EXPECT_NEAR(e[i], a[i], 1e-5f) << what << ", element " << i;
+        }
+    };
+
+    std::vector<std::string> ids;
+    for (const std::filesystem::directory_entry& entry :
+         std::filesystem::directory_iterator(corpus))
+    {
+        const std::string name = entry.path().filename().string();
+        if (name.rfind("skin-", 0) == 0 && entry.path().extension() == ".gltf")
+        {
+            ids.push_back(entry.path().stem().string());
+        }
+    }
+    std::sort(ids.begin(), ids.end());
+    ASSERT_FALSE(ids.empty()) << "no skin fixtures found -- the sweep proved nothing";
+
+    std::size_t compared = 0;
+    for (const std::string& id : ids)
+    {
+        SCOPED_TRACE(id);
+        ScratchDir contentRoot;
+        const int toolExit = RunGltfToCnjTool((corpus / (id + ".gltf")).string(),
+                                               contentRoot.path().string(), "skin");
+
+        GraphicsDevice gd;
+        ContentManager runtimeCm(nullptr, corpus.string());
+        runtimeCm.setGraphicsDevice(gd);
+
+        bool runtimeRefused = false;
+        std::unique_ptr<Model> runtime;
+        try
+        {
+            runtime = std::make_unique<Model>(runtimeCm.Load<Model>(id));
+        }
+        catch (const std::exception&)
+        {
+            runtimeRefused = true;
+        }
+
+        if (toolExit != 0 || runtimeRefused)
+        {
+            EXPECT_EQ(toolExit != 0, runtimeRefused)
+                << "one loader refused this file and the other imported it";
+            continue;
+        }
+
+        // The tool writes one Model .cnj per mesh group, named after the skin (GLTF-137/GLTF-138),
+        // plus one per animation clip -- so the Models are found by their own "type" field rather
+        // than by filenames this test would have to predict.
+        //
+        // ALL of them, sorted, not the first one directory iteration happens to yield.
+        // `skin-plus-static-mesh` produces two -- a skinned character and a static prop -- and
+        // iteration order is a filesystem detail rather than an ordering, so "the first Model"
+        // compared the prop against the runtime path's skinned model on some filesystems and the
+        // right pair on others. Which pair to compare is decided by what the models carry: when
+        // the runtime path produced skinning data, the offline model to compare with is the one
+        // that has skinning data too, and the point of the assertion is that such a model exists.
+        std::vector<std::string> modelAssets;
+        for (const std::filesystem::directory_entry& out :
+             std::filesystem::directory_iterator(contentRoot.path()))
+        {
+            if (out.path().extension() != ".cnj") { continue; }
+            std::ifstream cnj(out.path());
+            const std::string text((std::istreambuf_iterator<char>(cnj)),
+                                    std::istreambuf_iterator<char>());
+            if (text.find("\"type\": \"Model\"") != std::string::npos)
+            {
+                modelAssets.push_back(out.path().stem().string());
+            }
+        }
+        std::sort(modelAssets.begin(), modelAssets.end());
+        ASSERT_FALSE(modelAssets.empty()) << "the tool wrote no Model .cnj at all";
+
+        auto* runtimeSkin = dynamic_cast<SkinningData*>(runtime->getTagProperty());
+
+        ContentManager offlineCm(nullptr, contentRoot.path().string());
+        offlineCm.setGraphicsDevice(gd);
+        std::optional<Model> offline;
+        SkinningData* offlineSkin = nullptr;
+        for (const std::string& asset : modelAssets)
+        {
+            Model candidate = offlineCm.Load<Model>(asset);
+            auto* candidateSkin = dynamic_cast<SkinningData*>(candidate.getTagProperty());
+            const bool wanted = (runtimeSkin != nullptr) ? (candidateSkin != nullptr) : true;
+            if (!offline.has_value() || (wanted && offlineSkin == nullptr))
+            {
+                offline = std::move(candidate);
+                offlineSkin = dynamic_cast<SkinningData*>(offline->getTagProperty());
+            }
+            if (runtimeSkin != nullptr && offlineSkin != nullptr) { break; }
+        }
+        ASSERT_TRUE(offline.has_value());
+        if (runtimeSkin == nullptr && offlineSkin == nullptr) { continue; }
+        ASSERT_NE(nullptr, offlineSkin)
+            << "the offline path produced no SkinningData in any of its " << modelAssets.size()
+            << " Model .cnj file(s)";
+        ASSERT_NE(nullptr, runtimeSkin) << "the runtime path produced no SkinningData";
+        ++compared;
+
+        ASSERT_EQ(runtimeSkin->BoneCount, offlineSkin->BoneCount);
+        ASSERT_EQ(runtimeSkin->SkeletonHierarchy, offlineSkin->SkeletonHierarchy)
+            << "the two paths disagree about the bone tree itself";
+        ASSERT_EQ(runtimeSkin->BindPose.size(), offlineSkin->BindPose.size());
+        ASSERT_EQ(runtimeSkin->InverseBindPose.size(), offlineSkin->InverseBindPose.size());
+        for (std::size_t b = 0; b < runtimeSkin->BindPose.size(); ++b)
+        {
+            expectMatrixEqual(runtimeSkin->BindPose[b], offlineSkin->BindPose[b],
+                              "bone " + std::to_string(b) + " bind pose");
+            expectMatrixEqual(runtimeSkin->InverseBindPose[b], offlineSkin->InverseBindPose[b],
+                              "bone " + std::to_string(b) + " inverse bind pose");
+        }
+        ASSERT_EQ(runtimeSkin->SkeletonRootPrefix.size(), offlineSkin->SkeletonRootPrefix.size())
+            << "the root-bone prefix -- where GLTF-245/247's own terms live -- differs in size";
+        for (std::size_t b = 0; b < runtimeSkin->SkeletonRootPrefix.size(); ++b)
+        {
+            expectMatrixEqual(runtimeSkin->SkeletonRootPrefix[b], offlineSkin->SkeletonRootPrefix[b],
+                              "bone " + std::to_string(b) + " skeleton root prefix");
+        }
+    }
+    EXPECT_GT(compared, 0u) << "every skin fixture was skipped -- the sweep proved nothing";
+}
+
+// plan_gltf.md GLTF-121: the node-hierarchy half of the same conversion.
+//
+// Before GLTF-114 the node translations were discarded outright, so there was nothing for
+// unitScale to reach; now they are emitted as the .cnj "bones" array and the two must convert
+// together. A model authored in centimetres whose vertices shrink by 100 while its node offsets
+// do not is worse than one that ignored unitScale entirely: it comes apart, with each part
+// correctly sized and standing a hundred times too far from the next.
+TEST(GltfToCnjToolTest, UnitScaleReachesTheNodeHierarchyAndNotOnlyTheVertices)
+{
+    static const char* kRigidCentimetreGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [
+    { "name": "Pivot", "translation": [200, 0, 0], "children": [1] },
+    { "name": "MeshNode", "mesh": 0, "translation": [0, 300, 0] }
+  ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0 } } ] } ],
+  "buffers": [ { "byteLength": 36,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAADIQgAAAAAAAAAAAAAAAAAAyEIAAAAA" } ],
+  "bufferViews": [ { "buffer": 0, "byteOffset": 0, "byteLength": 36 } ],
+  "accessors": [ { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+                   "min": [0,0,0], "max": [100,100,0] } ]
+})GLTF";
+
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+    const std::filesystem::path gltfPath = gltfDir.path() / "cm.gltf";
+    WriteFile(gltfPath, kRigidCentimetreGltf);
+
+    ASSERT_EQ(0, RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "cm", "0.01"));
+
+    // The vertices convert -- the half that already worked, asserted here so a regression in
+    // either half fails this test rather than only one of them.
+    std::ifstream verts(contentRoot.path() / "cm_mesh0_verts.bin", std::ios::binary);
+    const std::vector<char> vertexBytes((std::istreambuf_iterator<char>(verts)),
+                                         std::istreambuf_iterator<char>());
+    ASSERT_FALSE(vertexBytes.empty());
+    const std::size_t stride = vertexBytes.size() / 3u;
+    float position[3];
+    std::memcpy(position, vertexBytes.data() + stride, sizeof(position));
+    EXPECT_NEAR(1.0f, position[0], 1e-4f) << "100 cm did not become 1 unit";
+
+    // And so do the node translations, which is what this test is for. The emitted transform is
+    // XNA row-major, so a translation is elements 12..14 of the 16.
+    std::ifstream cnj(contentRoot.path() / "cm.cnj");
+    const std::string text((std::istreambuf_iterator<char>(cnj)), std::istreambuf_iterator<char>());
+    ASSERT_NE(std::string::npos, text.find("\"bones\""));
+
+    // 200 cm -> 2 units and 300 cm -> 3 units. Searched by the value rather than by parsing the
+    // whole document, but anchored to the bone's own name so a coincidental 2 elsewhere in the
+    // file cannot satisfy it.
+    const std::size_t pivot = text.find("\"name\": \"Pivot\"");
+    ASSERT_NE(std::string::npos, pivot);
+    const std::size_t pivotEnd = text.find('\n', pivot);
+    const std::string pivotLine = text.substr(pivot, pivotEnd - pivot);
+    EXPECT_NE(std::string::npos, pivotLine.find(", 2, 0, 0, 1]"))
+        << "Pivot's translation did not convert with the vertices: " << pivotLine;
+
+    const std::size_t meshNode = text.find("\"name\": \"MeshNode\"");
+    ASSERT_NE(std::string::npos, meshNode);
+    const std::size_t meshNodeEnd = text.find('\n', meshNode);
+    const std::string meshNodeLine = text.substr(meshNode, meshNodeEnd - meshNode);
+    EXPECT_NE(std::string::npos, meshNodeLine.find(", 0, 3, 0, 1]"))
+        << "MeshNode's translation did not convert with the vertices: " << meshNodeLine;
+}
+
 TEST(GltfToCnjToolTest, UnitScaleAppliesToPositionsAndBoneTranslations)
 {
     ScratchDir gltfDir;
@@ -1307,12 +1951,14 @@ TEST(GltfToCnjToolTest, UnitScaleAppliesToPositionsAndBoneTranslations)
     const std::filesystem::path vertsPath = contentRoot.path() / "scaletest_mesh0_verts.bin";
     std::ifstream f(vertsPath, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    ASSERT_EQ(bytes.size(), 3u * 52u); // stride 52, skinned
+    // Stride 68, not 52: this primitive declares no material, so GLTF-215 selects the skinned
+    // PBR layout. Position still begins each vertex, which is what this test measures.
+    ASSERT_EQ(bytes.size(), 3u * 68u); // stride 68, skinned PBR
 
     // Authored positions were (0,0,0)/(100,0,0)/(0,100,0) (centimeters); with unitScale=0.01,
     // vertex 1's X must come out as 1.0, not 100.0.
     float pos1[3];
-    std::memcpy(pos1, bytes.data() + 1 * 52, sizeof(pos1));
+    std::memcpy(pos1, bytes.data() + 1 * 68, sizeof(pos1));
     EXPECT_NEAR(pos1[0], 1.0f, 1e-4f);
 
     GraphicsDevice gd;
@@ -1333,10 +1979,20 @@ TEST(GltfToCnjToolTest, UnitScaleAppliesToPositionsAndBoneTranslations)
     EXPECT_NEAR(skinningData->BindPose[0].getTranslationProperty().X, 0.5f, 1e-4f);
 }
 
-// CNB-72/73: a material with both a base-color and an occlusion texture must be imported through
-// DualTextureEffect (Texture=base color, Texture2=occlusion), with the mesh's vertex buffer using
-// the stride-20 VertexPositionTexture layout DualTextureEffect's shader actually expects.
-TEST(GltfToCnjToolTest, WiresBaseColorAndOcclusionTexturesThroughDualTextureEffect)
+// CNB-72/73 + plan_gltf.md GLTF-215: a material with both a base-color and an occlusion texture.
+//
+// This case used to import through DualTextureEffect (Texture=base colour, Texture2=an occlusion
+// image halved by RemapOcclusionImageForDualTextureEXT so its own always-multiply blend
+// approximated a lightmap), on the stride-20 VertexPositionTexture layout. That whole arrangement
+// existed only because the old selection rule asked which texture MAPS were present, and a
+// base-colour + occlusion pair matched no PBR map, so PBR was unavailable to it.
+//
+// GLTF-215 replaced that rule with the material MODEL the file declares. This material is
+// metallic-roughness, so it now imports through PbrEffect, which has a real OcclusionMap and needs
+// no brightness fake at all. The DualTextureEffect glTF path is therefore superseded rather than
+// broken -- the effect itself is untouched and still reachable through every other content path.
+// This test now pins the replacement, so the change cannot be undone silently.
+TEST(GltfToCnjToolTest, BaseColorAndOcclusionTexturesImportThroughPbrEffectWithARealOcclusionMap)
 {
     ScratchDir gltfDir;
     ScratchDir contentRoot;
@@ -1346,17 +2002,21 @@ TEST(GltfToCnjToolTest, WiresBaseColorAndOcclusionTexturesThroughDualTextureEffe
 
     const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "dualtex");
     ASSERT_EQ(exitCode, 0);
+
+    // Both images are written, and the occlusion one is now carried UNMODIFIED under the ordinary
+    // "_tex" sequence rather than halved into its own "_texocc" file: PbrEffect samples occlusion
+    // properly, so the CNB-88 brightness compensation would now be a distortion rather than a fix.
     ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "dualtex_tex0.png"));
-    // CNB-88 (Phase 14E): the occlusion texture is now written through
-    // RemapOcclusionImageForDualTextureEXT into its own "_texocc"-prefixed file (a separate
-    // cache/naming sequence from writtenTextures' own "_tex"+N -- see ConvertGroup's own doc
-    // comment for why), not "dualtex_tex1.png" the way an unmodified passthrough would have been.
-    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "dualtex_texocc0.png"));
+    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "dualtex_tex1.png"));
+    EXPECT_FALSE(std::filesystem::exists(contentRoot.path() / "dualtex_texocc0.png"))
+        << "the DualTextureEffect occlusion remap ran, so the old selection rule is back";
 
     const std::filesystem::path vertsPath = contentRoot.path() / "dualtex_mesh0_verts.bin";
     std::ifstream f(vertsPath, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    ASSERT_EQ(bytes.size(), 3u * 20u); // stride 20, VertexPositionTexture (no Normal)
+    // Stride 48 (Position+Normal+Tangent+TextureCoordinate), not the stride-20
+    // VertexPositionTexture layout DualTextureEffect required.
+    ASSERT_EQ(bytes.size(), 3u * 48u);
 
     GraphicsDevice gd;
     // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
@@ -1371,24 +2031,27 @@ TEST(GltfToCnjToolTest, WiresBaseColorAndOcclusionTexturesThroughDualTextureEffe
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
     ModelMesh* mesh = model.getMeshesProperty()[0];
 
-    auto* dualFx = dynamic_cast<DualTextureEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
-    ASSERT_NE(dualFx, nullptr);
-    Texture2D* tex1 = dualFx->getTextureProperty();
-    Texture2D* tex2 = dualFx->getTexture2Property();
-    ASSERT_NE(tex1, nullptr);
-    ASSERT_NE(tex2, nullptr);
-    EXPECT_EQ(tex1->getWidthProperty(), 1);
-    EXPECT_EQ(tex2->getWidthProperty(), 1);
+    EXPECT_EQ(nullptr, dynamic_cast<DualTextureEffect*>(
+                           mesh->getMeshPartsProperty()[0]->getEffectProperty()))
+        << "the material still selects DualTextureEffect -- GLTF-215's rule did not apply";
+    auto* pbr = dynamic_cast<PbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(nullptr, pbr);
 
-    // The fixture's occlusion image is a solid (255,0,0) 1x1 PNG -- after the CNB-88 brightness
-    // fix, the loaded Texture2 pixel's RGB must be halved (~127,0,0), not the raw (255,0,0) a
-    // byte-for-byte passthrough would have produced.
+    Texture2D* baseColor = pbr->getTextureProperty();
+    ASSERT_NE(nullptr, baseColor);
+    EXPECT_EQ(1, baseColor->getWidthProperty());
+
+    // The fixture's occlusion image is a solid (255,0,0) 1x1 PNG. It must arrive intact: the
+    // halving existed only to compensate DualTextureEffect's multiply blend.
+    Texture2D* occlusion = pbr->getOcclusionMapProperty();
+    ASSERT_NE(nullptr, occlusion) << "the occlusion map was dropped rather than carried to PBR";
     Color occlusionPixel(0, 0, 0, 0);
-    tex2->GetData(&occlusionPixel, 1);
-    EXPECT_NEAR(occlusionPixel.getRProperty(), 127, 2);
-    EXPECT_EQ(occlusionPixel.getGProperty(), 0);
-    EXPECT_EQ(occlusionPixel.getBProperty(), 0);
-    EXPECT_EQ(occlusionPixel.getAProperty(), 255);
+    occlusion->GetData(&occlusionPixel, 1);
+    EXPECT_EQ(255, occlusionPixel.getRProperty())
+        << "the occlusion texel was halved -- that compensation belongs to DualTextureEffect only";
+    EXPECT_EQ(0, occlusionPixel.getGProperty());
+    EXPECT_EQ(0, occlusionPixel.getBProperty());
+    EXPECT_EQ(255, occlusionPixel.getAProperty());
 }
 
 // CNB-66/67/68: a skinned mesh with a COLOR_0 attribute must import through the new stride-56
@@ -1436,9 +2099,10 @@ TEST(GltfToCnjToolTest, ExtractsVertexColorOnASkinnedMeshAndEnablesItOnSkinnedEf
     EXPECT_TRUE(skinnedFx->VertexColorEnabled);
 }
 
-// CNB-56/59: the offline CLI tool must serialize PbrEffect's 4 maps + factor values to real
-// .cnj/binary-sidecar files (stride 48), and ModelTypeReader's own .cnj JSON path must read them
-// back correctly -- unlike morph targets, which the CLI tool deliberately does not serialize.
+// plan_gltf.md GLTF-236/GLTF-237: every core material field must survive the offline .cnj path,
+// including the four values that used to be dropped there (base colour/alpha, normal scale and
+// occlusion strength). The direct and offline effects are compared at L6, not just against another
+// JSON parser, and deliberately non-default sampler/alpha state makes a missing field observable.
 TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
 {
     ScratchDir gltfDir;
@@ -1454,10 +2118,39 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "pbr_tex2.png"));
     ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "pbr_tex3.png"));
 
+    std::ifstream cnjFile(contentRoot.path() / "pbr.cnj");
+    const std::string cnj((std::istreambuf_iterator<char>(cnjFile)),
+                          std::istreambuf_iterator<char>());
+    EXPECT_NE(std::string::npos, cnj.find("\"normalScale\": 0.35"));
+    EXPECT_NE(std::string::npos, cnj.find("\"occlusionStrength\": 0.65"));
+    EXPECT_NE(std::string::npos, cnj.find("\"diffuseColor\": [0.25, 0.5, 0.75]"));
+    EXPECT_NE(std::string::npos, cnj.find("\"alpha\": 0.4"));
+    EXPECT_NE(std::string::npos, cnj.find("\"alphaMode\": \"MASK\""));
+    EXPECT_NE(std::string::npos, cnj.find("\"alphaCutoff\": 0.73"));
+    EXPECT_NE(std::string::npos, cnj.find("\"doubleSided\": true"));
+    EXPECT_NE(std::string::npos, cnj.find("\"ior\": 2"));
+    EXPECT_NE(std::string::npos, cnj.find("\"specularFactor\": 0.3"));
+    EXPECT_NE(std::string::npos,
+              cnj.find("\"specularColorFactor\": [0.25, 1, 12]"));
+    EXPECT_NE(std::string::npos, cnj.find("\"specularMap\": \"pbr_tex3.png\""));
+    EXPECT_NE(std::string::npos, cnj.find("\"specularColorMap\": \"pbr_tex0.png\""));
+    EXPECT_NE(std::string::npos,
+              cnj.find("\"specularTextureCoordinateSets\": [1, 0]"));
+    EXPECT_NE(std::string::npos,
+              cnj.find("\"specularTextureTransforms\": [0.2, 0.4, 0.3, 0.6, 0.25"));
+    EXPECT_NE(std::string::npos, cnj.find("\"sampler6Filter\": 1"));
+    EXPECT_NE(std::string::npos, cnj.find("\"sampler6AddressU\": 1"));
+    EXPECT_NE(std::string::npos, cnj.find("\"sampler6AddressV\": 2"));
+    EXPECT_NE(std::string::npos,
+              cnj.find("\"textureTransforms\": [0.125, 0.375, 2, 0.5"));
+    EXPECT_NE(std::string::npos, cnj.find("\"sampler0Filter\": 1"));
+    EXPECT_NE(std::string::npos, cnj.find("\"sampler0AddressU\": 1"));
+    EXPECT_NE(std::string::npos, cnj.find("\"sampler0AddressV\": 2"));
+
     const std::filesystem::path vertsPath = contentRoot.path() / "pbr_mesh0_verts.bin";
     std::ifstream f(vertsPath, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    ASSERT_EQ(bytes.size(), 3u * 48u); // stride 48, VertexPositionNormalTangentTexture
+    ASSERT_EQ(bytes.size(), 3u * 60u); // PBR layout with packed TextureCoordinate0/1
 
     float tangent0[4];
     std::memcpy(tangent0, bytes.data() + 24, sizeof(tangent0));
@@ -1471,6 +2164,11 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     // run and recorded its own assertions.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
+    ContentManager runtimeCm(nullptr, gltfDir.path().string());
+    runtimeCm.setGraphicsDevice(gd);
+    Model runtimeModel = runtimeCm.Load<Model>("pbr");
+
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("pbr");
@@ -1483,12 +2181,346 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     ASSERT_NE(pbrFx->getNormalMapProperty(), nullptr);
     ASSERT_NE(pbrFx->getMetallicRoughnessMapProperty(), nullptr);
     ASSERT_NE(pbrFx->getEmissiveMapProperty(), nullptr);
+    ASSERT_NE(pbrFx->getOcclusionMapProperty(), nullptr);
+    ASSERT_NE(pbrFx->getSpecularMapEXTProperty(), nullptr);
+    ASSERT_NE(pbrFx->getSpecularColorMapEXTProperty(), nullptr);
     EXPECT_NEAR(pbrFx->getMetallicFactorProperty(), 0.5f, 1e-5f);
     EXPECT_NEAR(pbrFx->getRoughnessFactorProperty(), 0.3f, 1e-5f);
+    EXPECT_NEAR(pbrFx->getIorEXTProperty(), 2.0f, 1e-5f);
+    EXPECT_NEAR(pbrFx->getSpecularFactorEXTProperty(), 0.3f, 1e-5f);
+    EXPECT_EQ(pbrFx->getSpecularColorFactorEXTProperty(), Vector3(0.25f, 1.0f, 12.0f));
     const Vector3 emissiveFactor = pbrFx->getEmissiveFactorProperty();
     EXPECT_NEAR(emissiveFactor.X, 0.1f, 1e-5f);
     EXPECT_NEAR(emissiveFactor.Y, 0.2f, 1e-5f);
     EXPECT_NEAR(emissiveFactor.Z, 0.3f, 1e-5f);
+    EXPECT_NEAR(pbrFx->getNormalScaleEXTProperty(), 0.35f, 1e-5f);
+    EXPECT_NEAR(pbrFx->getOcclusionStrengthEXTProperty(), 0.65f, 1e-5f);
+    const Vector3 diffuse = pbrFx->getDiffuseColorProperty();
+    EXPECT_NEAR(diffuse.X, 0.25f, 1e-5f);
+    EXPECT_NEAR(diffuse.Y, 0.5f, 1e-5f);
+    EXPECT_NEAR(diffuse.Z, 0.75f, 1e-5f);
+    EXPECT_NEAR(pbrFx->getAlphaProperty(), 0.4f, 1e-5f);
+    EXPECT_EQ(pbrFx->getAlphaModeEXTProperty(), AlphaModeEXT::Mask);
+    EXPECT_NEAR(pbrFx->getAlphaCutoffEXTProperty(), 0.73f, 1e-5f);
+    EXPECT_TRUE(pbrFx->getDoubleSidedEXTProperty());
+    EXPECT_EQ(pbrFx->getSpecularTextureCoordinateSetEXTProperty(), 1);
+    EXPECT_EQ(pbrFx->getSpecularColorTextureCoordinateSetEXTProperty(), 0);
+    EXPECT_FLOAT_EQ(pbrFx->getSpecularTextureTransformEXTProperty().Offset.X, 0.2f);
+    EXPECT_FLOAT_EQ(pbrFx->getSpecularTextureTransformEXTProperty().Offset.Y, 0.4f);
+    EXPECT_FLOAT_EQ(pbrFx->getSpecularTextureTransformEXTProperty().Scale.X, 0.3f);
+    EXPECT_FLOAT_EQ(pbrFx->getSpecularTextureTransformEXTProperty().Scale.Y, 0.6f);
+    EXPECT_FLOAT_EQ(pbrFx->getSpecularColorTextureTransformEXTProperty().Offset.X, 0.7f);
+    EXPECT_FLOAT_EQ(pbrFx->getSpecularColorTextureTransformEXTProperty().Offset.Y, 0.8f);
+    EXPECT_FLOAT_EQ(pbrFx->getSpecularColorTextureTransformEXTProperty().Scale.X, 1.5f);
+    EXPECT_FLOAT_EQ(pbrFx->getSpecularColorTextureTransformEXTProperty().Scale.Y, 2.5f);
+
+    const auto& baseTransform = pbrFx->getTextureTransformsEXTProperty()[0];
+    EXPECT_FLOAT_EQ(baseTransform.Offset.X, 0.125f);
+    EXPECT_FLOAT_EQ(baseTransform.Offset.Y, 0.375f);
+    EXPECT_FLOAT_EQ(baseTransform.Scale.X, 2.0f);
+    EXPECT_FLOAT_EQ(baseTransform.Scale.Y, 0.5f);
+    EXPECT_NEAR(baseTransform.Rotation, 1.5707963267948966f, 1e-5f);
+    const auto& normalTransform = pbrFx->getTextureTransformsEXTProperty()[1];
+    EXPECT_FLOAT_EQ(normalTransform.Offset.X, 0.625f);
+    EXPECT_FLOAT_EQ(normalTransform.Offset.Y, 0.25f);
+    EXPECT_FLOAT_EQ(normalTransform.Scale.X, 0.75f);
+    EXPECT_FLOAT_EQ(normalTransform.Scale.Y, 1.5f);
+    EXPECT_NEAR(normalTransform.Rotation, -0.7853981633974483f, 1e-5f);
+
+    auto* runtimeFx = dynamic_cast<PbrEffect*>(runtimeModel.getMeshesProperty()[0]
+        ->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(runtimeFx, nullptr);
+    ASSERT_NE(runtimeFx->getSpecularMapEXTProperty(), nullptr);
+    ASSERT_NE(runtimeFx->getSpecularColorMapEXTProperty(), nullptr);
+    EXPECT_EQ(runtimeFx->getSpecularTextureCoordinateSetEXTProperty(), 1);
+    EXPECT_EQ(runtimeFx->getSpecularColorTextureCoordinateSetEXTProperty(), 0);
+    EXPECT_EQ(runtimeFx->getSpecularTextureTransformEXTProperty(),
+              pbrFx->getSpecularTextureTransformEXTProperty());
+    EXPECT_EQ(runtimeFx->getSpecularColorTextureTransformEXTProperty(),
+              pbrFx->getSpecularColorTextureTransformEXTProperty());
+    for (std::size_t slot = 0; slot < 5; ++slot)
+    {
+        const auto& direct = runtimeFx->getTextureTransformsEXTProperty()[slot];
+        const auto& offline = pbrFx->getTextureTransformsEXTProperty()[slot];
+        EXPECT_NEAR(direct.Offset.X, offline.Offset.X, 1e-5f) << "slot " << slot;
+        EXPECT_NEAR(direct.Offset.Y, offline.Offset.Y, 1e-5f) << "slot " << slot;
+        EXPECT_NEAR(direct.Scale.X, offline.Scale.X, 1e-5f) << "slot " << slot;
+        EXPECT_NEAR(direct.Scale.Y, offline.Scale.Y, 1e-5f) << "slot " << slot;
+        EXPECT_NEAR(direct.Rotation, offline.Rotation, 1e-5f) << "slot " << slot;
+    }
+
+    const auto& sampler = mesh->getMeshPartsProperty()[0]->getSamplerStatesEXTProperty()[0];
+    EXPECT_EQ(TextureFilter::Point, sampler.getFilterProperty());
+    EXPECT_EQ(TextureAddressMode::Clamp, sampler.getAddressUProperty());
+    EXPECT_EQ(TextureAddressMode::Mirror, sampler.getAddressVProperty());
+    const auto& specularSamplers =
+        mesh->getMeshPartsProperty()[0]->getSpecularSamplerStatesEXTProperty();
+    EXPECT_EQ(TextureFilter::Linear, specularSamplers[0].getFilterProperty());
+    EXPECT_EQ(TextureFilter::Point, specularSamplers[1].getFilterProperty());
+    EXPECT_EQ(TextureAddressMode::Clamp, specularSamplers[1].getAddressUProperty());
+    EXPECT_EQ(TextureAddressMode::Mirror, specularSamplers[1].getAddressVProperty());
+
+    const Matrix identity = Matrix::getIdentityProperty();
+    const auto runtimeDraws = CnaTest::GltfOracle::CaptureDrawParamsEXT(
+        runtimeModel, identity, identity, identity);
+    const auto offlineDraws = CnaTest::GltfOracle::CaptureDrawParamsEXT(
+        model, identity, identity, identity);
+    ASSERT_EQ(runtimeDraws.size(), offlineDraws.size());
+    ASSERT_EQ(runtimeDraws.size(), 1u);
+    ExpectL6MaterialStateEqual(runtimeDraws.front(), offlineDraws.front());
+    const auto& transformRows = runtimeDraws.front().textureTransformRows;
+    EXPECT_NEAR(transformRows[0], 0.0f, 1e-5f);
+    EXPECT_NEAR(transformRows[1], -0.5f, 1e-5f);
+    EXPECT_FLOAT_EQ(transformRows[2], 0.125f);
+    EXPECT_NEAR(transformRows[4], 2.0f, 1e-5f);
+    EXPECT_NEAR(transformRows[5], 0.0f, 1e-5f);
+    EXPECT_FLOAT_EQ(transformRows[6], 0.375f);
+    EXPECT_NEAR(transformRows[8], 0.5303301f, 1e-5f);
+    EXPECT_NEAR(transformRows[9], 1.0606602f, 1e-5f);
+    EXPECT_FLOAT_EQ(transformRows[10], 0.625f);
+    EXPECT_NEAR(transformRows[12], -0.5303301f, 1e-5f);
+    EXPECT_NEAR(transformRows[13], 1.0606602f, 1e-5f);
+    EXPECT_FLOAT_EQ(transformRows[14], 0.25f);
+
+    // A pre-GLTF-216/343/344/184 or hand-written PBR .cnj may omit diffuseColor/alpha, Fresnel or
+    // texture-transform fields. Removing all of them from the rich output must retain the
+    // historical white/opaque/core-glTF/identity defaults.
+    std::string legacyCnj = cnj;
+    const auto eraseArrayField = [&](const std::string& field) {
+        const std::string prefix = ", \"" + field + "\": [";
+        const std::size_t begin = legacyCnj.find(prefix);
+        ASSERT_NE(begin, std::string::npos);
+        const std::size_t end = legacyCnj.find(']', begin + prefix.size());
+        ASSERT_NE(end, std::string::npos);
+        legacyCnj.erase(begin, end - begin + 1);
+    };
+    const auto eraseScalarField = [&](const std::string& field) {
+        const std::string prefix = ", \"" + field + "\": ";
+        const std::size_t begin = legacyCnj.find(prefix);
+        ASSERT_NE(begin, std::string::npos);
+        const std::size_t end = legacyCnj.find_first_of(",}", begin + prefix.size());
+        ASSERT_NE(end, std::string::npos);
+        legacyCnj.erase(begin, end - begin);
+    };
+    eraseArrayField("diffuseColor");
+    eraseArrayField("specularColorFactor");
+    eraseArrayField("textureTransforms");
+    eraseScalarField("alpha");
+    eraseScalarField("ior");
+    eraseScalarField("specularFactor");
+    WriteFile(contentRoot.path() / "legacy.cnj", legacyCnj);
+
+    Model legacy = cm.Load<Model>("legacy");
+    ASSERT_EQ(legacy.getMeshesProperty().getCountProperty(), 1);
+    auto* legacyFx = dynamic_cast<PbrEffect*>(
+        legacy.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(legacyFx, nullptr);
+    EXPECT_EQ(legacyFx->getDiffuseColorProperty(), Vector3(1.0f, 1.0f, 1.0f));
+    EXPECT_FLOAT_EQ(legacyFx->getAlphaProperty(), 1.0f);
+    EXPECT_FLOAT_EQ(legacyFx->getIorEXTProperty(), 1.5f);
+    EXPECT_FLOAT_EQ(legacyFx->getSpecularFactorEXTProperty(), 1.0f);
+    EXPECT_EQ(legacyFx->getSpecularColorFactorEXTProperty(), Vector3(1.0f, 1.0f, 1.0f));
+    const TextureTransformEXT identityTransform;
+    for (const auto& transform : legacyFx->getTextureTransformsEXTProperty())
+        EXPECT_EQ(identityTransform, transform);
+
+    const auto replaceTransformValues = [&](std::string text, const std::string& values) {
+        const std::size_t field = text.find("\"textureTransforms\": [");
+        EXPECT_NE(std::string::npos, field);
+        const std::size_t begin = text.find('[', field);
+        const std::size_t end = text.find(']', begin);
+        EXPECT_NE(std::string::npos, begin);
+        EXPECT_NE(std::string::npos, end);
+        text.replace(begin + 1, end - begin - 1, values);
+        return text;
+    };
+    WriteFile(contentRoot.path() / "short-transform.cnj",
+              replaceTransformValues(cnj, "0"));
+    EXPECT_THROW((void)cm.Load<Model>("short-transform"), ContentLoadException);
+    WriteFile(contentRoot.path() / "nonfinite-transform.cnj",
+              replaceTransformValues(cnj,
+                  "1e39, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, "
+                  "0, 0, 1, 1, 0, 0, 0, 1, 1, 0"));
+    EXPECT_THROW((void)cm.Load<Model>("nonfinite-transform"), ContentLoadException);
+    WriteFile(contentRoot.path() / "long-transform.cnj",
+              replaceTransformValues(cnj,
+                  "0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, "
+                  "0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 42"));
+    EXPECT_THROW((void)cm.Load<Model>("long-transform"), ContentLoadException);
+}
+
+// plan_gltf.md GLTF-237 and the L6 half of GLTF-244: one rich probe can prove that every schema
+// field exists, but not that each effect-selection/material shape reaches it. Sweep the complete
+// generated `mat-*` group and compare the draw parameter record, including map presence, factors,
+// alpha state and all five sampler slots. The floor stops a renamed/shrunk group from passing.
+TEST(GltfToCnjToolTest, OfflineAndRuntimePathsHaveIdenticalL6MaterialStateForTheCorpus)
+{
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
+    const std::filesystem::path corpus = std::filesystem::path("tests") / "assets" / "gltf";
+    if (!std::filesystem::exists(corpus)) { GTEST_SKIP() << "the fixture corpus is not present"; }
+
+    std::vector<std::string> ids;
+    for (const std::filesystem::directory_entry& entry :
+         std::filesystem::directory_iterator(corpus))
+    {
+        const std::string name = entry.path().filename().string();
+        if (name.rfind("mat-", 0) == 0 && entry.path().extension() == ".gltf")
+        {
+            ids.push_back(entry.path().stem().string());
+        }
+    }
+    std::sort(ids.begin(), ids.end());
+    ASSERT_GE(ids.size(), 14u) << "the material sweep silently lost corpus coverage";
+
+    std::size_t comparedParts = 0;
+    for (const std::string& id : ids)
+    {
+        SCOPED_TRACE(id);
+        ScratchDir contentRoot;
+        ASSERT_EQ(0, RunGltfToCnjTool((corpus / (id + ".gltf")).string(),
+                                      contentRoot.path().string(), "material"));
+
+        std::string modelAsset;
+        for (const std::filesystem::directory_entry& out :
+             std::filesystem::directory_iterator(contentRoot.path()))
+        {
+            if (out.path().extension() != ".cnj") { continue; }
+            std::ifstream cnjFile(out.path());
+            const std::string text((std::istreambuf_iterator<char>(cnjFile)),
+                                   std::istreambuf_iterator<char>());
+            if (text.find("\"type\": \"Model\"") != std::string::npos)
+            {
+                ASSERT_TRUE(modelAsset.empty()) << "material fixture emitted multiple Models";
+                modelAsset = out.path().stem().string();
+            }
+        }
+        ASSERT_FALSE(modelAsset.empty()) << "the tool wrote no Model .cnj";
+
+        ContentManager runtimeCm(nullptr, corpus.string());
+        runtimeCm.setGraphicsDevice(gd);
+        Model runtime = runtimeCm.Load<Model>(id);
+
+        ContentManager offlineCm(nullptr, contentRoot.path().string());
+        offlineCm.setGraphicsDevice(gd);
+        Model offline = offlineCm.Load<Model>(modelAsset);
+
+        const Matrix identity = Matrix::getIdentityProperty();
+        const auto runtimeDraws = CnaTest::GltfOracle::CaptureDrawParamsEXT(
+            runtime, identity, identity, identity);
+        const auto offlineDraws = CnaTest::GltfOracle::CaptureDrawParamsEXT(
+            offline, identity, identity, identity);
+        ASSERT_EQ(runtimeDraws.size(), offlineDraws.size());
+        ASSERT_FALSE(runtimeDraws.empty()) << "fixture produced no drawable material state";
+        comparedParts += runtimeDraws.size();
+        for (std::size_t part = 0; part < runtimeDraws.size(); ++part)
+        {
+            SCOPED_TRACE("draw " + std::to_string(part));
+            ExpectL6MaterialStateEqual(runtimeDraws[part], offlineDraws[part]);
+        }
+    }
+    EXPECT_GE(comparedParts, ids.size()) << "the sweep compared fewer parts than fixtures";
+}
+
+// plan_gltf.md GLTF-341/GLTF-342: material variants are complete mesh-part states, not merely
+// alternate colours. Prove the offline schema keeps the source-order name table, the sparse
+// primitive mapping and the PBR-to-unlit vertex-layout/effect transition, then compare every
+// selectable state against the direct runtime path at the draw-parameter boundary.
+TEST(GltfToCnjToolTest, MaterialVariantsRoundTripAsSelectableCompletePartStates)
+{
+    const std::filesystem::path corpus = std::filesystem::path("tests") / "assets" / "gltf";
+    const std::filesystem::path input = corpus / "mat-material-variants.gltf";
+    if (!std::filesystem::exists(input)) { GTEST_SKIP() << "the fixture corpus is not present"; }
+
+    ScratchDir contentRoot;
+    ASSERT_EQ(0, RunGltfToCnjTool(input.string(), contentRoot.path().string(), "variants"));
+
+    std::ifstream cnjFile(contentRoot.path() / "variants.cnj");
+    const std::string cnj((std::istreambuf_iterator<char>(cnjFile)),
+                          std::istreambuf_iterator<char>());
+    EXPECT_NE(std::string::npos,
+              cnj.find("\"materialVariantNames\": [\"Ocean blue\", \"Unlit green\", "
+                       "\"No mapping\"]"));
+    EXPECT_NE(std::string::npos, cnj.find("\"variantOf\": 0, \"materialVariant\": 0"));
+    EXPECT_NE(std::string::npos, cnj.find("\"variantOf\": 0, \"materialVariant\": 1"));
+    EXPECT_NE(std::string::npos, cnj.find("\"vertexStride\": 32, \"effect\": \"BasicEffect\""));
+
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
+    ContentManager runtimeContent(nullptr, corpus.string());
+    runtimeContent.setGraphicsDevice(gd);
+    Model runtime = runtimeContent.Load<Model>("mat-material-variants");
+
+    ContentManager offlineContent(nullptr, contentRoot.path().string());
+    offlineContent.setGraphicsDevice(gd);
+    Model offline = offlineContent.Load<Model>("variants");
+
+    const std::vector<std::string> expectedNames = {
+        "Ocean blue", "Unlit green", "No mapping"};
+    EXPECT_EQ(expectedNames, runtime.getMaterialVariantNamesEXTProperty());
+    EXPECT_EQ(expectedNames, offline.getMaterialVariantNamesEXTProperty());
+    ASSERT_EQ(1, offline.getMeshesProperty().getCountProperty());
+    ASSERT_EQ(1, offline.getMeshesProperty()[0]->getMeshPartsProperty().getCountProperty());
+    ModelMeshPart* offlinePart = offline.getMeshesProperty()[0]->getMeshPartsProperty()[0];
+    auto* defaultEffect = offlinePart->getEffectProperty();
+    auto* defaultVertices = offlinePart->getVertexBufferProperty();
+
+    const Matrix identity = Matrix::getIdentityProperty();
+    for (const int selection : {-1, 0, 1, 2})
+    {
+        SCOPED_TRACE("material variant " + std::to_string(selection));
+        runtime.setMaterialVariantEXTProperty(selection);
+        offline.setMaterialVariantEXTProperty(selection);
+        const auto runtimeDraws = CnaTest::GltfOracle::CaptureDrawParamsEXT(
+            runtime, identity, identity, identity);
+        const auto offlineDraws = CnaTest::GltfOracle::CaptureDrawParamsEXT(
+            offline, identity, identity, identity);
+        ASSERT_EQ(1u, runtimeDraws.size());
+        ASSERT_EQ(1u, offlineDraws.size());
+        ExpectL6MaterialStateEqual(runtimeDraws.front(), offlineDraws.front());
+    }
+
+    offline.setMaterialVariantEXTProperty(1);
+    EXPECT_NE(nullptr, dynamic_cast<BasicEffect*>(offlinePart->getEffectProperty()));
+    EXPECT_NE(defaultVertices, offlinePart->getVertexBufferProperty());
+    offline.setMaterialVariantEXTProperty(2);
+    EXPECT_EQ(defaultEffect, offlinePart->getEffectProperty())
+        << "an unmapped variant retained the previously selected primitive state";
+    EXPECT_EQ(defaultVertices, offlinePart->getVertexBufferProperty());
+    EXPECT_EQ(1, offline.getMeshesProperty()[0]->getEffectsProperty().getCountProperty());
+
+    const auto malformedLoadError = [&](std::string text, const std::string& from,
+                                        const std::string& to, const std::string& asset) {
+        const std::size_t position = text.find(from);
+        if (position == std::string::npos)
+        {
+            ADD_FAILURE() << "generated variants.cnj does not contain " << from;
+            return std::string{};
+        }
+        text.replace(position, from.size(), to);
+        WriteFile(contentRoot.path() / (asset + ".cnj"), text);
+        ContentManager malformedContent(nullptr, contentRoot.path().string());
+        malformedContent.setGraphicsDevice(gd);
+        try
+        {
+            (void)malformedContent.Load<Model>(asset);
+        }
+        catch (const ContentLoadException& ex)
+        {
+            return std::string(ex.what());
+        }
+        return std::string{};
+    };
+    EXPECT_NE(std::string::npos,
+              malformedLoadError(cnj, "\"variantOf\": 0", "\"variantOf\": 99",
+                                 "variants_bad_owner").find("unknown or later mesh entry 99"));
+    EXPECT_NE(std::string::npos,
+              malformedLoadError(cnj, "\"materialVariant\": 0", "\"materialVariant\": 9",
+                                 "variants_bad_index").find("out-of-range materialVariant 9"));
 }
 
 // PBR + skinning combo: the offline CLI tool must serialize a skinned, PBR-mapped mesh through
@@ -1543,6 +2575,18 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsSkinnedPbrMaterialThroughTheOfflineC
     ASSERT_NE(skinnedPbrFx, nullptr);
     ASSERT_NE(skinnedPbrFx->getTextureProperty(), nullptr);
     ASSERT_NE(skinnedPbrFx->getNormalMapProperty(), nullptr);
+    const TextureTransformEXT expectedTransform{
+        Vector2{0.2f, 0.4f}, Vector2{0.5f, 0.75f}, 0.3f};
+    EXPECT_EQ(expectedTransform, skinnedPbrFx->getTextureTransformsEXTProperty()[1]);
+
+    ContentManager runtimeCm(nullptr, gltfDir.path().string());
+    runtimeCm.setGraphicsDevice(gd);
+    Model runtimeModel = runtimeCm.Load<Model>("skinnedpbr");
+    auto* runtimeFx = dynamic_cast<SkinnedPbrEffect*>(runtimeModel.getMeshesProperty()[0]
+        ->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(runtimeFx, nullptr);
+    EXPECT_EQ(runtimeFx->getTextureTransformsEXTProperty(),
+              skinnedPbrFx->getTextureTransformsEXTProperty());
 }
 
 // Morph target CLI/.cnj serialization: the offline CLI tool must write a binary morph sidecar +
@@ -1591,6 +2635,26 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsMorphTargetsThroughTheOfflineCnjPath
     std::memcpy(&z0, blendedAtDefault.data() + 2 * sizeof(float), sizeof(float));
     EXPECT_NEAR(z0, 0.5f, 1e-5f);
 
+    // GLTF-128: the imported mesh sphere describes the default pose that was actually uploaded,
+    // not the all-zero base pose hidden in MorphTargetDataEXT. All three vertices moved to z=.5.
+    const auto offlineBounds = model.getBoundingSphereEXTProperty();
+    ASSERT_TRUE(offlineBounds.has_value());
+    for (const Vector3& position : std::vector<Vector3>{
+             Vector3(0.0f, 0.0f, 0.5f), Vector3(1.0f, 0.0f, 0.5f),
+             Vector3(0.0f, 1.0f, 0.5f)})
+    {
+        EXPECT_LE(Vector3::Distance(offlineBounds->Center, position),
+                  offlineBounds->Radius + 1e-5f);
+    }
+
+    ContentManager directCm(nullptr, gltfDir.path().string());
+    directCm.setGraphicsDevice(gd);
+    Model direct = directCm.Load<Model>("morph");
+    const auto directBounds = direct.getBoundingSphereEXTProperty();
+    ASSERT_TRUE(directBounds.has_value());
+    EXPECT_EQ(directBounds->Center, offlineBounds->Center);
+    EXPECT_FLOAT_EQ(directBounds->Radius, offlineBounds->Radius);
+
     // Weight animation: LINEAR 0.0 at t=0 -> 1.0 at t=1.
     ASSERT_EQ(morph->WeightTrack.Keys.size(), 2u);
     EXPECT_FALSE(morph->WeightTrack.StepInterpolation);
@@ -1599,6 +2663,198 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsMorphTargetsThroughTheOfflineCnjPath
     const auto midWeights = EvaluateMorphWeightsEXT(morph->WeightTrack, 0.5);
     ASSERT_EQ(midWeights.size(), 1u);
     EXPECT_NEAR(midWeights[0], 0.5f, 1e-5f);
+}
+
+// GLTF-289: the original CNB-82 sidecar carried only position and normal deltas. Tangent xyz now
+// lives in an optional trailer after that byte-compatible prefix, and a target with no POSITION
+// is encoded with a zero-filled prefix stream so its NORMAL bytes remain structurally readable.
+TEST(GltfToCnjToolTest, TangentAndNormalOnlyMorphTargetsRoundTripThroughTheOfflinePath)
+{
+    const std::filesystem::path corpus = std::filesystem::path("tests") / "assets" / "gltf";
+    const std::filesystem::path tangentInput =
+        corpus / "morph-position-normal-tangent.gltf";
+    const std::filesystem::path normalOnlyInput = corpus / "morph-normal-only-target.gltf";
+    if (!std::filesystem::exists(tangentInput) || !std::filesystem::exists(normalOnlyInput))
+        GTEST_SKIP() << "the morph fixture corpus is not present";
+
+    ScratchDir contentRoot;
+    std::vector<std::string> fixtureIds;
+    for (const auto& entry : std::filesystem::directory_iterator(corpus))
+    {
+        const std::filesystem::path& path = entry.path();
+        const std::string id = path.stem().string();
+        if (path.extension() == ".gltf" && id.rfind("morph-", 0) == 0)
+        {
+            fixtureIds.push_back(id);
+        }
+    }
+    std::sort(fixtureIds.begin(), fixtureIds.end());
+    ASSERT_GE(fixtureIds.size(), 13u) << "the morph fixture family has shrunk";
+    for (const std::string& id : fixtureIds)
+    {
+        ASSERT_EQ(0, RunGltfToCnjTool(
+                         (corpus / (id + ".gltf")).string(),
+                         contentRoot.path().string(), id)) << id;
+    }
+
+    const auto readBytes = [](const std::filesystem::path& path)
+    {
+        std::ifstream file(path, std::ios::binary);
+        return std::vector<std::uint8_t>(
+            std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    };
+    const std::filesystem::path tangentSidecar =
+        contentRoot.path() / "morph-position-normal-tangent_mesh0_morph.bin";
+    std::vector<std::uint8_t> tangentBytes = readBytes(tangentSidecar);
+
+    // One target × three vertices: the old prefix is 84 bytes. Pin the magic immediately after
+    // it, rather than merely proving that the new reader and writer share the same private guess.
+    constexpr std::size_t legacyPrefixSize =
+        sizeof(std::int32_t) * 3u + sizeof(float) * 3u * 3u * 2u;
+    ASSERT_GE(tangentBytes.size(), legacyPrefixSize + sizeof(std::int32_t) * 3u);
+    std::int32_t trailerMagic = 0;
+    std::memcpy(&trailerMagic, tangentBytes.data() + legacyPrefixSize, sizeof(trailerMagic));
+    EXPECT_EQ(CNA::Internal::CnjMorphTangentTrailerMagicEXT, trailerMagic);
+
+    const std::vector<std::uint8_t> normalOnlyBytes = readBytes(
+        contentRoot.path() / "morph-normal-only-target_mesh0_morph.bin");
+    EXPECT_EQ(legacyPrefixSize, normalOnlyBytes.size())
+        << "a NORMAL-only target was not represented by the backwards-compatible prefix";
+
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
+    ContentManager directContent(nullptr, corpus.string());
+    directContent.setGraphicsDevice(gd);
+    ContentManager offlineContent(nullptr, contentRoot.path().string());
+    offlineContent.setGraphicsDevice(gd);
+
+    Model directTangent = directContent.Load<Model>("morph-position-normal-tangent");
+    Model offlineTangent = offlineContent.Load<Model>("morph-position-normal-tangent");
+    auto* directTangentData = dynamic_cast<MorphTargetDataEXT*>(
+        directTangent.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getTagProperty());
+    auto* offlineTangentData = dynamic_cast<MorphTargetDataEXT*>(
+        offlineTangent.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getTagProperty());
+    ASSERT_NE(nullptr, directTangentData);
+    ASSERT_NE(nullptr, offlineTangentData);
+    ASSERT_EQ(1u, offlineTangentData->TangentDeltas.size());
+    ASSERT_EQ(3u, offlineTangentData->TangentDeltas[0].size());
+    for (std::size_t vertex = 0; vertex < 3u; ++vertex)
+    {
+        EXPECT_EQ(directTangentData->TangentDeltas[0][vertex],
+                  offlineTangentData->TangentDeltas[0][vertex]);
+    }
+    EXPECT_EQ(BlendMorphTargetsEXT(*directTangentData, directTangentData->Weights),
+              BlendMorphTargetsEXT(*offlineTangentData, offlineTangentData->Weights));
+
+    Model directNormalOnly = directContent.Load<Model>("morph-normal-only-target");
+    Model offlineNormalOnly = offlineContent.Load<Model>("morph-normal-only-target");
+    auto* directNormalData = dynamic_cast<MorphTargetDataEXT*>(
+        directNormalOnly.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getTagProperty());
+    auto* offlineNormalData = dynamic_cast<MorphTargetDataEXT*>(
+        offlineNormalOnly.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getTagProperty());
+    ASSERT_NE(nullptr, directNormalData);
+    ASSERT_NE(nullptr, offlineNormalData);
+    ASSERT_EQ(1u, offlineNormalData->NormalDeltas.size());
+    ASSERT_EQ(3u, offlineNormalData->NormalDeltas[0].size());
+    EXPECT_EQ(BlendMorphTargetsEXT(*directNormalData, directNormalData->Weights),
+              BlendMorphTargetsEXT(*offlineNormalData, offlineNormalData->Weights));
+
+    // A sidecar written before GLTF-289 ends exactly at the old prefix. Reuse the generated
+    // descriptor with that truncated copy to prove the compatibility branch, not merely the
+    // absence of a trailer on some unrelated POSITION-only fixture.
+    std::ifstream currentCnjFile(
+        contentRoot.path() / "morph-position-normal-tangent.cnj");
+    std::string legacyCnj((std::istreambuf_iterator<char>(currentCnjFile)),
+                          std::istreambuf_iterator<char>());
+    const std::string currentSidecarName =
+        "morph-position-normal-tangent_mesh0_morph.bin";
+    const std::string legacySidecarName = "legacy_morph.bin";
+    ASSERT_NE(std::string::npos, legacyCnj.find(currentSidecarName));
+    legacyCnj.replace(legacyCnj.find(currentSidecarName), currentSidecarName.size(),
+                      legacySidecarName);
+    WriteFile(contentRoot.path() / "legacy.cnj", legacyCnj);
+    WriteFile(contentRoot.path() / legacySidecarName, std::string(
+        reinterpret_cast<const char*>(tangentBytes.data()), legacyPrefixSize));
+    ContentManager legacyContent(nullptr, contentRoot.path().string());
+    legacyContent.setGraphicsDevice(gd);
+    Model legacy = legacyContent.Load<Model>("legacy");
+    auto* legacyMorph = dynamic_cast<MorphTargetDataEXT*>(
+        legacy.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getTagProperty());
+    ASSERT_NE(nullptr, legacyMorph);
+    ASSERT_EQ(1u, legacyMorph->TangentDeltas.size());
+    EXPECT_TRUE(legacyMorph->TangentDeltas[0].empty());
+
+    // Sweep every morph fixture, in both directions: every direct part must have one offline
+    // counterpart and every counterpart must reproduce the exact default blended vertex bytes.
+    // This catches per-shape sidecar bugs (several targets, absent semantics, explicit-zero node
+    // weights) that a single happy-path target cannot exercise.
+    std::size_t comparedParts = 0;
+    for (const std::string& id : fixtureIds)
+    {
+        SCOPED_TRACE(id);
+        Model direct = directContent.Load<Model>(id);
+        Model offline = offlineContent.Load<Model>(id);
+        std::vector<MorphTargetDataEXT*> directMorphs;
+        std::vector<MorphTargetDataEXT*> offlineMorphs;
+        const auto collectMorphs = [](Model& model, std::vector<MorphTargetDataEXT*>& result)
+        {
+            for (int meshIndex = 0;
+                 meshIndex < model.getMeshesProperty().getCountProperty(); ++meshIndex)
+            {
+                const auto& parts =
+                    model.getMeshesProperty()[meshIndex]->getMeshPartsProperty();
+                for (int partIndex = 0; partIndex < parts.getCountProperty(); ++partIndex)
+                {
+                    if (auto* morph = dynamic_cast<MorphTargetDataEXT*>(
+                            parts[partIndex]->getTagProperty()))
+                    {
+                        result.push_back(morph);
+                    }
+                }
+            }
+        };
+        collectMorphs(direct, directMorphs);
+        collectMorphs(offline, offlineMorphs);
+        ASSERT_EQ(directMorphs.size(), offlineMorphs.size());
+        ASSERT_FALSE(directMorphs.empty());
+        for (std::size_t part = 0; part < directMorphs.size(); ++part)
+        {
+            SCOPED_TRACE("part " + std::to_string(part));
+            const MorphTargetDataEXT& expected = *directMorphs[part];
+            const MorphTargetDataEXT& actual = *offlineMorphs[part];
+            EXPECT_EQ(expected.Stride, actual.Stride);
+            EXPECT_EQ(expected.BaseVertexBytes, actual.BaseVertexBytes);
+            EXPECT_EQ(expected.Weights, actual.Weights);
+            EXPECT_EQ(expected.NormalDeltas, actual.NormalDeltas);
+            EXPECT_EQ(expected.TangentDeltas, actual.TangentDeltas);
+            EXPECT_EQ(BlendMorphTargetsEXT(expected, expected.Weights),
+                      BlendMorphTargetsEXT(actual, actual.Weights));
+            ++comparedParts;
+        }
+    }
+    EXPECT_GE(comparedParts, fixtureIds.size());
+
+    // A present trailer is versioned state, not ignorable garbage. Corrupt only the version and
+    // require the reader to name it instead of consuming the following target count as another
+    // interpretation of the same bytes.
+    const std::int32_t unsupportedVersion = 99;
+    std::memcpy(tangentBytes.data() + legacyPrefixSize + sizeof(std::int32_t),
+                &unsupportedVersion, sizeof(unsupportedVersion));
+    WriteFile(tangentSidecar, std::string(
+        reinterpret_cast<const char*>(tangentBytes.data()), tangentBytes.size()));
+    ContentManager malformedContent(nullptr, contentRoot.path().string());
+    malformedContent.setGraphicsDevice(gd);
+    try
+    {
+        (void)malformedContent.Load<Model>("morph-position-normal-tangent");
+        FAIL() << "a morph tangent trailer with an unknown version loaded successfully";
+    }
+    catch (const ContentLoadException& ex)
+    {
+        EXPECT_NE(std::string::npos, std::string(ex.what()).find("unsupported version 99"));
+    }
 }
 
 // CUBICSPLINE interpolation for morph-weight animation tracks: the offline CLI/.cnj round-trip
@@ -1662,10 +2918,10 @@ TEST(GltfToCnjToolTest, ConvertsDracoCompressedTriangleAndLoadsBackThroughConten
     const std::filesystem::path vertsPath = contentRoot.path() / "draco_mesh0_verts.bin";
     std::ifstream f(vertsPath, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    ASSERT_EQ(bytes.size(), 3u * 32u); // stride 32, VertexPositionNormalTexture
+    ASSERT_EQ(bytes.size(), 3u * 48u); // stride 48, VertexPositionNormalTangentTexture
 
     float px1;
-    std::memcpy(&px1, bytes.data() + 32, sizeof(float)); // vertex 1's Position.X
+    std::memcpy(&px1, bytes.data() + 48, sizeof(float)); // vertex 1's Position.X
     EXPECT_NEAR(px1, 1.0f, 1e-5f);
 
     const std::filesystem::path idxPath = contentRoot.path() / "draco_mesh0_idx.bin";
@@ -1680,8 +2936,9 @@ TEST(GltfToCnjToolTest, ConvertsDracoCompressedTriangleAndLoadsBackThroughConten
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
     ModelMesh* mesh = model.getMeshesProperty()[0];
 
-    auto* basicFx = dynamic_cast<BasicEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
-    ASSERT_NE(basicFx, nullptr);
+    auto* pbrFx = dynamic_cast<PbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(pbrFx, nullptr);
+    EXPECT_EQ(pbrFx->getTextureProperty(), nullptr);
 }
 #endif
 
@@ -1717,16 +2974,309 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsKhrLightsPunctualThroughTheOfflineCn
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
     ModelMesh* mesh = model.getMeshesProperty()[0];
 
-    auto* basicFx = dynamic_cast<BasicEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
-    ASSERT_NE(basicFx, nullptr);
+    // PbrEffect, not BasicEffect, for the same reason as the textured-skinned case above: the
+    // material is metallic-roughness, so GLTF-215 selects the PBR path. What this test is actually
+    // about is the LIGHT, and the light reaches the same three `DirectionalLight` slots either way
+    // -- they are `IEffectLights`, which both effects implement.
+    auto* litFx =
+        dynamic_cast<PbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(litFx, nullptr)
+        << "a metallic-roughness material must select PbrEffect (GLTF-215)";
 
-    EXPECT_TRUE(basicFx->DirectionalLight0.getEnabledProperty());
-    const Vector3 dir = basicFx->DirectionalLight0.getDirectionProperty();
+    EXPECT_TRUE(litFx->DirectionalLight0.getEnabledProperty());
+    const Vector3 dir = litFx->DirectionalLight0.getDirectionProperty();
     EXPECT_NEAR(dir.X, 0.0f, 1e-4f);
     EXPECT_NEAR(dir.Y, 0.0f, 1e-4f);
     EXPECT_NEAR(dir.Z, -1.0f, 1e-4f);
-    const Vector3 color = basicFx->DirectionalLight0.getDiffuseColorProperty();
+    const Vector3 color = litFx->DirectionalLight0.getDiffuseColorProperty();
     EXPECT_NEAR(color.X, 0.25f, 1e-5f);
     EXPECT_NEAR(color.Y, 0.5f, 1e-5f);
     EXPECT_NEAR(color.Z, 0.75f, 1e-5f);
+}
+
+// plan_gltf.md GLTF-314: the two loaders must agree, clip for clip, on every animation fixture.
+//
+// The runtime path builds a ModelAnimationsEXT straight from ExtractSceneNodeClips; the offline
+// path writes each clip to its own .cnj and reads it back through a JSON parser. Those are two
+// entirely separate pieces of code producing the same type, and everything that can go wrong
+// between them is silent: a dropped track, a key time rounded through a decimal round-trip, a
+// track order that depends on an unordered_map's rehash, a targetSpace that defaults to
+// JointPalette on the way back in and poses the wrong bones.
+//
+// Swept over the whole `anim-*` corpus rather than one fixture, because the divergences are
+// per-shape -- disjoint key times, STEP, CUBICSPLINE, two clips, an unnamed clip, a parent and a
+// child, a channel path that is skipped.
+TEST(GltfToCnjToolTest, TheOfflineAndRuntimePathsProduceIdenticalAnimationClipsForEveryAnimFixture)
+{
+    const std::filesystem::path corpus = std::filesystem::path("tests") / "assets" / "gltf";
+    if (!std::filesystem::exists(corpus)) { GTEST_SKIP() << "the fixture corpus is not present"; }
+
+    std::vector<std::string> ids;
+    for (const std::filesystem::directory_entry& entry :
+         std::filesystem::directory_iterator(corpus))
+    {
+        const std::string name = entry.path().filename().string();
+        if (name.rfind("anim-", 0) == 0 && entry.path().extension() == ".gltf")
+        {
+            ids.push_back(entry.path().stem().string());
+        }
+    }
+    std::sort(ids.begin(), ids.end());
+    ASSERT_FALSE(ids.empty()) << "no anim fixtures found -- the sweep proved nothing";
+
+    std::size_t compared = 0;
+    for (const std::string& id : ids)
+    {
+        SCOPED_TRACE(id);
+        ScratchDir contentRoot;
+        const int toolExit = RunGltfToCnjTool((corpus / (id + ".gltf")).string(),
+                                               contentRoot.path().string(), "anim");
+        ASSERT_EQ(0, toolExit) << "the offline tool refused a fixture the corpus says imports";
+
+        GraphicsDevice gd;
+        ContentManager runtimeCm(nullptr, corpus.string());
+        runtimeCm.setGraphicsDevice(gd);
+        Model runtime = runtimeCm.Load<Model>(id);
+
+        // One Model .cnj per file here (no fixture in this group has a skin), plus one per clip.
+        // Found by its "type" field rather than by a filename this test would have to predict.
+        std::string modelAsset;
+        for (const std::filesystem::directory_entry& out :
+             std::filesystem::directory_iterator(contentRoot.path()))
+        {
+            if (out.path().extension() != ".cnj") { continue; }
+            std::ifstream cnj(out.path());
+            const std::string text((std::istreambuf_iterator<char>(cnj)),
+                                    std::istreambuf_iterator<char>());
+            if (text.find("\"type\": \"Model\"") != std::string::npos)
+            {
+                modelAsset = out.path().stem().string();
+                break;
+            }
+        }
+        ASSERT_FALSE(modelAsset.empty()) << "the tool wrote no Model .cnj at all";
+
+        ContentManager offlineCm(nullptr, contentRoot.path().string());
+        offlineCm.setGraphicsDevice(gd);
+        Model offline = offlineCm.Load<Model>(modelAsset);
+
+        auto* runtimeAnims = dynamic_cast<ModelAnimationsEXT*>(runtime.getTagProperty());
+        auto* offlineAnims = dynamic_cast<ModelAnimationsEXT*>(offline.getTagProperty());
+        if (runtimeAnims == nullptr && offlineAnims == nullptr) { continue; }
+        ASSERT_NE(nullptr, runtimeAnims) << "the runtime path produced no ModelAnimationsEXT";
+        ASSERT_NE(nullptr, offlineAnims) << "the offline path produced no ModelAnimationsEXT";
+        ++compared;
+
+        ASSERT_EQ(runtimeAnims->Clips.size(), offlineAnims->Clips.size())
+            << "the two paths disagree about how many clips this file has";
+        for (const auto& [name, runtimeClip] : runtimeAnims->Clips)
+        {
+            SCOPED_TRACE("clip " + name);
+            const auto found = offlineAnims->Clips.find(name);
+            ASSERT_NE(offlineAnims->Clips.end(), found)
+                << "a clip the runtime path names is missing from the .cnj -- and a clip is looked "
+                   "up BY NAME, so this is a lookup that silently returns nothing";
+            const AnimationClipEXT& offlineClip = found->second;
+
+            EXPECT_NEAR(runtimeClip.Duration.getTotalSecondsProperty(),
+                        offlineClip.Duration.getTotalSecondsProperty(), 1e-5);
+            // Applying a joint-palette clip's indices to Model::Bones would pose the wrong bones
+            // with no symptom but wrong motion, so the space must survive the round-trip too.
+            EXPECT_EQ(runtimeClip.TargetSpace, offlineClip.TargetSpace);
+            ASSERT_EQ(runtimeClip.Tracks.size(), offlineClip.Tracks.size());
+
+            for (std::size_t t = 0; t < runtimeClip.Tracks.size(); ++t)
+            {
+                SCOPED_TRACE("track " + std::to_string(t));
+                const BoneTrackEXT& r = runtimeClip.Tracks[t];
+                const BoneTrackEXT& o = offlineClip.Tracks[t];
+                EXPECT_EQ(r.BoneIndex, o.BoneIndex)
+                    << "track order is observable: byBone is an unordered_map, so without a sort "
+                       "the two paths agree only until a rehash";
+                ASSERT_EQ(r.Keys.size(), o.Keys.size());
+                for (std::size_t k = 0; k < r.Keys.size(); ++k)
+                {
+                    SCOPED_TRACE("key " + std::to_string(k));
+                    EXPECT_NEAR(r.Keys[k].Time.getTotalSecondsProperty(),
+                                o.Keys[k].Time.getTotalSecondsProperty(), 1e-5);
+                    EXPECT_NEAR(r.Keys[k].Translation.X, o.Keys[k].Translation.X, 1e-4f);
+                    EXPECT_NEAR(r.Keys[k].Translation.Y, o.Keys[k].Translation.Y, 1e-4f);
+                    EXPECT_NEAR(r.Keys[k].Translation.Z, o.Keys[k].Translation.Z, 1e-4f);
+                    EXPECT_NEAR(r.Keys[k].Rotation.X, o.Keys[k].Rotation.X, 1e-4f);
+                    EXPECT_NEAR(r.Keys[k].Rotation.Y, o.Keys[k].Rotation.Y, 1e-4f);
+                    EXPECT_NEAR(r.Keys[k].Rotation.Z, o.Keys[k].Rotation.Z, 1e-4f);
+                    EXPECT_NEAR(r.Keys[k].Rotation.W, o.Keys[k].Rotation.W, 1e-4f);
+                    EXPECT_NEAR(r.Keys[k].Scale.X, o.Keys[k].Scale.X, 1e-4f);
+                    EXPECT_NEAR(r.Keys[k].Scale.Y, o.Keys[k].Scale.Y, 1e-4f);
+                    EXPECT_NEAR(r.Keys[k].Scale.Z, o.Keys[k].Scale.Z, 1e-4f);
+                }
+            }
+        }
+    }
+    EXPECT_GT(compared, 0u) << "every anim fixture was skipped -- the sweep proved nothing";
+}
+
+// plan_gltf.md GLTF-034/GLTF-035: diagnostics are part of the loaded Model, not merely stdout.
+// Exercise one loss from each major source (animation, light budget and extension validation)
+// through both real entry points and prove the converter's JSON reader preserves the same count.
+TEST(GltfToCnjToolTest, StructuredImportDiagnosticsSurviveBothLoadPaths)
+{
+    const std::filesystem::path corpus = std::filesystem::path("tests") / "assets" / "gltf";
+    if (!std::filesystem::exists(corpus)) { GTEST_SKIP() << "the fixture corpus is not present"; }
+
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
+    struct Case { const char* fixture; const char* code; std::size_t minimumCount; };
+    const Case cases[] = {
+        {"anim-weights-path", "animation-paths-unsupported", 1u},
+        {"lights-over-budget", "lights-dropped", 2u},
+        {"mat-unimplemented-extensions", "ignored-extension", 3u},
+    };
+
+    const auto countCode = [](const GltfImportReportEXT& report, const std::string& code)
+    {
+        std::size_t count = 0;
+        for (const GltfImportDiagnosticEXT& diagnostic : report.Diagnostics)
+        {
+            if (diagnostic.Code == code) { count += diagnostic.Count; }
+        }
+        return count;
+    };
+
+    for (const Case& testCase : cases)
+    {
+        SCOPED_TRACE(testCase.fixture);
+        ScratchDir contentRoot;
+        ASSERT_EQ(0, RunGltfToCnjTool(
+                         (corpus / (std::string(testCase.fixture) + ".gltf")).string(),
+                         contentRoot.path().string(), "reported"));
+
+        ContentManager directContent(nullptr, corpus.string());
+        directContent.setGraphicsDevice(gd);
+        Model direct = directContent.Load<Model>(testCase.fixture);
+
+        ContentManager offlineContent(nullptr, contentRoot.path().string());
+        offlineContent.setGraphicsDevice(gd);
+        Model offline = offlineContent.Load<Model>("reported");
+
+        const GltfImportReportEXT& directReport = direct.getGltfImportReportEXTProperty();
+        const GltfImportReportEXT& offlineReport = offline.getGltfImportReportEXTProperty();
+        EXPECT_TRUE(directReport.AnythingLost());
+        EXPECT_TRUE(offlineReport.AnythingLost());
+        EXPECT_GE(countCode(directReport, testCase.code), testCase.minimumCount);
+        EXPECT_EQ(countCode(directReport, testCase.code),
+                  countCode(offlineReport, testCase.code));
+        EXPECT_EQ(directReport.NodeCount, offlineReport.NodeCount);
+        EXPECT_EQ(directReport.MeshInstanceCount, offlineReport.MeshInstanceCount);
+        EXPECT_EQ(directReport.DistinctMeshCount, offlineReport.DistinctMeshCount);
+        EXPECT_EQ(directReport.PrimitiveCount, offlineReport.PrimitiveCount);
+        EXPECT_EQ(directReport.ImportedLightCount, offlineReport.ImportedLightCount);
+    }
+}
+
+// --- plan_gltf.md GLTF-459 (§27.2 row 9): the large-asset budget ---------------------------------
+//
+// The row wants "large real-world assets load within a stated time and memory budget", and
+// GLTF-019 already decided such an asset is fetched, never committed -- it is a benchmark input,
+// not evidence. So this is opt-in exactly like GLTF-405's ChronographWatch row: without the
+// environment variables it skips, and with them it refuses anything but the pinned bytes, because
+// a budget measured against an unknown asset states nothing.
+//
+// Fetch them with:
+//   scripts/fetch-gltf-sample-assets.sh DEST Sponza RecursiveSkeletons
+//   CNA_GLTF_LARGE_MESH_ASSET=DEST/Models/Sponza/glTF/Sponza.gltf \
+//   CNA_GLTF_MANY_JOINT_ASSET=DEST/Models/RecursiveSkeletons/glTF/RecursiveSkeletons.gltf \
+//     CnaTests --gtest_filter='GltfToCnjToolTest.LargeReference*'
+//
+// Two assets rather than one, and that is the finding rather than a convenience: no Khronos sample
+// carries >= 50 MB, >= 200 k triangles AND >= 150 joints at once. Sponza supplies the first two
+// (50.2 MB, 262 267 triangles) and RecursiveSkeletons the third (840 joints over 84 skins, 924
+// nodes), so the row's three thresholds are met by the pair and each is named with the asset that
+// meets it instead of one number implying all three.
+//
+// The ceilings are the phase's own convention -- generous enough that only a pathological
+// regression trips them, never tuned to today's number, because a benchmark that fails on a loaded
+// machine gets deleted. Measured medians on an idle machine are ~5.3 s and ~1.2 s; the ceilings are
+// 60 s and 20 s. `docs/gltf-performance.md` carries the numbers, including the peak RSS, which is
+// measured with /usr/bin/time rather than asserted here: `ru_maxrss` is a process-wide high-water
+// mark, so inside the shared CnaTests binary it reports whatever suite ran first.
+namespace
+{
+    std::string Sha256File(const std::string& path)
+    {
+        std::ifstream file(path, std::ios::binary);
+        if (!file) { return {}; }
+        const std::vector<std::uint8_t> bytes{
+            std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+        System::Security::Cryptography::SHA256 sha;
+        const std::vector<std::uint8_t> digest = sha.ComputeHash(bytes);
+        std::ostringstream out;
+        out << std::hex << std::setfill('0');
+        for (const std::uint8_t byte : digest) { out << std::setw(2) << static_cast<unsigned>(byte); }
+        return out.str();
+    }
+
+    // Converts `assetPath` once and returns the wall-clock milliseconds, or -1.0 if the tool failed.
+    double MillisecondsToConvert(const std::string& assetPath, const std::string& baseName)
+    {
+        const std::filesystem::path outDir =
+            std::filesystem::temp_directory_path() / ("cna-gltf-budget-" + baseName);
+        std::filesystem::remove_all(outDir);
+        std::filesystem::create_directories(outDir);
+
+        const auto start = std::chrono::steady_clock::now();
+        const int rc = RunGltfToCnjTool(assetPath, outDir.string(), baseName);
+        const auto elapsed = std::chrono::steady_clock::now() - start;
+
+        std::filesystem::remove_all(outDir);
+        if (rc != 0)
+        {
+            ADD_FAILURE() << baseName << ": converter exited " << rc;
+            return -1.0;
+        }
+        return std::chrono::duration<double, std::milli>(elapsed).count();
+    }
+}
+
+TEST(GltfToCnjToolTest, LargeReferenceMeshAssetImportsInsideItsStatedBudget)
+{
+    const char* assetPath = std::getenv("CNA_GLTF_LARGE_MESH_ASSET");
+    if (assetPath == nullptr || *assetPath == '\0')
+    {
+        GTEST_SKIP() << "set CNA_GLTF_LARGE_MESH_ASSET to the pinned Sponza.gltf "
+                        "(scripts/fetch-gltf-sample-assets.sh DEST Sponza)";
+    }
+    ASSERT_EQ("646c10cbc8fab990ca29f363e90e2d65155f3a3569506852eb1434a9465b9501",
+              Sha256File(assetPath))
+        << "this is not the pinned Sponza -- a budget measured against an unknown asset states "
+           "nothing";
+
+    const double ms = MillisecondsToConvert(assetPath, "Sponza");
+    ASSERT_GE(ms, 0.0);
+    RecordProperty("sponzaImportMs", static_cast<int>(ms));
+    EXPECT_LT(ms, 60000.0)
+        << "the 50.2 MB / 262 267-triangle import took " << ms
+        << " ms, an order of magnitude over its measured ~5.3 s -- see docs/gltf-performance.md";
+}
+
+TEST(GltfToCnjToolTest, LargeReferenceJointAssetImportsInsideItsStatedBudget)
+{
+    const char* assetPath = std::getenv("CNA_GLTF_MANY_JOINT_ASSET");
+    if (assetPath == nullptr || *assetPath == '\0')
+    {
+        GTEST_SKIP() << "set CNA_GLTF_MANY_JOINT_ASSET to the pinned RecursiveSkeletons.gltf "
+                        "(scripts/fetch-gltf-sample-assets.sh DEST RecursiveSkeletons)";
+    }
+    ASSERT_EQ("9ebca751395f63359e7868d4a9b82ee1632c20680c5c05daa7f54a246eb9de85",
+              Sha256File(assetPath))
+        << "this is not the pinned RecursiveSkeletons";
+
+    const double ms = MillisecondsToConvert(assetPath, "RecursiveSkeletons");
+    ASSERT_GE(ms, 0.0);
+    RecordProperty("recursiveSkeletonsImportMs", static_cast<int>(ms));
+    EXPECT_LT(ms, 20000.0)
+        << "the 840-joint / 924-node import took " << ms
+        << " ms, an order of magnitude over its measured ~1.2 s -- see docs/gltf-performance.md";
 }

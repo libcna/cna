@@ -31,6 +31,7 @@ void main() {
     vec4 pos = pc.mvp * vec4(inPos, 1.0);
     pos.y = -pos.y;
     gl_Position = pos;
+    gl_PointSize = 1.0;
     fragUV = inUV;
     // Mix vertex color and diffuse based on vertexColorEnabled flag.
     fragTint = (pc.vertexColorEnabled > 0.5) ? inColor * pc.diffuseColor : pc.diffuseColor;

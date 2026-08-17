@@ -52,6 +52,10 @@ layout(set = 1, binding = 2) uniform FogParams {
     vec4 fogVector;        // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
 } fog;
 
+float cnaDirectionHandedness(mat3 m) {
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
+
 void main() {
     gl_Position = pc.mvp * vec4(inPos, 1.0);
     fragUV = inUV;
@@ -63,7 +67,7 @@ void main() {
     // normalMatrix used for the normal) -- correct for uniform-scale World transforms, mirrors
     // EasyGLRenderer::EnsurePbrProgram()'s own documented simplification exactly.
     fragTangent = mat3(lp.world) * inTangent.xyz;
-    fragBitangentSign = inTangent.w;
+    fragBitangentSign = inTangent.w * cnaDirectionHandedness(mat3(lp.world));
     fragWorldPos = (lp.world * vec4(inPos, 1.0)).xyz;
     // REMED-GFX-009: keep-factor from raw object-space Z (GFX-005 corrected form
     // (z+FogEnd)/(FogEnd-FogStart)); FogStart==FogEnd -> fully fogged (FNA SetFogVector). keep=1 ->

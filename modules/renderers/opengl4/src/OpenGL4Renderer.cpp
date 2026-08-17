@@ -154,7 +154,22 @@ uniform vec4 uDiffuseColor;
 uniform bool uVertexColorEnabled;
 uniform vec4 uAlphaTest;
 uniform vec3 uFogColor;
+uniform vec3 uSrgb;
 out vec4 fragColor;
+
+vec3 cnaSrgbToLinear(vec3 c)
+{
+    vec3 lo = c / 12.92;
+    vec3 hi = pow((c + 0.055) / 1.055, vec3(2.4));
+    return mix(lo, hi, step(vec3(0.04045), c));
+}
+
+vec3 cnaLinearToSrgb(vec3 c)
+{
+    vec3 lo = c * 12.92;
+    vec3 hi = 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
+    return mix(lo, hi, step(vec3(0.0031308), c));
+}
 void main()
 {
     vec4 vc = uVertexColorEnabled ? vColor : vec4(1.0);
@@ -843,6 +858,10 @@ out float vBitangentSign;
 out vec2 vUV;
 out vec3 vWorldPos;
 out float vFogFactor;
+float cnaDirectionHandedness(mat3 m)
+{
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
 void main()
 {
     gl_Position = uWorldViewProj * vec4(aPos, 1.0);
@@ -853,7 +872,7 @@ void main()
     mat3 normalMatrix = transpose(inverse(mat3(uWorld)));
     vNormal = normalMatrix * aNormal;
     vTangent = mat3(uWorld) * aTangent.xyz;
-    vBitangentSign = aTangent.w;
+    vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(uWorld));
     vUV = aUV;
     vWorldPos = (uWorld * vec4(aPos, 1.0)).xyz;
     // REMED-GFX-010: see kColoredParams3DVertSrc's own comment for the fog-vector formula.
@@ -880,6 +899,18 @@ out float vBitangentSign;
 out vec2 vUV;
 out vec3 vWorldPos;
 out float vFogFactor;
+vec3 cnaSkinNormal(mat3 m, vec3 n)
+{
+    vec3 c0 = m[0], c1 = m[1], c2 = m[2];
+    vec3 co0 = cross(c1, c2), co1 = cross(c2, c0), co2 = cross(c0, c1);
+    float det = dot(c0, co0);
+    vec3 transformed = mat3(co0, co1, co2) * n;
+    return abs(det) > 1e-6 ? transformed * sign(det) : m * n;
+}
+float cnaDirectionHandedness(mat3 m)
+{
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
 void main()
 {
     mat4 skinMat = uBones[aBoneIndices.x] * aBoneWeights.x;
@@ -892,12 +923,13 @@ void main()
     }
     vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
     gl_Position = uWorldViewProj * skinnedPos;
-    vec3 skinnedNormal = mat3(skinMat) * aNormal;
+    vec3 skinnedNormal = cnaSkinNormal(mat3(skinMat), aNormal);
     vec3 skinnedTangent = mat3(skinMat) * aTangent.xyz;
     mat3 normalMatrix = transpose(inverse(mat3(uWorld)));
     vNormal = normalMatrix * skinnedNormal;
     vTangent = mat3(uWorld) * skinnedTangent;
-    vBitangentSign = aTangent.w;
+    vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(uWorld))
+                                * cnaDirectionHandedness(mat3(skinMat));
     vUV = aUV;
     vWorldPos = (uWorld * skinnedPos).xyz;
     vFogFactor = 1.0 - clamp(dot(skinnedPos, uFogVector), 0.0, 1.0);
@@ -917,11 +949,15 @@ uniform sampler2D uNormalMap;
 uniform sampler2D uMetallicRoughnessMap;
 uniform sampler2D uEmissiveMap;
 uniform sampler2D uOcclusionMap;
+uniform sampler2D uSpecularMap;
+uniform sampler2D uSpecularColorMap;
 uniform vec4 uDiffuseColor;
 uniform vec3 uAmbientColor;
 uniform vec3 uEmissiveColor;
 uniform float uMetallicFactor;
 uniform float uRoughnessFactor;
+uniform float uNormalScale;
+uniform float uOcclusionStrength;
 uniform vec3 uLight0Dir;
 uniform vec3 uLight0Diffuse;
 uniform vec3 uLight1Dir;
@@ -929,10 +965,30 @@ uniform vec3 uLight1Diffuse;
 uniform vec3 uLight2Dir;
 uniform vec3 uLight2Diffuse;
 uniform vec3 uEyePosition;
+uniform vec4 uAlphaTest;
 uniform vec3 uFogColor;
+uniform vec4 uSrgb;
+uniform vec4 uDielectricFresnel;
+uniform vec4 uSpecularFresnelInputs;
+uniform vec4 uTextureTransformRows[10];
+uniform vec4 uSpecularTextureTransformRows[4];
 out vec4 fragColor;
 
-vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic)
+vec3 cnaSrgbToLinear(vec3 c)
+{
+    vec3 lo = c / 12.92;
+    vec3 hi = pow((c + 0.055) / 1.055, vec3(2.4));
+    return mix(lo, hi, step(vec3(0.04045), c));
+}
+
+vec3 cnaLinearToSrgb(vec3 c)
+{
+    vec3 lo = c * 12.92;
+    vec3 hi = 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
+    return mix(lo, hi, step(vec3(0.0031308), c));
+}
+
+vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec3 F90, float roughness, float metallic)
 {
     vec3 H = normalize(V + L);
     float NdotL = max(dot(N, L), 0.0);
@@ -948,7 +1004,7 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, flo
     k = k * k / 8.0;
     float G = (NdotV / (NdotV * (1.0 - k) + k)) * (NdotL / (NdotL * (1.0 - k) + k));
 
-    vec3 F = F0 + (vec3(1.0) - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
+    vec3 F = F0 + (F90 - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
 
     vec3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
     vec3 diffuseColor = albedo * (1.0 - metallic);
@@ -956,36 +1012,70 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, flo
     return (kd * diffuseColor / 3.14159265 + specular) * lightColor * NdotL;
 }
 
+vec2 cnaPbrTransformUV(vec2 uv, int slot)
+{
+    vec3 value = vec3(uv, 1.0);
+    return vec2(dot(value, uTextureTransformRows[slot * 2].xyz),
+                dot(value, uTextureTransformRows[slot * 2 + 1].xyz));
+}
+
+vec2 cnaPbrSpecularTransformUV(vec2 uv, int slot)
+{
+    vec3 value = vec3(uv, 1.0);
+    return vec2(dot(value, uSpecularTextureTransformRows[slot * 2].xyz),
+                dot(value, uSpecularTextureTransformRows[slot * 2 + 1].xyz));
+}
+
 void main()
 {
-    vec4 baseColorTex = texture(uTexture, vUV);
-    vec3 albedo = baseColorTex.rgb * uDiffuseColor.rgb;
+    vec4 baseColorTex = texture(uTexture, cnaPbrTransformUV(vUV, 0));
+    vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), uSrgb.x);
+    vec3 albedo = baseColor * uDiffuseColor.rgb;
     float alpha = baseColorTex.a * uDiffuseColor.a;
+    bool passesAlphaTest = (uAlphaTest.y > 0.0)
+        ? (abs(alpha - uAlphaTest.x) < uAlphaTest.y)
+        : (alpha < uAlphaTest.x);
+    if ((passesAlphaTest ? uAlphaTest.z : uAlphaTest.w) < 0.0) discard;
 
     vec3 N = normalize(vNormal);
     vec3 T = normalize(vTangent - N * dot(N, vTangent));
     vec3 B = cross(N, T) * vBitangentSign;
     mat3 TBN = mat3(T, B, N);
-    vec3 sampledNormal = texture(uNormalMap, vUV).rgb * 2.0 - 1.0;
+    vec3 sampledNormal = texture(uNormalMap, cnaPbrTransformUV(vUV, 1)).rgb * 2.0 - 1.0;
+    sampledNormal.xy *= uNormalScale;
     vec3 finalNormal = normalize(TBN * sampledNormal);
 
-    vec4 mr = texture(uMetallicRoughnessMap, vUV);
+    vec4 mr = texture(uMetallicRoughnessMap, cnaPbrTransformUV(vUV, 2));
     float roughness = clamp(mr.g * uRoughnessFactor, 0.045, 1.0);
     float metallic = clamp(mr.b * uMetallicFactor, 0.0, 1.0);
 
     vec3 V = normalize(uEyePosition - vWorldPos);
-    vec3 F0 = mix(vec3(0.04), albedo, metallic);
+    float specularWeight = uSpecularFresnelInputs.w
+        * texture(uSpecularMap, cnaPbrSpecularTransformUV(vUV, 0)).a;
+    vec3 specularColorTex = texture(
+        uSpecularColorMap, cnaPbrSpecularTransformUV(vUV, 1)).rgb;
+    specularColorTex = mix(
+        specularColorTex, cnaSrgbToLinear(specularColorTex), uSrgb.w);
+    vec3 dielectricF0 = min(
+        uSpecularFresnelInputs.xyz * specularColorTex, vec3(1.0)) * specularWeight;
+    vec3 F0 = mix(dielectricF0, albedo, metallic);
+    vec3 F90 = mix(vec3(specularWeight), vec3(1.0), metallic);
 
     vec3 Lo = vec3(0.0);
-    Lo += PbrLight(finalNormal, V, normalize(-uLight0Dir), uLight0Diffuse, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, normalize(-uLight1Dir), uLight1Diffuse, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, normalize(-uLight2Dir), uLight2Diffuse, albedo, F0, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-uLight0Dir), uLight0Diffuse, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-uLight1Dir), uLight1Diffuse, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-uLight2Dir), uLight2Diffuse, albedo, F0, F90, roughness, metallic);
 
-    float occlusion = texture(uOcclusionMap, vUV).r;
+    float occlusionSample = texture(uOcclusionMap, cnaPbrTransformUV(vUV, 4)).r;
+    float occlusion = 1.0 + uOcclusionStrength * (occlusionSample - 1.0);
     vec3 ambient = uAmbientColor * albedo * occlusion;
-    vec3 emissive = uEmissiveColor * texture(uEmissiveMap, vUV).rgb;
+    vec3 emissiveSample = texture(uEmissiveMap, cnaPbrTransformUV(vUV, 3)).rgb;
+    emissiveSample = mix(emissiveSample, cnaSrgbToLinear(emissiveSample), uSrgb.y);
+    vec3 emissive = uEmissiveColor * emissiveSample;
 
-    vec3 rgb = mix(uFogColor, ambient + Lo + emissive, vFogFactor);
+    vec3 fogLinear = mix(uFogColor, cnaSrgbToLinear(uFogColor), uSrgb.z);
+    vec3 rgb = mix(fogLinear, ambient + Lo + emissive, vFogFactor);
+    rgb = mix(rgb, cnaLinearToSrgb(rgb), uSrgb.z);
     fragColor = vec4(rgb, alpha);
 }
 )GLSL";
@@ -3244,6 +3334,14 @@ void main()
             gl4_glActiveTexture(GL_TEXTURE4);
             if (params.pbrOcclusionMap) params.pbrOcclusionMap->BindGL();
             else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_);
+
+            gl4_glActiveTexture(GL_TEXTURE5);
+            if (params.pbrSpecularMap) params.pbrSpecularMap->BindGL();
+            else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_);
+
+            gl4_glActiveTexture(GL_TEXTURE6);
+            if (params.pbrSpecularColorMap) params.pbrSpecularColorMap->BindGL();
+            else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_);
         }
 
         if (params.pbr && (strideInBytes == 48 || strideInBytes == 68))
@@ -3280,6 +3378,50 @@ void main()
             if (metallicLoc >= 0) gl4_glUniform1f(metallicLoc, params.pbrMetallicFactor);
             const int roughnessLoc = prog.UniformLocation("uRoughnessFactor");
             if (roughnessLoc >= 0) gl4_glUniform1f(roughnessLoc, params.pbrRoughnessFactor);
+            const int normalScaleLoc = prog.UniformLocation("uNormalScale");
+            if (normalScaleLoc >= 0) gl4_glUniform1f(normalScaleLoc, params.pbrNormalScale);
+            const int occlusionStrengthLoc = prog.UniformLocation("uOcclusionStrength");
+            if (occlusionStrengthLoc >= 0) gl4_glUniform1f(occlusionStrengthLoc, params.pbrOcclusionStrength);
+            const int srgbLoc = prog.UniformLocation("uSrgb");
+            if (srgbLoc >= 0)
+                gl4_glUniform4f(srgbLoc,
+                                params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                                params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
+                                params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f,
+                                params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f);
+            const int dielectricFresnelLoc = prog.UniformLocation("uDielectricFresnel");
+            if (dielectricFresnelLoc >= 0)
+                gl4_glUniform4f(dielectricFresnelLoc,
+                                params.pbrDielectricF0[0], params.pbrDielectricF0[1],
+                                params.pbrDielectricF0[2], params.pbrDielectricF90);
+            const int specularFresnelInputsLoc = prog.UniformLocation("uSpecularFresnelInputs");
+            if (specularFresnelInputsLoc >= 0)
+                gl4_glUniform4f(specularFresnelInputsLoc,
+                                params.pbrDielectricF0Unclamped[0],
+                                params.pbrDielectricF0Unclamped[1],
+                                params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor);
+            for (int row = 0; row < 10; ++row)
+            {
+                const std::string name =
+                    "uTextureTransformRows[" + std::to_string(row) + "]";
+                const int location = prog.UniformLocation(name.c_str());
+                if (location < 0) continue;
+                const float* values = params.pbrTextureTransformRows[row];
+                gl4_glUniform4f(location, values[0], values[1], values[2], values[3]);
+            }
+            for (int row = 0; row < 4; ++row)
+            {
+                const std::string name =
+                    "uSpecularTextureTransformRows[" + std::to_string(row) + "]";
+                const int location = prog.UniformLocation(name.c_str());
+                if (location < 0) continue;
+                const float* values = params.pbrSpecularTextureTransformRows[row];
+                gl4_glUniform4f(location, values[0], values[1], values[2], values[3]);
+            }
+            const int alphaTestLoc = prog.UniformLocation("uAlphaTest");
+            if (alphaTestLoc >= 0)
+                gl4_glUniform4f(alphaTestLoc, params.alphaTest[0], params.alphaTest[1],
+                                params.alphaTest[2], params.alphaTest[3]);
             setV3("uLight0Dir", params.light0Dir);
             setV3("uLight0Diffuse", params.light0Diffuse);
             setV3("uLight1Dir", params.light1Dir);
@@ -3297,6 +3439,10 @@ void main()
             if (emissiveMapLoc >= 0) gl4_glUniform1i(emissiveMapLoc, 3);
             const int occlusionMapLoc = prog.UniformLocation("uOcclusionMap");
             if (occlusionMapLoc >= 0) gl4_glUniform1i(occlusionMapLoc, 4);
+            const int specularMapLoc = prog.UniformLocation("uSpecularMap");
+            if (specularMapLoc >= 0) gl4_glUniform1i(specularMapLoc, 5);
+            const int specularColorMapLoc = prog.UniformLocation("uSpecularColorMap");
+            if (specularColorMapLoc >= 0) gl4_glUniform1i(specularColorMapLoc, 6);
             setFog(prog);
             return true;
         }

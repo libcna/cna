@@ -6,8 +6,12 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "CNA/Internal/Graphics/AlphaCoverageEXT.hpp"
+#include "CNA/Internal/Graphics/PbrFresnelEXT.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
+#include <array>
+#include <cmath>
 #include <stdexcept>
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -57,9 +61,24 @@ namespace Microsoft::Xna::Framework::Graphics
         diffuseColor_      = src.diffuseColor_;
         alpha_             = src.alpha_;
         ambientLightColor_ = src.ambientLightColor_;
-        emissiveFactor_    = src.emissiveFactor_;
-        metallicFactor_    = src.metallicFactor_;
-        roughnessFactor_   = src.roughnessFactor_;
+        emissiveFactor_         = src.emissiveFactor_;
+        metallicFactor_         = src.metallicFactor_;
+        roughnessFactor_        = src.roughnessFactor_;
+        iorEXT_                 = src.iorEXT_;
+        specularFactorEXT_      = src.specularFactorEXT_;
+        specularColorFactorEXT_ = src.specularColorFactorEXT_;
+        normalScale_            = src.normalScale_;
+        occlusionStrength_      = src.occlusionStrength_;
+        baseColorTextureIsSrgb_ = src.baseColorTextureIsSrgb_;
+        emissiveTextureIsSrgb_  = src.emissiveTextureIsSrgb_;
+        specularColorTextureIsSrgbEXT_ = src.specularColorTextureIsSrgbEXT_;
+        encodeOutputToSrgb_     = src.encodeOutputToSrgb_;
+        textureCoordinateSetsEXT_ = src.textureCoordinateSetsEXT_;
+        textureTransformsEXT_ = src.textureTransformsEXT_;
+        specularTextureCoordinateSetEXT_ = src.specularTextureCoordinateSetEXT_;
+        specularColorTextureCoordinateSetEXT_ = src.specularColorTextureCoordinateSetEXT_;
+        specularTextureTransformEXT_ = src.specularTextureTransformEXT_;
+        specularColorTextureTransformEXT_ = src.specularColorTextureTransformEXT_;
 
         DirectionalLight0 = src.DirectionalLight0;
         DirectionalLight1 = src.DirectionalLight1;
@@ -80,11 +99,15 @@ namespace Microsoft::Xna::Framework::Graphics
         metallicRoughnessMap_   = src.metallicRoughnessMap_;
         emissiveMap_            = src.emissiveMap_;
         occlusionMap_           = src.occlusionMap_;
+        specularMapEXT_          = src.specularMapEXT_;
+        specularColorMapEXT_     = src.specularColorMapEXT_;
         ownedTexture_               = src.ownedTexture_;
         ownedNormalMap_             = src.ownedNormalMap_;
         ownedMetallicRoughnessMap_  = src.ownedMetallicRoughnessMap_;
         ownedEmissiveMap_           = src.ownedEmissiveMap_;
         ownedOcclusionMap_          = src.ownedOcclusionMap_;
+        ownedSpecularMapEXT_         = src.ownedSpecularMapEXT_;
+        ownedSpecularColorMapEXT_    = src.ownedSpecularColorMapEXT_;
     }
 
     Effect* SkinnedPbrEffect::Clone()
@@ -254,8 +277,132 @@ namespace Microsoft::Xna::Framework::Graphics
     float SkinnedPbrEffect::getRoughnessFactorProperty() const  { return roughnessFactor_; }
     void  SkinnedPbrEffect::setRoughnessFactorProperty(float v) { roughnessFactor_ = v; }
 
+    float SkinnedPbrEffect::getIorEXTProperty() const { return iorEXT_; }
+    void SkinnedPbrEffect::setIorEXTProperty(float v) { iorEXT_ = v; }
+    float SkinnedPbrEffect::getSpecularFactorEXTProperty() const { return specularFactorEXT_; }
+    void SkinnedPbrEffect::setSpecularFactorEXTProperty(float v) { specularFactorEXT_ = v; }
+    Vector3 SkinnedPbrEffect::getSpecularColorFactorEXTProperty() const
+    {
+        return specularColorFactorEXT_;
+    }
+    void SkinnedPbrEffect::setSpecularColorFactorEXTProperty(const Vector3& v)
+    {
+        specularColorFactorEXT_ = v;
+    }
+    Texture2D* SkinnedPbrEffect::getSpecularMapEXTProperty() const { return specularMapEXT_; }
+    void SkinnedPbrEffect::setSpecularMapEXTProperty(Texture2D* v) { specularMapEXT_ = v; }
+    void SkinnedPbrEffect::SetOwnedSpecularMapEXT(std::shared_ptr<Texture2D> texture)
+    {
+        ownedSpecularMapEXT_ = std::move(texture);
+        specularMapEXT_ = ownedSpecularMapEXT_.get();
+    }
+    Texture2D* SkinnedPbrEffect::getSpecularColorMapEXTProperty() const
+    {
+        return specularColorMapEXT_;
+    }
+    void SkinnedPbrEffect::setSpecularColorMapEXTProperty(Texture2D* v)
+    {
+        specularColorMapEXT_ = v;
+    }
+    void SkinnedPbrEffect::SetOwnedSpecularColorMapEXT(std::shared_ptr<Texture2D> texture)
+    {
+        ownedSpecularColorMapEXT_ = std::move(texture);
+        specularColorMapEXT_ = ownedSpecularColorMapEXT_.get();
+    }
+    int SkinnedPbrEffect::getSpecularTextureCoordinateSetEXTProperty() const
+    {
+        return specularTextureCoordinateSetEXT_;
+    }
+    void SkinnedPbrEffect::setSpecularTextureCoordinateSetEXTProperty(int set)
+    {
+        if (set < 0 || set > 1)
+            throw std::out_of_range("PBR packed texture-coordinate set must be 0 or 1.");
+        specularTextureCoordinateSetEXT_ = set;
+    }
+    int SkinnedPbrEffect::getSpecularColorTextureCoordinateSetEXTProperty() const
+    {
+        return specularColorTextureCoordinateSetEXT_;
+    }
+    void SkinnedPbrEffect::setSpecularColorTextureCoordinateSetEXTProperty(int set)
+    {
+        if (set < 0 || set > 1)
+            throw std::out_of_range("PBR packed texture-coordinate set must be 0 or 1.");
+        specularColorTextureCoordinateSetEXT_ = set;
+    }
+    TextureTransformEXT SkinnedPbrEffect::getSpecularTextureTransformEXTProperty() const
+    {
+        return specularTextureTransformEXT_;
+    }
+    void SkinnedPbrEffect::setSpecularTextureTransformEXTProperty(
+        const TextureTransformEXT& value)
+    {
+        specularTextureTransformEXT_ = value;
+    }
+    TextureTransformEXT SkinnedPbrEffect::getSpecularColorTextureTransformEXTProperty() const
+    {
+        return specularColorTextureTransformEXT_;
+    }
+    void SkinnedPbrEffect::setSpecularColorTextureTransformEXTProperty(
+        const TextureTransformEXT& value)
+    {
+        specularColorTextureTransformEXT_ = value;
+    }
+    bool SkinnedPbrEffect::getSpecularColorTextureIsSrgbEXTProperty() const
+    {
+        return specularColorTextureIsSrgbEXT_;
+    }
+    void SkinnedPbrEffect::setSpecularColorTextureIsSrgbEXTProperty(bool v)
+    {
+        specularColorTextureIsSrgbEXT_ = v;
+    }
+
     Vector3 SkinnedPbrEffect::getEmissiveFactorProperty() const { return emissiveFactor_; }
     void    SkinnedPbrEffect::setEmissiveFactorProperty(const Vector3& v) { emissiveFactor_ = v; }
+
+    float   SkinnedPbrEffect::getNormalScaleEXTProperty() const { return normalScale_; }
+    void    SkinnedPbrEffect::setNormalScaleEXTProperty(float v) { normalScale_ = v; }
+    float   SkinnedPbrEffect::getOcclusionStrengthEXTProperty() const { return occlusionStrength_; }
+    void    SkinnedPbrEffect::setOcclusionStrengthEXTProperty(float v) { occlusionStrength_ = v; }
+    const std::array<int, 5>& SkinnedPbrEffect::getTextureCoordinateSetsEXTProperty() const
+    {
+        return textureCoordinateSetsEXT_;
+    }
+    void SkinnedPbrEffect::setTextureCoordinateSetEXTProperty(int slot, int set)
+    {
+        if (slot < 0 || slot >= static_cast<int>(textureCoordinateSetsEXT_.size()))
+            throw std::out_of_range("PBR texture-coordinate slot must be in range [0, 4].");
+        if (set < 0 || set > 1)
+            throw std::out_of_range("PBR packed texture-coordinate set must be 0 or 1.");
+        textureCoordinateSetsEXT_[static_cast<std::size_t>(slot)] = set;
+    }
+    const std::array<TextureTransformEXT, 5>&
+    SkinnedPbrEffect::getTextureTransformsEXTProperty() const
+    {
+        return textureTransformsEXT_;
+    }
+    void SkinnedPbrEffect::setTextureTransformEXTProperty(
+        int slot, const TextureTransformEXT& value)
+    {
+        if (slot < 0 || slot >= static_cast<int>(textureTransformsEXT_.size()))
+            throw std::out_of_range("PBR texture-transform slot must be in range [0, 4].");
+        textureTransformsEXT_[static_cast<std::size_t>(slot)] = value;
+    }
+    bool    SkinnedPbrEffect::getBaseColorTextureIsSrgbEXTProperty() const { return baseColorTextureIsSrgb_; }
+    void    SkinnedPbrEffect::setBaseColorTextureIsSrgbEXTProperty(bool v) { baseColorTextureIsSrgb_ = v; }
+    bool    SkinnedPbrEffect::getEmissiveTextureIsSrgbEXTProperty() const { return emissiveTextureIsSrgb_; }
+    void    SkinnedPbrEffect::setEmissiveTextureIsSrgbEXTProperty(bool v) { emissiveTextureIsSrgb_ = v; }
+    bool    SkinnedPbrEffect::getEncodeOutputToSrgbEXTProperty() const { return encodeOutputToSrgb_; }
+    void    SkinnedPbrEffect::setEncodeOutputToSrgbEXTProperty(bool v) { encodeOutputToSrgb_ = v; }
+
+    // plan_gltf.md GLTF-228/GLTF-229/GLTF-231. Plain carried state: nothing here touches the
+    // device, and the renderer reads it through FillGpuDrawParams like every other material value.
+    AlphaModeEXT SkinnedPbrEffect::getAlphaModeEXTProperty() const { return alphaMode_; }
+    void SkinnedPbrEffect::setAlphaModeEXTProperty(AlphaModeEXT v) { alphaMode_ = v; }
+    float SkinnedPbrEffect::getAlphaCutoffEXTProperty() const { return alphaCutoff_; }
+    void SkinnedPbrEffect::setAlphaCutoffEXTProperty(float v) { alphaCutoff_ = v; }
+    bool SkinnedPbrEffect::getDoubleSidedEXTProperty() const { return doubleSided_; }
+    void SkinnedPbrEffect::setDoubleSidedEXTProperty(bool v) { doubleSided_ = v; }
+
 
     int  SkinnedPbrEffect::getWeightsPerVertexProperty() const { return weightsPerVertex_; }
     void SkinnedPbrEffect::setWeightsPerVertexProperty(int v)
@@ -353,6 +500,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (metallicRoughnessMap_)  p.pbrMetallicRoughnessMap = &metallicRoughnessMap_->GetRenderer();
         if (emissiveMap_)           p.pbrEmissiveMap = &emissiveMap_->GetRenderer();
         if (occlusionMap_)          p.pbrOcclusionMap = &occlusionMap_->GetRenderer();
+        if (specularMapEXT_)        p.pbrSpecularMap = &specularMapEXT_->GetRenderer();
+        if (specularColorMapEXT_)   p.pbrSpecularColorMap = &specularColorMapEXT_->GetRenderer();
 
         p.diffuseColor[0] = diffuseColor_.X;
         p.diffuseColor[1] = diffuseColor_.Y;
@@ -367,8 +516,83 @@ namespace Microsoft::Xna::Framework::Graphics
         p.emissiveColor[1] = emissiveFactor_.Y;
         p.emissiveColor[2] = emissiveFactor_.Z;
 
+        // plan_gltf.md GLTF-210/GLTF-212: which bound textures are sRGB-encoded, and whether the
+        // lit result is encoded back. Carried as three separate facts because they are three
+        // separate decisions -- two about what a texture contains, one about where the fragment
+        // is going.
+        p.pbrNormalScale       = normalScale_;
+        p.pbrOcclusionStrength = occlusionStrength_;
+        p.pbrTextureCoordinateSetMask = 0;
+        for (std::size_t i = 0; i < textureCoordinateSetsEXT_.size(); ++i)
+            if (textureCoordinateSetsEXT_[i] == 1)
+                p.pbrTextureCoordinateSetMask |= std::uint32_t{1} << i;
+        for (std::size_t i = 0; i < textureTransformsEXT_.size(); ++i)
+        {
+            const TextureTransformEXT& transform = textureTransformsEXT_[i];
+            const float cosine = std::cos(transform.Rotation);
+            const float sine = std::sin(transform.Rotation);
+            float* row0 = p.pbrTextureTransformRows[i * 2];
+            float* row1 = p.pbrTextureTransformRows[i * 2 + 1];
+            row0[0] = cosine * transform.Scale.X;
+            row0[1] = -sine * transform.Scale.Y;
+            row0[2] = transform.Offset.X;
+            row0[3] = 0.0f;
+            row1[0] = sine * transform.Scale.X;
+            row1[1] = cosine * transform.Scale.Y;
+            row1[2] = transform.Offset.Y;
+            row1[3] = 0.0f;
+        }
+        if (specularTextureCoordinateSetEXT_ == 1)
+            p.pbrTextureCoordinateSetMask |= std::uint32_t{1} << 5;
+        if (specularColorTextureCoordinateSetEXT_ == 1)
+            p.pbrTextureCoordinateSetMask |= std::uint32_t{1} << 6;
+        const auto fillSpecularTransform = [&](std::size_t slot,
+                                               const TextureTransformEXT& transform)
+        {
+            const float cosine = std::cos(transform.Rotation);
+            const float sine = std::sin(transform.Rotation);
+            float* row0 = p.pbrSpecularTextureTransformRows[slot * 2];
+            float* row1 = p.pbrSpecularTextureTransformRows[slot * 2 + 1];
+            row0[0] = cosine * transform.Scale.X;
+            row0[1] = -sine * transform.Scale.Y;
+            row0[2] = transform.Offset.X;
+            row0[3] = 0.0f;
+            row1[0] = sine * transform.Scale.X;
+            row1[1] = cosine * transform.Scale.Y;
+            row1[2] = transform.Offset.Y;
+            row1[3] = 0.0f;
+        };
+        fillSpecularTransform(0, specularTextureTransformEXT_);
+        fillSpecularTransform(1, specularColorTextureTransformEXT_);
+        p.pbrBaseColorTextureIsSrgb = baseColorTextureIsSrgb_;
+        p.pbrEmissiveTextureIsSrgb  = emissiveTextureIsSrgb_;
+        p.pbrSpecularColorTextureIsSrgb = specularColorTextureIsSrgbEXT_;
+        p.pbrEncodeOutputToSrgb     = encodeOutputToSrgb_;
+
         p.pbrMetallicFactor  = metallicFactor_;
         p.pbrRoughnessFactor = roughnessFactor_;
+        const CNA::Internal::Graphics::PbrDielectricFresnelEXT dielectricFresnel =
+            CNA::Internal::Graphics::ComputePbrDielectricFresnelEXT(
+                iorEXT_, specularFactorEXT_,
+                {specularColorFactorEXT_.X, specularColorFactorEXT_.Y,
+                 specularColorFactorEXT_.Z});
+        p.pbrDielectricF0[0] = dielectricFresnel.f0[0];
+        p.pbrDielectricF0[1] = dielectricFresnel.f0[1];
+        p.pbrDielectricF0[2] = dielectricFresnel.f0[2];
+        p.pbrDielectricF90   = dielectricFresnel.f90;
+        p.pbrDielectricF0Unclamped[0] = dielectricFresnel.unclampedF0[0];
+        p.pbrDielectricF0Unclamped[1] = dielectricFresnel.unclampedF0[1];
+        p.pbrDielectricF0Unclamped[2] = dielectricFresnel.unclampedF0[2];
+        p.pbrSpecularFactor = dielectricFresnel.specularFactor;
+
+        // plan_gltf.md GLTF-372: identical to PbrEffect's -- a skinned surface masks on the same
+        // rule, and the pbr_skinned shader reads the same uAlphaTest uniform.
+        const std::array<float, 4> alphaTest =
+            CNA::Internal::Graphics::AlphaTestVectorForAlphaModeEXT(alphaMode_, alphaCutoff_);
+        p.alphaTest[0] = alphaTest[0];
+        p.alphaTest[1] = alphaTest[1];
+        p.alphaTest[2] = alphaTest[2];
+        p.alphaTest[3] = alphaTest[3];
 
         const bool    light0On = DirectionalLight0.getEnabledProperty();
         const Vector3 ld0  = light0On ? DirectionalLight0.getDiffuseColorProperty() : Vector3::Zero;

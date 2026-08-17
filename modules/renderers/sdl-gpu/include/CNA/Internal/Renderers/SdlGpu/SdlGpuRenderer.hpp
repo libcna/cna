@@ -1430,7 +1430,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // a storage buffer -- both variants share pbrFragmentShader_ unchanged (see
         // pbr_skinned3d.vert.glsl's own doc comment). uniforms/lightUniforms reuse FillExtUniforms/
         // FillLitLightUniforms's/FillSkinnedLightUniforms's existing layouts unchanged; pbrParams
-        // is the one genuinely new uniform block (MetallicFactor/RoughnessFactor).
+        // is the one genuinely new uniform block (MetallicFactor/RoughnessFactor + alpha coverage).
         struct PbrDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
@@ -1444,7 +1444,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 32> uniforms{};          ///< PC (FillExtUniforms's existing layout)
             std::array<float, 56> lightUniforms{};     ///< LitLightParams/SkinnedLightParams (byte-identical)
-            std::array<float, 4>  pbrParams{};          ///< PbrParams: metallicFactor, roughnessFactor, pad, pad
+            std::array<float, 72> pbrParams{};          ///< factors plus 14 affine transform rows
             bool skinned = false;
             std::array<float, 72 * 16> boneUniforms{}; ///< only used/uploaded when skinned == true
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
@@ -1457,12 +1457,16 @@ namespace CNA::Internal::Renderers::SdlGpu
             SdlGpuSampledTextureEXT metallicRoughnessMap;     ///< optional, default white
             SdlGpuSampledTextureEXT emissiveMap;              ///< optional, default white
             SdlGpuSampledTextureEXT occlusionMap;             ///< optional, default white
+            SdlGpuSampledTextureEXT specularMap;              ///< optional strength, default white
+            SdlGpuSampledTextureEXT specularColorMap;         ///< optional colour, default white
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
             /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
+            SamplerSlotState specularSampler;       ///< GraphicsDevice.SamplerStates[5]
+            SamplerSlotState specularColorSampler;  ///< GraphicsDevice.SamplerStates[6]
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
@@ -1639,6 +1643,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         std::unique_ptr<IVertexBufferRenderer> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int index_capacity) override;
+        std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int index_capacity) override;
 
         /**
          * @brief Creates an off-screen `RenderTarget2D` (Phase `SDLGPU-8`, `SDLGPU-35`/`SDLGPU-38`),
@@ -2311,9 +2316,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> pbrPipelines_;
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> pbrSkinnedPipelines_;
         std::vector<PbrDrawCommand> pbrDrawCommands_;
-        // 1x1 fallback textures for PbrEffect's 4 optional maps when left unbound -- lazily
+        // 1x1 fallback textures for PbrEffect's 6 optional maps when left unbound -- lazily
         // created by EnsureDefaultPbrTextures(). default_white_ makes an absent metallic-
-        // roughness/emissive/occlusion map read as "factor alone"/"no emissive tint"/"fully lit"
+        // roughness/emissive/occlusion/specular maps read as their neutral value
         // (each semantic's own neutral value is 1.0); default_flat_normal_ makes an absent normal
         // map decode (via the shader's rgb*2-1) to the unperturbed geometric normal (0,0,1).
         // Mirrors EasyGLRenderer::default_white_texture_/default_flat_normal_texture_.

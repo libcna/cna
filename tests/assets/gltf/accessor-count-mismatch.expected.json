@@ -1,0 +1,158 @@
+{
+  "id": "accessor-count-mismatch",
+  "description": "A primitive whose NORMAL accessor holds two elements while its POSITION holds three. Every accessor is individually valid; the file is malformed because they disagree. Refused by structural validation and, independently, by extraction -- which matters because extraction is also called directly.",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "meshes-overview",
+    "accessors"
+  ],
+  "inventory": {
+    "id": "accessor-count-mismatch",
+    "owningGroup": "robustness",
+    "referencingGroups": [],
+    "validatedLayers": [
+      "L1",
+      "L2"
+    ],
+    "features": [
+      "attribute count mismatch",
+      "per-primitive attribute agreement",
+      "import rejection"
+    ],
+    "auditFixture": null,
+    "validatorExpectedErrorCodes": [
+      "MESH_PRIMITIVE_UNEQUAL_ACCESSOR_COUNT"
+    ],
+    "validatorExceptionReason": "Unequal primitive attribute counts are deliberately refused by CNA; this pre-dates the bad-* naming rule."
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 1,
+    "meshCount": 1,
+    "materialCount": 0,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
+    "skinCount": 0,
+    "animationCount": 0,
+    "accessorCount": 3,
+    "bufferViewCount": 3,
+    "bufferCount": 1,
+    "bufferByteLength": 66,
+    "extensionsUsed": [],
+    "extensionsRequired": [],
+    "punctualLightCount": 0
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 0,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      {
+        "index": 1,
+        "usage": "NORMAL",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 2,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 36,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 2,
+        "usage": "indices",
+        "type": "SCALAR",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 3,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 2,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 60,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          2
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": []
+  },
+  "l4": {},
+  "l5": {
+    "supported": false,
+    "reason": "The primitive is refused at extraction, so no buffers are produced.",
+    "blockedBy": [
+      "GLTF-060"
+    ],
+    "parts": []
+  },
+  "rejection": {
+    "stage": "validation",
+    "task": "GLTF-060",
+    "errorContains": [
+      "structural validation"
+    ],
+    "alsoRefusedAtExtraction": true,
+    "extractionErrorContains": [
+      "NORMAL",
+      "same count"
+    ],
+    "note": "Refused TWICE, and both matter. cgltf_validate catches the disagreement (code 4), so every path that validates -- both loaders -- rejects the file before extraction is reached. But ExtractMesh is also called DIRECTLY, without validation, by the L3 oracle itself, and it had no check of its own: POSITION's count drives the loop that indexes every other decoded stream, so a short NORMAL was read past the end of its vector. GLTF-060's check turns that undefined behaviour into a named error for any caller, which is why it is not redundant with the validation cgltf already performs."
+  },
+  "defects": []
+}
