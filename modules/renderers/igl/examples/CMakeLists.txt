@@ -82,4 +82,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
     cna_register_renderer_test(NAME Igl_Stencil COMMAND cna_test_igl_stencil
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # IGL-22/IGL-55: multiple simultaneous colour attachments (MRT), first cut.
+    cna_igl_test(cna_test_igl_mrt igl_mrt_test.cpp)
+    cna_register_renderer_test(NAME Igl_Mrt COMMAND cna_test_igl_mrt
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
