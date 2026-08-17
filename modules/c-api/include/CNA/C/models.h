@@ -988,6 +988,330 @@ CNA_C_API CNA_Result cna_model_draw(
     CNA_Matrix projection);
 
 /**
+ * @brief Fixed-width severity identity for one glTF import diagnostic.
+ *
+ * CNA extension: XNA has no import diagnostics. The values match
+ * `Microsoft::Xna::Framework::Graphics::GltfImportDiagnosticSeverityEXT`.
+ */
+typedef uint32_t CNA_GltfImportDiagnosticSeverityEXT;
+/** @brief Informational conversion or generated data; no authored result was lost. */
+#define CNA_GLTF_IMPORT_SEVERITY_INFORMATION_EXT UINT32_C(0)
+/** @brief The imported result differs from, or omits, authored data. */
+#define CNA_GLTF_IMPORT_SEVERITY_WARNING_EXT UINT32_C(1)
+/** @brief Highest defined diagnostic-severity identity. */
+#define CNA_GLTF_IMPORT_SEVERITY_MAXIMUM_EXT CNA_GLTF_IMPORT_SEVERITY_WARNING_EXT
+
+/**
+ * @brief Fixed-width identity for what one glTF import diagnostic describes.
+ *
+ * CNA extension. The values match
+ * `Microsoft::Xna::Framework::Graphics::GltfImportDiagnosticKindEXT`.
+ */
+typedef uint32_t CNA_GltfImportDiagnosticKindEXT;
+/** @brief An exact conversion or other useful import note. */
+#define CNA_GLTF_IMPORT_KIND_INFORMATION_EXT UINT32_C(0)
+/** @brief CNA generated data that the source did not provide. */
+#define CNA_GLTF_IMPORT_KIND_GENERATED_DATA_EXT UINT32_C(1)
+/** @brief The source data is suspicious, but its actual values were still imported. */
+#define CNA_GLTF_IMPORT_KIND_INVALID_SOURCE_DATA_EXT UINT32_C(2)
+/** @brief Authored data was represented approximately. */
+#define CNA_GLTF_IMPORT_KIND_APPROXIMATION_EXT UINT32_C(3)
+/** @brief Authored data could not be carried and was discarded. */
+#define CNA_GLTF_IMPORT_KIND_DROPPED_DATA_EXT UINT32_C(4)
+/** @brief CNA does not implement the named optional feature. */
+#define CNA_GLTF_IMPORT_KIND_UNSUPPORTED_FEATURE_EXT UINT32_C(5)
+/** @brief Highest defined diagnostic-kind identity. */
+#define CNA_GLTF_IMPORT_KIND_MAXIMUM_EXT CNA_GLTF_IMPORT_KIND_UNSUPPORTED_FEATURE_EXT
+
+/**
+ * @brief Structured summary of how one model's source scene was imported.
+ *
+ * CNA extension. The counts describe the source scene this Model represents. A model that came
+ * from another content path, or from a document predating the report, reads back all zeros.
+ *
+ * The four trailing values are derived rather than stored, and are answered here so a caller does
+ * not have to walk the diagnostics to learn whether anything was lost. `diagnostic_count` bounds
+ * the index accepted by `cna_model_get_gltf_import_diagnostic_ext`.
+ */
+typedef struct CNA_GltfImportReportEXT {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Nodes imported from the represented source scene. */
+    uint64_t node_count;
+
+    /** @brief Mesh placements imported from source nodes. */
+    uint64_t mesh_instance_count;
+
+    /** @brief Distinct source meshes referenced by those placements. */
+    uint64_t distinct_mesh_count;
+
+    /** @brief Distinct source meshes referenced by more than one placement. */
+    uint64_t shared_mesh_count;
+
+    /** @brief Longest imported root-to-leaf node chain. */
+    uint64_t max_node_depth;
+
+    /** @brief Imported scene nodes that reference a camera. */
+    uint64_t camera_node_count;
+
+    /** @brief Imported scene nodes that reference a punctual light. */
+    uint64_t light_node_count;
+
+    /** @brief Punctual lights that reached a CNA effect light slot. */
+    uint64_t imported_light_count;
+
+    /** @brief Source primitives represented by this model, excluding material variants. */
+    uint64_t primitive_count;
+
+    /** @brief Independent skins represented by this model. */
+    uint64_t skin_count;
+
+    /** @brief Source animations inspected while producing this model. */
+    uint64_t animation_count;
+
+    /** @brief Animation clips actually retained by this model. */
+    uint64_t clip_count;
+
+    /** @brief Ordered import outcomes available by index; only outcomes that occurred. */
+    uint64_t diagnostic_count;
+
+    /** @brief Warning entries, not the sum of their occurrence counts. */
+    uint64_t warning_count;
+
+    /** @brief Sum of the dropped-data and unsupported-feature occurrence counts. */
+    uint64_t dropped_feature_count;
+
+    /** @brief Sum of the approximation occurrence counts. */
+    uint64_t approximation_count;
+
+    /** @brief Whether at least one warning is present, so the result may differ from the source. */
+    CNA_Bool anything_lost;
+} CNA_GltfImportReportEXT;
+
+/**
+ * @brief One programmatically reachable outcome of importing a glTF asset.
+ *
+ * CNA extension. The four strings this entry carries are read separately, because a string of
+ * unbounded length never goes in a fixed structure in this ABI. `detail_count` bounds the index
+ * accepted by the per-detail routes.
+ */
+typedef struct CNA_GltfImportDiagnosticEXT {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Whether this is a note or an observable fidelity warning. */
+    CNA_GltfImportDiagnosticSeverityEXT severity;
+
+    /** @brief Whether the outcome generated, approximated, dropped or did not support data. */
+    CNA_GltfImportDiagnosticKindEXT kind;
+
+    /** @brief Number of occurrences represented by this entry. */
+    uint64_t count;
+
+    /** @brief Largest measured magnitude associated with the entry, or 0 when none applies. */
+    double worst_magnitude;
+
+    /** @brief Individual affected names available by index, such as texture maps. */
+    uint64_t detail_count;
+} CNA_GltfImportDiagnosticEXT;
+
+/**
+ * @brief A diagnostic to append, with its strings borrowed for the duration of the call.
+ *
+ * CNA extension. Appending is how the list is built, rather than passing an array of entries: each
+ * entry carries four independent strings, and an array of those in a fixed structure would need a
+ * second level of borrowed pointers that a caller has to keep alive for exactly one call.
+ */
+typedef struct CNA_GltfImportDiagnosticDescriptorEXT {
+    /** @brief Stable lower-case, hyphen-separated diagnostic identifier. */
+    CNA_StringView code;
+
+    /** @brief One `CNA_GLTF_IMPORT_SEVERITY_*_EXT` identity. */
+    CNA_GltfImportDiagnosticSeverityEXT severity;
+
+    /** @brief One `CNA_GLTF_IMPORT_KIND_*_EXT` identity. */
+    CNA_GltfImportDiagnosticKindEXT kind;
+
+    /** @brief Primitive, node, clip or extension this entry concerns; may be empty. */
+    CNA_StringView subject;
+
+    /** @brief Number of occurrences represented by this entry. */
+    uint64_t count;
+
+    /** @brief Largest measured magnitude associated with the entry, or 0 when none applies. */
+    double worst_magnitude;
+
+    /** @brief Individual affected names borrowed for the call, or null for none. */
+    const CNA_StringView* details;
+
+    /** @brief Number of entries beginning at @ref details. */
+    uint64_t detail_count;
+
+    /** @brief Human-readable explanation suitable for a log or diagnostics overlay. */
+    CNA_StringView message;
+} CNA_GltfImportDiagnosticDescriptorEXT;
+
+/**
+ * @brief Gets the glTF import report for a model.
+ * @param model Model handle.
+ * @param out_report Receives the report; its size and version headers must be set.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_get_gltf_import_report_ext(
+    CNA_ModelHandle model,
+    CNA_GltfImportReportEXT* out_report);
+
+/**
+ * @brief Replaces a model's glTF import report counts and clears its diagnostics.
+ *
+ * The four derived values and `diagnostic_count` are outputs of the report rather than state, so
+ * they are not read from @p report; a caller must set them to zero, and any other value is
+ * refused rather than quietly dropped. Build the diagnostics afterwards with
+ * `cna_model_add_gltf_import_diagnostic_ext`.
+ *
+ * @param model Model handle.
+ * @param report The counts to record.
+ * @return `CNA_RESULT_INVALID_ARGUMENT` for a null, malformed or derived-value-bearing report.
+ */
+CNA_C_API CNA_Result cna_model_set_gltf_import_report_ext(
+    CNA_ModelHandle model,
+    const CNA_GltfImportReportEXT* report);
+
+/**
+ * @brief Appends one diagnostic to a model's glTF import report.
+ * @param model Model handle.
+ * @param descriptor The diagnostic to copy in; its strings are borrowed for the call only.
+ * @return `CNA_RESULT_INVALID_ARGUMENT` for a null descriptor, an undefined severity or kind, or
+ *         an invalid string view.
+ */
+CNA_C_API CNA_Result cna_model_add_gltf_import_diagnostic_ext(
+    CNA_ModelHandle model,
+    const CNA_GltfImportDiagnosticDescriptorEXT* descriptor);
+
+/**
+ * @brief Gets one import diagnostic by discovery order.
+ * @param model Model handle.
+ * @param index Diagnostic index below the report's `diagnostic_count`.
+ * @param out_diagnostic Receives the diagnostic; its size and version headers must be set.
+ * @return `CNA_RESULT_INVALID_ARGUMENT` when @p index is not below the diagnostic count.
+ */
+CNA_C_API CNA_Result cna_model_get_gltf_import_diagnostic_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    CNA_GltfImportDiagnosticEXT* out_diagnostic);
+
+/**
+ * @brief Gets the exact byte count of a diagnostic's stable identifier.
+ *
+ * The code is the machine-readable identity: branch on it, never on the message, which is written
+ * for people and may gain detail or wording fixes without becoming an ABI break.
+ *
+ * @param model Model handle.
+ * @param index Diagnostic index.
+ * @param out_byte_count Receives the required byte count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_get_gltf_import_diagnostic_code_byte_count_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies a diagnostic's stable lower-case, hyphen-separated identifier.
+ * @param model Model handle.
+ * @param index Diagnostic index.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_model_copy_gltf_import_diagnostic_code_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/** @brief Gets the exact byte count of the primitive, node, clip or extension concerned. */
+CNA_C_API CNA_Result cna_model_get_gltf_import_diagnostic_subject_byte_count_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies the subject this diagnostic concerns, which may be empty.
+ * @param model Model handle.
+ * @param index Diagnostic index.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_model_copy_gltf_import_diagnostic_subject_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/** @brief Gets the exact byte count of the human-readable explanation. */
+CNA_C_API CNA_Result cna_model_get_gltf_import_diagnostic_message_byte_count_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies the human-readable explanation, suitable for a log or overlay.
+ *
+ * Display only. A consumer that needs to recognise an outcome branches on the code.
+ *
+ * @param model Model handle.
+ * @param index Diagnostic index.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_model_copy_gltf_import_diagnostic_message_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/** @brief Gets the exact byte count of one individual affected name. */
+CNA_C_API CNA_Result cna_model_get_gltf_import_diagnostic_detail_byte_count_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    uint64_t detail_index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies one individual affected name, such as a texture map or custom attribute.
+ * @param model Model handle.
+ * @param index Diagnostic index.
+ * @param detail_index Detail index below the diagnostic's `detail_count`.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_model_copy_gltf_import_diagnostic_detail_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    uint64_t detail_index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
  * @brief Creates owned morph-target data by deeply copying a fixed C descriptor.
  * @param descriptor Complete borrowed source descriptor.
  * @param out_data Receives the owned data handle.

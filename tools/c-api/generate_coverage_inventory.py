@@ -444,8 +444,11 @@ def load_rules(path: Path) -> list[Rule]:
         # exposes no callable public behavior at all, such as a friendship declaration.
         if status not in {"implemented", "partial", "not-applicable"}:
             raise RuntimeError(f"Explicit rule {rule_id} has invalid status {status!r}.")
+        # An empty list is how a newly written rule starts: it covers nothing until someone runs
+        # --approve-rule-symbols for it, and until then its symbols stay `planned`. A missing key
+        # is still an error, so the field cannot be forgotten.
         approved = raw.get("approved_symbols")
-        if not isinstance(approved, list) or not approved:
+        if not isinstance(approved, list):
             raise RuntimeError(
                 f"Explicit rule {rule_id} has no approved_symbols. Every rule names the stable IDs "
                 "it was reviewed against; run --approve-rule-symbols to record them deliberately."

@@ -2434,6 +2434,7 @@
   "cna_microphone_start_at",
   "cna_microphone_stop_at",
   "cna_microphone_subscribe_buffer_ready_at",
+  "cna_model_add_gltf_import_diagnostic_ext",
   "cna_model_bone_add_child",
   "cna_model_bone_collection_contains",
   "cna_model_bone_collection_create",
@@ -2453,6 +2454,10 @@
   "cna_model_bone_set_transform",
   "cna_model_copy_absolute_bone_transforms",
   "cna_model_copy_bone_transforms",
+  "cna_model_copy_gltf_import_diagnostic_code_ext",
+  "cna_model_copy_gltf_import_diagnostic_detail_ext",
+  "cna_model_copy_gltf_import_diagnostic_message_ext",
+  "cna_model_copy_gltf_import_diagnostic_subject_ext",
   "cna_model_create",
   "cna_model_create_default",
   "cna_model_create_with_parents",
@@ -2466,6 +2471,12 @@
   "cna_model_effect_collection_remove",
   "cna_model_get_bone_transform_count",
   "cna_model_get_bones",
+  "cna_model_get_gltf_import_diagnostic_code_byte_count_ext",
+  "cna_model_get_gltf_import_diagnostic_detail_byte_count_ext",
+  "cna_model_get_gltf_import_diagnostic_ext",
+  "cna_model_get_gltf_import_diagnostic_message_byte_count_ext",
+  "cna_model_get_gltf_import_diagnostic_subject_byte_count_ext",
+  "cna_model_get_gltf_import_report_ext",
   "cna_model_get_meshes",
   "cna_model_get_root",
   "cna_model_get_tag",
@@ -2516,6 +2527,7 @@
   "cna_model_mesh_set_parent_bone",
   "cna_model_mesh_set_tag",
   "cna_model_set_bone_transforms",
+  "cna_model_set_gltf_import_report_ext",
   "cna_model_set_owned_resources",
   "cna_model_set_tag",
   "cna_morph_target_data_ext_blend",
@@ -4113,6 +4125,16 @@
   "CNA_GESTURE_TYPE_PINCH_COMPLETE": 512,
   "CNA_GESTURE_TYPE_TAP": 1,
   "CNA_GESTURE_TYPE_VERTICAL_DRAG": 16,
+  "CNA_GLTF_IMPORT_KIND_APPROXIMATION_EXT": 3,
+  "CNA_GLTF_IMPORT_KIND_DROPPED_DATA_EXT": 4,
+  "CNA_GLTF_IMPORT_KIND_GENERATED_DATA_EXT": 1,
+  "CNA_GLTF_IMPORT_KIND_INFORMATION_EXT": 0,
+  "CNA_GLTF_IMPORT_KIND_INVALID_SOURCE_DATA_EXT": 2,
+  "CNA_GLTF_IMPORT_KIND_MAXIMUM_EXT": 5,
+  "CNA_GLTF_IMPORT_KIND_UNSUPPORTED_FEATURE_EXT": 5,
+  "CNA_GLTF_IMPORT_SEVERITY_INFORMATION_EXT": 0,
+  "CNA_GLTF_IMPORT_SEVERITY_MAXIMUM_EXT": 1,
+  "CNA_GLTF_IMPORT_SEVERITY_WARNING_EXT": 1,
   "CNA_GRAPHICS_BACKEND_CATEGORY_DIAGNOSTIC": 4,
   "CNA_GRAPHICS_BACKEND_CATEGORY_NATIVE": 0,
   "CNA_GRAPHICS_BACKEND_CATEGORY_SOFTWARE": 2,
@@ -5223,6 +5245,14 @@
    8
   ],
   "CNA_GestureType": [
+   4,
+   4
+  ],
+  "CNA_GltfImportDiagnosticKindEXT": [
+   4,
+   4
+  ],
+  "CNA_GltfImportDiagnosticSeverityEXT": [
    4,
    4
   ],
@@ -7932,6 +7962,164 @@
     ]
    },
    "size": 64
+  },
+  "CNA_GltfImportDiagnosticDescriptorEXT": {
+   "align": 8,
+   "fields": {
+    "code": [
+     0,
+     16
+    ],
+    "count": [
+     40,
+     8
+    ],
+    "detail_count": [
+     64,
+     8
+    ],
+    "details": [
+     56,
+     8
+    ],
+    "kind": [
+     20,
+     4
+    ],
+    "message": [
+     72,
+     16
+    ],
+    "severity": [
+     16,
+     4
+    ],
+    "subject": [
+     24,
+     16
+    ],
+    "worst_magnitude": [
+     48,
+     8
+    ]
+   },
+   "size": 88
+  },
+  "CNA_GltfImportDiagnosticEXT": {
+   "align": 8,
+   "fields": {
+    "count": [
+     16,
+     8
+    ],
+    "detail_count": [
+     32,
+     8
+    ],
+    "kind": [
+     12,
+     4
+    ],
+    "severity": [
+     8,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "worst_magnitude": [
+     24,
+     8
+    ]
+   },
+   "size": 40
+  },
+  "CNA_GltfImportReportEXT": {
+   "align": 8,
+   "fields": {
+    "animation_count": [
+     88,
+     8
+    ],
+    "anything_lost": [
+     136,
+     1
+    ],
+    "approximation_count": [
+     128,
+     8
+    ],
+    "camera_node_count": [
+     48,
+     8
+    ],
+    "clip_count": [
+     96,
+     8
+    ],
+    "diagnostic_count": [
+     104,
+     8
+    ],
+    "distinct_mesh_count": [
+     24,
+     8
+    ],
+    "dropped_feature_count": [
+     120,
+     8
+    ],
+    "imported_light_count": [
+     64,
+     8
+    ],
+    "light_node_count": [
+     56,
+     8
+    ],
+    "max_node_depth": [
+     40,
+     8
+    ],
+    "mesh_instance_count": [
+     16,
+     8
+    ],
+    "node_count": [
+     8,
+     8
+    ],
+    "primitive_count": [
+     72,
+     8
+    ],
+    "shared_mesh_count": [
+     32,
+     8
+    ],
+    "skin_count": [
+     80,
+     8
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "warning_count": [
+     112,
+     8
+    ]
+   },
+   "size": 144
   },
   "CNA_GraphicsAdapterInfo": {
    "align": 8,

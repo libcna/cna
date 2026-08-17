@@ -53,6 +53,10 @@ using Microsoft::Xna::Framework::Graphics::ModelBoneCollection;
 using Microsoft::Xna::Framework::Graphics::ModelEffectCollection;
 using Microsoft::Xna::Framework::Graphics::ModelMesh;
 using Microsoft::Xna::Framework::Graphics::ModelMeshPart;
+using Microsoft::Xna::Framework::Graphics::GltfImportDiagnosticKindEXT;
+using Microsoft::Xna::Framework::Graphics::GltfImportDiagnosticSeverityEXT;
+using Microsoft::Xna::Framework::Graphics::GltfImportDiagnosticEXT;
+using Microsoft::Xna::Framework::Graphics::GltfImportReportEXT;
 using Microsoft::Xna::Framework::Graphics::Model;
 using Microsoft::Xna::Framework::Graphics::MorphTargetDataEXT;
 using Microsoft::Xna::Framework::Graphics::MorphWeightKeyframeEXT;
@@ -3533,6 +3537,401 @@ CNA_Result cna_model_draw(
         model->value->Draw(
             ToNative(world), ToNative(view), ToNative(projection));
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+constexpr uint32_t ReportStructureVersion = UINT32_C(1);
+
+/* The report and its diagnostics are read, never handed out as a handle: the whole object belongs
+   to the Model and lives exactly as long as it does, so an index-based read cannot outlive what it
+   read from. The strings come back through the count/copy pairs used everywhere else in this ABI,
+   because a string of unbounded length never goes in a fixed structure. */
+
+[[nodiscard]] CNA_Result GetImportDiagnostic(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    std::shared_ptr<ModelResource>* const outModel,
+    const GltfImportDiagnosticEXT** const outDiagnostic)
+{
+    if (const CNA_Result result = GetModel(modelHandle, outModel);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<GltfImportDiagnosticEXT>& diagnostics =
+        (*outModel)->value->getGltfImportReportEXTProperty().Diagnostics;
+    if (index >= diagnostics.size()) {
+        return InvalidArgument("The glTF import diagnostic index is outside the valid range.");
+    }
+    *outDiagnostic = &diagnostics[static_cast<std::size_t>(index)];
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result CopyDiagnosticString(
+    const std::string& value,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The glTF import diagnostic output buffer is invalid.");
+    }
+    *outByteCount = static_cast<uint64_t>(value.size());
+    if (capacity < value.size()) {
+        return Fail(
+            CNA_RESULT_BUFFER_TOO_SMALL,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The destination cannot hold the complete glTF import diagnostic string.");
+    }
+    if (!value.empty()) {
+        std::memcpy(destination, value.data(), value.size());
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result GetDiagnosticStringByteCount(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    uint64_t* const outByteCount,
+    const std::string& (*select)(const GltfImportDiagnosticEXT&))
+{
+    if (outByteCount == nullptr) {
+        return InvalidArgument("The glTF import diagnostic byte-count output is null.");
+    }
+    std::shared_ptr<ModelResource> model;
+    const GltfImportDiagnosticEXT* diagnostic = nullptr;
+    if (const CNA_Result result = GetImportDiagnostic(modelHandle, index, &model, &diagnostic);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outByteCount = static_cast<uint64_t>(select(*diagnostic).size());
+    return CNA_RESULT_SUCCESS;
+}
+
+const std::string& SelectCode(const GltfImportDiagnosticEXT& value) { return value.Code; }
+const std::string& SelectSubject(const GltfImportDiagnosticEXT& value) { return value.Subject; }
+const std::string& SelectMessage(const GltfImportDiagnosticEXT& value) { return value.Message; }
+
+} // namespace
+
+CNA_Result cna_model_get_gltf_import_report_ext(
+    const CNA_ModelHandle modelHandle,
+    CNA_GltfImportReportEXT* const outReport)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outReport == nullptr || outReport->struct_size < sizeof(CNA_GltfImportReportEXT) ||
+            outReport->struct_version != ReportStructureVersion) {
+            return InvalidArgument("The glTF import report output is null or malformed.");
+        }
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const GltfImportReportEXT& report = model->value->getGltfImportReportEXTProperty();
+        *outReport = CNA_GltfImportReportEXT{
+            .struct_size = sizeof(CNA_GltfImportReportEXT),
+            .struct_version = ReportStructureVersion,
+            .node_count = static_cast<uint64_t>(report.NodeCount),
+            .mesh_instance_count = static_cast<uint64_t>(report.MeshInstanceCount),
+            .distinct_mesh_count = static_cast<uint64_t>(report.DistinctMeshCount),
+            .shared_mesh_count = static_cast<uint64_t>(report.SharedMeshCount),
+            .max_node_depth = static_cast<uint64_t>(report.MaxNodeDepth),
+            .camera_node_count = static_cast<uint64_t>(report.CameraNodeCount),
+            .light_node_count = static_cast<uint64_t>(report.LightNodeCount),
+            .imported_light_count = static_cast<uint64_t>(report.ImportedLightCount),
+            .primitive_count = static_cast<uint64_t>(report.PrimitiveCount),
+            .skin_count = static_cast<uint64_t>(report.SkinCount),
+            .animation_count = static_cast<uint64_t>(report.AnimationCount),
+            .clip_count = static_cast<uint64_t>(report.ClipCount),
+            .diagnostic_count = static_cast<uint64_t>(report.Diagnostics.size()),
+            .warning_count = static_cast<uint64_t>(report.getWarningCountProperty()),
+            .dropped_feature_count =
+                static_cast<uint64_t>(report.getDroppedFeatureCountProperty()),
+            .approximation_count = static_cast<uint64_t>(report.getApproximationCountProperty()),
+            .anything_lost = report.AnythingLost() ? CNA_TRUE : CNA_FALSE};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_set_gltf_import_report_ext(
+    const CNA_ModelHandle modelHandle,
+    const CNA_GltfImportReportEXT* const report)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (report == nullptr || report->struct_size < sizeof(CNA_GltfImportReportEXT) ||
+            report->struct_version != ReportStructureVersion) {
+            return InvalidArgument("The glTF import report is null or malformed.");
+        }
+        // The derived values are answers the report computes from its diagnostics, not state a
+        // caller owns. Refusing a non-zero one is deliberate: silently dropping it would let a
+        // caller believe it had recorded a warning count that the next read contradicts.
+        if (report->diagnostic_count != 0U || report->warning_count != 0U ||
+            report->dropped_feature_count != 0U || report->approximation_count != 0U ||
+            report->anything_lost != CNA_FALSE) {
+            return InvalidArgument(
+                "The glTF import report's derived values are outputs and must be zero.");
+        }
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        GltfImportReportEXT native;
+        native.NodeCount = static_cast<std::size_t>(report->node_count);
+        native.MeshInstanceCount = static_cast<std::size_t>(report->mesh_instance_count);
+        native.DistinctMeshCount = static_cast<std::size_t>(report->distinct_mesh_count);
+        native.SharedMeshCount = static_cast<std::size_t>(report->shared_mesh_count);
+        native.MaxNodeDepth = static_cast<std::size_t>(report->max_node_depth);
+        native.CameraNodeCount = static_cast<std::size_t>(report->camera_node_count);
+        native.LightNodeCount = static_cast<std::size_t>(report->light_node_count);
+        native.ImportedLightCount = static_cast<std::size_t>(report->imported_light_count);
+        native.PrimitiveCount = static_cast<std::size_t>(report->primitive_count);
+        native.SkinCount = static_cast<std::size_t>(report->skin_count);
+        native.AnimationCount = static_cast<std::size_t>(report->animation_count);
+        native.ClipCount = static_cast<std::size_t>(report->clip_count);
+        model->value->setGltfImportReportEXTProperty(std::move(native));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_add_gltf_import_diagnostic_ext(
+    const CNA_ModelHandle modelHandle,
+    const CNA_GltfImportDiagnosticDescriptorEXT* const descriptor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (descriptor == nullptr) {
+            return InvalidArgument("The glTF import diagnostic descriptor is null.");
+        }
+        if (descriptor->severity > CNA_GLTF_IMPORT_SEVERITY_MAXIMUM_EXT) {
+            return InvalidArgument("The glTF import diagnostic severity is not a defined identity.");
+        }
+        if (descriptor->kind > CNA_GLTF_IMPORT_KIND_MAXIMUM_EXT) {
+            return InvalidArgument("The glTF import diagnostic kind is not a defined identity.");
+        }
+        if (descriptor->details == nullptr && descriptor->detail_count != 0U) {
+            return InvalidArgument("The glTF import diagnostic detail array is null.");
+        }
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        GltfImportDiagnosticEXT entry;
+        if (const CNA_Result result = CopyStringView(descriptor->code, true, &entry.Code);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The glTF import diagnostic code is not valid UTF-8 text.");
+        }
+        if (const CNA_Result result = CopyStringView(descriptor->subject, true, &entry.Subject);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The glTF import diagnostic subject is not valid UTF-8 text.");
+        }
+        if (const CNA_Result result = CopyStringView(descriptor->message, true, &entry.Message);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The glTF import diagnostic message is not valid UTF-8 text.");
+        }
+        entry.Details.reserve(static_cast<std::size_t>(descriptor->detail_count));
+        for (uint64_t index = 0U; index < descriptor->detail_count; ++index) {
+            std::string detail;
+            if (const CNA_Result result =
+                    CopyStringView(descriptor->details[index], true, &detail);
+                result != CNA_RESULT_SUCCESS) {
+                return Fail(
+                    result,
+                    ErrorCategoryForResult(result),
+                    "A glTF import diagnostic detail is not valid UTF-8 text.");
+            }
+            entry.Details.push_back(std::move(detail));
+        }
+        entry.Severity =
+            static_cast<GltfImportDiagnosticSeverityEXT>(descriptor->severity);
+        entry.Kind = static_cast<GltfImportDiagnosticKindEXT>(descriptor->kind);
+        entry.Count = static_cast<std::size_t>(descriptor->count);
+        entry.WorstMagnitude = descriptor->worst_magnitude;
+
+        // The canonical report exposes its diagnostics as a const reference, so appending means
+        // reading the whole report, extending it and setting it back. Copies of this size happen
+        // once per diagnostic at build time and never on a render path.
+        GltfImportReportEXT updated = model->value->getGltfImportReportEXTProperty();
+        updated.Diagnostics.push_back(std::move(entry));
+        model->value->setGltfImportReportEXTProperty(std::move(updated));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_get_gltf_import_diagnostic_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    CNA_GltfImportDiagnosticEXT* const outDiagnostic)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outDiagnostic == nullptr ||
+            outDiagnostic->struct_size < sizeof(CNA_GltfImportDiagnosticEXT) ||
+            outDiagnostic->struct_version != ReportStructureVersion) {
+            return InvalidArgument("The glTF import diagnostic output is null or malformed.");
+        }
+        std::shared_ptr<ModelResource> model;
+        const GltfImportDiagnosticEXT* diagnostic = nullptr;
+        if (const CNA_Result result = GetImportDiagnostic(modelHandle, index, &model, &diagnostic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outDiagnostic = CNA_GltfImportDiagnosticEXT{
+            .struct_size = sizeof(CNA_GltfImportDiagnosticEXT),
+            .struct_version = ReportStructureVersion,
+            .severity = static_cast<CNA_GltfImportDiagnosticSeverityEXT>(diagnostic->Severity),
+            .kind = static_cast<CNA_GltfImportDiagnosticKindEXT>(diagnostic->Kind),
+            .count = static_cast<uint64_t>(diagnostic->Count),
+            .worst_magnitude = diagnostic->WorstMagnitude,
+            .detail_count = static_cast<uint64_t>(diagnostic->Details.size())};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_get_gltf_import_diagnostic_code_byte_count_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GetDiagnosticStringByteCount(modelHandle, index, outByteCount, SelectCode);
+    });
+}
+
+CNA_Result cna_model_copy_gltf_import_diagnostic_code_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> model;
+        const GltfImportDiagnosticEXT* diagnostic = nullptr;
+        if (const CNA_Result result = GetImportDiagnostic(modelHandle, index, &model, &diagnostic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyDiagnosticString(diagnostic->Code, destination, capacity, outByteCount);
+    });
+}
+
+CNA_Result cna_model_get_gltf_import_diagnostic_subject_byte_count_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GetDiagnosticStringByteCount(modelHandle, index, outByteCount, SelectSubject);
+    });
+}
+
+CNA_Result cna_model_copy_gltf_import_diagnostic_subject_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> model;
+        const GltfImportDiagnosticEXT* diagnostic = nullptr;
+        if (const CNA_Result result = GetImportDiagnostic(modelHandle, index, &model, &diagnostic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyDiagnosticString(diagnostic->Subject, destination, capacity, outByteCount);
+    });
+}
+
+CNA_Result cna_model_get_gltf_import_diagnostic_message_byte_count_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GetDiagnosticStringByteCount(modelHandle, index, outByteCount, SelectMessage);
+    });
+}
+
+CNA_Result cna_model_copy_gltf_import_diagnostic_message_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> model;
+        const GltfImportDiagnosticEXT* diagnostic = nullptr;
+        if (const CNA_Result result = GetImportDiagnostic(modelHandle, index, &model, &diagnostic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyDiagnosticString(diagnostic->Message, destination, capacity, outByteCount);
+    });
+}
+
+CNA_Result cna_model_get_gltf_import_diagnostic_detail_byte_count_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    const uint64_t detailIndex,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteCount == nullptr) {
+            return InvalidArgument("The glTF import diagnostic byte-count output is null.");
+        }
+        std::shared_ptr<ModelResource> model;
+        const GltfImportDiagnosticEXT* diagnostic = nullptr;
+        if (const CNA_Result result = GetImportDiagnostic(modelHandle, index, &model, &diagnostic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (detailIndex >= diagnostic->Details.size()) {
+            return InvalidArgument(
+                "The glTF import diagnostic detail index is outside the valid range.");
+        }
+        *outByteCount = static_cast<uint64_t>(
+            diagnostic->Details[static_cast<std::size_t>(detailIndex)].size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_copy_gltf_import_diagnostic_detail_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    const uint64_t detailIndex,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> model;
+        const GltfImportDiagnosticEXT* diagnostic = nullptr;
+        if (const CNA_Result result = GetImportDiagnostic(modelHandle, index, &model, &diagnostic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (detailIndex >= diagnostic->Details.size()) {
+            return InvalidArgument(
+                "The glTF import diagnostic detail index is outside the valid range.");
+        }
+        return CopyDiagnosticString(
+            diagnostic->Details[static_cast<std::size_t>(detailIndex)],
+            destination,
+            capacity,
+            outByteCount);
     });
 }
 

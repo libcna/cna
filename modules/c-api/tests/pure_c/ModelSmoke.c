@@ -106,6 +106,234 @@ static int validate_default(void)
     return 1;
 }
 
+static CNA_StringView view(const char* const text)
+{
+    CNA_StringView result;
+    result.data = text;
+    result.byte_length = strlen(text);
+    return result;
+}
+
+static int string_equals(const char* const buffer, const uint64_t length, const char* const text)
+{
+    return length == (uint64_t)strlen(text) && memcmp(buffer, text, (size_t)length) == 0;
+}
+
+/* The glTF import report a model carries: an all-zero default, a round-trip through the counts,
+   and the diagnostics whose derived answers the report computes rather than stores. */
+static int validate_gltf_import_report(void)
+{
+    CNA_ModelHandle model = CNA_INVALID_HANDLE;
+    CNA_GltfImportReportEXT report = {sizeof(CNA_GltfImportReportEXT), UINT32_C(1),
+                                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, CNA_FALSE};
+    CNA_GltfImportReportEXT written = {sizeof(CNA_GltfImportReportEXT), UINT32_C(1),
+                                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, CNA_FALSE};
+    CNA_GltfImportDiagnosticEXT diagnostic = {
+        sizeof(CNA_GltfImportDiagnosticEXT), UINT32_C(1), 0, 0, 0, 0.0, 0};
+    CNA_GltfImportDiagnosticEXT malformed = {0, 0, 0, 0, 0, 0.0, 0};
+    CNA_StringView details[2];
+    CNA_GltfImportDiagnosticDescriptorEXT descriptor;
+    char buffer[64];
+    uint64_t length = UINT64_MAX;
+
+    REQUIRE(cna_model_create_default(&model) == CNA_RESULT_SUCCESS);
+
+    /* A model from any other content path reads back the all-zero empty default. */
+    REQUIRE(cna_model_get_gltf_import_report_ext(model, &report) == CNA_RESULT_SUCCESS &&
+            report.node_count == 0U && report.mesh_instance_count == 0U &&
+            report.distinct_mesh_count == 0U && report.shared_mesh_count == 0U &&
+            report.max_node_depth == 0U && report.camera_node_count == 0U &&
+            report.light_node_count == 0U && report.imported_light_count == 0U &&
+            report.primitive_count == 0U && report.skin_count == 0U &&
+            report.animation_count == 0U && report.clip_count == 0U &&
+            report.diagnostic_count == 0U && report.warning_count == 0U &&
+            report.dropped_feature_count == 0U && report.approximation_count == 0U &&
+            report.anything_lost == CNA_FALSE);
+
+    written.node_count = 11U;
+    written.mesh_instance_count = 12U;
+    written.distinct_mesh_count = 13U;
+    written.shared_mesh_count = 14U;
+    written.max_node_depth = 15U;
+    written.camera_node_count = 16U;
+    written.light_node_count = 17U;
+    written.imported_light_count = 18U;
+    written.primitive_count = 19U;
+    written.skin_count = 20U;
+    written.animation_count = 21U;
+    written.clip_count = 22U;
+    REQUIRE(cna_model_set_gltf_import_report_ext(model, &written) == CNA_RESULT_SUCCESS &&
+            cna_model_get_gltf_import_report_ext(model, &report) == CNA_RESULT_SUCCESS &&
+            report.node_count == 11U && report.mesh_instance_count == 12U &&
+            report.distinct_mesh_count == 13U && report.shared_mesh_count == 14U &&
+            report.max_node_depth == 15U && report.camera_node_count == 16U &&
+            report.light_node_count == 17U && report.imported_light_count == 18U &&
+            report.primitive_count == 19U && report.skin_count == 20U &&
+            report.animation_count == 21U && report.clip_count == 22U &&
+            report.diagnostic_count == 0U && report.anything_lost == CNA_FALSE);
+
+    /* A derived value on input is refused rather than dropped, and the report stays as it was. */
+    written.warning_count = 1U;
+    REQUIRE(cna_model_set_gltf_import_report_ext(model, &written) == CNA_RESULT_INVALID_ARGUMENT);
+    written.warning_count = 0U;
+    written.anything_lost = CNA_TRUE;
+    REQUIRE(cna_model_set_gltf_import_report_ext(model, &written) == CNA_RESULT_INVALID_ARGUMENT);
+    written.anything_lost = CNA_FALSE;
+    REQUIRE(cna_model_get_gltf_import_report_ext(model, &report) == CNA_RESULT_SUCCESS &&
+            report.node_count == 11U);
+
+    /* An information entry leaves the report reporting no loss. */
+    details[0] = view("baseColorTexture");
+    details[1] = view("normalTexture");
+    descriptor.code = view("texture-transform-applied");
+    descriptor.severity = CNA_GLTF_IMPORT_SEVERITY_INFORMATION_EXT;
+    descriptor.kind = CNA_GLTF_IMPORT_KIND_INFORMATION_EXT;
+    descriptor.subject = view("material 0");
+    descriptor.count = 2U;
+    descriptor.worst_magnitude = 0.0;
+    descriptor.details = details;
+    descriptor.detail_count = 2U;
+    descriptor.message = view("Two texture transforms were applied as authored.");
+    REQUIRE(cna_model_add_gltf_import_diagnostic_ext(model, &descriptor) == CNA_RESULT_SUCCESS &&
+            cna_model_get_gltf_import_report_ext(model, &report) == CNA_RESULT_SUCCESS &&
+            report.diagnostic_count == 1U && report.warning_count == 0U &&
+            report.dropped_feature_count == 0U && report.approximation_count == 0U &&
+            report.anything_lost == CNA_FALSE);
+
+    /* Each warning kind moves exactly the derived answer it belongs to. */
+    descriptor.code = view("skin-influences-dropped");
+    descriptor.severity = CNA_GLTF_IMPORT_SEVERITY_WARNING_EXT;
+    descriptor.kind = CNA_GLTF_IMPORT_KIND_DROPPED_DATA_EXT;
+    descriptor.subject = view("mesh 3");
+    descriptor.count = 5U;
+    descriptor.worst_magnitude = 0.25;
+    descriptor.details = 0;
+    descriptor.detail_count = 0U;
+    descriptor.message = view("Five joint influences beyond the fourth were discarded.");
+    REQUIRE(cna_model_add_gltf_import_diagnostic_ext(model, &descriptor) == CNA_RESULT_SUCCESS);
+    descriptor.code = view("weights-renormalised");
+    descriptor.kind = CNA_GLTF_IMPORT_KIND_APPROXIMATION_EXT;
+    descriptor.count = 3U;
+    descriptor.worst_magnitude = 0.5;
+    descriptor.message = view("Weights were renormalised.");
+    REQUIRE(cna_model_add_gltf_import_diagnostic_ext(model, &descriptor) == CNA_RESULT_SUCCESS);
+    descriptor.code = view("extension-unsupported");
+    descriptor.kind = CNA_GLTF_IMPORT_KIND_UNSUPPORTED_FEATURE_EXT;
+    descriptor.count = 7U;
+    descriptor.worst_magnitude = 0.0;
+    descriptor.message = view("KHR_materials_sheen is not implemented.");
+    REQUIRE(cna_model_add_gltf_import_diagnostic_ext(model, &descriptor) == CNA_RESULT_SUCCESS);
+    REQUIRE(cna_model_get_gltf_import_report_ext(model, &report) == CNA_RESULT_SUCCESS &&
+            report.diagnostic_count == 4U &&
+            report.warning_count == 3U &&
+            report.dropped_feature_count == 12U &&
+            report.approximation_count == 3U &&
+            report.anything_lost == CNA_TRUE);
+
+    /* Entries keep discovery order, and every field of the first one reads back. */
+    REQUIRE(cna_model_get_gltf_import_diagnostic_ext(model, 0U, &diagnostic) ==
+                CNA_RESULT_SUCCESS &&
+            diagnostic.severity == CNA_GLTF_IMPORT_SEVERITY_INFORMATION_EXT &&
+            diagnostic.kind == CNA_GLTF_IMPORT_KIND_INFORMATION_EXT &&
+            diagnostic.count == 2U && diagnostic.worst_magnitude == 0.0 &&
+            diagnostic.detail_count == 2U);
+    REQUIRE(cna_model_get_gltf_import_diagnostic_ext(model, 1U, &diagnostic) ==
+                CNA_RESULT_SUCCESS &&
+            diagnostic.severity == CNA_GLTF_IMPORT_SEVERITY_WARNING_EXT &&
+            diagnostic.kind == CNA_GLTF_IMPORT_KIND_DROPPED_DATA_EXT &&
+            diagnostic.count == 5U && diagnostic.worst_magnitude == 0.25 &&
+            diagnostic.detail_count == 0U);
+
+    /* The code is the identity to branch on; the message is display text. Both round-trip, and
+       an exact-capacity copy writes no terminator. */
+    REQUIRE(cna_model_get_gltf_import_diagnostic_code_byte_count_ext(model, 0U, &length) ==
+                CNA_RESULT_SUCCESS && length == (uint64_t)strlen("texture-transform-applied"));
+    memset(buffer, '#', sizeof(buffer));
+    REQUIRE(cna_model_copy_gltf_import_diagnostic_code_ext(
+                model, 0U, buffer, sizeof(buffer), &length) == CNA_RESULT_SUCCESS &&
+            string_equals(buffer, length, "texture-transform-applied") &&
+            buffer[length] == '#');
+    REQUIRE(cna_model_copy_gltf_import_diagnostic_subject_ext(
+                model, 0U, buffer, sizeof(buffer), &length) == CNA_RESULT_SUCCESS &&
+            string_equals(buffer, length, "material 0") &&
+            cna_model_get_gltf_import_diagnostic_subject_byte_count_ext(model, 0U, &length) ==
+                CNA_RESULT_SUCCESS && length == (uint64_t)strlen("material 0"));
+    REQUIRE(cna_model_get_gltf_import_diagnostic_message_byte_count_ext(model, 0U, &length) ==
+                CNA_RESULT_SUCCESS &&
+            length == (uint64_t)strlen("Two texture transforms were applied as authored.") &&
+            cna_model_copy_gltf_import_diagnostic_message_ext(
+                model, 0U, buffer, sizeof(buffer), &length) == CNA_RESULT_SUCCESS &&
+            string_equals(buffer, length,
+                          "Two texture transforms were applied as authored."));
+    REQUIRE(cna_model_get_gltf_import_diagnostic_detail_byte_count_ext(model, 0U, 1U, &length) ==
+                CNA_RESULT_SUCCESS && length == (uint64_t)strlen("normalTexture") &&
+            cna_model_copy_gltf_import_diagnostic_detail_ext(
+                model, 0U, 1U, buffer, sizeof(buffer), &length) == CNA_RESULT_SUCCESS &&
+            string_equals(buffer, length, "normalTexture"));
+
+    /* An empty subject is a valid answer, not a refusal. */
+    REQUIRE(cna_model_copy_gltf_import_diagnostic_subject_ext(
+                model, 1U, buffer, sizeof(buffer), &length) == CNA_RESULT_SUCCESS &&
+            length == (uint64_t)strlen("mesh 3"));
+
+    /* Insufficient capacity reports the requirement and performs no partial write. */
+    memset(buffer, '#', sizeof(buffer));
+    REQUIRE(cna_model_copy_gltf_import_diagnostic_code_ext(model, 0U, buffer, 4U, &length) ==
+                CNA_RESULT_BUFFER_TOO_SMALL &&
+            length == (uint64_t)strlen("texture-transform-applied") &&
+            buffer[0] == '#' && buffer[3] == '#');
+    REQUIRE(cna_model_copy_gltf_import_diagnostic_code_ext(model, 0U, 0, 0U, &length) ==
+                CNA_RESULT_BUFFER_TOO_SMALL && length ==
+            (uint64_t)strlen("texture-transform-applied"));
+
+    /* Out-of-range indices, malformed structures and undefined identities are all refused. */
+    REQUIRE(cna_model_get_gltf_import_diagnostic_ext(model, 4U, &diagnostic) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_get_gltf_import_diagnostic_code_byte_count_ext(model, 4U, &length) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_copy_gltf_import_diagnostic_message_ext(
+                model, 4U, buffer, sizeof(buffer), &length) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_get_gltf_import_diagnostic_detail_byte_count_ext(model, 1U, 0U, &length) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_copy_gltf_import_diagnostic_detail_ext(
+                model, 0U, 2U, buffer, sizeof(buffer), &length) == CNA_RESULT_INVALID_ARGUMENT);
+    REQUIRE(cna_model_get_gltf_import_report_ext(model, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_set_gltf_import_report_ext(model, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_get_gltf_import_diagnostic_ext(model, 0U, &malformed) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_add_gltf_import_diagnostic_ext(model, 0) == CNA_RESULT_INVALID_ARGUMENT);
+    descriptor.severity = CNA_GLTF_IMPORT_SEVERITY_MAXIMUM_EXT + 1U;
+    REQUIRE(cna_model_add_gltf_import_diagnostic_ext(model, &descriptor) ==
+            CNA_RESULT_INVALID_ARGUMENT);
+    descriptor.severity = CNA_GLTF_IMPORT_SEVERITY_WARNING_EXT;
+    descriptor.kind = CNA_GLTF_IMPORT_KIND_MAXIMUM_EXT + 1U;
+    REQUIRE(cna_model_add_gltf_import_diagnostic_ext(model, &descriptor) ==
+            CNA_RESULT_INVALID_ARGUMENT);
+    descriptor.kind = CNA_GLTF_IMPORT_KIND_DROPPED_DATA_EXT;
+    descriptor.details = 0;
+    descriptor.detail_count = 1U;
+    REQUIRE(cna_model_add_gltf_import_diagnostic_ext(model, &descriptor) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_get_gltf_import_report_ext(model, &report) == CNA_RESULT_SUCCESS &&
+            report.diagnostic_count == 4U);
+
+    /* Setting the report again clears the diagnostics with it. */
+    REQUIRE(cna_model_set_gltf_import_report_ext(model, &written) == CNA_RESULT_SUCCESS &&
+            cna_model_get_gltf_import_report_ext(model, &report) == CNA_RESULT_SUCCESS &&
+            report.diagnostic_count == 0U && report.anything_lost == CNA_FALSE &&
+            report.node_count == 11U);
+
+    /* Argument validation precedes the handle lookup, so the stale-handle check needs a
+       descriptor that would otherwise be accepted. */
+    descriptor.details = details;
+    descriptor.detail_count = 2U;
+    REQUIRE(cna_model_destroy(model) == CNA_RESULT_SUCCESS &&
+            cna_model_get_gltf_import_report_ext(model, &report) == CNA_RESULT_INVALID_HANDLE &&
+            cna_model_add_gltf_import_diagnostic_ext(model, &descriptor) ==
+                CNA_RESULT_INVALID_HANDLE);
+    return 1;
+}
+
 static int validate_aggregate(const CNA_Handle device)
 {
     CNA_ModelBoneHandle root = CNA_INVALID_HANDLE;
@@ -248,7 +476,7 @@ int main(void)
         {Title, sizeof(Title) - 1U}, &callbacks};
     CNA_Handle game = CNA_INVALID_HANDLE;
 
-    if (!validate_default() || release_count != 2 ||
+    if (!validate_default() || release_count != 2 || !validate_gltf_import_report() ||
         cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || state.stage != 2 ||
         cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
