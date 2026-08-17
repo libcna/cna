@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectFog.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectLights.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IShadowReceiverEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
@@ -20,7 +21,7 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief Built-in effect that supports optional texturing, vertex coloring, fog, and lighting.
      */
-    class BasicEffect : public Effect, public IEffectMatrices, public IEffectFog, public IEffectLights
+    class BasicEffect : public Effect, public IEffectMatrices, public IEffectFog, public IEffectLights, public IShadowReceiverEXT
     {
     public:
         /**
@@ -355,7 +356,35 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void OnApply() override;
 
+
+    public:
+        // ---- CNAEXT: shadow reception (plan_modern.md MOD-820) ----------------------------
+
+        /** @brief Sets the shadow map this effect samples. @param shadowMap The map, or null. */
+        CNAEXT void setShadowMapEXT(Texture2D* shadowMap) override;
+        /** @brief Returns the attached shadow map, or null. */
+        CNAEXT [[nodiscard]] Texture2D* getShadowMapEXT() const override;
+        /** @brief Sets the light's view-projection matrix. @param lightViewProjection The matrix. */
+        CNAEXT void setLightViewProjectionEXT(const Matrix& lightViewProjection) override;
+        /** @brief Returns the light's view-projection matrix. */
+        CNAEXT [[nodiscard]] Matrix getLightViewProjectionEXT() const override;
+        /** @brief Enables or disables shadow sampling. @param enabled True to sample. */
+        CNAEXT void setShadowsEnabledEXT(bool enabled) override;
+        /** @brief Returns whether shadow sampling is enabled. */
+        CNAEXT [[nodiscard]] bool isShadowsEnabledEXT() const override;
+        /** @brief Sets the shadow comparison bias. @param bias The bias. */
+        CNAEXT void setShadowDepthBiasEXT(float bias) override;
+        /** @brief Returns the shadow comparison bias. */
+        CNAEXT [[nodiscard]] float getShadowDepthBiasEXT() const override;
+
     private:
+
+        // CNAEXT shadow reception (MOD-820). Inert by default: an effect that is never given a
+        // shadow map renders exactly as it did before this existed.
+        Texture2D* shadowMapEXT_ = nullptr;
+        Matrix lightViewProjectionEXT_{};
+        bool  shadowsEnabledEXT_ = false;
+        float shadowDepthBiasEXT_ = 0.0015f;
         explicit BasicEffect(const BasicEffect& cloneSource);
 
         Vector3 diffuseColor_           = Vector3{1.0f, 1.0f, 1.0f};

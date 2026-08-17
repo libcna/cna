@@ -897,6 +897,16 @@ namespace CNA::Internal::Renderers
         /// EnvironmentMapEffect: camera world-space position for reflection vector.
         /// BasicEffect (lit path only): camera world-space position for specular half-vector.
         float eyePositionWorld[3] = {0,0,0};
+        /// plan_modern.md MOD-821: shadow reception. `shadowMap` holds light-space distance (not a
+        /// depth buffer -- CNA cannot sample a depth attachment; see CNA::Graphics::ShadowMap), and
+        /// `lightViewProjColMajor` takes a world position into that map's space. Defaults mean "no
+        /// shadows", and a renderer with no shadow-sampling variant accepts and ignores them, the
+        /// same convention the PBR fields use.
+        const ITextureRenderer* shadowMap = nullptr;
+        float lightViewProjColMajor[16] = {
+            1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+        bool  shadowsEnabled = false;
+        float shadowDepthBias = 0.0015f;
         /// BasicEffect: DirectionalLight0/1/2's SpecularColor, zeroed when that light is disabled
         /// (mirrors the light*Diffuse zeroing — FNA's DirectionalLight.Enabled setter zeroes both).
         float light0Specular[3] = {0,0,0};

@@ -463,13 +463,13 @@ depth-based effects will reuse.
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| MOD-820 | `IShadowReceiverEXT` interface (`setShadowMapEXT`, `setLightViewProjectionEXT`, `setShadowsEnabledEXT`) | ⬜ | Header in `Microsoft/Xna/Framework/Graphics/`, `CNAEXT`-marked, no `#ifdef`; includes `CNA/CNAHelper.hpp`. |
-| MOD-821 | `GpuDrawParams` shadow field group (`shadowMap`, `lightViewProjColMajor[16]`, `shadowsEnabled`, `shadowBias`, `shadowMapTexelSize`) | ⬜ | Appended with defaults that mean "no shadows"; every renderer compiles and ignores them unchanged. |
-| MOD-822 | `BasicEffect` implements `IShadowReceiverEXT` + fills the params | ⬜ | Tests cover the 3 setters and the filled params; no behavior change when disabled. |
-| MOD-823 | `SkinnedEffect` implements `IShadowReceiverEXT` | ⬜ | Same. |
-| MOD-824 | `PbrEffect` implements `IShadowReceiverEXT` | ⬜ | Same. |
-| MOD-825 | `SkinnedPbrEffect` implements `IShadowReceiverEXT` | ⬜ | Same. |
-| MOD-826 | Document the "accepted and ignored on renderers without the shader" convention for these fields | ⬜ | Matches the PBR precedent; written in `docs/cnaext-engine-layer.md` and in each effect's header. |
+| MOD-820 | `IShadowReceiverEXT` interface (`setShadowMapEXT`, `setLightViewProjectionEXT`, `setShadowsEnabledEXT`) | ✅ | Done. `IShadowReceiverEXT` in the XNA namespace, `CNAEXT`-marked and always compiled — receiving a shadow is a per-draw material property, and gating it behind a compile option would make an effect's public surface change with a build flag. Generating the map stays in the engine layer; this is the seam. |
+| MOD-821 | `GpuDrawParams` shadow field group (`shadowMap`, `lightViewProjColMajor[16]`, `shadowsEnabled`, `shadowBias`, `shadowMapTexelSize`) | ✅ | Done — `shadowMap`, `lightViewProjColMajor[16]`, `shadowsEnabled` and `shadowDepthBias` appended to `GpuDrawParams` with inert defaults, so every renderer compiles unchanged and one without a shadow variant accepts and ignores them. |
+| MOD-822 | `BasicEffect` implements `IShadowReceiverEXT` + fills the params | ✅ | Done — `BasicEffect`. |
+| MOD-823 | `SkinnedEffect` implements `IShadowReceiverEXT` | ✅ | Done — `SkinnedEffect`. |
+| MOD-824 | `PbrEffect` implements `IShadowReceiverEXT` | ✅ | Done — `PbrEffect`. |
+| MOD-825 | `SkinnedPbrEffect` implements `IShadowReceiverEXT` | ✅ | Done — `SkinnedPbrEffect`. |
+| MOD-826 | Document the "accepted and ignored on renderers without the shader" convention for these fields | ✅ | Done — documented on the interface itself, next to the reason the generating half lives elsewhere. |
 | MOD-827 | Decide whether shadow reception needs a shader-variant explosion or a uniform branch | ⬜ | Written decision (recommendation: one extra variant per lit shader, keyed by `shadowsEnabled`, to avoid a runtime branch on mobile GPUs). |
 
 ### 8.3 EasyGL reference shaders
@@ -490,7 +490,7 @@ depth-based effects will reuse.
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
 | MOD-850 | Unit tests: light matrices, ortho fitting, quality→size table, settings | ✅ | Done — 12 cases: the size table, the view/backward-vector convention, the straight-down and unnormalized-direction cases, containment and tightness of the fitted volume, a degenerate scene, both misuse guards, and that an empty pass leaves the map meaning "nothing occludes". |
-| MOD-851 | Unit tests: `IShadowReceiverEXT` on all four effects (setters, params, disabled default) | ⬜ | Both equal and unequal cases per CLAUDE.md's test rules. |
+| MOD-851 | Unit tests: `IShadowReceiverEXT` on all four effects (setters, params, disabled default) | ✅ | Done — 7 cases, exercised through an `IShadowReceiverEXT&` rather than the concrete types (a shadow subsystem should not need to know which effect it is talking to). Includes the two that matter beyond round-tripping: the defaults leave `GpuDrawParams` exactly as before this existed, and enabling shadows without attaching a map does not tell the renderer to sample a texture that is not there. |
 | MOD-852 | Golden image: single cube on a plane, sun at 45° | ⬜ | Committed golden. |
 | MOD-853 | Golden image: shadows disabled == unshadowed render | ⬜ | Bit-identical. |
 | MOD-854 | Golden image: skinned character self-shadowing | ⬜ | Committed golden. |

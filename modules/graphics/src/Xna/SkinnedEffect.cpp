@@ -319,6 +319,17 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SkinnedEffect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& p) const
     {
+        // MOD-821: accepted-and-ignored on renderers without a shadow-sampling variant, exactly
+        // like the PBR fields beside them.
+        p.shadowsEnabled  = shadowsEnabledEXT_ && shadowMapEXT_ != nullptr;
+        p.shadowDepthBias = shadowDepthBiasEXT_;
+        if (p.shadowsEnabled)
+        {
+            p.shadowMap = &shadowMapEXT_->GetRenderer();
+            const float* lightMatrix = &lightViewProjectionEXT_.M11;
+            for (int i = 0; i < 16; ++i) p.lightViewProjColMajor[i] = lightMatrix[i];
+        }
+
         p.skinned            = true;
         p.textureEnabled     = true;
         p.lightingEnabled    = true;
@@ -541,4 +552,23 @@ namespace Microsoft::Xna::Framework::Graphics
         static const std::string name = "Microsoft.Xna.Framework.Graphics.SkinnedEffect";
         return name;
     }
+
+    void SkinnedEffect::setShadowMapEXT(Texture2D* shadowMap) { shadowMapEXT_ = shadowMap; }
+
+    Texture2D* SkinnedEffect::getShadowMapEXT() const { return shadowMapEXT_; }
+
+    void SkinnedEffect::setLightViewProjectionEXT(const Matrix& lightViewProjection)
+    {
+        lightViewProjectionEXT_ = lightViewProjection;
+    }
+
+    Matrix SkinnedEffect::getLightViewProjectionEXT() const { return lightViewProjectionEXT_; }
+
+    void SkinnedEffect::setShadowsEnabledEXT(bool enabled) { shadowsEnabledEXT_ = enabled; }
+
+    bool SkinnedEffect::isShadowsEnabledEXT() const { return shadowsEnabledEXT_; }
+
+    void SkinnedEffect::setShadowDepthBiasEXT(float bias) { shadowDepthBiasEXT_ = bias; }
+
+    float SkinnedEffect::getShadowDepthBiasEXT() const { return shadowDepthBiasEXT_; }
 }

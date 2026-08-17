@@ -431,6 +431,17 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void PbrEffect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& p) const
     {
+        // MOD-821: accepted-and-ignored on renderers without a shadow-sampling variant, exactly
+        // like the PBR fields beside them.
+        p.shadowsEnabled  = shadowsEnabledEXT_ && shadowMapEXT_ != nullptr;
+        p.shadowDepthBias = shadowDepthBiasEXT_;
+        if (p.shadowsEnabled)
+        {
+            p.shadowMap = &shadowMapEXT_->GetRenderer();
+            const float* lightMatrix = &lightViewProjectionEXT_.M11;
+            for (int i = 0; i < 16; ++i) p.lightViewProjColMajor[i] = lightMatrix[i];
+        }
+
         using namespace CNA::Internal::Renderers;
 
         p.pbr             = true;
@@ -599,4 +610,23 @@ namespace Microsoft::Xna::Framework::Graphics
         static const std::string name = "Microsoft.Xna.Framework.Graphics.PbrEffect";
         return name;
     }
+
+    void PbrEffect::setShadowMapEXT(Texture2D* shadowMap) { shadowMapEXT_ = shadowMap; }
+
+    Texture2D* PbrEffect::getShadowMapEXT() const { return shadowMapEXT_; }
+
+    void PbrEffect::setLightViewProjectionEXT(const Matrix& lightViewProjection)
+    {
+        lightViewProjectionEXT_ = lightViewProjection;
+    }
+
+    Matrix PbrEffect::getLightViewProjectionEXT() const { return lightViewProjectionEXT_; }
+
+    void PbrEffect::setShadowsEnabledEXT(bool enabled) { shadowsEnabledEXT_ = enabled; }
+
+    bool PbrEffect::isShadowsEnabledEXT() const { return shadowsEnabledEXT_; }
+
+    void PbrEffect::setShadowDepthBiasEXT(float bias) { shadowDepthBiasEXT_ = bias; }
+
+    float PbrEffect::getShadowDepthBiasEXT() const { return shadowDepthBiasEXT_; }
 }

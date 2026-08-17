@@ -52,6 +52,17 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         using namespace CNA::Internal::Renderers;
 
+        // MOD-821: carried to the renderer whether or not it has a shadow-sampling variant --
+        // the same accepted-and-ignored convention the PBR fields use.
+        p.shadowsEnabled  = shadowsEnabledEXT_ && shadowMapEXT_ != nullptr;
+        p.shadowDepthBias = shadowDepthBiasEXT_;
+        if (p.shadowsEnabled)
+        {
+            p.shadowMap = &shadowMapEXT_->GetRenderer();
+            const float* m = &lightViewProjectionEXT_.M11;
+            for (int i = 0; i < 16; ++i) p.lightViewProjColMajor[i] = m[i];
+        }
+
         p.textureEnabled     = textureEnabled_;
         p.vertexColorEnabled = VertexColorEnabled;
         p.lightingEnabled    = lightingEnabled_;
@@ -229,4 +240,23 @@ namespace Microsoft::Xna::Framework::Graphics
         static const std::string name = "Microsoft.Xna.Framework.Graphics.BasicEffect";
         return name;
     }
+
+    void BasicEffect::setShadowMapEXT(Texture2D* shadowMap) { shadowMapEXT_ = shadowMap; }
+
+    Texture2D* BasicEffect::getShadowMapEXT() const { return shadowMapEXT_; }
+
+    void BasicEffect::setLightViewProjectionEXT(const Matrix& lightViewProjection)
+    {
+        lightViewProjectionEXT_ = lightViewProjection;
+    }
+
+    Matrix BasicEffect::getLightViewProjectionEXT() const { return lightViewProjectionEXT_; }
+
+    void BasicEffect::setShadowsEnabledEXT(bool enabled) { shadowsEnabledEXT_ = enabled; }
+
+    bool BasicEffect::isShadowsEnabledEXT() const { return shadowsEnabledEXT_; }
+
+    void BasicEffect::setShadowDepthBiasEXT(float bias) { shadowDepthBiasEXT_ = bias; }
+
+    float BasicEffect::getShadowDepthBiasEXT() const { return shadowDepthBiasEXT_; }
 }
