@@ -65,6 +65,19 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param count Number of vec2 elements (`values` holds `count * 2` floats).
          */
         CNAEXT void SetUniformVec2Array(const char* name, const float* values, int count);
+
+        /**
+         * @brief Sets a `vec3` array uniform.
+         *
+         * Distinct from SetUniformFloatArray for a reason that costs an afternoon to rediscover:
+         * GL rejects filling a `vec3[]` from a float array as a type mismatch and leaves the
+         * uniform at its default, without an error the caller sees.
+         *
+         * @param name   The uniform's name in the shader.
+         * @param values Pointer to @p count * 3 floats.
+         * @param count  Number of vec3 elements.
+         */
+        CNAEXT void SetUniformVec3Array(const char* name, const float* values, int count);
         /**
          * @brief Binds a texture to an additional sampler unit for this effect's shader.
          *

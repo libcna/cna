@@ -70,6 +70,11 @@ namespace Microsoft::Xna::Framework::Graphics
         if (effectRenderer_) effectRenderer_->SetUniformVec2Array(name, values, count);
     }
 
+    void ShaderEffect::SetUniformVec3Array(const char* name, const float* values, int count)
+    {
+        if (effectRenderer_) effectRenderer_->SetUniformVec3Array(name, values, count);
+    }
+
     void ShaderEffect::SetTexture(int unit, Texture2D& texture)
     {
         if (effectRenderer_) effectRenderer_->BindTexture(unit, &texture.GetRenderer());

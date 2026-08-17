@@ -686,6 +686,12 @@ namespace CNA::Internal::Renderers
         /// Sets a vec2 array uniform by name. `count` is the number of vec2 elements
         /// (`values` holds `count * 2` floats).
         virtual void SetUniformVec2Array(const char* name, const float* values, int count) {}
+
+        /// plan_modern.md MOD-217 (reopened): uploads @p count vec3 values. A vec3 array cannot be
+        /// filled through SetUniformFloatArray -- GL rejects the type mismatch and leaves the
+        /// uniform at zero, silently, which is how an SSAO kernel of 64 vec3s turns into 64 samples
+        /// at the origin and an image with no occlusion in it at all.
+        virtual void SetUniformVec3Array(const char* name, const float* values, int count) {}
         /// Binds a texture to the given sampler unit (0-based) for subsequent draw calls.
         /// Unit 0 is normally driven by the caller (e.g. SpriteBatch); this is for additional
         /// units a custom shader samples directly (e.g. a second blend-source texture).

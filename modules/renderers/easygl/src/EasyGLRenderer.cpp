@@ -1613,6 +1613,12 @@ if (!ProfileIsEs2ApiGeneration())
         if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count) * 2), 2);
     }
 
+    void EasyGLEffectRenderer::SetUniformVec3Array(const char* name, const float* values, int count)
+    {
+        const int loc = program_.uniform_location(name);
+        if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count) * 3), 3);
+    }
+
     void EasyGLEffectRenderer::BindTexture(int unit, ITextureRenderer* texture)
     {
         if (!texture) return;
