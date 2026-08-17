@@ -18,9 +18,20 @@
 > honest rather than cosmetic, and it reproduced the pre-merge `implemented` figure of 6,111 to the
 > symbol.
 >
-> So `coverage-closed` is recorded **not met** and the release gate reads **not ready** again. Both
-> are true, and neither is a regression introduced by the merge — they are what was already the case
-> and had not been visible. `CBIND-051` binds the 176.
+> `CBIND-051A`–`051E` then bound all 176 — the KHR material extensions on both PBR effects, the
+> glTF import report and its diagnostics, the mesh-part and clip target-space families, the model's
+> cameras, skins, bounds and material variants, and the animation-player additions — with exactly
+> one row recorded not applicable. The matrix reads **6,286 implemented, 12 approved partial, 0
+> planned, 386 not applicable** and `RELEASE_GATE.md` is back to **ready**. Every ABI change across
+> the five slices was purely additive: nothing was renamed, resized or relaid out.
+>
+> Two of those slices met the same question and gave it the same answer, which is worth carrying
+> forward. `AnimationClipEXT::TargetSpace` and `MorphTargetDataEXT::TangentDeltas` both belong
+> naturally on a published creation descriptor, and both of those descriptors carry **no size or
+> version header** — so growing either would move every field after it, a break costing a minor
+> version even at experimental 0.1.0. Both became separate routes instead. A new versioned struct
+> gets `struct_size`/`struct_version`; an old unversioned one is frozen, and anything it lacks is
+> reached another way.
 >
 > The lesson generalises past this gate: a rule that says "everything here is covered" needs to name
 > what "here" was when someone checked, or a later merge inherits an approval nobody gave.

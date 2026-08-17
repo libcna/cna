@@ -267,7 +267,146 @@ static int validate_all(void)
     return 1;
 }
 
+/* CBIND-051E: the clips a glTF scene declares apart from any one skeleton, the rig root a file
+   names, and the two helpers that pose a model directly. */
+static int validate_model_animations_ext(void)
+{
+    const CNA_KeyframeEXT keys[2] = {
+        {0.0, {0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 0.0F, 1.0F}, {1.0F, 1.0F, 1.0F}},
+        {1.0, {2.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 0.0F, 1.0F}, {1.0F, 1.0F, 1.0F}}};
+    const CNA_BoneTrackEXTDescriptor tracks[1] = {{0, 0U, keys, 2U}};
+    const CNA_AnimationClipEXTDescriptor clip = {1.0, tracks, 1U};
+    const CNA_NamedAnimationClipEXTDescriptor named[2] = {
+        {{"Walk", 4U}, {1.0, tracks, 1U}},
+        {{"Idle", 4U}, {2.0, tracks, 1U}}};
+    CNA_ModelAnimationsEXTHandle animations = CNA_INVALID_HANDLE;
+    CNA_ModelAnimationsEXTHandle empty = CNA_INVALID_HANDLE;
+    CNA_ModelHandle model = CNA_INVALID_HANDLE;
+    CNA_SkinningDataHandle data = CNA_INVALID_HANDLE;
+    CNA_ClipTargetSpaceEXT space = UINT32_MAX;
+    char buffer[64];
+    double duration = -1.0;
+    uint64_t count = UINT64_MAX;
+    uint64_t length = UINT64_MAX;
+    uint64_t posed = UINT64_MAX;
+    int32_t root = INT32_MIN;
+
+    (void)clip;
+
+    REQUIRE(cna_model_animations_ext_create(0, 0U, &empty) == CNA_RESULT_SUCCESS &&
+            cna_model_animations_ext_get_clip_count(empty, &count) == CNA_RESULT_SUCCESS &&
+            count == 0U &&
+            cna_model_animations_ext_destroy(empty) == CNA_RESULT_SUCCESS);
+
+    REQUIRE(cna_model_animations_ext_create(named, 2U, &animations) == CNA_RESULT_SUCCESS &&
+            cna_model_animations_ext_get_clip_count(animations, &count) == CNA_RESULT_SUCCESS &&
+            count == 2U);
+
+    /* The canonical type keeps clips in a hash map, so the C order is sorted rather than
+       whatever the map happens to traverse. */
+    REQUIRE(cna_model_animations_ext_copy_clip_name_at(
+                animations, 0U, buffer, sizeof(buffer), &length) == CNA_RESULT_SUCCESS &&
+            length == 4U && memcmp(buffer, "Idle", 4U) == 0 &&
+            cna_model_animations_ext_copy_clip_name_at(
+                animations, 1U, buffer, sizeof(buffer), &length) == CNA_RESULT_SUCCESS &&
+            memcmp(buffer, "Walk", 4U) == 0 &&
+            cna_model_animations_ext_get_clip_name_byte_count_at(animations, 1U, &length) ==
+                CNA_RESULT_SUCCESS && length == 4U);
+
+    REQUIRE(cna_model_animations_ext_get_clip_info_at(
+                animations, 0U, &duration, &count, &space) == CNA_RESULT_SUCCESS &&
+            duration == 2.0 && count == 1U &&
+            space == CNA_CLIP_TARGET_SPACE_JOINT_PALETTE_EXT &&
+            cna_model_animations_ext_get_clip_info_at(
+                animations, 1U, &duration, &count, &space) == CNA_RESULT_SUCCESS &&
+            duration == 1.0);
+
+    REQUIRE(cna_model_animations_ext_get_type_name_byte_count(animations, &length) ==
+                CNA_RESULT_SUCCESS && length > 0U &&
+            cna_model_animations_ext_copy_type_name(
+                animations, buffer, sizeof(buffer), &count) == CNA_RESULT_SUCCESS &&
+            count == length &&
+            memcmp(buffer, "Microsoft.Xna.Framework.Graphics.ModelAnimationsEXT",
+                   (size_t)count) == 0);
+
+    /* A joint-palette clip applied to Model::Bones is refused, not silently mis-posed. */
+    REQUIRE(cna_model_create_default(&model) == CNA_RESULT_SUCCESS &&
+            cna_model_apply_clip_to_bones_ext(model, animations, 1U, 0.5) ==
+                CNA_RESULT_INVALID_ARGUMENT);
+    REQUIRE(cna_model_animations_ext_set_clip_target_space_at(
+                animations, 1U, CNA_CLIP_TARGET_SPACE_SCENE_NODE_EXT) == CNA_RESULT_SUCCESS &&
+            cna_model_animations_ext_get_clip_info_at(
+                animations, 1U, &duration, &count, &space) == CNA_RESULT_SUCCESS &&
+            space == CNA_CLIP_TARGET_SPACE_SCENE_NODE_EXT &&
+            cna_model_apply_clip_to_bones_ext(model, animations, 1U, 0.5) ==
+                CNA_RESULT_SUCCESS);
+
+    /* The declared rig root a file names, which older paths leave unset. */
+    {
+        const CNA_Matrix bind[1] = {{1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F,
+                                     0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F}};
+        const int32_t hierarchy[1] = {-1};
+        const CNA_SkinningDataDescriptor skinning = {
+            1, 0U, hierarchy, bind, bind, 0, 0U, 0, 0U};
+        REQUIRE(cna_skinning_data_create(&skinning, &data) == CNA_RESULT_SUCCESS);
+    }
+    REQUIRE(cna_skinning_data_get_skeleton_root_node_index_ext(data, &root) ==
+                CNA_RESULT_SUCCESS && root == -1 &&
+            cna_skinning_data_get_skeleton_root_name_byte_count_ext(data, &length) ==
+                CNA_RESULT_SUCCESS && length == 0U &&
+            cna_skinning_data_set_skeleton_root_node_index_ext(data, 4) == CNA_RESULT_SUCCESS &&
+            cna_skinning_data_get_skeleton_root_node_index_ext(data, &root) ==
+                CNA_RESULT_SUCCESS && root == 4 &&
+            cna_skinning_data_set_skeleton_root_name_ext(data, string_view("Armature")) ==
+                CNA_RESULT_SUCCESS &&
+            cna_skinning_data_copy_skeleton_root_name_ext(
+                data, buffer, sizeof(buffer), &length) == CNA_RESULT_SUCCESS &&
+            length == 8U && memcmp(buffer, "Armature", 8U) == 0);
+    memset(buffer, '#', sizeof(buffer));
+    REQUIRE(cna_skinning_data_copy_skeleton_root_name_ext(data, buffer, 2U, &length) ==
+                CNA_RESULT_BUFFER_TOO_SMALL && length == 8U && buffer[0] == '#');
+
+    /* A model with no skinned effects poses none, and says so rather than failing. */
+    REQUIRE(cna_model_apply_bind_pose_bone_transforms_ext(model, data, &posed) ==
+                CNA_RESULT_SUCCESS && posed == 0U);
+
+    /* Out-of-range indices, undefined identities, null outputs and stale handles are refused. */
+    REQUIRE(cna_model_animations_ext_get_clip_info_at(
+                animations, 2U, &duration, &count, &space) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_animations_ext_copy_clip_name_at(
+                animations, 2U, buffer, sizeof(buffer), &length) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_animations_ext_set_clip_target_space_at(
+                animations, 0U, CNA_CLIP_TARGET_SPACE_MAXIMUM_EXT + 1U) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_animations_ext_get_clip_count(animations, 0) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_animations_ext_create(0, 1U, &empty) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_animations_ext_create(named, 2U, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_apply_clip_to_bones_ext(model, animations, 5U, 0.0) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_apply_bind_pose_bone_transforms_ext(model, data, 0) ==
+                CNA_RESULT_INVALID_ARGUMENT);
+    {
+        /* Duplicate clip names are refused rather than silently collapsing to one. */
+        const CNA_NamedAnimationClipEXTDescriptor duplicate[2] = {
+            {{"Walk", 4U}, {1.0, tracks, 1U}},
+            {{"Walk", 4U}, {1.0, tracks, 1U}}};
+        REQUIRE(cna_model_animations_ext_create(duplicate, 2U, &empty) ==
+                    CNA_RESULT_INVALID_ARGUMENT && empty == CNA_INVALID_HANDLE);
+    }
+
+    REQUIRE(cna_model_animations_ext_destroy(animations) == CNA_RESULT_SUCCESS &&
+            cna_model_animations_ext_get_clip_count(animations, &count) ==
+                CNA_RESULT_INVALID_HANDLE &&
+            cna_model_apply_clip_to_bones_ext(model, animations, 0U, 0.0) ==
+                CNA_RESULT_INVALID_HANDLE &&
+            cna_skinning_data_destroy(data) == CNA_RESULT_SUCCESS &&
+            cna_model_destroy(model) == CNA_RESULT_SUCCESS);
+    return 1;
+}
+
 int main(void)
 {
-    return validate_all() ? 0 : 1;
+    return validate_all() && validate_model_animations_ext() ? 0 : 1;
 }

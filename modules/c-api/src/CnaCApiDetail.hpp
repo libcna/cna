@@ -176,6 +176,7 @@ enum class ObjectKind : uint32_t {
     AvatarDescription = 118,
     AvatarAnimation = 119,
     AvatarRenderer = 120,
+    ModelAnimationsEXT = 121,
     Test = UINT32_MAX
 };
 

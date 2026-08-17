@@ -2421,6 +2421,163 @@ CNA_C_API CNA_Result cna_matrix_create_infinite_perspective_field_of_view_ext(
     float near_plane_distance,
     CNA_Matrix* out_matrix);
 
+/** @brief Owned stable handle for a copied set of named animation clips. */
+typedef CNA_Handle CNA_ModelAnimationsEXTHandle;
+
+/**
+ * @brief Creates an owned set of named animation clips.
+ *
+ * CNA extension: the clips a glTF scene declares, separate from any one skeleton, so a model
+ * whose animations target scene nodes rather than a joint palette has somewhere to keep them.
+ *
+ * @param clips Named clips borrowed for the call, or null for an empty set.
+ * @param clip_count Number of named clips.
+ * @param out_animations Receives the owned handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_animations_ext_create(
+    const CNA_NamedAnimationClipEXTDescriptor* clips,
+    uint64_t clip_count,
+    CNA_ModelAnimationsEXTHandle* out_animations);
+
+/** @brief Releases an owned ModelAnimationsEXT handle. */
+CNA_C_API CNA_Result cna_model_animations_ext_destroy(CNA_ModelAnimationsEXTHandle animations);
+
+/** @brief Gets the exact byte count of the ModelAnimationsEXT type name. */
+CNA_C_API CNA_Result cna_model_animations_ext_get_type_name_byte_count(
+    CNA_ModelAnimationsEXTHandle animations,
+    uint64_t* out_byte_count);
+
+/** @brief Copies the ModelAnimationsEXT type name without a terminator. */
+CNA_C_API CNA_Result cna_model_animations_ext_copy_type_name(
+    CNA_ModelAnimationsEXTHandle animations,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/** @brief Gets how many clips this set carries. */
+CNA_C_API CNA_Result cna_model_animations_ext_get_clip_count(
+    CNA_ModelAnimationsEXTHandle animations,
+    uint64_t* out_count);
+
+/** @brief Gets the exact byte count of one clip name, in sorted order. */
+CNA_C_API CNA_Result cna_model_animations_ext_get_clip_name_byte_count_at(
+    CNA_ModelAnimationsEXTHandle animations,
+    uint64_t clip_index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies one clip name without a terminator, in sorted order.
+ *
+ * Sorted rather than in insertion order: the canonical type keeps its clips in a hash map, whose
+ * traversal order is not something a C consumer may depend on.
+ *
+ * @param animations ModelAnimationsEXT handle.
+ * @param clip_index Clip index below the clip count.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_model_animations_ext_copy_clip_name_at(
+    CNA_ModelAnimationsEXTHandle animations,
+    uint64_t clip_index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Gets one clip's duration, track count and target space.
+ * @param animations ModelAnimationsEXT handle.
+ * @param clip_index Clip index below the clip count.
+ * @param out_duration_seconds Receives the clip duration in seconds.
+ * @param out_track_count Receives the number of bone tracks.
+ * @param out_target_space Receives one `CNA_CLIP_TARGET_SPACE_*_EXT` identity.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_animations_ext_get_clip_info_at(
+    CNA_ModelAnimationsEXTHandle animations,
+    uint64_t clip_index,
+    double* out_duration_seconds,
+    uint64_t* out_track_count,
+    CNA_ClipTargetSpaceEXT* out_target_space);
+
+/** @brief States which index space one clip's bone indices are in. */
+CNA_C_API CNA_Result cna_model_animations_ext_set_clip_target_space_at(
+    CNA_ModelAnimationsEXTHandle animations,
+    uint64_t clip_index,
+    CNA_ClipTargetSpaceEXT value);
+
+/**
+ * @brief Poses a model's bones from one scene-node clip at a point in time.
+ *
+ * Each track's bone index selects a `Model::Bones` entry directly, so the clip must state
+ * `CNA_CLIP_TARGET_SPACE_SCENE_NODE_EXT`: applying a joint-palette clip's indices to `Model::Bones`
+ * would pose the wrong bones without saying so, which is why it is refused here instead.
+ *
+ * @param model Model handle.
+ * @param animations ModelAnimationsEXT handle holding the clip.
+ * @param clip_index Clip index below the clip count.
+ * @param time_seconds The time to evaluate at, clamped to the clip's duration.
+ * @return `CNA_RESULT_INVALID_ARGUMENT` for a joint-palette clip or an out-of-range index.
+ */
+CNA_C_API CNA_Result cna_model_apply_clip_to_bones_ext(
+    CNA_ModelHandle model,
+    CNA_ModelAnimationsEXTHandle animations,
+    uint64_t clip_index,
+    double time_seconds);
+
+/**
+ * @brief Poses every skinned effect on a model with its skeleton's bind pose.
+ *
+ * A model from an older or non-glTF path has no per-skin mapping and retains the historical
+ * apply-to-all behaviour. This holds no state of its own: animating afterwards simply overwrites
+ * the palette.
+ *
+ * @param model Model handle whose parts carry skinned effects.
+ * @param data SkinningData handle, normally the skeleton the model was built with.
+ * @param out_posed_count Receives how many skinned effects were posed; 0 for a model with none.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_apply_bind_pose_bone_transforms_ext(
+    CNA_ModelHandle model,
+    CNA_SkinningDataHandle data,
+    uint64_t* out_posed_count);
+
+/** @brief Gets the declared rig root's scene-node index, or -1 when the file declares none. */
+CNA_C_API CNA_Result cna_skinning_data_get_skeleton_root_node_index_ext(
+    CNA_SkinningDataHandle data,
+    int32_t* out_value);
+
+/** @brief States the declared rig root's scene-node index, or -1 for none. */
+CNA_C_API CNA_Result cna_skinning_data_set_skeleton_root_node_index_ext(
+    CNA_SkinningDataHandle data,
+    int32_t value);
+
+/** @brief Gets the exact byte count of the declared rig root's node name. */
+CNA_C_API CNA_Result cna_skinning_data_get_skeleton_root_name_byte_count_ext(
+    CNA_SkinningDataHandle data,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies the declared rig root's node name without a terminator.
+ * @param data SkinningData handle.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_skinning_data_copy_skeleton_root_name_ext(
+    CNA_SkinningDataHandle data,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/** @brief States the declared rig root's node name; may be empty. */
+CNA_C_API CNA_Result cna_skinning_data_set_skeleton_root_name_ext(
+    CNA_SkinningDataHandle data,
+    CNA_StringView name);
+
 #ifdef __cplusplus
 }
 #endif

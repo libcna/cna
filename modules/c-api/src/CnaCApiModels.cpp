@@ -56,6 +56,9 @@ using Microsoft::Xna::Framework::Graphics::ModelBoneCollection;
 using Microsoft::Xna::Framework::Graphics::ModelEffectCollection;
 using Microsoft::Xna::Framework::Graphics::ModelMesh;
 using Microsoft::Xna::Framework::Graphics::ModelMeshPart;
+using Microsoft::Xna::Framework::Graphics::ApplyBindPoseBoneTransformsEXT;
+using Microsoft::Xna::Framework::Graphics::ApplyClipToBonesEXT;
+using Microsoft::Xna::Framework::Graphics::ModelAnimationsEXT;
 using Microsoft::Xna::Framework::Graphics::ModelCameraEXT;
 using Microsoft::Xna::Framework::Graphics::ModelSkinEXT;
 using Microsoft::Xna::Framework::Graphics::ClipTargetSpaceEXT;
@@ -6682,6 +6685,410 @@ CNA_Result cna_matrix_create_infinite_perspective_field_of_view_ext(
         *outMatrix = ToC(Microsoft::Xna::Framework::Graphics::
                                    CreateInfinitePerspectiveFieldOfViewEXT(
                                        fieldOfView, aspectRatio, nearPlaneDistance));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+struct ModelAnimationsResource final {
+    std::shared_ptr<ModelAnimationsEXT> value = std::make_shared<ModelAnimationsEXT>();
+};
+
+[[nodiscard]] std::vector<std::string> SortedAnimationClipNames(
+    const ModelAnimationsEXT& animations)
+{
+    std::vector<std::string> names;
+    names.reserve(animations.Clips.size());
+    for (const auto& [name, ignored] : animations.Clips) {
+        static_cast<void>(ignored);
+        names.push_back(name);
+    }
+    std::sort(names.begin(), names.end());
+    return names;
+}
+
+[[nodiscard]] CNA_Result GetModelAnimations(
+    const CNA_ModelAnimationsEXTHandle handle,
+    std::shared_ptr<ModelAnimationsResource>* const outAnimations)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::ModelAnimationsEXT, outAnimations);
+    return result == CNA_RESULT_SUCCESS
+        ? CNA_RESULT_SUCCESS
+        : Fail(
+            result, ErrorCategoryForResult(result),
+            "The ModelAnimationsEXT handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result GetAnimationClipAt(
+    const CNA_ModelAnimationsEXTHandle handle,
+    const uint64_t clipIndex,
+    std::shared_ptr<ModelAnimationsResource>* const outAnimations,
+    std::string* const outName)
+{
+    if (const CNA_Result result = GetModelAnimations(handle, outAnimations);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<std::string> names = SortedAnimationClipNames(*(*outAnimations)->value);
+    if (clipIndex >= names.size()) {
+        return InvalidArgument("The ModelAnimationsEXT clip index is outside the valid range.");
+    }
+    *outName = names[static_cast<std::size_t>(clipIndex)];
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_model_animations_ext_create(
+    const CNA_NamedAnimationClipEXTDescriptor* const clips,
+    const uint64_t clipCount,
+    CNA_ModelAnimationsEXTHandle* const outAnimations)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outAnimations == nullptr) {
+            return InvalidArgument("The ModelAnimationsEXT output handle is null.");
+        }
+        *outAnimations = CNA_INVALID_HANDLE;
+        if (clips == nullptr && clipCount != 0U) {
+            return InvalidArgument("The ModelAnimationsEXT clip array is null.");
+        }
+        auto resource = std::make_shared<ModelAnimationsResource>();
+        if (clipCount > resource->value->Clips.max_size()) {
+            return Fail(
+                CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
+                "The ModelAnimationsEXT clip count is too large.");
+        }
+        resource->value->Clips.reserve(static_cast<std::size_t>(clipCount));
+        for (uint64_t index = 0U; index < clipCount; ++index) {
+            const CNA_NamedAnimationClipEXTDescriptor& source = clips[index];
+            std::string name;
+            if (const CNA_Result result = CopyStringView(source.name, true, &name);
+                result != CNA_RESULT_SUCCESS) {
+                return Fail(
+                    result, ErrorCategoryForResult(result),
+                    "A ModelAnimationsEXT clip name is not valid UTF-8 text.");
+            }
+            if (resource->value->Clips.contains(name)) {
+                return InvalidArgument("ModelAnimationsEXT clip names must be unique.");
+            }
+            AnimationClipEXT clip;
+            if (const CNA_Result result = CopyAnimationClipDescriptor(source.clip, &clip);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            resource->value->Clips.emplace(std::move(name), std::move(clip));
+        }
+        return GetRuntimeHandles().Create(
+            ObjectKind::ModelAnimationsEXT, std::move(resource), outAnimations);
+    });
+}
+
+CNA_Result cna_model_animations_ext_destroy(const CNA_ModelAnimationsEXTHandle handle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelAnimationsResource> animations;
+        if (const CNA_Result result = GetModelAnimations(handle, &animations);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(handle);
+        return result == CNA_RESULT_SUCCESS
+            ? CNA_RESULT_SUCCESS
+            : Fail(
+                result, ErrorCategoryForResult(result),
+                "The ModelAnimationsEXT handle could not be released.");
+    });
+}
+
+CNA_Result cna_model_animations_ext_get_type_name_byte_count(
+    const CNA_ModelAnimationsEXTHandle handle,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteCount == nullptr) {
+            return InvalidArgument("The ModelAnimationsEXT type-name byte-count output is null.");
+        }
+        std::shared_ptr<ModelAnimationsResource> animations;
+        if (const CNA_Result result = GetModelAnimations(handle, &animations);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outByteCount = static_cast<uint64_t>(animations->value->GetTypeName().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_animations_ext_copy_type_name(
+    const CNA_ModelAnimationsEXTHandle handle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelAnimationsResource> animations;
+        if (const CNA_Result result = GetModelAnimations(handle, &animations);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyModelString(
+            animations->value->GetTypeName(), destination, capacity, outByteCount,
+            "The ModelAnimationsEXT type-name output is invalid.",
+            "The destination cannot hold the complete ModelAnimationsEXT type name.");
+    });
+}
+
+CNA_Result cna_model_animations_ext_get_clip_count(
+    const CNA_ModelAnimationsEXTHandle handle,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidArgument("The ModelAnimationsEXT clip-count output is null.");
+        }
+        std::shared_ptr<ModelAnimationsResource> animations;
+        if (const CNA_Result result = GetModelAnimations(handle, &animations);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<uint64_t>(animations->value->Clips.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_animations_ext_get_clip_name_byte_count_at(
+    const CNA_ModelAnimationsEXTHandle handle,
+    const uint64_t clipIndex,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteCount == nullptr) {
+            return InvalidArgument("The ModelAnimationsEXT clip-name byte-count output is null.");
+        }
+        std::shared_ptr<ModelAnimationsResource> animations;
+        std::string name;
+        if (const CNA_Result result = GetAnimationClipAt(handle, clipIndex, &animations, &name);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outByteCount = static_cast<uint64_t>(name.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_animations_ext_copy_clip_name_at(
+    const CNA_ModelAnimationsEXTHandle handle,
+    const uint64_t clipIndex,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelAnimationsResource> animations;
+        std::string name;
+        if (const CNA_Result result = GetAnimationClipAt(handle, clipIndex, &animations, &name);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyModelString(
+            name, destination, capacity, outByteCount,
+            "The ModelAnimationsEXT clip-name output is invalid.",
+            "The destination cannot hold the complete ModelAnimationsEXT clip name.");
+    });
+}
+
+CNA_Result cna_model_animations_ext_get_clip_info_at(
+    const CNA_ModelAnimationsEXTHandle handle,
+    const uint64_t clipIndex,
+    double* const outDurationSeconds,
+    uint64_t* const outTrackCount,
+    CNA_ClipTargetSpaceEXT* const outTargetSpace)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outDurationSeconds == nullptr || outTrackCount == nullptr ||
+            outTargetSpace == nullptr) {
+            return InvalidArgument("The ModelAnimationsEXT clip-info outputs are null.");
+        }
+        std::shared_ptr<ModelAnimationsResource> animations;
+        std::string name;
+        if (const CNA_Result result = GetAnimationClipAt(handle, clipIndex, &animations, &name);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const AnimationClipEXT& clip = animations->value->Clips.at(name);
+        *outDurationSeconds = clip.Duration.getTotalSecondsProperty();
+        *outTrackCount = static_cast<uint64_t>(clip.Tracks.size());
+        *outTargetSpace = static_cast<CNA_ClipTargetSpaceEXT>(clip.TargetSpace);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_animations_ext_set_clip_target_space_at(
+    const CNA_ModelAnimationsEXTHandle handle,
+    const uint64_t clipIndex,
+    const CNA_ClipTargetSpaceEXT value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (value > CNA_CLIP_TARGET_SPACE_MAXIMUM_EXT) {
+            return InvalidArgument("The clip target space is not a defined identity.");
+        }
+        std::shared_ptr<ModelAnimationsResource> animations;
+        std::string name;
+        if (const CNA_Result result = GetAnimationClipAt(handle, clipIndex, &animations, &name);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        animations->value->Clips.at(name).TargetSpace =
+            static_cast<ClipTargetSpaceEXT>(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_apply_clip_to_bones_ext(
+    const CNA_ModelHandle modelHandle,
+    const CNA_ModelAnimationsEXTHandle animationsHandle,
+    const uint64_t clipIndex,
+    const double timeSeconds)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<ModelAnimationsResource> animations;
+        std::string name;
+        if (const CNA_Result result =
+                GetAnimationClipAt(animationsHandle, clipIndex, &animations, &name);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (!IsValidTimeSpanSeconds(timeSeconds)) {
+            return InvalidArgument("The clip evaluation time is not a valid TimeSpan.");
+        }
+        const System::TimeSpan time = System::TimeSpan::FromSeconds(timeSeconds);
+        // A joint-palette clip's indices name palette slots, so applying them to Model::Bones
+        // would pose the wrong bones without saying so. The canonical helper throws; the barrier
+        // turns that into INVALID_ARGUMENT rather than letting it pass as success.
+        ApplyClipToBonesEXT(*model->value, animations->value->Clips.at(name), time);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_apply_bind_pose_bone_transforms_ext(
+    const CNA_ModelHandle modelHandle,
+    const CNA_SkinningDataHandle dataHandle,
+    uint64_t* const outPosedCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPosedCount == nullptr) {
+            return InvalidArgument("The bind-pose posed-count output is null.");
+        }
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outPosedCount = static_cast<uint64_t>(
+            ApplyBindPoseBoneTransformsEXT(*model->value, *data->value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinning_data_get_skeleton_root_node_index_ext(
+    const CNA_SkinningDataHandle dataHandle,
+    int32_t* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The SkinningData skeleton-root index output is null.");
+        }
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = static_cast<int32_t>(data->value->SkeletonRootNodeIndexEXT);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinning_data_set_skeleton_root_node_index_ext(
+    const CNA_SkinningDataHandle dataHandle,
+    const int32_t value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        data->value->SkeletonRootNodeIndexEXT = static_cast<int>(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinning_data_get_skeleton_root_name_byte_count_ext(
+    const CNA_SkinningDataHandle dataHandle,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteCount == nullptr) {
+            return InvalidArgument("The SkinningData skeleton-root name output is null.");
+        }
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outByteCount = static_cast<uint64_t>(data->value->SkeletonRootNameEXT.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinning_data_copy_skeleton_root_name_ext(
+    const CNA_SkinningDataHandle dataHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyModelString(
+            data->value->SkeletonRootNameEXT, destination, capacity, outByteCount,
+            "The SkinningData skeleton-root name output is invalid.",
+            "The destination cannot hold the complete SkinningData skeleton-root name.");
+    });
+}
+
+CNA_Result cna_skinning_data_set_skeleton_root_name_ext(
+    const CNA_SkinningDataHandle dataHandle,
+    const CNA_StringView name)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string copied;
+        if (const CNA_Result result = CopyStringView(name, true, &copied);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The SkinningData skeleton-root name is not valid UTF-8 text.");
+        }
+        data->value->SkeletonRootNameEXT = std::move(copied);
         return CNA_RESULT_SUCCESS;
     });
 }

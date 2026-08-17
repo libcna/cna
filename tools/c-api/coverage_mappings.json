@@ -2330,18 +2330,21 @@
         "constant",
         "alias"
       ],
-      "mapping": "owned stable `CNA_SkinningDataHandle` and `CNA_AnimationPlayerHandle` values; SkinningData deeply copies fixed skeleton/root-prefix/named-clip descriptors and exposes deterministic count/copy/name access, while a player retains its SkinningData, selects clips by copied UTF-8 name, accepts finite seconds and canonical booleans, and atomically copies local/world/final skin matrices",
-      "tests": "descriptor and handle ABI, deep-copy independence, exact type identity, every skeleton/root-prefix/clip field, retained player lifetime, bind-pose defaults, StartClip, relative/absolute update, clamp and constant-time loop behavior, current position/clip/name, exact local/world/skin composition, capacity atomicity, malformed prefix/flags/time/name plus stale/wrong-kind/wrong-thread paths in strict-C `AnimationPlayerSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze both handles and descriptor layout",
+      "mapping": "owned stable `CNA_SkinningDataHandle` and `CNA_AnimationPlayerHandle` values; SkinningData deeply copies fixed skeleton/root-prefix/named-clip descriptors and exposes deterministic count/copy/name access, while a player retains its SkinningData, selects clips by copied UTF-8 name, accepts finite seconds and canonical booleans, and atomically copies local/world/final skin matrices; the declared rig root's node index and name on the same handle, and an owned `CNA_ModelAnimationsEXTHandle` for the clips a scene declares apart from any one skeleton, read by sorted index because the canonical type keeps them in a hash map whose traversal order no C consumer may depend on",
+      "tests": "descriptor and handle ABI, deep-copy independence, exact type identity, every skeleton/root-prefix/clip field, retained player lifetime, bind-pose defaults, StartClip, relative/absolute update, clamp and constant-time loop behavior, current position/clip/name, exact local/world/skin composition, capacity atomicity, malformed prefix/flags/time/name plus stale/wrong-kind/wrong-thread paths in strict-C `AnimationPlayerSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze both handles and descriptor layout; the unset rig root older paths leave behind and a round trip through both of its fields, an empty and a populated clip set, sorted clip order, clip duration/track/target-space reads, the type name, duplicate clip names refused, and out-of-range, undefined-identity, null-output and stale-handle refusals in strict-C `AnimationPlayerSmoke.c`",
       "status": "implemented",
-      "task": "CBIND-035E7",
+      "task": "CBIND-051E",
       "approved_symbols": [
+        "CPP-059D8A7602CB",
         "CPP-082A73234CBC",
         "CPP-13256D2364C2",
         "CPP-1B4776F72838",
         "CPP-1E77D615322C",
         "CPP-1F024101FE72",
         "CPP-20D560B0D381",
+        "CPP-270C93A42BBB",
         "CPP-27127CC9A7F0",
+        "CPP-52CD39222F60",
         "CPP-5AA0CDD275EE",
         "CPP-82C7CA07F5D6",
         "CPP-9144315EFECE",
@@ -2350,7 +2353,9 @@
         "CPP-C96C39B96FFF",
         "CPP-D667291FFC8E",
         "CPP-DA53B39AC99B",
+        "CPP-DD3FB2D3EA13",
         "CPP-DE3579A3BB99",
+        "CPP-E58E77386B78",
         "CPP-ED67162FBF77",
         "CPP-F7A0DE46B2EC",
         "CPP-FF25A39FFF33"
@@ -14136,6 +14141,22 @@
       "task": "CBIND-051D",
       "approved_symbols": [
         "CPP-C26D156BA9CC"
+      ]
+    },
+    {
+      "id": "model-bone-pose-helpers",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:ApplyClipToBonesEXT|ApplyBindPoseBoneTransformsEXT)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/AnimationPlayer\\.hpp$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_model_apply_clip_to_bones_ext`, taking the clip as a `CNA_ModelAnimationsEXTHandle` and a sorted index and letting the canonical refusal of a joint-palette clip through as `CNA_RESULT_INVALID_ARGUMENT`, and `cna_model_apply_bind_pose_bone_transforms_ext`, returning the posed-effect count as an output parameter",
+      "tests": "a joint-palette clip refused and the same clip accepted once it states scene-node space, a model with no skinned effects reporting zero posed, and out-of-range clip index, null-output and stale-handle refusals in strict-C `AnimationPlayerSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-051E",
+      "approved_symbols": [
+        "CPP-534556328EF8",
+        "CPP-8C5D891CEF8E"
       ]
     }
   ]
