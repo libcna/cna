@@ -8,7 +8,7 @@ session needs to start work without re-deriving the state.
 
 - **Branch:** `feature/gltf`, with local commits. The owner explicitly requested a push when the
   current autonomous run reaches its weekly-limit cutoff; no pull request has been requested.
-- **Working document:** `plan_gltf.md`, **469** numbered rows. **Six remain open: `GLTF-344`
+- **Working document:** `plan_gltf.md`, **471** numbered rows. **Six remain open: `GLTF-344`
   (`✅/⬜`, the specular texture pair on 3 of 15 PBR renderers), `GLTF-459`, `GLTF-460`, and
   `GLTF-463`–`GLTF-465`** — the three rows the 2026-08-17 re-audit opened. Everything else is closed.
   §27.2 carries a row-by-row ROBUST assessment; that section, not this file, is the record of what
@@ -84,19 +84,28 @@ ctest --test-dir /tmp/cnagltf-nodraco-build -L gltf-conformance
 
 Expected as of this writing:
 
+**Measured on the 2026-08-17 re-audit revision, on a `HEADLESS` + vendored-Draco `build/`:**
+
 | Check | Expected |
 |---|---|
 | `ctest -L gltf-conformance` | **10/10 passed** (the `Perf` rung joined on 2026-08-12) |
-| full suite | **6 372 passed, 191 skipped, 18 failed** |
-| generator `--check` / `--determinism` | **145 assets, 729 files — byte-identical** |
-| pinned Khronos Validator | **270 valid, 20 expected-invalid, 42 warnings** |
-| `*Gltf*`, HEADLESS + vendored Draco | **552 tests: 551 passed, 1 opt-in ChronographWatch skip** (14.7 s on the 2026-08-15 declaration revision) |
+| full suite, from the ROOT | **7 509 tests: 7 280 passed, 228 skipped, 0 failed** |
+| `*Gltf*` | **594 tests: 591 passed, 3 skipped, 0 failed** — the skips are the opt-in licensed ChronographWatch asset and the two opt-in large-reference-asset budgets |
+| generator `--check` / `--determinism` | **145 assets, 729 files — byte-identical**, and two independent generator runs agree byte-for-byte |
+| EasyGL L7 corpus (Xvfb, production viewer) | **145 dispositions: 137 deterministic PNGs, 8 deterministic safe rejections**, zero RGB/alpha tolerance |
+| SOFTWARE L7 corpus (Xvfb) | **145 dispositions: 137 PNGs, 8 safe rejections** — runnable again only since `GLTF-467` |
+| DirectX11 L7 corpus (Wine + DXVK under Xvfb) | **145 dispositions: 137 PNGs, 8 safe rejections**; **130 of the 137 reproduced the pre-existing goldens pixel-identically**, which is what proves the DXVK route is the one the committed set was captured on rather than a lavapipe substitute |
+| pinned Khronos Validator | **270 valid, 20 expected-invalid, 42 warnings** (not re-run on this revision) |
+| `*Gltf*`, HEADLESS + vendored Draco, 2026-08-15 revision | **552 tests: 551 passed, 1 opt-in ChronographWatch skip** (14.7 s) — kept for comparison |
 | `*Gltf*`, HEADLESS without Draco | **539 tests: 538 passed, 1 opt-in skip**; the ten-test difference is the real decoder/encoder evidence, while the unavailable-path checks still run |
 | conformance ladder, Draco `ON` / `OFF` | **10/10 passed** / **10/10 passed** |
 | pinned reference renderer subset | **13/13 passed**; the original 12-case bounds remain minimum foreground IoU 0.999579, coverage ratio 0.999891–1.000422 and worst foreground RGB MAE 67.60; `uv1-material` additionally passes after dual-stream support |
 | final pinned viewer retake | **14/14 rows, 15/15 cases passed** through two byte-identical viewer captures plus the exact viewer camera in the Khronos renderer; report in `docs/gltf-viewer-retake-report.json` |
 
-**Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
+**The full suite has no failures on this configuration.** The 18 that the 2026-08-15 table reported
+were a `STUB` build's; on `HEADLESS` the capability-gated cases really run. If you build `STUB`, expect
+them back — they are the STUB renderer's own capability expectations and the TextureCube DDS fixtures,
+and they are **pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures
 (`TextureCubeTest.*`, `Texture3DTextureCubeContentTypeReaderTest.*`,
 `XnbBuiltInReaderRegistrationTest.*`) and `CnjCapabilityMatrixTest.TextureCubeDelegatesViaSourceFile`.
@@ -200,60 +209,107 @@ These are not style preferences; they are what made the campaign find things.
 
 ## What is blocked in this environment, and why
 
-There is no longer a Draco, viewer-write or Khronos-reference blocker. The remaining limits are
-narrower than the old table implied:
+Rewritten 2026-08-17. **Two of the three previously recorded boundaries were not real**, and both were
+found by *running the thing that was said to be impossible* rather than by reasoning about it:
+
+- **DirectX11 L7 was recorded as needing "a DXVK'd Wine prefix this environment does not have".** It
+  has one. `wine`, `x86_64-w64-mingw32-g++`, `/usr/lib/dxvk` and `~/.wine-cna-d3d11` are all present,
+  the viewer cross-builds with `cmake/toolchains/mingw-w64.cmake` against the prebuilt Windows SDL3,
+  and the full 145-asset capture runs through `scripts/run-wine-dxvk.sh` under
+  `CNA_D3D11_VIRTUAL_DESKTOP` on Xvfb (`GLTF-471`).
+- **The SOFTWARE L7 policy was not blocked by the environment at all** — the harness's own
+  identity check made it structurally unrunnable (`GLTF-467`).
 
 | Boundary | Rows | Note |
 |---|---|---|
-| **format/material breadth** | `GLTF-344` | `GLTF-184` and `GLTF-244` are closed. Per-map `KHR_texture_transform` landed, and the two `KHR_materials_specular` texture inputs now reach **12 of the 15** PBR renderers. `metal`, `webgpu` and `wicked` sample neither, and none of the three carries a second UV stream at all, so the dual-UV foundation comes first. The split is machine-checked by `GltfRendererPbrFallbackPolicy.SpecularTextureInventoryClassifiesEveryPbrRenderer` -- read it rather than this row, which is a snapshot. |
-| **renderer/platform residue** | *(none)* | **This row was stale and misled a later session; keep it corrected.** `GLTF-379` and `385`–`387` all closed with exactly the whole-corpus L7 capture/tolerance policies the old text said were missing: EasyGL, Vulkan, SOFTWARE and **DirectX11 under Xvfb + Wine + DXVK** each have reviewed goldens, a policy file, a hash report and a passing no-display guard test. What remains for §27.2 row 12 is Gate C's own protocol (`scripts/gltf-viewer-retake.py`), whose real-world rows ran on one renderer. |
-| **milestone chain** | `GLTF-459`–`460` | CORE and the matching `FUTURE.md` update (`GLTF-449`/`458`) are closed. ROBUST **has now been assessed row by row in §27.2 itself: 9 of 12 green.** Rows 3, 6 and 12 remain; read §27.2, not this table. |
+| **format/material breadth** | `GLTF-344` | `KHR_materials_specular`'s two texture inputs reach **12 of the 16** PBR renderers. `igl`, `metal`, `webgpu` and `wicked` sample neither, and none of the four carries a second UV stream at all, so the dual-UV foundation comes first. Machine-checked by `GltfRendererPbrFallbackPolicy.SpecularTextureInventoryClassifiesEveryPbrRenderer` — read it rather than any prose count. |
+| **vertex-colour PBR per renderer** | `GLTF-465` | `GLTF-462` made the importer, the shared material representation and **two** renderers correct (EasyGL, which is five GL profiles, and SOFTWARE). The other 15 bind the stride-60 record and ignore its colour slot, which is safe rather than wrong — an uncoloured primitive fills the slot with **opaque white**, the multiplier's identity — but it is a real per-renderer gap, partitioned by `GltfRendererPbrFallbackPolicy.VertexColourReachesTheBaseColourProductOnlyWhereItIsImplemented`. |
+| **vertex layout** | `GLTF-463` | A **skinned** vertex-coloured metallic-roughness primitive. Stride 76 is exactly the skinned PBR record's seven fields, so unlike stride 60 it has no reserved bytes a colour could occupy; carrying one needs a stride every renderer's input layout would have to learn. Such a primitive keeps `SkinnedEffect` — so it keeps its `NORMAL` and its colours, and loses only the metallic-roughness factors and maps, which `unsupportedMaterialModelEXT` names. |
+| **corpus asset count** | `GLTF-464` | The corpus is pinned at 145 assets by four L7 provenance reports that enumerate every asset, so a new fixture fails each report's completeness assertion until that renderer is re-captured. All four are now re-capturable here, which is what makes `GLTF-464` (promoting `GLTF-461`/`468`/`470`'s inline probes to real fixtures) ordinary work rather than blocked work. |
+| **milestone chain** | `GLTF-459`–`460` | ROBUST is **9 of 12** green in §27.2 (rows 3, 6 and 12 open). `CORE` is declared but §27.1.2 records the declaration as premature and leaves two named residues (`GLTF-463`, `GLTF-465`) inside its rows 12/19. |
 
 ## Suggested next clusters
 
-Rewritten 2026-08-15 after §27.2 was assessed row by row. Four of the five clusters the previous
-list named are now closed (`GLTF-184`, `GLTF-244`, `GLTF-379`, `385`–`387`); what is left is the
-three open ROBUST rows, ordered by cost.
+Rewritten 2026-08-17 after the re-audit. Ordered by cost, cheapest first.
 
-1. **Gate C: 3 of 4 renderers pass; the fourth is blocked by a BGFX defect.** OPENGLES3, VULKAN
-   and **DIRECTX11 under Wine + DXVK** are green on all 14 rows, so the Direct3D path the row names
-   is done. Reproduce any of them with:
+1. **`GLTF-465`: carry `COLOR_0` into the remaining PBR renderers' fragment paths.** The importer and
+   the shared representation are done; each renderer needs its PBR fragment shader to multiply the
+   attribute under the `vertexColorEnabled` gate, exactly as EasyGL and SOFTWARE now do. Follow each
+   renderer's own plan and `GLTF-157`'s rule — a renderer change nobody can verify is not a fix — and
+   move its row in
+   `GltfRendererPbrFallbackPolicy.VertexColourReachesTheBaseColourProductOnlyWhereItIsImplemented`
+   as each lands. The bgfx/diligent/vulkan/directx paths are all runnable here.
 
-   ```bash
-   # DirectX11 -- needs libz-mingw-w64-dev and a DXVK'd prefix (dxvk-setup install)
-   CNA_D3D11_VIRTUAL_DESKTOP="CNA,1280x1024" xvfb-run -a python3 scripts/gltf-viewer-retake.py \
-     --renderer <pinned glTF-Sample-Renderer> --sample-assets <pinned samples> \
-     --viewer <build>/cna_gltf_viewer.exe --viewer-runner scripts/run-wine-dxvk.sh \
-     --viewer-source <viewer checkout> --goldens tests/gltf-l7/directx11 --output <empty dir>
-   ```
+2. **`GLTF-464`: promote the three inline spec-rule probes to corpus fixtures.** `GLTF-461`'s two and
+   `GLTF-468`/`GLTF-470`'s three are conformance statements living as C++ string literals only because
+   the corpus was pinned at 145. All four L7 renderers are re-capturable in this environment now, so
+   this is ordinary work: add the fixtures, regenerate, re-capture all four L7 sets, lower the inline
+   ceiling back down.
 
-   Do **not** force `VK_DRIVER_FILES=lvp_icd.json` for DirectX11: the goldens were captured on the
-   Intel GPU, and lavapipe shifts every row by one LSB against a tolerance of 0.
+3. **`GLTF-463`: the skinned vertex-coloured PBR stride.** A vertex-layout addition (stride 80: the
+   whole stride-76 record plus a packed colour) that every renderer binding stride 76 has to learn.
+   Deliberately not added speculatively — an unused canonical stride is dead weight, so the entry
+   lands with its first consumer.
 
-   **BGFX is the open one, and it is a renderer bug rather than tooling.** It builds (only the
-   `libwayland-egl.so` dev symlink is missing) and renders, but fails the two-independent-process
-   byte-identity requirement on textured assets — `texture-shared-two-samplers` in a full-corpus
-   run, `tex-reference-checkerboard` once in ten probes — while being perfectly stable in isolation
-   (6/6 identical). Find that before capturing any BGFX goldens; a golden set is only meaningful if
-   two processes agree.
+4. **§27.2 row 12 (Gate C) and row 6 (real point/spot lights).** Unchanged in shape from the
+   2026-08-15 assessment, and row 6 is still the largest item between here and ROBUST: the light block
+   is shared shader ABI across every renderer, and XNA's `IEffectLights` names exactly three
+   directional lights and cannot express a point or spot light. `GLTF-331` carries the design sketch;
+   `GLTF-326`/`327` already count and report the loss, so nothing is silent meanwhile.
 
-2. **The `KHR_materials_specular` texture pair on `metal`, `webgpu`, `wicked` (`GLTF-344`,
-   §27.2 row 3).** Not three small bindings: none of the three carries a second UV stream, and the
-   binding contract is defined per map with its own UV selector, so the dual-UV foundation comes
-   first. Weigh verifiability before starting — `metal` cannot be built or run in this environment
-   at all, and `GLTF-157`'s rule is that a renderer change nobody can verify is not a fix.
-   `GltfRendererPbrFallbackPolicy.SpecularTextureInventoryClassifiesEveryPbrRenderer` holds the
-   partition and must be edited deliberately when one of the three moves.
-3. **Real point and spot lights (§27.2 row 6).** The largest item between here and ROBUST, and
-   scoped out on purpose: the light block is shared shader ABI across every renderer, and XNA's
-   `IEffectLights` names exactly three directional lights and cannot express a point or spot light.
-   `GLTF-331` carries the four-step design sketch; `GLTF-326`/`327` already count and report the
-   loss, so nothing is silent meanwhile.
-
-Then `GLTF-459` (declare ROBUST) and `GLTF-460` (retrospective), in that order.
+Then `GLTF-459` (declare ROBUST — but read §27.1.2 first: its precondition moved) and `GLTF-460`
+(retrospective, which now has a much better story to tell about *why* a green milestone was wrong).
 
 **Before starting anything, read `docs/gltf-conformance.md` §3.7 and §3.8.** They now record how to
 add a fixture and when a document belongs inline instead — both were learned the expensive way.
+
+## What the 2026-08-17 re-audit found (read this before trusting a green MILESTONE)
+
+The 2026-08-12 section below is about not trusting a green **run**. This one is about not trusting a
+green **milestone**, and the mechanism is different: every finding here sat inside a §27.1 row that
+was green, and none of them needed new tooling to find — four came from reading the pinned
+specification's own sentences against the code, and two from running something that had never run.
+
+- **A conformance row that paraphrases the specification will pass over the sentence it paraphrases.**
+  Row 7 asks that attributes "decode exactly, with correct defaults for absent attributes". §3.7.2.1
+  says *"When normals are not specified, client implementations MUST calculate flat normals and the
+  provided tangents (if present) MUST be ignored."* That is two MUSTs, and neither is a decode or a
+  default. Both were unmet. Row 15 asks that morph targets "apply position, normal and tangent
+  deltas"; §3.7.2.2 says *"When the base mesh primitive does not specify normals, client
+  implementations MUST calculate flat normals for each morph target"* — which is not a delta at all,
+  and was unimplemented. **Write rows that quote.**
+
+- **A documented deviation is not evidence of compliance, and it will be read as one.** `GLTF-173`
+  recorded averaged-instead-of-flat normals as unavoidable ("duplication would change the vertex count
+  and every per-vertex stream including morph deltas"), `GLTF-457` copied that into `CHECKLIST.md`, and
+  row 7 stayed green. The claim was simply false: duplication is one remap applied to every stream, and
+  `GLTF-461` does it in about eighty lines. **A deviation whose justification is "impossible" deserves
+  one attempt at the impossible.**
+
+- **A named loss will be accepted as completeness.** Row 18 asks that "every loss the importer does
+  perform is reported". `mat-vertex-color-pbr` was a *known-defect fixture* asserting that CNA names
+  what it drops — and what it dropped was the entire metallic-roughness material *plus the authored
+  `NORMAL`*, because the stride-24 layout it fell to has no normal slot. Row 12 ("metallic-roughness
+  PBR is complete") was verified only on primitives with no `COLOR_0`. **A milestone that accepts a
+  reported loss as evidence will accept any loss.**
+
+- **Three of the four were protected by a fixture that PASSED.** `normal-absent` is a single triangle,
+  so averaging and per-face shading coincide *exactly* on it. `morph-no-base-normals` translates all
+  three vertices by the same vector, so its target cannot change a face normal. The corpus rule "a
+  fixture must discriminate" had been applied to **values** and not to **rules**. `GLTF-461`'s tests
+  assert §3.7.2.1's own definition remap-independently — every corner of every emitted triangle
+  carries that triangle's own geometric normal, derived from the *emitted* positions — so no numbering
+  or fixture shape can satisfy them by accident.
+
+- **Two things were unrunnable rather than passing.** The L7 harness's renderer-identity check used
+  `startswith`, and CNA's logger had grown a line prefix, so the SOFTWARE and DirectX11 policies
+  completed all 145 assets and then failed their own final check (`GLTF-467`) — which is why the
+  SOFTWARE report could only ever verify itself. And stride 60, live since `GLTF-182`, had never been
+  bound by most PBR renderers: `OPENGL2` read `TEXCOORD` at offset 24, *inside the tangent*, so every
+  dual-UV PBR mesh textured itself from tangent bytes in silence (`GLTF-462`).
+
+- **`NEXT_gltf.md`'s own "blocked" table was wrong twice**, and both entries had been copied forward
+  by successive sessions. See the rewritten section above.
 
 ## What the 2026-08-12 session found (read this before trusting a green run)
 
@@ -308,6 +364,8 @@ Both have their own regression tests, and the L6 sweep now fails if it sees no a
 | `docs/gltf-conventions.md` | Every decision with a rationale: transforms, mirroring, colour space, effect selection, lighting, animation, extensions. |
 | `docs/gltf-performance.md` | Phase 22's measurements and the decision each led to — the parse/cache costs, the 4× unpack ceiling, the 2× morph duplication, the occlusion codec. Reproduce with `--gtest_filter='GltfPerformance.*' --gtest_output=xml:`. |
 | `docs/gltf-limitations.md` | The inverse: what cannot be carried, what is approximated, and the report field that names each loss. Its §1 is generated from the extension registry and its report fields are checked against the header — see `GltfLimitationsDoc`. |
+| `tools/gltf_fixtures/flatnormals.py` | `GLTF-461`'s **independent** Python statement of §3.7.2.1's flat-normal split, so a golden is a second opinion on the split rather than a restatement of whatever the importer produced. |
+| `scripts/gltf-l7-corpus.py` | The four-policy L7 oracle. All four policies (EasyGL, Vulkan, SOFTWARE, DirectX11-under-Wine+DXVK) are runnable in this environment; `GLTF-467` records why two of them had not been. |
 | `docs/gltf-conformance.md` | The oracle ladder and the spec pin. |
 | `docs/gltf-api-change-review.md` | `GLTF-025`'s gate. Read §4 before proposing public API. |
 | `known_bugs.md` | Defects found outside the plan's own rows. |
