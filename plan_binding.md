@@ -1180,19 +1180,23 @@ what remains. This section carries only what a fresh context cannot infer from t
   why that is the standing first step rather than a formality. `next` had already advanced 4
   commits past this branch when `CBIND-052B` landed (`05a9eab06`), none of them touching
   `modules/c-api/`, `tools/c-api/` or `docs/c-api/`.
-- **Two things this slice deliberately left, both named rather than fixed.** The published export
-  count is stale in three documents — `ABI_VERSIONING.md`, `CONSUMING.md` and `LIMITATIONS.md` all
-  say **2,720** where `abi_baseline.json` measures **2,833** — which predates this slice and
-  belongs to whichever task last grew the surface; it is prose, not a gate, so no check catches
-  it. And `abi_baseline.json` records no `CNA_*_FLAG_*` constant at all, because the tool reads
-  simple integer constants and these are shift expressions; the new
-  `CNA_GRAPHICS_CAPABILITY_FLAG_COMPILED_EFFECTS` is pinned by the `AbiHeaderC.c`/`AbiHeaderCpp.cpp`
-  assertion walls instead. Both are worth an owner decision, neither is worth widening this slice.
+- **The published export count was stale in three documents** — `ABI_VERSIONING.md`,
+  `CONSUMING.md` and `LIMITATIONS.md` all said **2,720** where `abi_baseline.json` measured
+  **2,838**. Corrected on 2026-08-17 in its own commit, deliberately separate from `CBIND-052A`/`B`
+  because it predates them. **Nothing prevents it happening again:** these are prose claims and no
+  gate reads them, while every count in the same sentence's neighbourhood (`COVERAGE.md`'s
+  snapshot, `LIMITATIONS.md`'s group counts, `RELEASE_GATE.md`'s evidence) is generated. A checker
+  that holds the three documents' export figure against `abi_baseline.json` is the obvious fix and
+  is not yet written.
+- **`abi_baseline.json` records no `CNA_*_FLAG_*` constant at all**, because the tool reads simple
+  integer constants and these are shift expressions; `CNA_GRAPHICS_CAPABILITY_FLAG_COMPILED_EFFECTS`
+  is pinned by the `AbiHeaderC.c`/`AbiHeaderCpp.cpp` assertion walls instead. Left as it stands:
+  it is a tooling gap, not a wrong claim.
 - Historical, kept because the reasoning still applies: **the experimental release gate**
   (`CBIND-042B`) was built this way, and a later gate should be built the same way. Every input it
   needs now
   exists and should be **pointed at rather than rebuilt**: `COMPATIBILITY.md` (23 toolchain cells),
-  `abi_baseline.json` (layouts and 2,720 exports), `hello_cna` with `CApi_InstalledConsumer` (a real
+  `abi_baseline.json` (layouts and exports), `hello_cna` with `CApi_InstalledConsumer` (a real
   C application built from outside the tree), `FUZZING.md`, `COVERAGE.md` and now
   `LIMITATIONS.md`. Build it the way this campaign builds every gate — a declaration, a checker,
   `--check` in ctest and CI — and make it fail **in both directions**: a criterion recorded as met
