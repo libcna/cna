@@ -456,7 +456,7 @@ Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
 `HTML_DOM` | `SKIA` | `FREEDIRECT` | `DIRECTX9` | `DIRECTX1` | `DIRECTX2` | `DIRECTX3` | `DIRECTX5` | `DIRECTX6` |
 `DIRECTX7` | `DIRECTX8` | `DIRECTX10` | `SDL_GPU` | `OPENGLES1` | `OPENGL4` | `OPENGL1` | `OPENGL2` |
 `WICKED` | `SOKOL` | `DILIGENT` | `GLIDE` | `GDI` | `LLGL` | `METAL` | `BLEND2D` | `FNA3D` |
-`SVG_DOM` | `OPENVG` | `PORTABLEGL`). These are exactly 46
+`SVG_DOM` | `OPENVG` | `PORTABLEGL` | `PIXIJS`). These are exactly 47
 public identities; EasyGL remains an internal implementation shared by five GL profiles. The former
 `ASCII` renderer identity was removed in favor of a renderer-neutral post-process effect,
 `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) -- see `docs/ascii-post-process-effect.md`.
@@ -473,6 +473,12 @@ it does not delegate rendering to EasyGL and does not advertise 3D/depth/MSAA/MR
 Use `plan_skia.md`, `NEXT_skia.md`, `docs/skia-renderer.md`, and
 `docs/skia-developer-build.md` for that subsystem; do not reconstruct its state from the general
 `NEXT.md`.
+`PIXIJS` is the newest and most experimental renderer, Emscripten-only, rendering `SpriteBatch`
+output through a pooled `PIXI.Sprite` scene graph (pixijs.com) rather than raw WebGL calls or
+Canvas2D/DOM primitives. As of its initial authoring it has not been built or run on any real
+Emscripten toolchain in any session -- see `plan_pixijs.md` and `docs/pixijs-renderer.md` for its
+own honest status legend and capability boundary; do not describe it as verified or usable until
+`plan_pixijs.md`'s own PIXIJS-84 (a real Emscripten toolchain build) actually happens.
 
 ---
 

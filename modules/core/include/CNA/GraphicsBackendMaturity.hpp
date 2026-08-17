@@ -56,9 +56,9 @@ namespace CNA
     /**
      * @brief Returns how confidently CNA recommends the given graphics renderer for real use.
      *
-     * Callable for any of the 46 public GraphicsRendererType identities, not only the one
+     * Callable for any of the 47 public GraphicsRendererType identities, not only the one
      * compiled into the current build -- e.g. to list every backend's maturity in a launcher or
-     * editor UI without compiling all 46 renderer variants.
+     * editor UI without compiling all 47 renderer variants.
      *
      * @param type The renderer identity to classify.
      * @return The renderer's maturity.
@@ -106,6 +106,7 @@ namespace CNA
             case GraphicsRendererType::SvgDom:
             case GraphicsRendererType::OpenVg:
             case GraphicsRendererType::PortableGL:
+            case GraphicsRendererType::PixiJs:
                 return GraphicsBackendMaturity::Experimental;
 
             case GraphicsRendererType::DirectX1:

@@ -144,7 +144,12 @@ namespace CNA
         OpenVg,
 
         /** @brief PortableGL (rswinkle/PortableGL, CPU software OpenGL 3.x). */
-        PortableGL
+        PortableGL,
+
+        /** @brief PixiJS (pixijs.com, Emscripten only, 2D-only in v1 scope): SpriteBatch output as
+         * a retained-mode PIXI.Sprite scene graph rendered through PixiJS's own WebGL batch
+         * renderer. */
+        PixiJs
     };
 
     /**
@@ -256,6 +261,8 @@ namespace CNA
         return GraphicsRendererType::OpenVg;
 #elif defined(CNA_RENDERER_PORTABLEGL)
         return GraphicsRendererType::PortableGL;
+#elif defined(CNA_RENDERER_PIXIJS)
+        return GraphicsRendererType::PixiJs;
 #else
 #error "CNA: no CNA_RENDERER_* compile definition set -- graphics renderer selection (cmake/RendererSelection.cmake) is broken"
 #endif
@@ -321,6 +328,7 @@ namespace CNA
             case GraphicsRendererType::SvgDom:         return "SVG_DOM";
             case GraphicsRendererType::OpenVg:         return "OPENVG";
             case GraphicsRendererType::PortableGL:    return "PORTABLEGL";
+            case GraphicsRendererType::PixiJs:        return "PIXIJS";
         }
         return "UNKNOWN";
     }

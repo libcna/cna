@@ -64,6 +64,7 @@ IDENTITIES = [
     ("SVG_DOM", "SvgDom"),
     ("OPENVG", "OpenVg"),
     ("PORTABLEGL", "PortableGL"),
+    ("PIXIJS", "PixiJs"),
 ]
 
 

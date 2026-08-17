@@ -169,6 +169,12 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
     ++enabled;
 #endif
 
+    // plan_pixijs.md: same registration discipline as every renderer above -- add the PIXIJS
+    // entry here in the same task that adds the identity everywhere else, not after the fact.
+#ifdef CNA_RENDERER_PIXIJS
+    ++enabled;
+#endif
+
     EXPECT_EQ(enabled, 1);
 }
 

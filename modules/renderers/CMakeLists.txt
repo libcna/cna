@@ -2,7 +2,7 @@
 # Renderer module composition. Every implementation family owns
 # modules/renderers/<family>/{CMakeLists.txt,src/,include/,tests/}; exactly one family
 # builds the selected ${RENDERER_TARGET} per configuration (RendererSelection.cmake resolves
-# the public identity to RENDERER_DIR = modules/renderers/<family>). The 46 public renderer
+# the public identity to RENDERER_DIR = modules/renderers/<family>). The 47 public renderer
 # identities live in RendererSelection.cmake + GraphicsRendererType.hpp and are pinned by
 # scripts/check_renderer_identities.py; families and helper targets here are
 # implementation structure, not identities.

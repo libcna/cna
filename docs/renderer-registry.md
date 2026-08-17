@@ -1,10 +1,11 @@
 # CNA renderer registry
 
-Current as of the eleven-lane renderer integration (2026-08-11): CNA exposes exactly **46 public
+Current as of the addition of `PIXIJS` (2026-08-16): CNA exposes exactly **47 public
 renderer identities**. `ASCII` was removed as a public renderer identity and its reusable
 quantization/glyph-atlas logic migrated to a renderer-neutral post-process effect,
 `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) — see
-`docs/ascii-post-process-effect.md`. `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG` and `PORTABLEGL` were added. EasyGL is an internal
+`docs/ascii-post-process-effect.md`. `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`, `PORTABLEGL`
+and `PIXIJS` were added. EasyGL is an internal
 implementation shared by five public GL profiles and does not add a public identity. Internal
 renderer/API choices made by bgfx, Skia, Sokol, Diligent, LLGL, or another abstraction likewise do
 not add CNA identities.
@@ -59,9 +60,10 @@ not add CNA identities.
 | 44 | `SvgDom` | `SVG_DOM` | `CNA_RENDERER_SVG_DOM` | SVG DOM / `SvgDomRenderer` | Emscripten |
 | 45 | `OpenVg` | `OPENVG` | `CNA_RENDERER_OPENVG` | ShivaVG / `OpenVgRenderer` | desktop OpenGL (compat profile) |
 | 46 | `PortableGL` | `PORTABLEGL` | `CNA_RENDERER_PORTABLEGL` | PortableGL / `PortableGLRenderer` | none (CPU-only, fetched header) |
+| 47 | `PixiJs` | `PIXIJS` | `CNA_RENDERER_PIXIJS` | PixiJS / `PixiJsRenderer` | Emscripten + vendored PixiJS UMD build |
 
-The five GL profiles share one implementation target, macro, and factory, so 46 public identities
-map to 42 concrete implementation factories. Their public contracts remain distinct because the
+The five GL profiles share one implementation target, macro, and factory, so 47 public identities
+map to 43 concrete implementation factories. Their public contracts remain distinct because the
 selected context, shader language/profile, and supported platform differ. `FREEDIRECT` is the
 renamed free-direct-backed identity; current `DIRECTX3` is the genuine DirectX 3 implementation.
 `EASYGL` and the temporary `DX30` are not accepted selectors or compatibility aliases.

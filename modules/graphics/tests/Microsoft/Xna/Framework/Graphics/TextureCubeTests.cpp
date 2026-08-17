@@ -79,13 +79,15 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
     defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_HTML_DOM) || \
     defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_GDI) || \
     defined(CNA_RENDERER_BLEND2D) || \
-    defined(CNA_RENDERER_OPENVG)
+    defined(CNA_RENDERER_OPENVG) || \
+    defined(CNA_RENDERER_PORTABLEGL) || \
+    defined(CNA_RENDERER_PIXIJS)
 // OPENVG keeps IGraphicsRenderer::CreateTextureCube's nullptr default under the default Throw
 // policy (OpenVgRenderer::CreateTextureCube only ever returns a real object under the opt-in
 // WarnAndStub policy, and even then a discard-everything null object, never real storage) --
 // ShivaVG/OpenVG has no cube-map concept at all. Same "no cube resource exists" shape as
-// SDL_Renderer/Canvas/HTML_DOM/FreeDirect/GDI above. || \
-    defined(CNA_RENDERER_PORTABLEGL)
+// SDL_Renderer/Canvas/HTML_DOM/FreeDirect/GDI above, and (plan_pixijs.md PIXIJS-71) PIXIJS: no
+// cube override written, so it keeps the same shared nullptr default, v1 scope being 2D-only.
 constexpr bool kCubeLevel0ReadbackSupported = false;
 constexpr bool kCubeStorageSupported        = false;
 #else
