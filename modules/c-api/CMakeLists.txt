@@ -149,6 +149,10 @@ if(CNA_C_API_BUILD_STATIC AND UNIX AND NOT APPLE AND Python3_Interpreter_FOUND)
         COMMAND Python3::Interpreter
             "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/c-api/generate_static_archive.py"
             --build-dir "${CMAKE_BINARY_DIR}"
+            # The module's own binary directory, because CMAKE_BINARY_DIR is the *consumer's*
+            # root when CNA is consumed with add_subdirectory() -- the C API then lives at
+            # <build>/<subdir>/modules/c-api and the link line is not where the build root says.
+            --module-binary-dir "${CMAKE_CURRENT_BINARY_DIR}"
             --output "${CNA_C_API_STATIC_ARCHIVE}"
             --targets-file "${CNA_C_API_STATIC_TARGETS}"
             --work-dir "${CMAKE_CURRENT_BINARY_DIR}/static-archive"
