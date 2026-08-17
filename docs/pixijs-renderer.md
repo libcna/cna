@@ -16,10 +16,11 @@ its draw path is built, run and pixel-checked in a real browser on every change.
 |---|---|
 | `emcmake` configure, `-DCNA_GRAPHICS_RENDERER=PIXIJS` | passes |
 | `cna_renderer_pixijs`, `cna_test_pixijs_smoke` (Release, `-O3`) | build and link |
-| Browser pixel suite, headless Chromium over local HTTP | **66/66 checks pass** |
+| Browser pixel suite, headless Chromium over local HTTP | **70/70 checks pass** |
 | `cna_test_pixijs_host` (native GTest, no browser) | **28/28 pass** |
 | Multi-renderer configure `PIXIJS;CANVAS;HTML_DOM;SVG_DOM` | passes; `cna_demo_renderer_selection` links |
 | `scripts/check_renderer_identities.py` | passes, including the runtime-registry arm |
+| `cna_demo_2d` in a browser | renders and **displays** a real animated scene: hundreds of rotated, scaled, alpha-blended sprites over a cleared background |
 
 **Not covered by any of that**, and therefore not claimed:
 

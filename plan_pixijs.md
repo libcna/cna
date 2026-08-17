@@ -19,6 +19,7 @@ Emscripten toolchain and is pixel-verified in a real browser on every change.
 | `PIXIJS` non-default in `CANVAS;PIXIJS` | configures, and `--extern-pre-js` still reaches the link line |
 | `PIXIJS + DIRECTX11` / `PIXIJS + METAL` | rejected at configure time with a complete reason |
 | `scripts/check_renderer_identities.py`, `check_renderer_combinations.py`, the five platform gates | pass |
+| `cna_demo_2d` under `PIXIJS` in a browser | renders and **displays** a real animated scene -- hundreds of rotated, scaled, alpha-blended sprites over a cleared background |
 
 **What is still not verified**, and is therefore not claimed anywhere in this plan:
 
