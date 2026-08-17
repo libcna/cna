@@ -1016,6 +1016,37 @@ TEST(GltfFixtureCorpus, EveryL7GoldenCarriesTheVertexColourAlphaProductRatherTha
         const int redHigh = *std::max_element(witnessReds.begin(), witnessReds.end());
         EXPECT_GT(redHigh - redLow, 5)
             << "the vertex-coloured capture's base colour is spatially flat";
+
+        // The RIGID path needs its own witness, because `skin-vertex-color-pbr` proves stride 80 and
+        // says nothing about stride 60. `mat-vertex-color-pbr` is opaque, so alpha cannot carry it --
+        // but its three `COLOR_0` values are pure red, green and blue, and its emissive factor
+        // (0.05, 0, 0.2) has NO green in it. So at its red corner every green contribution to the
+        // surface is zero except the specular term, and the capture must actually contain a green
+        // channel of 0. Under the opaque-white identity the albedo's green would be
+        // `baseColorFactor.g` = 0.4 everywhere, lit and never zero -- the one thing this cannot be
+        // confused with. The upper bound then proves the channel is genuinely present elsewhere
+        // rather than the whole surface being black.
+        const std::filesystem::path rigidPath = goldens / "mat-vertex-color-pbr.png";
+        ASSERT_TRUE(std::filesystem::is_regular_file(rigidPath)) << rigidPath;
+        const CNA::Internal::Graphics::ImageData rigid =
+            CNA::Internal::Graphics::ImageLoader::Load(rigidPath.string());
+        int greenLow = 256;
+        int greenHigh = -1;
+        std::size_t rigidForeground = 0;
+        for (std::size_t at = 0; at + 3 < rigid.pixels.size(); at += 4)
+        {
+            if (rigid.pixels[at + 3] == 0) { continue; }
+            ++rigidForeground;
+            const int green = static_cast<int>(rigid.pixels[at + 1]);
+            greenLow = std::min(greenLow, green);
+            greenHigh = std::max(greenHigh, green);
+        }
+        ASSERT_GT(rigidForeground, 0u) << "the rigid vertex-colour capture has no foreground";
+        EXPECT_EQ(0, greenLow)
+            << "no pixel has a zero green channel, so COLOR_0's own green is not multiplying the "
+               "base colour on the rigid stride-60 path";
+        EXPECT_GT(greenHigh, 30)
+            << "the whole rigid capture is green-free, which is a black surface rather than a product";
     }
 }
 

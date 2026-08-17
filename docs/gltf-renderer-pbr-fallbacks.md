@@ -552,4 +552,8 @@ without a `COLOR_0` (`mat-factor-only-gold`) must capture exactly one alpha valu
 `skin-vertex-color-pbr` must capture a spread whose end points match `baseColorFactor.a` times the
 authored per-vertex alphas. The rig's own alpha composite is calibrated from the control asset in the
 same golden set rather than assumed, so the test survives a legitimate rig change and still fails if
-the colour is dropped.
+the colour is dropped. The **rigid** stride-60 path gets its own witness in the same test, because alpha
+cannot carry it: `mat-vertex-color-pbr` is opaque, but its three `COLOR_0` values are pure red, green and
+blue and its emissive factor has no green in it, so its capture must contain a green channel of exactly
+**0** at the red corner. Under the opaque-white identity that channel would be `baseColorFactor.g` = 0.4,
+lit and never zero.
