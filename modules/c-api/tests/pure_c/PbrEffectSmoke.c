@@ -16,8 +16,20 @@ _Static_assert(CNA_PBR_TEXTURE_BASE_COLOR == UINT32_C(0) &&
                    CNA_PBR_TEXTURE_NORMAL == UINT32_C(1) &&
                    CNA_PBR_TEXTURE_METALLIC_ROUGHNESS == UINT32_C(2) &&
                    CNA_PBR_TEXTURE_EMISSIVE == UINT32_C(3) &&
-                   CNA_PBR_TEXTURE_OCCLUSION == UINT32_C(4),
+                   CNA_PBR_TEXTURE_OCCLUSION == UINT32_C(4) &&
+                   CNA_PBR_TEXTURE_SPECULAR_EXT == UINT32_C(5) &&
+                   CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT == UINT32_C(6) &&
+                   CNA_PBR_TEXTURE_MAXIMUM == CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT,
                "CNA PBR texture identities changed");
+_Static_assert(CNA_ALPHA_MODE_OPAQUE_EXT == UINT32_C(0) &&
+                   CNA_ALPHA_MODE_MASK_EXT == UINT32_C(1) &&
+                   CNA_ALPHA_MODE_BLEND_EXT == UINT32_C(2) &&
+                   CNA_ALPHA_MODE_MAXIMUM_EXT == CNA_ALPHA_MODE_BLEND_EXT,
+               "CNA alpha-mode identities changed");
+_Static_assert(sizeof(CNA_TextureTransformEXT) == 28U,
+               "CNA texture-transform layout changed");
+_Static_assert(_Alignof(CNA_TextureTransformEXT) == 4U,
+               "CNA texture-transform alignment changed");
 _Static_assert(CNA_SKINNED_PBR_EFFECT_MAX_BONES == UINT32_C(72),
                "SkinnedPbrEffect maximum bone count changed");
 
@@ -132,6 +144,222 @@ static int validate_color_matrix(const CNA_EffectHandle effect)
     return 1;
 }
 
+static int transform_equals(
+    const CNA_TextureTransformEXT* const value,
+    const float offset_x,
+    const float offset_y,
+    const float scale_x,
+    const float scale_y,
+    const float rotation)
+{
+    return value->offset.x == offset_x && value->offset.y == offset_y &&
+        value->scale.x == scale_x && value->scale.y == scale_y &&
+        value->rotation == rotation &&
+        value->struct_size == sizeof(CNA_TextureTransformEXT) &&
+        value->struct_version == UINT32_C(1);
+}
+
+/* The KHR material extensions the glTF importer carries into an effect. Both PBR variants share
+   one route family, so this runs unchanged for PbrEffect and SkinnedPbrEffect. */
+static int exercise_pbr_material_ext(const CNA_EffectHandle effect)
+{
+    CNA_TextureTransformEXT transform = {0};
+    CNA_TextureTransformEXT other = {0};
+    CNA_TextureTransformEXT malformed = {0};
+    CNA_AlphaModeEXT alpha_mode = UINT32_MAX;
+    CNA_Vector3 vector = {9, 9, 9};
+    CNA_Bool boolean = CNA_FALSE;
+    CNA_Bool equal = CNA_FALSE;
+    int32_t coordinate_set = -1;
+    float scalar = -1.0F;
+
+    /* Documented defaults, which are the C++ member initialisers these routes carry across. */
+    REQUIRE(cna_pbr_effect_get_ior_ext(effect, &scalar) == CNA_RESULT_SUCCESS &&
+            scalar == 1.5F &&
+            cna_pbr_effect_get_specular_factor_ext(effect, &scalar) == CNA_RESULT_SUCCESS &&
+            scalar == 1.0F &&
+            cna_pbr_effect_get_specular_color_factor_ext(effect, &vector) ==
+                CNA_RESULT_SUCCESS && vector3_equals(vector, 1, 1, 1) &&
+            cna_pbr_effect_get_normal_scale_ext(effect, &scalar) == CNA_RESULT_SUCCESS &&
+            scalar == 1.0F &&
+            cna_pbr_effect_get_occlusion_strength_ext(effect, &scalar) == CNA_RESULT_SUCCESS &&
+            scalar == 1.0F &&
+            cna_pbr_effect_get_alpha_cutoff_ext(effect, &scalar) == CNA_RESULT_SUCCESS &&
+            scalar == 0.5F &&
+            cna_pbr_effect_get_alpha_mode_ext(effect, &alpha_mode) == CNA_RESULT_SUCCESS &&
+            alpha_mode == CNA_ALPHA_MODE_OPAQUE_EXT &&
+            cna_pbr_effect_get_double_sided_ext(effect, &boolean) == CNA_RESULT_SUCCESS &&
+            boolean == CNA_FALSE &&
+            cna_pbr_effect_get_encode_output_to_srgb_ext(effect, &boolean) ==
+                CNA_RESULT_SUCCESS && boolean == CNA_TRUE);
+
+    /* Round-trip every scalar, including values the canonical API does not clamp. */
+    REQUIRE(cna_pbr_effect_set_ior_ext(effect, -2.5F) == CNA_RESULT_SUCCESS &&
+            cna_pbr_effect_get_ior_ext(effect, &scalar) == CNA_RESULT_SUCCESS &&
+            scalar == -2.5F &&
+            cna_pbr_effect_set_specular_factor_ext(effect, 3.0F) == CNA_RESULT_SUCCESS &&
+            cna_pbr_effect_get_specular_factor_ext(effect, &scalar) == CNA_RESULT_SUCCESS &&
+            scalar == 3.0F &&
+            cna_pbr_effect_set_specular_color_factor_ext(
+                effect, (CNA_Vector3){0.25F, 0.5F, 0.75F}) == CNA_RESULT_SUCCESS &&
+            cna_pbr_effect_get_specular_color_factor_ext(effect, &vector) ==
+                CNA_RESULT_SUCCESS && vector3_equals(vector, 0.25F, 0.5F, 0.75F) &&
+            cna_pbr_effect_set_normal_scale_ext(effect, 0.0F) == CNA_RESULT_SUCCESS &&
+            cna_pbr_effect_get_normal_scale_ext(effect, &scalar) == CNA_RESULT_SUCCESS &&
+            scalar == 0.0F &&
+            cna_pbr_effect_set_occlusion_strength_ext(effect, 0.75F) == CNA_RESULT_SUCCESS &&
+            cna_pbr_effect_get_occlusion_strength_ext(effect, &scalar) == CNA_RESULT_SUCCESS &&
+            scalar == 0.75F &&
+            cna_pbr_effect_set_alpha_cutoff_ext(effect, 0.125F) == CNA_RESULT_SUCCESS &&
+            cna_pbr_effect_get_alpha_cutoff_ext(effect, &scalar) == CNA_RESULT_SUCCESS &&
+            scalar == 0.125F);
+
+    /* Every alpha-mode identity round-trips; anything past the maximum is refused. */
+    for (uint32_t mode = 0U; mode <= CNA_ALPHA_MODE_MAXIMUM_EXT; ++mode) {
+        REQUIRE(cna_pbr_effect_set_alpha_mode_ext(effect, mode) == CNA_RESULT_SUCCESS &&
+                cna_pbr_effect_get_alpha_mode_ext(effect, &alpha_mode) == CNA_RESULT_SUCCESS &&
+                alpha_mode == mode);
+    }
+    REQUIRE(cna_pbr_effect_set_alpha_mode_ext(effect, CNA_ALPHA_MODE_MAXIMUM_EXT + 1U) ==
+            CNA_RESULT_INVALID_ARGUMENT);
+
+    REQUIRE(cna_pbr_effect_set_double_sided_ext(effect, CNA_TRUE) == CNA_RESULT_SUCCESS &&
+            cna_pbr_effect_get_double_sided_ext(effect, &boolean) == CNA_RESULT_SUCCESS &&
+            boolean == CNA_TRUE &&
+            cna_pbr_effect_set_encode_output_to_srgb_ext(effect, CNA_FALSE) ==
+                CNA_RESULT_SUCCESS &&
+            cna_pbr_effect_get_encode_output_to_srgb_ext(effect, &boolean) ==
+                CNA_RESULT_SUCCESS && boolean == CNA_FALSE);
+
+    /* Value type: defaults, mutation and equality in both directions. */
+    REQUIRE(cna_texture_transform_ext_init(&transform) == CNA_RESULT_SUCCESS &&
+            transform_equals(&transform, 0.0F, 0.0F, 1.0F, 1.0F, 0.0F) &&
+            cna_texture_transform_ext_init(&other) == CNA_RESULT_SUCCESS &&
+            cna_texture_transform_ext_equals(&transform, &other, &equal) ==
+                CNA_RESULT_SUCCESS && equal == CNA_TRUE);
+    transform.offset.x = 0.5F;
+    transform.scale.y = 2.0F;
+    transform.rotation = 1.25F;
+    REQUIRE(cna_texture_transform_ext_equals(&transform, &other, &equal) ==
+                CNA_RESULT_SUCCESS && equal == CNA_FALSE);
+
+    /* Both per-slot families cover all seven slots, including the two specular slots whose
+       canonical accessors are separate properties rather than array entries. */
+    for (uint32_t slot = 0U; slot <= CNA_PBR_TEXTURE_MAXIMUM; ++slot) {
+        REQUIRE(cna_pbr_effect_get_texture_coordinate_set_ext(effect, slot, &coordinate_set) ==
+                    CNA_RESULT_SUCCESS && coordinate_set == 0 &&
+                cna_pbr_effect_set_texture_coordinate_set_ext(effect, slot, 1) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_pbr_effect_get_texture_coordinate_set_ext(effect, slot, &coordinate_set) ==
+                    CNA_RESULT_SUCCESS && coordinate_set == 1);
+        REQUIRE(cna_pbr_effect_get_texture_transform_ext(effect, slot, &other) ==
+                    CNA_RESULT_SUCCESS &&
+                transform_equals(&other, 0.0F, 0.0F, 1.0F, 1.0F, 0.0F) &&
+                cna_pbr_effect_set_texture_transform_ext(effect, slot, &transform) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_pbr_effect_get_texture_transform_ext(effect, slot, &other) ==
+                    CNA_RESULT_SUCCESS &&
+                transform_equals(&other, 0.5F, 0.0F, 1.0F, 2.0F, 1.25F));
+    }
+
+    /* Only the three colour-carrying slots answer the sRGB question. */
+    REQUIRE(cna_pbr_effect_get_texture_is_srgb_ext(
+                effect, CNA_PBR_TEXTURE_BASE_COLOR, &boolean) == CNA_RESULT_SUCCESS &&
+            boolean == CNA_TRUE &&
+            cna_pbr_effect_get_texture_is_srgb_ext(
+                effect, CNA_PBR_TEXTURE_EMISSIVE, &boolean) == CNA_RESULT_SUCCESS &&
+            boolean == CNA_TRUE &&
+            cna_pbr_effect_get_texture_is_srgb_ext(
+                effect, CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT, &boolean) == CNA_RESULT_SUCCESS &&
+            boolean == CNA_TRUE);
+    REQUIRE(cna_pbr_effect_set_texture_is_srgb_ext(
+                effect, CNA_PBR_TEXTURE_BASE_COLOR, CNA_FALSE) == CNA_RESULT_SUCCESS &&
+            cna_pbr_effect_get_texture_is_srgb_ext(
+                effect, CNA_PBR_TEXTURE_BASE_COLOR, &boolean) == CNA_RESULT_SUCCESS &&
+            boolean == CNA_FALSE &&
+            cna_pbr_effect_set_texture_is_srgb_ext(
+                effect, CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT, CNA_FALSE) == CNA_RESULT_SUCCESS &&
+            cna_pbr_effect_get_texture_is_srgb_ext(
+                effect, CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT, &boolean) == CNA_RESULT_SUCCESS &&
+            boolean == CNA_FALSE);
+    REQUIRE(cna_pbr_effect_get_texture_is_srgb_ext(
+                effect, CNA_PBR_TEXTURE_NORMAL, &boolean) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_get_texture_is_srgb_ext(
+                effect, CNA_PBR_TEXTURE_METALLIC_ROUGHNESS, &boolean) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_get_texture_is_srgb_ext(
+                effect, CNA_PBR_TEXTURE_OCCLUSION, &boolean) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_get_texture_is_srgb_ext(
+                effect, CNA_PBR_TEXTURE_SPECULAR_EXT, &boolean) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_set_texture_is_srgb_ext(
+                effect, CNA_PBR_TEXTURE_NORMAL, CNA_TRUE) == CNA_RESULT_INVALID_ARGUMENT);
+
+    /* Null outputs, undefined slots, out-of-range channels, malformed structs and non-boolean
+       CNA_Bool values are all refused rather than acted on. */
+    REQUIRE(cna_pbr_effect_get_ior_ext(effect, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_get_specular_factor_ext(effect, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_get_specular_color_factor_ext(effect, 0) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_get_normal_scale_ext(effect, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_get_occlusion_strength_ext(effect, 0) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_get_alpha_mode_ext(effect, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_get_alpha_cutoff_ext(effect, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_get_double_sided_ext(effect, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_get_encode_output_to_srgb_ext(effect, 0) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_get_texture_coordinate_set_ext(
+                effect, CNA_PBR_TEXTURE_BASE_COLOR, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_get_texture_transform_ext(
+                effect, CNA_PBR_TEXTURE_BASE_COLOR, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_get_texture_is_srgb_ext(
+                effect, CNA_PBR_TEXTURE_BASE_COLOR, 0) == CNA_RESULT_INVALID_ARGUMENT);
+    REQUIRE(cna_pbr_effect_get_texture_coordinate_set_ext(
+                effect, CNA_PBR_TEXTURE_MAXIMUM + 1U, &coordinate_set) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_set_texture_coordinate_set_ext(
+                effect, CNA_PBR_TEXTURE_MAXIMUM + 1U, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_get_texture_transform_ext(
+                effect, CNA_PBR_TEXTURE_MAXIMUM + 1U, &other) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_set_texture_transform_ext(
+                effect, CNA_PBR_TEXTURE_MAXIMUM + 1U, &transform) ==
+                CNA_RESULT_INVALID_ARGUMENT);
+    REQUIRE(cna_pbr_effect_set_texture_coordinate_set_ext(
+                effect, CNA_PBR_TEXTURE_BASE_COLOR, 2) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_set_texture_coordinate_set_ext(
+                effect, CNA_PBR_TEXTURE_BASE_COLOR, -1) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_get_texture_coordinate_set_ext(
+                effect, CNA_PBR_TEXTURE_BASE_COLOR, &coordinate_set) == CNA_RESULT_SUCCESS &&
+            coordinate_set == 1);
+    REQUIRE(cna_pbr_effect_set_texture_transform_ext(
+                effect, CNA_PBR_TEXTURE_BASE_COLOR, &malformed) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_get_texture_transform_ext(
+                effect, CNA_PBR_TEXTURE_BASE_COLOR, &malformed) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_set_texture_transform_ext(
+                effect, CNA_PBR_TEXTURE_BASE_COLOR, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_texture_transform_ext_init(0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_texture_transform_ext_equals(&transform, &malformed, &equal) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_texture_transform_ext_equals(&transform, &other, 0) ==
+                CNA_RESULT_INVALID_ARGUMENT);
+    REQUIRE(cna_pbr_effect_set_double_sided_ext(effect, (CNA_Bool)2) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_set_encode_output_to_srgb_ext(effect, (CNA_Bool)2) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_set_texture_is_srgb_ext(
+                effect, CNA_PBR_TEXTURE_BASE_COLOR, (CNA_Bool)2) == CNA_RESULT_INVALID_ARGUMENT);
+
+    /* A stale handle reaches none of it. */
+    REQUIRE(cna_pbr_effect_get_ior_ext(CNA_INVALID_HANDLE, &scalar) ==
+                CNA_RESULT_INVALID_HANDLE &&
+            cna_pbr_effect_set_alpha_mode_ext(
+                CNA_INVALID_HANDLE, CNA_ALPHA_MODE_BLEND_EXT) == CNA_RESULT_INVALID_HANDLE &&
+            cna_pbr_effect_get_texture_transform_ext(
+                CNA_INVALID_HANDLE, CNA_PBR_TEXTURE_BASE_COLOR, &other) ==
+                CNA_RESULT_INVALID_HANDLE);
+    return 1;
+}
+
 static int exercise_common_pbr(
     const CNA_Handle device,
     const CNA_EffectHandle effect,
@@ -172,6 +400,7 @@ static int exercise_common_pbr(
             scalar == 1 &&
             cna_pbr_effect_get_emissive_factor(effect, &vector) == CNA_RESULT_SUCCESS &&
             vector3_equals(vector, 0, 0, 0));
+    REQUIRE(exercise_pbr_material_ext(effect));
     REQUIRE(cna_effect_lights_get_ambient_color(effect, &vector) == CNA_RESULT_SUCCESS &&
             vector3_equals(vector, 0, 0, 0) &&
             cna_effect_lights_get_enabled(effect, &boolean) == CNA_RESULT_SUCCESS &&
@@ -189,7 +418,7 @@ static int exercise_common_pbr(
             boolean == CNA_FALSE &&
             cna_effect_fog_get_start(effect, &scalar) == CNA_RESULT_SUCCESS && scalar == 0 &&
             cna_effect_fog_get_end(effect, &scalar) == CNA_RESULT_SUCCESS && scalar == 1);
-    for (uint32_t slot = 0U; slot <= CNA_PBR_TEXTURE_OCCLUSION; ++slot) {
+    for (uint32_t slot = 0U; slot <= CNA_PBR_TEXTURE_MAXIMUM; ++slot) {
         REQUIRE(cna_pbr_effect_get_texture(effect, slot, &boolean, &returned) ==
                     CNA_RESULT_SUCCESS && boolean == CNA_FALSE &&
                 returned == CNA_INVALID_HANDLE);
@@ -242,16 +471,16 @@ static int exercise_common_pbr(
                 CNA_RESULT_INVALID_ARGUMENT &&
             cna_texture2d_destroy(cpu_texture) == CNA_RESULT_SUCCESS);
     REQUIRE(cna_texture2d_create(device, &texture_info, &texture) == CNA_RESULT_SUCCESS);
-    for (uint32_t slot = 0U; slot <= CNA_PBR_TEXTURE_OCCLUSION; ++slot) {
+    for (uint32_t slot = 0U; slot <= CNA_PBR_TEXTURE_MAXIMUM; ++slot) {
         REQUIRE(cna_pbr_effect_set_texture(effect, slot, texture) == CNA_RESULT_SUCCESS &&
                 cna_pbr_effect_get_texture(effect, slot, &boolean, &returned) ==
                     CNA_RESULT_SUCCESS && boolean == CNA_TRUE && returned == texture);
     }
     REQUIRE(cna_pbr_effect_get_texture(
-                effect, CNA_PBR_TEXTURE_OCCLUSION + 1U, &boolean, &returned) ==
+                effect, CNA_PBR_TEXTURE_MAXIMUM + 1U, &boolean, &returned) ==
                 CNA_RESULT_INVALID_ARGUMENT &&
             cna_pbr_effect_set_texture(
-                effect, CNA_PBR_TEXTURE_OCCLUSION + 1U, texture) ==
+                effect, CNA_PBR_TEXTURE_MAXIMUM + 1U, texture) ==
                 CNA_RESULT_INVALID_ARGUMENT &&
             cna_effect_clone(effect, &clone) == CNA_RESULT_SUCCESS &&
             type_equals(clone, expected_type));
@@ -277,14 +506,14 @@ static int exercise_common_pbr(
             boolean == CNA_TRUE &&
             cna_directional_light_destroy(lights[0]) == CNA_RESULT_SUCCESS);
     lights[0] = CNA_INVALID_HANDLE;
-    for (uint32_t slot = 0U; slot <= CNA_PBR_TEXTURE_OCCLUSION; ++slot) {
+    for (uint32_t slot = 0U; slot <= CNA_PBR_TEXTURE_MAXIMUM; ++slot) {
         REQUIRE(cna_pbr_effect_get_texture(clone, slot, &boolean, &returned) ==
                     CNA_RESULT_SUCCESS && boolean == CNA_TRUE && returned == texture &&
                 cna_pbr_effect_set_texture(effect, slot, CNA_INVALID_HANDLE) ==
                     CNA_RESULT_SUCCESS);
     }
     REQUIRE(cna_texture2d_destroy(texture) == CNA_RESULT_INVALID_STATE);
-    for (uint32_t slot = 0U; slot <= CNA_PBR_TEXTURE_OCCLUSION; ++slot) {
+    for (uint32_t slot = 0U; slot <= CNA_PBR_TEXTURE_MAXIMUM; ++slot) {
         REQUIRE(cna_pbr_effect_set_texture(clone, slot, CNA_INVALID_HANDLE) ==
                     CNA_RESULT_SUCCESS);
     }

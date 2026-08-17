@@ -27,12 +27,14 @@
 #include "Microsoft/Xna/Framework/Graphics/IEffectFog.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectLights.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AlphaModeEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureTransformEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
@@ -73,6 +75,7 @@ using Microsoft::Xna::Framework::Quaternion;
 using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Vector4;
+using Microsoft::Xna::Framework::Graphics::AlphaModeEXT;
 using Microsoft::Xna::Framework::Graphics::EffectAnnotation;
 using Microsoft::Xna::Framework::Graphics::EffectAnnotationCollection;
 using Microsoft::Xna::Framework::Graphics::Effect;
@@ -103,6 +106,7 @@ using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
 using Microsoft::Xna::Framework::Graphics::SpriteEffect;
 using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::TextureTransformEXT;
 using Microsoft::Xna::Framework::Graphics::Texture3D;
 using Microsoft::Xna::Framework::Graphics::TextureCube;
 
@@ -274,7 +278,7 @@ struct EffectLifetime final {
     RetainedTextureSlot stockTexture0;
     RetainedTextureSlot stockTexture1;
     RetainedTextureSlot environmentMap;
-    std::array<RetainedTextureSlot, 5> pbrTextures;
+    std::array<RetainedTextureSlot, CNA_PBR_TEXTURE_MAXIMUM + 1U> pbrTextures;
 };
 
 struct EffectState final {
@@ -6581,7 +6585,7 @@ CNA_Result cna_pbr_effect_get_texture(
     CNA_Handle* const outTexture)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (slot > CNA_PBR_TEXTURE_OCCLUSION) {
+        if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
             return InvalidArgument("The PBR texture slot is outside the valid range.");
         }
         PbrEffectView view;
@@ -6603,7 +6607,7 @@ CNA_Result cna_pbr_effect_set_texture(
     const CNA_Handle textureHandle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (slot > CNA_PBR_TEXTURE_OCCLUSION) {
+        if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
             return InvalidArgument("The PBR texture slot is outside the valid range.");
         }
         PbrEffectView view;
@@ -6622,7 +6626,9 @@ CNA_Result cna_pbr_effect_set_texture(
                     case CNA_PBR_TEXTURE_NORMAL: view.pbr->SetOwnedNormalMap(std::move(texture)); break;
                     case CNA_PBR_TEXTURE_METALLIC_ROUGHNESS: view.pbr->SetOwnedMetallicRoughnessMap(std::move(texture)); break;
                     case CNA_PBR_TEXTURE_EMISSIVE: view.pbr->SetOwnedEmissiveMap(std::move(texture)); break;
-                    default: view.pbr->SetOwnedOcclusionMap(std::move(texture)); break;
+                    case CNA_PBR_TEXTURE_OCCLUSION: view.pbr->SetOwnedOcclusionMap(std::move(texture)); break;
+                    case CNA_PBR_TEXTURE_SPECULAR_EXT: view.pbr->SetOwnedSpecularMapEXT(std::move(texture)); break;
+                    default: view.pbr->SetOwnedSpecularColorMapEXT(std::move(texture)); break;
                     }
                 } else {
                     switch (slot) {
@@ -6630,7 +6636,9 @@ CNA_Result cna_pbr_effect_set_texture(
                     case CNA_PBR_TEXTURE_NORMAL: view.skinned->SetOwnedNormalMap(std::move(texture)); break;
                     case CNA_PBR_TEXTURE_METALLIC_ROUGHNESS: view.skinned->SetOwnedMetallicRoughnessMap(std::move(texture)); break;
                     case CNA_PBR_TEXTURE_EMISSIVE: view.skinned->SetOwnedEmissiveMap(std::move(texture)); break;
-                    default: view.skinned->SetOwnedOcclusionMap(std::move(texture)); break;
+                    case CNA_PBR_TEXTURE_OCCLUSION: view.skinned->SetOwnedOcclusionMap(std::move(texture)); break;
+                    case CNA_PBR_TEXTURE_SPECULAR_EXT: view.skinned->SetOwnedSpecularMapEXT(std::move(texture)); break;
+                    default: view.skinned->SetOwnedSpecularColorMapEXT(std::move(texture)); break;
                     }
                 }
             });
@@ -6749,6 +6757,652 @@ CNA_Result cna_pbr_effect_set_emissive_factor(
             view.pbr->setEmissiveFactorProperty(ToNative(value));
         } else {
             view.skinned->setEmissiveFactorProperty(ToNative(value));
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+// The three colour-carrying slots. Everything else a PBR material samples -- the normal map's
+// tangent-space vectors, the packed metallic-roughness channels, the occlusion factor -- is linear
+// data by definition, so an sRGB question about those slots has no answer rather than a false one.
+[[nodiscard]] bool IsColorTextureSlot(const CNA_PbrTextureSlot slot) noexcept
+{
+    return slot == CNA_PBR_TEXTURE_BASE_COLOR || slot == CNA_PBR_TEXTURE_EMISSIVE ||
+        slot == CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT;
+}
+
+[[nodiscard]] CNA_Bool ToCBoolean(const bool value) noexcept
+{
+    return value ? CNA_TRUE : CNA_FALSE;
+}
+
+[[nodiscard]] CNA_TextureTransformEXT ToC(const TextureTransformEXT& value) noexcept
+{
+    return CNA_TextureTransformEXT{
+        .struct_size = sizeof(CNA_TextureTransformEXT),
+        .struct_version = StructureVersion,
+        .offset = ToC(value.Offset),
+        .scale = ToC(value.Scale),
+        .rotation = value.Rotation};
+}
+
+[[nodiscard]] TextureTransformEXT ToNative(const CNA_TextureTransformEXT& value) noexcept
+{
+    return TextureTransformEXT{
+        .Offset = ToNative(value.offset),
+        .Scale = ToNative(value.scale),
+        .Rotation = value.rotation};
+}
+
+[[nodiscard]] bool IsTextureTransform(const CNA_TextureTransformEXT* const value) noexcept
+{
+    return value != nullptr && value->struct_size >= sizeof(CNA_TextureTransformEXT) &&
+        value->struct_version == StructureVersion;
+}
+
+} // namespace
+
+CNA_Result cna_texture_transform_ext_init(CNA_TextureTransformEXT* const outTransform)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTransform == nullptr) {
+            return InvalidArgument("The texture transform output is null.");
+        }
+        *outTransform = ToC(TextureTransformEXT{});
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_texture_transform_ext_equals(
+    const CNA_TextureTransformEXT* const left,
+    const CNA_TextureTransformEXT* const right,
+    CNA_Bool* const outEqual)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEqual == nullptr) {
+            return InvalidArgument("The texture transform comparison output is null.");
+        }
+        if (!IsTextureTransform(left) || !IsTextureTransform(right)) {
+            return InvalidArgument("A texture transform operand is null or malformed.");
+        }
+        *outEqual = ToCBoolean(ToNative(*left) == ToNative(*right));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_ior_ext(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The PBR index-of-refraction output is null.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = view.pbr != nullptr
+            ? view.pbr->getIorEXTProperty()
+            : view.skinned->getIorEXTProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_ior_ext(const CNA_EffectHandle effectHandle, const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (view.pbr != nullptr) {
+            view.pbr->setIorEXTProperty(value);
+        } else {
+            view.skinned->setIorEXTProperty(value);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_specular_factor_ext(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The PBR specular-factor output is null.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = view.pbr != nullptr
+            ? view.pbr->getSpecularFactorEXTProperty()
+            : view.skinned->getSpecularFactorEXTProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_specular_factor_ext(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (view.pbr != nullptr) {
+            view.pbr->setSpecularFactorEXTProperty(value);
+        } else {
+            view.skinned->setSpecularFactorEXTProperty(value);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_specular_color_factor_ext(
+    const CNA_EffectHandle effectHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The PBR specular-colour-factor output is null.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(view.pbr != nullptr
+            ? view.pbr->getSpecularColorFactorEXTProperty()
+            : view.skinned->getSpecularColorFactorEXTProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_specular_color_factor_ext(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (view.pbr != nullptr) {
+            view.pbr->setSpecularColorFactorEXTProperty(ToNative(value));
+        } else {
+            view.skinned->setSpecularColorFactorEXTProperty(ToNative(value));
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_normal_scale_ext(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The PBR normal-scale output is null.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = view.pbr != nullptr
+            ? view.pbr->getNormalScaleEXTProperty()
+            : view.skinned->getNormalScaleEXTProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_normal_scale_ext(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (view.pbr != nullptr) {
+            view.pbr->setNormalScaleEXTProperty(value);
+        } else {
+            view.skinned->setNormalScaleEXTProperty(value);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_occlusion_strength_ext(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The PBR occlusion-strength output is null.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = view.pbr != nullptr
+            ? view.pbr->getOcclusionStrengthEXTProperty()
+            : view.skinned->getOcclusionStrengthEXTProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_occlusion_strength_ext(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (view.pbr != nullptr) {
+            view.pbr->setOcclusionStrengthEXTProperty(value);
+        } else {
+            view.skinned->setOcclusionStrengthEXTProperty(value);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_texture_coordinate_set_ext(
+    const CNA_EffectHandle effectHandle,
+    const CNA_PbrTextureSlot slot,
+    int32_t* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The PBR texture-coordinate-set output is null.");
+        }
+        if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
+            return InvalidArgument("The PBR texture slot is outside the valid range.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto read = [slot](const auto& effect) -> int {
+            switch (slot) {
+            case CNA_PBR_TEXTURE_SPECULAR_EXT:
+                return effect.getSpecularTextureCoordinateSetEXTProperty();
+            case CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT:
+                return effect.getSpecularColorTextureCoordinateSetEXTProperty();
+            default:
+                return effect.getTextureCoordinateSetsEXTProperty()[slot];
+            }
+        };
+        *outValue = view.pbr != nullptr ? read(*view.pbr) : read(*view.skinned);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_texture_coordinate_set_ext(
+    const CNA_EffectHandle effectHandle,
+    const CNA_PbrTextureSlot slot,
+    const int32_t value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
+            return InvalidArgument("The PBR texture slot is outside the valid range.");
+        }
+        if (value != 0 && value != 1) {
+            return InvalidArgument("The packed UV channel must be 0 or 1.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto write = [slot, value](auto& effect) {
+            switch (slot) {
+            case CNA_PBR_TEXTURE_SPECULAR_EXT:
+                effect.setSpecularTextureCoordinateSetEXTProperty(value);
+                break;
+            case CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT:
+                effect.setSpecularColorTextureCoordinateSetEXTProperty(value);
+                break;
+            default:
+                effect.setTextureCoordinateSetEXTProperty(static_cast<int>(slot), value);
+                break;
+            }
+        };
+        if (view.pbr != nullptr) {
+            write(*view.pbr);
+        } else {
+            write(*view.skinned);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_texture_transform_ext(
+    const CNA_EffectHandle effectHandle,
+    const CNA_PbrTextureSlot slot,
+    CNA_TextureTransformEXT* const outTransform)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsTextureTransform(outTransform)) {
+            return InvalidArgument("The PBR texture-transform output is null or malformed.");
+        }
+        if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
+            return InvalidArgument("The PBR texture slot is outside the valid range.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto read = [slot](const auto& effect) -> TextureTransformEXT {
+            switch (slot) {
+            case CNA_PBR_TEXTURE_SPECULAR_EXT:
+                return effect.getSpecularTextureTransformEXTProperty();
+            case CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT:
+                return effect.getSpecularColorTextureTransformEXTProperty();
+            default:
+                return effect.getTextureTransformsEXTProperty()[slot];
+            }
+        };
+        *outTransform = ToC(view.pbr != nullptr ? read(*view.pbr) : read(*view.skinned));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_texture_transform_ext(
+    const CNA_EffectHandle effectHandle,
+    const CNA_PbrTextureSlot slot,
+    const CNA_TextureTransformEXT* const transform)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsTextureTransform(transform)) {
+            return InvalidArgument("The PBR texture transform is null or malformed.");
+        }
+        if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
+            return InvalidArgument("The PBR texture slot is outside the valid range.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const TextureTransformEXT native = ToNative(*transform);
+        const auto write = [slot, &native](auto& effect) {
+            switch (slot) {
+            case CNA_PBR_TEXTURE_SPECULAR_EXT:
+                effect.setSpecularTextureTransformEXTProperty(native);
+                break;
+            case CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT:
+                effect.setSpecularColorTextureTransformEXTProperty(native);
+                break;
+            default:
+                effect.setTextureTransformEXTProperty(static_cast<int>(slot), native);
+                break;
+            }
+        };
+        if (view.pbr != nullptr) {
+            write(*view.pbr);
+        } else {
+            write(*view.skinned);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_texture_is_srgb_ext(
+    const CNA_EffectHandle effectHandle,
+    const CNA_PbrTextureSlot slot,
+    CNA_Bool* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The PBR sRGB output is null.");
+        }
+        if (!IsColorTextureSlot(slot)) {
+            return InvalidArgument("Only the base-colour, emissive and specular-colour slots "
+                                   "carry an sRGB encoding flag.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto read = [slot](const auto& effect) -> bool {
+            switch (slot) {
+            case CNA_PBR_TEXTURE_EMISSIVE:
+                return effect.getEmissiveTextureIsSrgbEXTProperty();
+            case CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT:
+                return effect.getSpecularColorTextureIsSrgbEXTProperty();
+            default:
+                return effect.getBaseColorTextureIsSrgbEXTProperty();
+            }
+        };
+        *outValue = ToCBoolean(view.pbr != nullptr ? read(*view.pbr) : read(*view.skinned));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_texture_is_srgb_ext(
+    const CNA_EffectHandle effectHandle,
+    const CNA_PbrTextureSlot slot,
+    const CNA_Bool value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsBool(value)) {
+            return InvalidArgument("The boolean argument is neither CNA_TRUE nor CNA_FALSE.");
+        }
+        if (!IsColorTextureSlot(slot)) {
+            return InvalidArgument("Only the base-colour, emissive and specular-colour slots "
+                                   "carry an sRGB encoding flag.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const bool native = (value == CNA_TRUE);
+        const auto write = [slot, native](auto& effect) {
+            switch (slot) {
+            case CNA_PBR_TEXTURE_EMISSIVE:
+                effect.setEmissiveTextureIsSrgbEXTProperty(native);
+                break;
+            case CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT:
+                effect.setSpecularColorTextureIsSrgbEXTProperty(native);
+                break;
+            default:
+                effect.setBaseColorTextureIsSrgbEXTProperty(native);
+                break;
+            }
+        };
+        if (view.pbr != nullptr) {
+            write(*view.pbr);
+        } else {
+            write(*view.skinned);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_encode_output_to_srgb_ext(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The PBR output-encoding output is null.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToCBoolean(view.pbr != nullptr
+            ? view.pbr->getEncodeOutputToSrgbEXTProperty()
+            : view.skinned->getEncodeOutputToSrgbEXTProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_encode_output_to_srgb_ext(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Bool value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsBool(value)) {
+            return InvalidArgument("The boolean argument is neither CNA_TRUE nor CNA_FALSE.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (view.pbr != nullptr) {
+            view.pbr->setEncodeOutputToSrgbEXTProperty((value == CNA_TRUE));
+        } else {
+            view.skinned->setEncodeOutputToSrgbEXTProperty((value == CNA_TRUE));
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_alpha_mode_ext(
+    const CNA_EffectHandle effectHandle,
+    CNA_AlphaModeEXT* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The PBR alpha-mode output is null.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = static_cast<CNA_AlphaModeEXT>(view.pbr != nullptr
+            ? view.pbr->getAlphaModeEXTProperty()
+            : view.skinned->getAlphaModeEXTProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_alpha_mode_ext(
+    const CNA_EffectHandle effectHandle,
+    const CNA_AlphaModeEXT value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (value > CNA_ALPHA_MODE_MAXIMUM_EXT) {
+            return InvalidArgument("The alpha mode is not a defined identity.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto native = static_cast<AlphaModeEXT>(value);
+        if (view.pbr != nullptr) {
+            view.pbr->setAlphaModeEXTProperty(native);
+        } else {
+            view.skinned->setAlphaModeEXTProperty(native);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_alpha_cutoff_ext(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The PBR alpha-cutoff output is null.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = view.pbr != nullptr
+            ? view.pbr->getAlphaCutoffEXTProperty()
+            : view.skinned->getAlphaCutoffEXTProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_alpha_cutoff_ext(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (view.pbr != nullptr) {
+            view.pbr->setAlphaCutoffEXTProperty(value);
+        } else {
+            view.skinned->setAlphaCutoffEXTProperty(value);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_double_sided_ext(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The PBR double-sided output is null.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToCBoolean(view.pbr != nullptr
+            ? view.pbr->getDoubleSidedEXTProperty()
+            : view.skinned->getDoubleSidedEXTProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_double_sided_ext(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Bool value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsBool(value)) {
+            return InvalidArgument("The boolean argument is neither CNA_TRUE nor CNA_FALSE.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (view.pbr != nullptr) {
+            view.pbr->setDoubleSidedEXTProperty((value == CNA_TRUE));
+        } else {
+            view.skinned->setDoubleSidedEXTProperty((value == CNA_TRUE));
         }
         return CNA_RESULT_SUCCESS;
     });

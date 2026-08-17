@@ -474,7 +474,11 @@ def load_rules(path: Path) -> list[Rule]:
     return rules
 
 
-def approve_rule_symbols(path: Path, usage: dict[str, list[str]]) -> int:
+def approve_rule_symbols(
+    path: Path,
+    usage: dict[str, list[str]],
+    only: list[str] | None = None,
+) -> int:
     """Record the symbols each explicit rule is reviewed against.
 
     Deliberately separate from ``--write``: the routine command a developer runs to refresh the
@@ -483,9 +487,15 @@ def approve_rule_symbols(path: Path, usage: dict[str, list[str]]) -> int:
     symbols have been looked at and the rule's mapping and test evidence genuinely cover them.
     """
     payload = json.loads(path.read_text(encoding="utf-8"))
+    selected = set(only or ())
+    known = {raw["id"] for raw in payload.get("rules", [])}
+    if unknown := sorted(selected - known):
+        raise RuntimeError("No such coverage rule: " + ", ".join(unknown))
     changed: list[str] = []
     for raw in payload.get("rules", []):
         rule_id = raw["id"]
+        if selected and rule_id not in selected:
+            continue
         measured = sorted(usage.get(rule_id, ()))
         previous = raw.get("approved_symbols") or []
         if sorted(previous) != measured:
@@ -791,7 +801,20 @@ def parse_arguments() -> argparse.Namespace:
         type=Path,
         help="override the Markdown path (primarily for isolated generator tests)",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--rule",
+        action="append",
+        default=[],
+        metavar="ID",
+        help=(
+            "with --approve-rule-symbols, re-approve only these rules; repeatable. A task that "
+            "binds one family must not approve the rest along with it"
+        ),
+    )
+    arguments = parser.parse_args()
+    if arguments.rule and not arguments.approve_rule_symbols:
+        parser.error("--rule is only meaningful with --approve-rule-symbols")
+    return arguments
 
 
 def main() -> int:
@@ -815,7 +838,7 @@ def main() -> int:
         usage_out=usage,
     )
     if arguments.approve_rule_symbols:
-        return approve_rule_symbols(rules_path, usage)
+        return approve_rule_symbols(rules_path, usage, arguments.rule)
     validate_inventory(headers, excluded, symbols, mappings)
     rendered = render_markdown(headers, excluded, symbols, mappings)
 

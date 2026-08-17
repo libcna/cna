@@ -74,6 +74,51 @@ typedef uint32_t CNA_PbrTextureSlot;
 #define CNA_PBR_TEXTURE_EMISSIVE UINT32_C(3)
 /** @brief Occlusion texture slot. */
 #define CNA_PBR_TEXTURE_OCCLUSION UINT32_C(4)
+/** @brief `KHR_materials_specular` scalar strength map slot; sampled from the alpha channel. */
+#define CNA_PBR_TEXTURE_SPECULAR_EXT UINT32_C(5)
+/** @brief `KHR_materials_specular` colour map slot; sRGB encoded by default. */
+#define CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT UINT32_C(6)
+/** @brief Highest defined PBR texture slot identity. */
+#define CNA_PBR_TEXTURE_MAXIMUM CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT
+
+/**
+ * @brief Fixed-width glTF alpha-coverage identity.
+ *
+ * CNA extension: XNA has no material alpha mode. The values match
+ * `Microsoft::Xna::Framework::Graphics::AlphaModeEXT`.
+ */
+typedef uint32_t CNA_AlphaModeEXT;
+/** @brief The rendered output is fully opaque and any alpha is ignored. */
+#define CNA_ALPHA_MODE_OPAQUE_EXT UINT32_C(0)
+/** @brief Alpha is compared against the cutoff and the fragment is kept or discarded. */
+#define CNA_ALPHA_MODE_MASK_EXT UINT32_C(1)
+/** @brief Alpha blends the fragment with what is already there. */
+#define CNA_ALPHA_MODE_BLEND_EXT UINT32_C(2)
+/** @brief Highest defined alpha-mode identity. */
+#define CNA_ALPHA_MODE_MAXIMUM_EXT CNA_ALPHA_MODE_BLEND_EXT
+
+/**
+ * @brief A texture coordinate's scale-rotate-translate transform, as `KHR_texture_transform`.
+ *
+ * CNA extension. The transform is independent of which packed UV channel a slot samples: the
+ * selected coordinate is scaled, then rotated, then translated, and the result is sampled.
+ */
+typedef struct CNA_TextureTransformEXT {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Translation applied after scaling and rotation; zero by default. */
+    CNA_Vector2 offset;
+
+    /** @brief Per-axis scale; one by default. */
+    CNA_Vector2 scale;
+
+    /** @brief Counter-clockwise rotation in radians; zero by default. */
+    float rotation;
+} CNA_TextureTransformEXT;
 
 /** @brief Owned standalone or stable effect-member view of a DirectionalLight. */
 typedef CNA_Handle CNA_DirectionalLightHandle;
@@ -2131,6 +2176,190 @@ CNA_C_API CNA_Result cna_pbr_effect_get_emissive_factor(
 CNA_C_API CNA_Result cna_pbr_effect_set_emissive_factor(
     CNA_EffectHandle effect,
     CNA_Vector3 value);
+
+/**
+ * @brief Fills a texture transform with its documented defaults.
+ *
+ * Identity: no offset, unit scale, no rotation. Call this before setting individual fields so the
+ * size and version headers are correct for the library that was built against them.
+ *
+ * @param out_transform Destination transform.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` when @p out_transform is null.
+ */
+CNA_C_API CNA_Result cna_texture_transform_ext_init(CNA_TextureTransformEXT* out_transform);
+
+/**
+ * @brief Compares two texture transforms field by field.
+ * @param left First transform.
+ * @param right Second transform.
+ * @param out_equal Receives whether every field is equal.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed argument.
+ */
+CNA_C_API CNA_Result cna_texture_transform_ext_equals(
+    const CNA_TextureTransformEXT* left,
+    const CNA_TextureTransformEXT* right,
+    CNA_Bool* out_equal);
+
+/** @brief Gets `KHR_materials_ior`'s index of refraction; 1.5 by default. */
+CNA_C_API CNA_Result cna_pbr_effect_get_ior_ext(CNA_EffectHandle effect, float* out_value);
+
+/** @brief Sets the dielectric index of refraction without clamping. */
+CNA_C_API CNA_Result cna_pbr_effect_set_ior_ext(CNA_EffectHandle effect, float value);
+
+/** @brief Gets `KHR_materials_specular`'s reflection strength; 1 by default. */
+CNA_C_API CNA_Result cna_pbr_effect_get_specular_factor_ext(
+    CNA_EffectHandle effect,
+    float* out_value);
+
+/** @brief Sets the dielectric specular strength without clamping. */
+CNA_C_API CNA_Result cna_pbr_effect_set_specular_factor_ext(CNA_EffectHandle effect, float value);
+
+/** @brief Gets the linear-RGB F0 colour factor; white by default. */
+CNA_C_API CNA_Result cna_pbr_effect_get_specular_color_factor_ext(
+    CNA_EffectHandle effect,
+    CNA_Vector3* out_value);
+
+/** @brief Sets the dielectric F0 colour factor. */
+CNA_C_API CNA_Result cna_pbr_effect_set_specular_color_factor_ext(
+    CNA_EffectHandle effect,
+    CNA_Vector3 value);
+
+/** @brief Gets how far the bound normal map perturbs the surface; 1 by default. */
+CNA_C_API CNA_Result cna_pbr_effect_get_normal_scale_ext(
+    CNA_EffectHandle effect,
+    float* out_value);
+
+/** @brief Sets the normal scale; 0 flattens the map, 1 is as authored. */
+CNA_C_API CNA_Result cna_pbr_effect_set_normal_scale_ext(CNA_EffectHandle effect, float value);
+
+/** @brief Gets how far the bound occlusion map darkens; 1 by default. */
+CNA_C_API CNA_Result cna_pbr_effect_get_occlusion_strength_ext(
+    CNA_EffectHandle effect,
+    float* out_value);
+
+/** @brief Sets the occlusion strength; 0 disables occlusion, 1 applies the map as authored. */
+CNA_C_API CNA_Result cna_pbr_effect_set_occlusion_strength_ext(
+    CNA_EffectHandle effect,
+    float value);
+
+/**
+ * @brief Gets the packed vertex UV channel one texture slot samples.
+ * @param effect PbrEffect or SkinnedPbrEffect handle.
+ * @param slot One of the `CNA_PBR_TEXTURE_*` identities.
+ * @param out_value Receives the packed UV channel, 0 or 1.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_pbr_effect_get_texture_coordinate_set_ext(
+    CNA_EffectHandle effect,
+    CNA_PbrTextureSlot slot,
+    int32_t* out_value);
+
+/**
+ * @brief Selects the packed vertex UV channel for one texture slot.
+ * @param effect PbrEffect or SkinnedPbrEffect handle.
+ * @param slot One of the `CNA_PBR_TEXTURE_*` identities.
+ * @param value Packed UV channel, either 0 or 1.
+ * @return `CNA_RESULT_INVALID_ARGUMENT` for an undefined slot or a channel outside [0,1].
+ */
+CNA_C_API CNA_Result cna_pbr_effect_set_texture_coordinate_set_ext(
+    CNA_EffectHandle effect,
+    CNA_PbrTextureSlot slot,
+    int32_t value);
+
+/**
+ * @brief Gets one texture slot's scale-rotate-translate transform.
+ * @param effect PbrEffect or SkinnedPbrEffect handle.
+ * @param slot One of the `CNA_PBR_TEXTURE_*` identities.
+ * @param out_transform Receives the transform; its size and version headers must be set.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_pbr_effect_get_texture_transform_ext(
+    CNA_EffectHandle effect,
+    CNA_PbrTextureSlot slot,
+    CNA_TextureTransformEXT* out_transform);
+
+/**
+ * @brief Sets one texture slot's scale-rotate-translate transform.
+ * @param effect PbrEffect or SkinnedPbrEffect handle.
+ * @param slot One of the `CNA_PBR_TEXTURE_*` identities.
+ * @param transform The new transform.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_pbr_effect_set_texture_transform_ext(
+    CNA_EffectHandle effect,
+    CNA_PbrTextureSlot slot,
+    const CNA_TextureTransformEXT* transform);
+
+/**
+ * @brief Gets whether one texture slot's samples are sRGB encoded.
+ *
+ * Only the three colour-carrying slots have this flag: base colour, emissive and specular colour.
+ * The others are linear data by definition, and asking about them is refused rather than answered
+ * with a value that would mean nothing.
+ *
+ * @param effect PbrEffect or SkinnedPbrEffect handle.
+ * @param slot `CNA_PBR_TEXTURE_BASE_COLOR`, `CNA_PBR_TEXTURE_EMISSIVE` or
+ *             `CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT`.
+ * @param out_value Receives whether the slot's samples require sRGB decoding.
+ * @return `CNA_RESULT_INVALID_ARGUMENT` for any other slot.
+ */
+CNA_C_API CNA_Result cna_pbr_effect_get_texture_is_srgb_ext(
+    CNA_EffectHandle effect,
+    CNA_PbrTextureSlot slot,
+    CNA_Bool* out_value);
+
+/**
+ * @brief Sets whether one texture slot's samples require sRGB decoding.
+ * @param effect PbrEffect or SkinnedPbrEffect handle.
+ * @param slot One of the three colour-carrying slots documented by the getter.
+ * @param value Whether the samples are sRGB encoded.
+ * @return `CNA_RESULT_INVALID_ARGUMENT` for any other slot.
+ */
+CNA_C_API CNA_Result cna_pbr_effect_set_texture_is_srgb_ext(
+    CNA_EffectHandle effect,
+    CNA_PbrTextureSlot slot,
+    CNA_Bool value);
+
+/** @brief Gets whether the shader encodes its own output to sRGB. */
+CNA_C_API CNA_Result cna_pbr_effect_get_encode_output_to_srgb_ext(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_value);
+
+/** @brief Sets whether the shader encodes its own output to sRGB. */
+CNA_C_API CNA_Result cna_pbr_effect_set_encode_output_to_srgb_ext(
+    CNA_EffectHandle effect,
+    CNA_Bool value);
+
+/** @brief Gets the material's alpha-coverage mode. */
+CNA_C_API CNA_Result cna_pbr_effect_get_alpha_mode_ext(
+    CNA_EffectHandle effect,
+    CNA_AlphaModeEXT* out_value);
+
+/**
+ * @brief Sets the material's alpha-coverage mode.
+ * @param effect PbrEffect or SkinnedPbrEffect handle.
+ * @param value One `CNA_ALPHA_MODE_*_EXT` identity.
+ * @return `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ */
+CNA_C_API CNA_Result cna_pbr_effect_set_alpha_mode_ext(
+    CNA_EffectHandle effect,
+    CNA_AlphaModeEXT value);
+
+/** @brief Gets the alpha threshold used by `CNA_ALPHA_MODE_MASK_EXT`. */
+CNA_C_API CNA_Result cna_pbr_effect_get_alpha_cutoff_ext(
+    CNA_EffectHandle effect,
+    float* out_value);
+
+/** @brief Sets the alpha threshold used by `CNA_ALPHA_MODE_MASK_EXT`. */
+CNA_C_API CNA_Result cna_pbr_effect_set_alpha_cutoff_ext(CNA_EffectHandle effect, float value);
+
+/** @brief Gets whether the material is rendered from both sides. */
+CNA_C_API CNA_Result cna_pbr_effect_get_double_sided_ext(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_value);
+
+/** @brief Sets whether the material is rendered from both sides. */
+CNA_C_API CNA_Result cna_pbr_effect_set_double_sided_ext(CNA_EffectHandle effect, CNA_Bool value);
 
 /** @brief Gets the SkinnedPbrEffect weights-per-vertex value. */
 CNA_C_API CNA_Result cna_skinned_pbr_effect_get_weights_per_vertex(

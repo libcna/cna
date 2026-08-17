@@ -30,7 +30,7 @@
       "check": "coverage_has_no_planned_rows",
       "recorded": "not met",
       "evidence": "docs/c-api/COVERAGE.md, gated by CApiCoverageMatrix",
-      "note": "Closed by CBIND-044 on 2026-08-16, reopened the same day by the merge of `next`, and closed again by CBIND-047 and CBIND-049. The second merge of `next` reopened it again on 2026-08-17, and CBIND-050 found the first closure had been partly an illusion: 73 mapping rules matched a whole header with `.*`, so 121 symbols the merge added inherited \"implemented and tested\" without a single C route existing for them. Rules are now pinned to the stable IDs they were reviewed against, which is why this reads 176 rather than 55. CBIND-051 binds them. An unapproved partial row still fails this criterion."
+      "note": "Closed by CBIND-044 on 2026-08-16, reopened the same day by the merge of `next`, and closed again by CBIND-047 and CBIND-049. The second merge of `next` reopened it again on 2026-08-17, and CBIND-050 found the first closure had been partly an illusion: 73 mapping rules matched a whole header with `.*`, so 121 symbols the merge added inherited \"implemented and tested\" without a single C route existing for them. Rules are now pinned to the stable IDs they were reviewed against, which is why this reopened at 176 rather than 55. CBIND-051A bound the first 84 -- the KHR material extensions on both PBR effects -- leaving 92. An unapproved partial row still fails this criterion."
     },
     {
       "id": "limitations-matrix",

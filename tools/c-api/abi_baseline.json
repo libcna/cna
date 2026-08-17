@@ -2743,17 +2743,41 @@
   "cna_packet_writer_write_vector4",
   "cna_pbr_effect_create",
   "cna_pbr_effect_get_alpha",
+  "cna_pbr_effect_get_alpha_cutoff_ext",
+  "cna_pbr_effect_get_alpha_mode_ext",
   "cna_pbr_effect_get_diffuse_color",
+  "cna_pbr_effect_get_double_sided_ext",
   "cna_pbr_effect_get_emissive_factor",
+  "cna_pbr_effect_get_encode_output_to_srgb_ext",
+  "cna_pbr_effect_get_ior_ext",
   "cna_pbr_effect_get_metallic_factor",
+  "cna_pbr_effect_get_normal_scale_ext",
+  "cna_pbr_effect_get_occlusion_strength_ext",
   "cna_pbr_effect_get_roughness_factor",
+  "cna_pbr_effect_get_specular_color_factor_ext",
+  "cna_pbr_effect_get_specular_factor_ext",
   "cna_pbr_effect_get_texture",
+  "cna_pbr_effect_get_texture_coordinate_set_ext",
+  "cna_pbr_effect_get_texture_is_srgb_ext",
+  "cna_pbr_effect_get_texture_transform_ext",
   "cna_pbr_effect_set_alpha",
+  "cna_pbr_effect_set_alpha_cutoff_ext",
+  "cna_pbr_effect_set_alpha_mode_ext",
   "cna_pbr_effect_set_diffuse_color",
+  "cna_pbr_effect_set_double_sided_ext",
   "cna_pbr_effect_set_emissive_factor",
+  "cna_pbr_effect_set_encode_output_to_srgb_ext",
+  "cna_pbr_effect_set_ior_ext",
   "cna_pbr_effect_set_metallic_factor",
+  "cna_pbr_effect_set_normal_scale_ext",
+  "cna_pbr_effect_set_occlusion_strength_ext",
   "cna_pbr_effect_set_roughness_factor",
+  "cna_pbr_effect_set_specular_color_factor_ext",
+  "cna_pbr_effect_set_specular_factor_ext",
   "cna_pbr_effect_set_texture",
+  "cna_pbr_effect_set_texture_coordinate_set_ext",
+  "cna_pbr_effect_set_texture_is_srgb_ext",
+  "cna_pbr_effect_set_texture_transform_ext",
   "cna_pbr_material_init",
   "cna_picture_album_collection_copy_type_name",
   "cna_picture_album_collection_destroy",
@@ -3300,6 +3324,8 @@
   "cna_texture_get_format_size",
   "cna_texture_get_info",
   "cna_texture_get_pixel_store_alignment",
+  "cna_texture_transform_ext_equals",
+  "cna_texture_transform_ext_init",
   "cna_texture_validate_format",
   "cna_texture_validate_get_data_format",
   "cna_texturecube_copy_type_name",
@@ -3611,6 +3637,10 @@
   "CNA_ABI_VERSION_MAJOR": 0,
   "CNA_ABI_VERSION_MINOR": 1,
   "CNA_ABI_VERSION_PATCH": 0,
+  "CNA_ALPHA_MODE_BLEND_EXT": 2,
+  "CNA_ALPHA_MODE_MASK_EXT": 1,
+  "CNA_ALPHA_MODE_MAXIMUM_EXT": 2,
+  "CNA_ALPHA_MODE_OPAQUE_EXT": 0,
   "CNA_ASCII_QUANTIZE_MODE_BLACK_WHITE": 0,
   "CNA_ASCII_QUANTIZE_MODE_COLOR": 1,
   "CNA_AUDIO_CHANNELS_MONO": 1,
@@ -4532,9 +4562,12 @@
   "CNA_PACKED_VECTOR_FORMAT_SHORT4": 16,
   "CNA_PBR_TEXTURE_BASE_COLOR": 0,
   "CNA_PBR_TEXTURE_EMISSIVE": 3,
+  "CNA_PBR_TEXTURE_MAXIMUM": 6,
   "CNA_PBR_TEXTURE_METALLIC_ROUGHNESS": 2,
   "CNA_PBR_TEXTURE_NORMAL": 1,
   "CNA_PBR_TEXTURE_OCCLUSION": 4,
+  "CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT": 6,
+  "CNA_PBR_TEXTURE_SPECULAR_EXT": 5,
   "CNA_PLANE_INTERSECTION_BACK": 1,
   "CNA_PLANE_INTERSECTION_FRONT": 0,
   "CNA_PLANE_INTERSECTION_INTERSECTING": 2,
@@ -4816,6 +4849,10 @@
   "CNA_AlbumHandle": [
    8,
    8
+  ],
+  "CNA_AlphaModeEXT": [
+   4,
+   4
   ],
   "CNA_AnimationPlayerHandle": [
    8,
@@ -10681,6 +10718,32 @@
     ]
    },
    "size": 24
+  },
+  "CNA_TextureTransformEXT": {
+   "align": 4,
+   "fields": {
+    "offset": [
+     8,
+     8
+    ],
+    "rotation": [
+     24,
+     4
+    ],
+    "scale": [
+     16,
+     8
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 28
   },
   "CNA_TouchCapabilities": {
    "align": 4,
