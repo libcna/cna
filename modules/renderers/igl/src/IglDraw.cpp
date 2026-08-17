@@ -143,8 +143,17 @@ namespace CNA::Internal::Renderers::Igl
         combined = combined * BuildPresentationMatrix(targetWidth, targetHeight, rectX, rectY,
                                                        rectWidth, rectHeight);
 
-        if (GetDevice().getNormalizedZRange() == igl::NormalizedZRange::NegOneToOne)
+        // igl::IDevice::getNormalizedZRange() defaults to NegOneToOne in the base class, and
+        // neither IGL's OpenGL nor Vulkan backend overrides it -- correct for OpenGL (whose native
+        // clip-space Z genuinely is [-1, 1]), but silently wrong for Vulkan, whose native Z range
+        // is [0, 1] like Direct3D. Trusting the reported value applies this OpenGL-only remap to
+        // Vulkan too, corrupting every Z value into the wrong range. IsVulkanBackend() is checked
+        // directly rather than trusting the (for this IGL version, unreliable) API report.
+        if (!IsVulkanBackend() &&
+            GetDevice().getNormalizedZRange() == igl::NormalizedZRange::NegOneToOne)
+        {
             ApplyNegativeOneToOneDepth(combined);
+        }
 
         CopyMatrixToGlsl(combined, uniforms.worldViewProjection);
         CopyMatrixToGlsl(world, uniforms.world);

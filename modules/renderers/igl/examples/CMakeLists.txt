@@ -52,12 +52,22 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
     cna_register_renderer_test(NAME Igl_3D COMMAND cna_test_igl_3d
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    # IGL-60: same binary, forced onto Vulkan -- regression coverage for the NormalizedZRange fix
+    # (this exact scene was the one that first proved it: the depth test only gates correctly once
+    # the OpenGL-only [-1,1] Z remap stops being wrongly applied to Vulkan's native [0,1] range).
+    cna_register_renderer_test(NAME Igl_3D_Vulkan COMMAND cna_test_igl_3d
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
 
     # IGL-24: off-screen targets, their readback row order, and their sampling orientation.
     cna_igl_test(cna_test_igl_rendertarget igl_rendertarget_test.cpp)
     cna_register_renderer_test(NAME Igl_RenderTarget COMMAND cna_test_igl_rendertarget
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    # IGL-60: same binary, forced onto Vulkan -- also regressed by the NormalizedZRange bug.
+    cna_register_renderer_test(NAME Igl_RenderTarget_Vulkan COMMAND cna_test_igl_rendertarget
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
 
     # IGL-55: the first stock-effect parity test beyond BasicEffect's colour-only path.
     cna_igl_test(cna_test_igl_alphatesteffect igl_alphatesteffect_test.cpp)
