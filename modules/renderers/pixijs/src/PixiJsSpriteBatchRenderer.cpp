@@ -60,26 +60,32 @@ EM_JS(void, CNA_PixiJs_FlushSprites, (const void* commands, int count, int strid
         }
         if (sprite.parent !== container) container.addChild(sprite);
 
+        // plan_pixijs.md PIXIJS-44 / REMED-PIXIJS-2: flip via the texture's own GroupD8 `rotate` (mirrors WHICH
+        // texel samples which corner), never via negative sprite.scale. Empirically verified
+        // (2026-08-17, live browser probe against known RGBY texel data, independent of this
+        // build): negative scale composed with an off-center anchor visibly SHIFTS the sprite's
+        // on-screen footprint instead of mirroring content in place (anchor=(0,0), scale=(-4,4)
+        // moved a destRect(20,8,8,8) draw's visible content to x=[12,20) instead of leaving it at
+        // x=[20,28) -- a real bug the original, unverified "negative scale" design got wrong).
+        // GroupD8 rotate values, also confirmed empirically against the same fixture (E=0 is
+        // identity): 12 = pure horizontal mirror, 8 = pure vertical mirror, 4 = both (== 12 XOR 8)
+        // -- all three leave the destination rectangle exactly where destinationX/Y/Width/Height
+        // says it should be, matching XNA's real contract (flip changes sampling, never position).
+        const flipH = (flags & 1) !== 0;
+        const flipV = (flags & 2) !== 0;
+        const pixiRotate = (flipH ? 12 : 0) ^ (flipV ? 8 : 0);
+
         // A fresh PIXI.Texture "view" per draw, sharing the entry's baseTexture/GPU resource but
         // carrying its own frame rectangle -- mutating a shared texture's own .frame in place would
         // corrupt every other sprite currently sampling the same atlas with a different sub-rect.
         const baseTexture = entry.texture.baseTexture || entry.texture;
-        sprite.texture = new PIXI.Texture(baseTexture, new PIXI.Rectangle(sourceX, sourceY, sourceWidth, sourceHeight));
+        sprite.texture = new PIXI.Texture(baseTexture, new PIXI.Rectangle(sourceX, sourceY, sourceWidth, sourceHeight), undefined, undefined, pixiRotate);
 
         // plan_pixijs.md PIXIJS-43: anchor is PixiJS's own normalized (0..1 of the frame) pivot --
         // XNA's origin is source-pixel space, so divide through by the source rectangle's own size.
         sprite.anchor.set(sourceWidth ? originX / sourceWidth : 0, sourceHeight ? originY / sourceHeight : 0);
         sprite.position.set(destinationX, destinationY);
-
-        // plan_pixijs.md PIXIJS-44 (unverified): flip via negative scale composed with the same
-        // anchor point rotation/scale already pivot around -- believed correct by construction
-        // (anchor-relative scale/rotation is exactly XNA's own origin-relative model) but not
-        // verified against a real FNA reference render yet.
-        const flipH = (flags & 1) !== 0;
-        const flipV = (flags & 2) !== 0;
-        const scaleX = (sourceWidth ? destinationWidth / sourceWidth : 1) * (flipH ? -1 : 1);
-        const scaleY = (sourceHeight ? destinationHeight / sourceHeight : 1) * (flipV ? -1 : 1);
-        sprite.scale.set(scaleX, scaleY);
+        sprite.scale.set(sourceWidth ? destinationWidth / sourceWidth : 1, sourceHeight ? destinationHeight / sourceHeight : 1);
         sprite.rotation = rotation;
 
         // plan_pixijs.md PIXIJS-42: native sprite.tint is RGB-only (same split CANVAS-32 already

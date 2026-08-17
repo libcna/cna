@@ -27,7 +27,7 @@ using namespace CNA::Internal::Renderers::PixiJs;
 
 namespace
 {
-    constexpr int kExpectedChecks = 5;
+    constexpr int kExpectedChecks = 9;
 }
 
 class PixiJsSmokeTest : public Game
@@ -71,7 +71,7 @@ protected:
             renderer.GetViewportSize(w, h);
             check(w > 0 && h > 0, "GetViewportSize() reports a positive logical size");
         }
-        else if (frame_ == 2)
+        else if (frame_ == 4)
         {
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             result_ = (passCount_ == kExpectedChecks) ? 0 : 1;
@@ -81,16 +81,61 @@ protected:
 
         dev.Clear(Color::CornflowerBlue);
 
-        spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque);
-        spriteBatch_->Draw(*texture_, Rectangle(8, 8, 8, 8), Rectangle(0, 0, 2, 2), Color::White);
-        spriteBatch_->End();
+        if (frame_ == 1)
+        {
+            // Scaled, unrotated, anchor=(0,0) draw. Source texture is a 2x2 RGBA8 grid
+            // (TL=Red, TR=Green, BL=Blue, BR=Yellow), scaled 4x into an 8x8 destination rect.
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+            spriteBatch_->Draw(*texture_, Rectangle(8, 8, 8, 8), Rectangle(0, 0, 2, 2), Color::White);
+            spriteBatch_->End();
 
-        std::vector<Color> pixels(64 * 64, Color(0, 0, 0, 0));
-        dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
-        check(pixels[8 * 64 + 8] == Color(255, 0, 0, 255),
-              "scaled draw starts with the source's top-left texel");
-        check(pixels[15 * 64 + 15] == Color(255, 255, 0, 255),
-              "scaled draw reaches the exact destination bottom-right texel");
+            std::vector<Color> pixels(64 * 64, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
+            check(pixels[8 * 64 + 8] == Color(255, 0, 0, 255),
+                  "scaled draw starts with the source's top-left texel");
+            check(pixels[15 * 64 + 15] == Color(255, 255, 0, 255),
+                  "scaled draw reaches the exact destination bottom-right texel");
+        }
+        else if (frame_ == 2)
+        {
+            // 180-degree rotation around the texture's exact center (origin=(1,1) in
+            // source-pixel space, matching the 2x2 texture's own midpoint). destRect(8,8,8,8) means
+            // the origin point lands at screen (8,8); the unrotated quad would span (4,4)-(12,12).
+            // Rotating 180 around that same anchor point swaps which quadrant shows which texel:
+            // Red (originally top-left) ends up in the bottom-right quadrant, and Yellow
+            // (originally bottom-right) ends up in the top-left quadrant, while the bounding box
+            // itself (4,4)-(12,12) does not move.
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+            spriteBatch_->Draw(*texture_, Rectangle(8, 8, 8, 8), Rectangle(0, 0, 2, 2), Color::White,
+                                3.14159265358979323846f, Vector2(1.0f, 1.0f), SpriteEffects::None, 0.0f);
+            spriteBatch_->End();
+
+            std::vector<Color> pixels(64 * 64, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
+            check(pixels[4 * 64 + 4] == Color(255, 255, 0, 255),
+                  "180-degree rotation around center puts the source's bottom-right texel at the bounding box's top-left");
+            check(pixels[11 * 64 + 11] == Color(255, 0, 0, 255),
+                  "180-degree rotation around center puts the source's top-left texel at the bounding box's bottom-right");
+        }
+        else if (frame_ == 3)
+        {
+            // FlipHorizontally, origin=(0,0), unrotated, destRect(20,8,8,8): the destination
+            // rectangle must NOT move (REMED-PIXIJS-2's own fix -- a naive negative-scale flip
+            // shifted the footprint left by 8px here, confirmed empirically before the fix). Only
+            // sampling mirrors left-right: the top-left quadrant now shows the source's top-right
+            // texel (Green), and the bottom-right quadrant shows the source's bottom-left (Blue).
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+            spriteBatch_->Draw(*texture_, Rectangle(20, 8, 8, 8), Rectangle(0, 0, 2, 2), Color::White,
+                                0.0f, Vector2::Zero, SpriteEffects::FlipHorizontally, 0.0f);
+            spriteBatch_->End();
+
+            std::vector<Color> pixels(64 * 64, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
+            check(pixels[8 * 64 + 20] == Color(0, 255, 0, 255),
+                  "FlipHorizontally shows the source's top-right texel at the (unmoved) destination top-left");
+            check(pixels[15 * 64 + 27] == Color(0, 0, 255, 255),
+                  "FlipHorizontally shows the source's bottom-left texel at the (unmoved) destination bottom-right");
+        }
     }
 
 public:
