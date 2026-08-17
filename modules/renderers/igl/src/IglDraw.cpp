@@ -430,7 +430,8 @@ namespace CNA::Internal::Renderers::Igl
 
         std::shared_ptr<igl::IShaderStages> stages;
         std::uint64_t programId = 0;
-        if (auto* custom = dynamic_cast<IglEffectRenderer*>(params.customEffectRenderer))
+        auto* custom = dynamic_cast<IglEffectRenderer*>(params.customEffectRenderer);
+        if (custom != nullptr)
         {
             if (!custom->IsValid())
             {
@@ -484,7 +485,7 @@ namespace CNA::Internal::Renderers::Igl
             stencilAttachment ? stencilAttachment->getFormat() : igl::TextureFormat::Invalid);
 
         const std::shared_ptr<igl::IRenderPipelineState> pipeline =
-            AcquirePipeline(key, vertexInput, stages);
+            AcquirePipeline(key, vertexInput, stages, custom);
 
         // ---- Bind and draw --------------------------------------------------------------------
         encoder_->bindRenderPipelineState(pipeline);
@@ -511,7 +512,7 @@ namespace CNA::Internal::Renderers::Igl
 
         BindEffectResources(*encoder_, params, uniforms, bones.get());
 
-        if (auto* custom = dynamic_cast<IglEffectRenderer*>(params.customEffectRenderer))
+        if (custom != nullptr)
             ApplyCustomEffectUniforms(*encoder_, *pipeline, *custom);
 
         const int elementCount = VertexCountForPrimitives(primitive, primitiveCount);
@@ -820,7 +821,7 @@ namespace CNA::Internal::Renderers::Igl
             stencilAttachment ? stencilAttachment->getFormat() : igl::TextureFormat::Invalid);
 
         const std::shared_ptr<igl::IRenderPipelineState> pipeline =
-            AcquirePipeline(key, vertexInput, stages);
+            AcquirePipeline(key, vertexInput, stages, customRenderer);
 
         encoder_->bindRenderPipelineState(pipeline);
         encoder_->bindDepthStencilState(AcquireDepthStencilState());

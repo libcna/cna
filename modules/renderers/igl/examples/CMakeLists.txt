@@ -118,4 +118,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
     cna_register_renderer_test(NAME Igl_RenderTargetCube COMMAND cna_test_igl_rendertargetcube
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # IGL-17/IGL-42..45/IGL-55: custom ShaderEffect compiling and sampling a real Texture3D.
+    cna_igl_test(cna_test_igl_shadereffect_texture3d igl_shadereffect_texture3d_test.cpp)
+    cna_register_renderer_test(NAME Igl_ShaderEffectTexture3D COMMAND cna_test_igl_shadereffect_texture3d
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

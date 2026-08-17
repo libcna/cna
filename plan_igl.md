@@ -29,7 +29,7 @@ custom `ShaderEffect`).
 | C | Resources (textures, buffers, targets) | 🔶 `Texture2D`/`RenderTarget2D`/depth/`RenderTarget2D.GetData` (`Igl_RenderTarget`) and 2-slot MRT (`Igl_Mrt`) verified; cube/3D textures, RenderTargetCube, back-buffer readback beyond the smoke test's own use untested |
 | D | 2D pipeline (`SpriteBatch`) | ✅ verified (`Igl_2D`) |
 | E | 3D pipeline and stock effects | 🔶 `BasicEffect` colour-only + depth test (`Igl_3D`), `AlphaTestEffect` discard (`Igl_AlphaTestEffect`), `DualTextureEffect` (`Igl_DualTextureEffect`) verified; `EnvironmentMapEffect`/`SkinnedEffect`/`PbrEffect`/fog/instancing still ✍️ |
-| F | Custom `ShaderEffect` | ✍️ written, unverified |
+| F | Custom `ShaderEffect` | 🔶 core compile/uniform/texture path verified (OpenGL/GLX, `Igl_ShaderEffectTexture3D`) after fixing a real texture-binding bug; `SpriteBatch.Begin(effect)` and 2D/cube custom textures share the fix but have no dedicated test yet |
 | G | Tests, docs and gates | 🔶 the four example tests pass; platform boundary gates ran clean for this work |
 | H | Verification and hardening | 🔶 IGL-56/57/58/59 done; IGL-60-64 open |
 
@@ -114,7 +114,7 @@ Legend: ✅ done and verified · ✍️ code written, not yet compiled · 🔶 p
 | ID | Task | State | Notes |
 |----|------|-------|-------|
 | IGL-16 | `Texture2D` | ✍️ | RGBA8 and the mapped `SurfaceFormat` set, real mip levels, `HasDefinedMipLevel` from what was actually uploaded |
-| IGL-17 | `TextureCube` / `Texture3D` | 🔶 | real `igl::TextureType::Cube` / `ThreeD` resources, per-face and per-box uploads. `TextureCube` construction, per-face `SetData` and sampling verified by `Igl_EnvironmentMapEffect`; `Texture3D` remains ✍️ |
+| IGL-17 | `TextureCube` / `Texture3D` | 🔶 | real `igl::TextureType::Cube` / `ThreeD` resources, per-face and per-box uploads. `TextureCube` construction, per-face `SetData` and sampling verified by `Igl_EnvironmentMapEffect`; `Texture3D` construction and per-box `SetData` now verified by `Igl_ShaderEffectTexture3D` (sampled through a real custom shader and read back via the back buffer, since `IglTexture3DRenderer::GetData()` intentionally has no readback path of its own -- see `IglResources.cpp`) |
 | IGL-18 | Vertex / index buffers | ✍️ | lazily created, grown on demand, re-upload flushes the pending frame first |
 | IGL-19 | Dynamic buffer pool | ✍️ | 3-frame ring for `SpriteBatch`/`DrawUser*`/uniforms |
 | IGL-20 | `RenderTarget2D` | 🔶 | colour + optional depth/stencil, real MSAA with an IGL resolve attachment, mip regeneration after each pass, `GetData` via `copyBytesColorAttachment`. Colour+depth path verified by `Igl_RenderTarget`; the real-MSAA path was verified this session by `igl_msaa_test.cpp` (`Igl_Msaa`) -- and found a genuine bug on the way (see IGL-15's note). Mip regeneration remains ✍️ |
@@ -154,10 +154,52 @@ Legend: ✅ done and verified · ✍️ code written, not yet compiled · 🔶 p
 
 | ID | Task | State | Notes |
 |----|------|-------|-------|
-| IGL-42 | `ShaderEffect` compilation | ✍️ | `ShaderStagesCreator::fromModuleStringInput`, version-directive adaptation, real compile errors |
-| IGL-43 | Effect parameters | ✍️ | `bindUniform` on OpenGL; explicit refusal on Vulkan (design decision 8) |
-| IGL-44 | Effect textures | ✍️ | `SetTexture` for 2D, cube and volume textures |
-| IGL-45 | `SpriteBatch.Begin(effect)` | ✍️ | custom effect drives the sprite pipeline |
+| IGL-42 | `ShaderEffect` compilation | 🔶 | `ShaderStagesCreator::fromModuleStringInput`, version-directive adaptation, real compile errors. Verified by `igl_shadereffect_texture3d_test.cpp` (`Igl_ShaderEffectTexture3D`) on OpenGL/GLX; still ✍️ on Vulkan (no test attempts a custom effect there, and Phase H's Vulkan bug is unresolved regardless) |
+| IGL-43 | Effect parameters | 🔶 | `bindUniform` on OpenGL; explicit refusal on Vulkan (design decision 8). The `Int`/`Float3` uniforms `Igl_ShaderEffectTexture3D` sets (`VolumeSampler`, `coord`) are verified reaching the shader; float/vec2/vec4/mat4/array variants remain ✍️ |
+| IGL-44 | Effect textures | 🔶 | `SetTexture` for 2D, cube and volume textures. Found and fixed a real, previously-undiscovered architectural bug this session (see below) that left every custom-effect texture unit unbindable; `Texture3D`'s path is now verified end-to-end via `Igl_ShaderEffectTexture3D`. 2D/cube custom-effect textures share the same fixed code path so the fix covers them too, but neither has its own dedicated custom-effect test yet |
+| IGL-45 | `SpriteBatch.Begin(effect)` | ✍️ | custom effect drives the sprite pipeline. The pipeline-creation half of the fix below (`AcquirePipeline`'s new `customEffect` parameter) also applies to the `SpriteBatch` custom-effect draw path in `IglDraw.cpp` (both call sites were fixed together, and `ctest -R Igl` was re-run clean after), but no `SpriteBatch.Begin(effect)`-specific pixel test exists yet to prove it end-to-end |
+
+**IGL-42/43/44 bug, found and fixed this session:** the first test to exercise a custom `ShaderEffect`
+with its own texture sampler (`igl_shadereffect_texture3d_test.cpp`, written to also be the only way
+to verify `Texture3D` sampling -- `IglTexture3DRenderer::GetData()` intentionally refuses readback, so
+sampling one through a real shader and reading the rendered pixel is the only proof route) rendered
+solid black instead of the expected red/blue volume slices, with `Sampler uniform (uTexture0/uEnvMap/
+...) not found in shader` and `Unable to find sampler location` logged. Root cause: `AcquirePipeline()`
+(`IglPipelineCache.cpp`) unconditionally built `igl::RenderPipelineDesc::fragmentUnitSamplerMap` from
+the **built-in uber-shader's fixed sampler names** (`GetSamplerUniformName(unit)` → `uTexture0`,
+`uEnvMap`, ...) for every pipeline, including ones compiled from a custom `ShaderEffect`'s own GLSL
+(which declares whatever sampler names the game wrote, e.g. `VolumeSampler`). IGL's OpenGL backend
+resolves samplers by name at pipeline-creation time (`RenderPipelineState::compilePipeline`, upstream
+`igl/opengl/RenderPipelineState.cpp`) and caches the result in `unitSamplerLocationMap_`; a name that
+does not exist in the custom shader resolves to no location, so every later `encoder.bindTexture(unit,
+...)` call for that unit fails inside `bindTextureUnit()` (`Result::Code::RuntimeError, "Unable to find
+sampler location"`) and the texture is never actually bound anywhere the shader can read it -- silently,
+since `ApplyCustomEffectUniforms()` in `IglDraw.cpp` does not check the encoder's bind result.
+
+Fix: `AcquirePipeline()` gained an optional `const IglEffectRenderer* customEffect` parameter (default
+`nullptr`, so every other call site is unaffected). When non-null, `fragmentUnitSamplerMap` is built
+from that effect's own recorded uniforms instead of the built-in names: every `Int`-typed uniform is
+read back (`IglEffectRenderer::UniformValue::data` stores an int's bytes bit-exact, decoded here via
+`std::memcpy`) as `{samplerName: unit}`, matching the pre-existing, EasyGL-shared convention that a
+custom shader declares which sampler occupies which texture unit through `SetUniformInt(samplerName,
+unit)` -- the same call a game already makes to select a unit in GLSL's own binding model. Both
+`AcquirePipeline()` call sites in `IglDraw.cpp` (the general 3D draw path and the `SpriteBatch`
+custom-effect path) now pass their already-in-scope `IglEffectRenderer*` through. Cache correctness is
+preserved without changes to `PipelineKey`: a custom effect's `programId` (unique per compiled program)
+is already part of the key, and the built-in shader always uses `programId == 0`, so a custom-effect
+pipeline and a built-in one can never collide in the cache regardless of which sampler map either was
+built with.
+
+**Known residual, not a regression:** `BindEffectResources()` unconditionally tries to bind a dummy
+texture to all 7 built-in texture units (`Texture0`, `Texture1`, `EnvironmentMap`, `NormalMap`,
+`MetallicRoughnessMap`, `EmissiveMap`, `OcclusionMap`) on every draw, including custom-effect draws
+whose pipeline's sampler map now only contains the units the effect itself declared. The unused units'
+`bindTexture` calls fail the same "Unable to find sampler location" way and are silently skipped
+(`IGL_LOG_INFO_ONCE`-deduplicated to a single log line per process, confirmed harmless: `coord`/
+`VolumeSampler` — the only slot the test's shader actually reads — bind and sample correctly, and both
+`Igl_ShaderEffectTexture3D` checks pass). Not fixed, since doing so would mean `BindEffectResources`
+tracking which units a bound custom effect's own pipeline actually maps, which is more invasive than
+this task's scope; documented here rather than silently left unexplained.
 
 ### Phase G — tests, docs and gates
 
@@ -202,6 +244,7 @@ Legend: ✅ done and verified · ✍️ code written, not yet compiled · 🔶 p
 | Sampler LOD bias | No field in `igl::SamplerStateDesc` | recorded, not applied |
 | Cube render-target MSAA | Not expressible in `igl::FramebufferDesc` | applied count reported as 1 |
 | Wayland | Only an X11 native window is wired up | the constructor throws by name |
+| Custom-effect pipelines and the 7 built-in texture units | A custom `ShaderEffect`'s pipeline only maps the sampler names/units the effect itself set via `SetUniformInt`; `BindEffectResources()` still unconditionally tries every built-in unit (`Texture0` through `OcclusionMap`) on every draw | the unused units' dummy-texture binds fail inside IGL and are silently skipped (`IGL_LOG_INFO_ONCE`'d to one harmless log line per process); the units the effect actually declared bind and sample correctly |
 
 ---
 
@@ -235,7 +278,7 @@ modules/renderers/igl/
     examples/{CMakeLists.txt,igl_smoke_test.cpp,igl_2d_test.cpp,igl_3d_test.cpp,igl_rendertarget_test.cpp,
         igl_alphatesteffect_test.cpp,igl_dualtextureeffect_test.cpp,igl_fog_test.cpp,igl_stencil_test.cpp,
         igl_mrt_test.cpp,igl_msaa_test.cpp,igl_environmentmapeffect_test.cpp,igl_skinnedeffect_test.cpp,
-        igl_pbreffect_test.cpp,igl_rendertargetcube_test.cpp}
+        igl_pbreffect_test.cpp,igl_rendertargetcube_test.cpp,igl_shadereffect_texture3d_test.cpp}
     tests/CNA/Internal/Renderers/Igl/IglRendererSelectionTests.cpp
 docs/igl-renderer.md
 plan_igl.md

@@ -1769,7 +1769,8 @@ namespace CNA::Internal::Renderers::Igl
         [[nodiscard]] std::shared_ptr<igl::IRenderPipelineState> AcquirePipeline(
             const PipelineKey& key,
             const std::shared_ptr<igl::IVertexInputState>& vertexInput,
-            const std::shared_ptr<igl::IShaderStages>& stages);
+            const std::shared_ptr<igl::IShaderStages>& stages,
+            const IglEffectRenderer* customEffect = nullptr);
         [[nodiscard]] std::shared_ptr<igl::IDepthStencilState> AcquireDepthStencilState();
         [[nodiscard]] std::shared_ptr<igl::ISamplerState> AcquireSamplerState(int slot);
 

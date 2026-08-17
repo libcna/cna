@@ -9,6 +9,7 @@
 #include <igl/ShaderCreator.h>
 
 #include <algorithm>
+#include <cstring>
 #include <functional>
 #include <stdexcept>
 #include <string>
@@ -164,7 +165,8 @@ namespace CNA::Internal::Renderers::Igl
     std::shared_ptr<igl::IRenderPipelineState> IglRenderer::AcquirePipeline(
         const PipelineKey& key,
         const std::shared_ptr<igl::IVertexInputState>& vertexInput,
-        const std::shared_ptr<igl::IShaderStages>& stages)
+        const std::shared_ptr<igl::IShaderStages>& stages,
+        const IglEffectRenderer* customEffect)
     {
         const auto cached = pipelines_.find(key);
         if (cached != pipelines_.end())
@@ -212,8 +214,34 @@ namespace CNA::Internal::Renderers::Igl
         // qualifier (the generated GLSL targets 4.1 core, where `layout(binding=)` on a uniform
         // block is not yet available). These two maps are what turns the generated names back into
         // the binding numbers the encoder uses, so both backends address the same slots.
-        for (std::uint32_t unit = 0; unit < TextureUnit::Count; ++unit)
-            desc.fragmentUnitSamplerMap[unit] = igl::genNameHandle(GetSamplerUniformName(unit));
+        //
+        // A custom ShaderEffect's GLSL declares its own sampler names (e.g. "VolumeSampler"), never
+        // the built-in uber-shader's fixed names ("uTexture0", "uEnvMap", ...), so the built-in map
+        // would resolve to no location for every unit and every SetTexture()/bindTexture() would
+        // silently fail to bind. The convention this renderer follows -- shared with the EasyGL
+        // family -- is that a custom shader declares which sampler occupies which texture unit via
+        // SetUniformInt(samplerName, unit), the same call a game already makes to select a unit. That
+        // recorded Int uniform is read back here to build a sampler map scoped to this one effect's
+        // own program, exactly like the built-in map is scoped to the built-in uber-shader's program.
+        if (customEffect != nullptr)
+        {
+            for (const auto& [name, value] : customEffect->GetUniforms())
+            {
+                if (value.type != igl::UniformType::Int || value.data.empty())
+                    continue;
+                int unit = 0;
+                std::memcpy(&unit, value.data.data(), sizeof(int));
+                if (unit < 0 || unit >= static_cast<int>(TextureUnit::Count))
+                    continue;
+                desc.fragmentUnitSamplerMap[static_cast<std::uint32_t>(unit)] =
+                    igl::genNameHandle(name);
+            }
+        }
+        else
+        {
+            for (std::uint32_t unit = 0; unit < TextureUnit::Count; ++unit)
+                desc.fragmentUnitSamplerMap[unit] = igl::genNameHandle(GetSamplerUniformName(unit));
+        }
         desc.uniformBlockBindingMap[UniformBufferBinding::Effect] = {
             {igl::genNameHandle(GetUniformBlockName(UniformBufferBinding::Effect)),
              igl::NameHandle{}}};
