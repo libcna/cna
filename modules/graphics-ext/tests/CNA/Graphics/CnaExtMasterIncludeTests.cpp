@@ -60,6 +60,9 @@ TEST(CnaExtMasterIncludeTest, EffectTypesAreVisible)
     EXPECT_GT(sizeof(CNA::Graphics::DepthEffect), 0u);
     EXPECT_GT(sizeof(CNA::Graphics::CRTEffect), 0u);
     EXPECT_GT(sizeof(CNA::Graphics::AsciiPostProcessEffect), 0u);
+    // Shadows, both shapes -- the master include is the one place a consumer should have to name.
+    EXPECT_GT(sizeof(CNA::Graphics::ShadowMap), 0u);
+    EXPECT_GT(sizeof(CNA::Graphics::CascadedShadowMap), 0u);
 }
 
 } // namespace

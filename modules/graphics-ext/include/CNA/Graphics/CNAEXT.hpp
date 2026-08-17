@@ -40,6 +40,7 @@
 #include "CNA/Graphics/TonemapPass.hpp"
 
 // ---- Shadows ---------------------------------------------------------------------------------
+#include "CNA/Graphics/CascadedShadowMap.hpp"
 #include "CNA/Graphics/DirectionalLightEXT.hpp"
 #include "CNA/Graphics/ShadowMap.hpp"
 
