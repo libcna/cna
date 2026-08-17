@@ -802,8 +802,8 @@ than guessed: it is the floor for every row below.
 | Renderer | Route | Task |
 |---|---|---|
 | FNA3D | Done. MojoShader effect runtime inside FNA3D, GLSL or SPIR-V chosen by FNA3D's own driver | `FX-031`–`FX-038` |
-| SDL_GPU | SPIR-V profile plus the `mojoshader_sdlgpu.c` adapter. Runtime implemented and tested; ordinary 3D draws and SpriteBatch now both have a working route (`FX-071`), but the capability is still false pending the FX-060 shared suite and a golden-pixel test | `FX-061`, `FX-071` |
-| EasyGL and the OpenGL/OpenGL ES family | GLSL/GLSLES/GLSLES3 profiles plus `mojoshader_opengl.c`. One implementation serves `OPENGLES2`, `OPENGLES3`, `OPENGL33`, `OPENGL4`, `WEBGL1` and `WEBGL2`, since EasyGL is their shared implementation | `FX-062` |
+| SDL_GPU | Done. SPIR-V profile plus the `mojoshader_sdlgpu.c` adapter; ordinary 3D draws and SpriteBatch both have a working route, a golden-pixel test and the FX-060 shared suite passing, `SupportsCompiledEffects()` true | `FX-061`, `FX-071` |
+| EasyGL and the OpenGL/OpenGL ES family | Done. GLSL/GLSLES/GLSLES3 profiles plus `mojoshader_opengl.c`. One implementation serves `OPENGLES2`, `OPENGLES3`, `OPENGL33`, `OPENGL4`, `WEBGL1` and `WEBGL2`, since EasyGL is their shared implementation; a working draw route, a golden-pixel test and the FX-060 shared suite passing, `SupportsCompiledEffects()` true | `FX-062` |
 | DirectX 11 | HLSL profile plus `mojoshader_d3d11.c`, Windows-only by the pin's own gating | `FX-063` |
 | Vulkan | SPIR-V profile, **no adapter** -- descriptor layout, uniform buffers and vertex linkage are CNA's to write, which is why it is split into a prototype and a completion task | `FX-064`, `FX-065` |
 | Metal | Metal profile emits MSL source and CNA's Metal renderer already builds pipelines from MSL through `newLibraryWithSource`, but there is no adapter and the profile only exists on Apple | `FX-066` |
