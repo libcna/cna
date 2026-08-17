@@ -2736,8 +2736,17 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
     // EasyGL serves five GL profiles (OPENGLES2/3, OPENGL33, WEBGL1/2), so this is more than one
     // renderer identity; SOFTWARE is the CPU rasteriser, where the same product is evaluated per
     // fragment on the host.
-    constexpr std::array<VertexColourPbrAudit, 2> implemented{{
+    // IGL is here for the same architectural reason it needs no stride row: its shader library is
+    // GENERATED per feature set, and it declares `aColor` exactly when the vertex declaration carries
+    // a Color -- which stride 60 now does. Its vertex stage multiplies the attribute into the colour
+    // that becomes `vColor`, and its fragment stage feeds that straight to the PBR BRDF, so the
+    // product is baseColorFactor x COLOR_0 x baseColorTexture with no per-renderer work at all. That
+    // is the abstraction paying for itself, and it is why this row was checked rather than assumed:
+    // the first draft of this audit listed `igl` as not-yet on the strength of it having no stride
+    // table, which is exactly backwards.
+    constexpr std::array<VertexColourPbrAudit, 3> implemented{{
         {"easygl", "vec3 albedo=baseRGB*uDiffuseColor.rgb*cnaVertexColor.rgb;"},
+        {"igl", "if (cnaHas(CNA_VERTEX_COLOR_ENABLED)) color *= aColor;"},
         {"software", "if (stride == 60) UnpackColorBytes(raw.At(56), out.r, out.g, out.b, out.a);"},
     }};
     for (const VertexColourPbrAudit& audit : implemented)
@@ -2748,6 +2757,14 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
         EXPECT_NE(std::string::npos, source.find(Normalize(audit.evidence)))
             << "listed as multiplying COLOR_0 into base colour, but the product is not there";
     }
+
+    // IGL's product has to reach the BRDF, not merely exist: the colour is multiplied in the VERTEX
+    // stage, so what proves it is PBR-relevant is that the same value is what `cnaShadePbr` receives.
+    const std::string igl = RendererSlotText(renderers, "igl");
+    EXPECT_NE(std::string::npos, igl.find(Normalize("vec4 color = vColor;")))
+        << "the fragment stage does not start from the interpolated vertex colour";
+    EXPECT_NE(std::string::npos, igl.find(Normalize("cnaShadePbr(color.rgb, normal, eyeVector,")))
+        << "the colour product never reaches the PBR BRDF";
 
     // EasyGL's gate has to exist as well as its product: the stride-60 record ALWAYS carries a
     // colour, so a shader that multiplied unconditionally would be relying on the opaque-white fill
@@ -2761,8 +2778,8 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
         << "the stride-60 colour slot is never bound, so the shader reads stale VAO state";
 
     // And the whole of the residue, named. Anything else in kAudits multiplies by the identity.
-    constexpr std::array<const char*, 15> notYet{{
-        "bgfx", "diligent", "directx9", "directx11", "directx12", "igl", "llgl",
+    constexpr std::array<const char*, 14> notYet{{
+        "bgfx", "diligent", "directx9", "directx11", "directx12", "llgl",
         "magnum", "metal", "opengl2", "opengl4", "sdl-gpu", "vulkan", "webgpu", "wicked",
     }};
     std::set<std::string> classified;

@@ -495,7 +495,7 @@ read those, not this table, which is a snapshot.
 | DirectX 9 | yes (`GLTF-462`: the stride-48 element list describes the record; a D3D9 declaration carries offsets while the stride travels with `SetStreamSource`) | not yet (`GLTF-465`) |
 | DirectX 11 | yes | not yet (`GLTF-465`) |
 | DirectX 12 | yes | not yet (`GLTF-465`) |
-| IGL | yes, **without a stride row**: it builds its vertex input from the public `VertexDeclaration`, so the canonical layout reaches it colour element included | not yet (`GLTF-465`) |
+| IGL | yes, **without a stride row**: it builds its vertex input from the public `VertexDeclaration`, so the canonical layout reaches it colour element included | **yes, also without per-renderer work** — its shader library is generated per feature set, so it declares `aColor` exactly when the declaration carries a Color, multiplies it into the colour that becomes `vColor`, and feeds that to `cnaShadePbr`. Both halves of this row are the declaration-driven abstraction paying for itself |
 | LLGL | yes (`GLTF-462` added the row; it previously produced no attributes at all) | not yet (`GLTF-465`) |
 | Magnum | yes (`GLTF-462` added the row; it previously produced no attributes at all) | not yet (`GLTF-465`) |
 | OpenGL 2 | yes (`GLTF-462` **fixed a silent mis-binding**: the record reached a catch-all that read UV inside the tangent) | not yet (`GLTF-465`) |
@@ -505,6 +505,11 @@ read those, not this table, which is a snapshot.
 | SDL GPU | **not yet** (`GLTF-465`) | not yet |
 | WebGPU | **not yet** (`GLTF-465`) | not yet |
 | Wicked | **not yet** (`GLTF-465`) | not yet |
+
+**Three of the seventeen implement it, and one of the three cost nothing.** EasyGL is five GL
+profiles, SOFTWARE is the CPU rasteriser, and IGL needed no change at all — which is the argument for
+moving renderers off stride-keyed dispatch and onto the public `VertexDeclaration`, not merely a
+convenience.
 
 **The residue is safe, and that is the property the tests pin.** A primitive with no `COLOR_0` fills
 the slot with **opaque white**, which is the multiplier's identity — so a renderer that ignores the
