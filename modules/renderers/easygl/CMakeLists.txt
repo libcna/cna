@@ -5,6 +5,13 @@
 cna_add_renderer()
 target_link_libraries(${RENDERER_TARGET} PRIVATE easy-gl)
 
+# plan_fx.md FX-062: compiled XNA effects go through MojoShader's own OpenGL adapter plus the
+# translation shared with every other compiled-effect backend. Opt-in, because MojoShader is a
+# fetched dependency this renderer does not otherwise need.
+if(CNA_EASYGL_COMPILED_EFFECTS)
+    target_link_libraries(${RENDERER_TARGET} PUBLIC cna_renderer_mojoshader_effect)
+endif()
+
 # Module-owned examples (module-examples campaign): the family's example/test
 # registration is module-local; its historical selection/platform conditions
 # live inside examples/CMakeLists.txt unchanged.

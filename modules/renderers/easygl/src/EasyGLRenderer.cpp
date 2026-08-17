@@ -3195,9 +3195,27 @@ void main()
         // GraphicsDevice_ is a Game base member destroyed after every subclass member; a globally
         // held render target reaches the first one, which is why the ownership is weak at all.)
         IGraphicsRenderer::UnregisterForWindow(surfaceState_.GetWindowId());
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        // Must run here, in the destructor body, rather than relying on member destruction order:
+        // mojoShaderContext_ is a raw pointer (no destructor of its own) and needs the GL context
+        // still current, which platformContext_ (destroyed after this body returns) still owns.
+        if (mojoShaderContext_ != nullptr)
+        {
+            MOJOSHADER_glMakeContextCurrent(nullptr);
+            MOJOSHADER_glDestroyContext(mojoShaderContext_);
+            mojoShaderContext_ = nullptr;
+        }
+#endif
         // platformContext_ is the first-declared member and therefore dies last, after every GL
         // resource member has released while the context is still current.
     }
+
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+    CNA::Platform::GlProcAddressLoader EasyGLRenderer::GetProcAddressLoaderEXT() const
+    {
+        return platformContext_->GetLoader();
+    }
+#endif
 
     bool EasyGLRenderer::SupportsCapability(CNA::GraphicsCapability capability) const
     {

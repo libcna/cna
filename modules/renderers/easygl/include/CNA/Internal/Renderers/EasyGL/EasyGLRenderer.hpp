@@ -4,6 +4,9 @@
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/Platform/IPlatformGlContext.hpp"
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+#include "mojoshader.h"
+#endif
 #include <easygl/easygl.hpp>
 #include <array>
 #include <cstdint>
@@ -631,6 +634,12 @@ namespace CNA::Internal::Renderers::EasyGL
         // Declared first so it is destroyed last: all GL resources below release while the
         // platform context is still current and alive.
         std::unique_ptr<EasyGLPlatformContext> platformContext_;
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        // plan_fx.md FX-062: one MojoShader GL context per this renderer's whole lifetime, created
+        // lazily on first CreateCompiledEffect() call (see GetMojoShaderContextEXT() in
+        // EasyGLCompiledEffect.cpp).
+        MOJOSHADER_glContext* mojoShaderContext_ = nullptr;
+#endif
         EasyGLSurfaceState surfaceState_;
         ::easygl::Device device;
         ::easygl::ResourceRegistry registry_;
@@ -813,6 +822,37 @@ namespace CNA::Internal::Renderers::EasyGL
             bool contextRecoveryEnabled = true, int multiSampleCount = 1,
             int swapInterval = 1);
         ~EasyGLRenderer() override;
+
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        /**
+         * @brief Parses a compiled XNA effect for this device (plan_fx.md FX-062).
+         * @param effectCode Compiled effect bytes.
+         * @param effectCodeBytes Number of bytes at @p effectCode.
+         * @return The runtime, or null if MojoShader has no context for this device.
+         */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
+
+        /**
+         * @brief CNAEXT. Returns this device's MojoShader context, creating it on first use.
+         *
+         * MojoShader allows one context per GL context, so it is owned here rather than by each
+         * effect. Unlike SDL_GPU, EasyGL's GL context can be recreated (context-loss recovery);
+         * this initial implementation does not yet recreate the MojoShader context to follow --
+         * a documented, narrower scope than the ordinary (non-compiled-effect) draw path's own
+         * recovery support.
+         * @return The context, or null if it could not be created.
+         */
+        CNAEXT [[nodiscard]] MOJOSHADER_glContext* GetMojoShaderContextEXT();
+
+        /**
+         * @brief CNAEXT. Returns the raw GL function-pointer loader this renderer's platform
+         * context resolves every native GL call through, so MojoShader's OpenGL adapter can look
+         * its own functions up the same way (EasyGLCompiledEffect.cpp, a different translation
+         * unit from where EasyGLPlatformContext is defined).
+         */
+        CNAEXT [[nodiscard]] CNA::Platform::GlProcAddressLoader GetProcAddressLoaderEXT() const;
+#endif
         // AnisotropicFiltering/MultiSampleAntiAliasing re-query the same live GL state the
         // startup capability dump (EnsureGL()) already prints, since they're cheap, idempotent GL
         // queries -- no need to cache them. WireFrame is implemented through measured triangle
