@@ -21,6 +21,59 @@
 > verification of any kind performed."** Treat every PIXIJS-N marked 🟨 in this plan as *more*
 > provisional than the same mark on `plan_canvas.md`/`plan_html_dom.md` until a real Emscripten
 > toolchain is available and Phase P8's build/test tasks actually run.
+>
+> **Update, 2026-08-17 — current status summary.** Phases P0/P1 (CMake integration, the
+> `PixiJsRenderer` skeleton, and full public-identity registration — `PIXIJS` is now the 47th entry
+> in `GraphicsRendererType`, `scripts/check_renderer_identities.py`, `GraphicsBackendCategory.hpp`/
+> `GraphicsBackendMaturity.hpp`, `docs/renderer-registry.md`, and every identity-count/compile-
+> definition test) are genuinely complete and were validated by a full native
+> `-DCNA_GRAPHICS_RENDERER=SDL_RENDERER` `CnaTests` build (exit code 0) plus a passing
+> `GraphicsRendererTypeTest` run (7/7, covering all 47 identities). Phases P2-P7 (the actual PixiJS
+> draw path — `Clear`/`Present`, textures, render targets, `SpriteBatch`) exist as real, reviewed C++
+> and `EM_JS` source, but **have never been compiled or executed under Emscripten in any session**
+> (no `emsdk` has ever been available here) — see "What remains" below for the concrete, ordered
+> list of what has to happen before any of that code can be trusted. Nothing in Phases P2-P8 should
+> be described as working; it is an unverified first draft, not a functioning renderer.
+
+### What remains (in dependency order)
+
+1. **PIXIJS-1** — actually perform the pinned PixiJS v7.4.2 UMD download and fill in
+   `CNA_PIXIJS_SHA256` in `cmake/ThirdPartyPixiJS.cmake` (currently deliberately blank — a
+   `-DCNA_GRAPHICS_RENDERER=PIXIJS` configure fails fast rather than trust an unpinned file), or
+   obtain a local `pixi.min.js` and pass `-DCNA_PIXIJS_ROOT`.
+2. **PIXIJS-84** — the actual blocker: get a real Emscripten toolchain (`emsdk`) into a session and
+   run `emcmake cmake -DCNA_GRAPHICS_RENDERER=PIXIJS ...` followed by a real build. This is the
+   first point any `EM_JS` code in this renderer has ever been compiled.
+3. Fix whatever the first real Emscripten build surfaces in `PixiJsRenderer.cpp`/
+   `PixiJsTextureRenderer.cpp`/`PixiJsRenderTargetRenderer.cpp`/`PixiJsSpriteBatchRenderer.cpp` —
+   expect real bugs; none of this JS has ever executed even once.
+4. Run `cna_test_pixijs_smoke` in a real browser (`emrun`) and get it to genuinely PASS — the first
+   real pixel-level evidence this renderer draws anything at all.
+5. Once basic drawing works, close the still-open design/implementation gaps, roughly in this order:
+   - **PIXIJS-22** — verify the `Present()`/ticker design decision (`autoStart:false` +
+     explicit `app.renderer.render()`) actually produces frames, not just compiles.
+   - **PIXIJS-43/44** — verify the anchor/origin and `SpriteEffects` flip math against a real FNA
+     reference render (both are unverified hypotheses right now).
+   - **PIXIJS-50/51** — real per-blend-mode PixiJS behavior (`Opaque`/`AlphaBlend`/
+     `NonPremultiplied` currently all collapse to the same `PIXI.BLEND_MODES.NORMAL`, which is a
+     known, explicitly-flagged gap, not a working mapping).
+   - **PIXIJS-31** — decide and implement the real mip-level (`level > 0`) policy instead of the
+     current unconditional throw.
+   - **PIXIJS-32** — implement direct `Texture2D::SetData` on a bound render target (currently
+     throws — no re-upload-via-sprite design written yet).
+   - **PIXIJS-45/46/53** — `SetTransformMatrix` (non-identity), `TextureAddressMode`
+     (wrap/mirror/clamp), and `SetSamplerFilter` are all still no-op stubs or throws.
+   - **PIXIJS-60** — confirm `SpriteFont`/`DrawString` actually falls out of the `SpriteBatch` path
+     for free, the way it does on `CANVAS`/`HTML_DOM`.
+6. **PIXIJS-52** (stretch) — fully generic `BlendState` support via custom PixiJS blend-mode
+   registration, once the 4-preset path above is real and verified.
+7. **PIXIJS-80/82** — real GTest execution under Emscripten/`node`, and a manual browser
+   verification checklist (mirroring `docs/canvas-backend.md`'s own 10-item checklist) once there is
+   something real to check.
+
+Until step 2 happens, every task below this point stays at its current 🟨/⬜ mark regardless of how
+much source code exists for it — code review is not the same as verification, and this plan
+deliberately does not conflate the two.
 
 ---
 
