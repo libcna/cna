@@ -24,11 +24,13 @@ do not reconstruct the layer's state from the general `NEXT.md`.
 | ✅ | `MOD-105`, `MOD-108`/`124`, `MOD-131` — unsupported formats refused, format-aware readback, and the end-to-end proof that values above 1.0 survive |
 | ⛔ | `MOD-106` — lenient-substitution opt-out, dropped (it would preserve a behaviour that never existed) |
 | ✅ | `MOD-107` — `RenderTargetCube` carries its `SurfaceFormat` to the renderer too (the path IBL needs) |
+| ✅ | `MOD-118`–`MOD-123`, `MOD-125` — completeness diagnostic, depth/MSAA/mip/MRT on float targets, half-float filtering query |
 
-**Next up (critical path to a first HDR frame):** `MOD-118`–`MOD-123`, `MOD-125` (the rest of the EasyGL float
-work: half-float-only contexts, depth combination, MSAA resolve, mips, linear filtering, MRT) →
-`MOD-200`–`MOD-210` (pass infrastructure) → `MOD-300`–`MOD-305` (tonemapping) → `MOD-700`–`MOD-712`
-(`RenderPipeline`). `MOD-5`, `MOD-21`, `MOD-22` remain open from Phase 0.
+**Next up (critical path to a first HDR frame):** Phase 1 is complete for the reference renderer.
+Next is `MOD-200`–`MOD-210` (fullscreen-pass infrastructure) → `MOD-300`–`MOD-305` (tonemapping) →
+`MOD-700`–`MOD-712` (`RenderPipeline`). `MOD-5`, `MOD-21`, `MOD-22` remain open from Phase 0 and
+`MOD-21`/`MOD-22` are prerequisites of Phase 3, so they come first. `MOD-130`–`MOD-141` (Phase 1's
+remaining verification and documentation rows) trail the implementation.
 
 **Owner decisions in force** (asked 2026-08-17): start with the HDR spine; EasyGL is the
 reference renderer with Vulkan and D3D11 as the committed follow-ups and the rest opportunistic;

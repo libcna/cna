@@ -2202,6 +2202,26 @@ else
             }
         }
 
+        // plan_modern.md MOD-119: ask GL whether the combination it was just handed is actually
+        // renderable, and say so if it is not. A driver can accept every individual call above and
+        // still refuse the assembled framebuffer -- a colour format that is sampleable but not
+        // renderable, a sample count the depth attachment cannot match, a size beyond a limit. All
+        // of that used to surface as a target that silently rendered nowhere, which is the hardest
+        // shape of bug to trace back to its cause; the format and the GL status make it a
+        // one-glance diagnosis instead.
+        const ::metagl::FramebufferStatus status =
+            fbo_.check_status(::easygl::FramebufferTarget::Framebuffer);
+        if (status != ::metagl::FramebufferStatus::Complete)
+        {
+            ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+            throw std::runtime_error(
+                "EasyGL: render target " + std::to_string(width_) + "x" + std::to_string(height_) +
+                " (SurfaceFormat ordinal " + std::to_string(surfaceFormat_) +
+                ", DepthFormat ordinal " + std::to_string(depthFormat_) +
+                ", samples " + std::to_string(multiSampleCount_) +
+                ") is not framebuffer-complete: " + std::string(::metagl::to_string(status)));
+        }
+
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
     }
 
@@ -3869,6 +3889,17 @@ if (!ProfileIsEs2ApiGeneration())
         return ProbeFloatRenderTargetSupportEXT(storage.isFullFloat)
             ? RendererFormatVerdict::Supported
             : RendererFormatVerdict::Unsupported;
+    }
+
+    bool EasyGLRenderer::SupportsHalfFloatTextureLinearFilteringEXT() const
+    {
+        // Half-float texture filtering is core in the ES 3.0 API generation and in desktop GL 3.0+,
+        // which is every profile this renderer builds for except the ES 2.0 generation. There it
+        // would need GL_OES_texture_half_float_linear, and nothing in CNA asks for it, so the
+        // honest answer is no rather than a probe for a path that is never taken.
+        if (ProfileIsEs2ApiGeneration())
+            return metagl::HasExtension("GL_OES_texture_half_float_linear");
+        return true;
     }
 
     bool EasyGLRenderer::ProbeFloatRenderTargetSupportEXT(bool fullFloat) const

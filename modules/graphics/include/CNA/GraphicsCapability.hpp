@@ -159,6 +159,22 @@ namespace CNA
          * in CNA) and falls back to `Color` with a one-time log when neither float capability is
          * present. See `FloatRenderTargets` for why the two are separate entries.
          */
-        HalfFloatRenderTargets
+        HalfFloatRenderTargets,
+
+        /**
+         * @brief Linear (and mip) filtering when *sampling* a half-float colour texture, as opposed
+         * to merely rendering into one.
+         *
+         * The two are separate hardware features and separate GL extensions: a context can render
+         * to `RGBA16F` and still only sample it with `NEAREST`. Bloom is where that bites -- its
+         * down/upsample chain is built on hardware-filtered half-resolution reads, and without
+         * linear filtering it must fall back to more taps at more cost for a worse result. The
+         * `CNA::Graphics` passes query this and document which fallback they take.
+         *
+         * Reported for the half-float formats (`HalfSingle`/`HalfVector2`/`HalfVector4`/
+         * `HdrBlendable`), which are what the engine layer's targets use; 32-bit float filtering is
+         * rarer still and no CNA pass depends on it.
+         */
+        HalfFloatTextureLinearFiltering
     };
 } // CNA

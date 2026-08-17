@@ -1734,6 +1734,15 @@ namespace CNA::Internal::Renderers
             return CreateRenderTarget2D(w, h, depthFormat, preserveContents, mipMap, multiSampleCount);
         }
 
+        /// plan_modern.md MOD-123: whether sampling a half-float colour texture with a linear
+        /// (or mip) filter is supported by this context, as distinct from being able to render into
+        /// one. Default false: a renderer that has not checked cannot promise it, and a pass that
+        /// wrongly assumes hardware filtering gets undefined sampling rather than a slower path.
+        [[nodiscard]] virtual bool SupportsHalfFloatTextureLinearFilteringEXT() const
+        {
+            return false;
+        }
+
         /// Activates the given render target (binds its FBO). Pass nullptr to
         /// restore the default back buffer.
         virtual void SetRenderTarget2D(IRenderTargetRenderer* rt) {}

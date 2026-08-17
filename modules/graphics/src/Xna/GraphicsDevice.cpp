@@ -2148,6 +2148,10 @@ namespace Microsoft::Xna::Framework::Graphics
             return SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4);
         if (capability == CNA::GraphicsCapability::HalfFloatRenderTargets)
             return SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable);
+        // Derived for the same reason (MOD-123): answered by a renderer virtual whose default is
+        // false, never by a capability switch whose default is true.
+        if (capability == CNA::GraphicsCapability::HalfFloatTextureLinearFiltering)
+            return GetRenderer().SupportsHalfFloatTextureLinearFilteringEXT();
         return GetRenderer().SupportsCapability(capability);
     }
 

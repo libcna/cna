@@ -15,11 +15,14 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <vector>
+
+#include "CNA/GraphicsCapability.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Vector4;
@@ -27,6 +30,7 @@ using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
 using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4;
@@ -159,6 +163,114 @@ TEST(HdrRenderTargetRoundTripTest, AnUnsupportedCubeFormatIsRefused)
         RenderTargetCube cube(gd, kSize, false, SurfaceFormat::Dxt1, DepthFormat::None);
         (void)cube.getFormatProperty();
     });
+}
+
+TEST(HdrRenderTargetRoundTripTest, AFloatTargetCarriesARealDepthBuffer)
+{
+    // MOD-120: an HDR scene target is useless without depth -- the pipeline renders a depth-tested
+    // 3D scene into it. A driver may accept the colour attachment and then refuse the assembled
+    // framebuffer once depth joins it, which MOD-119's completeness check now reports as a throw;
+    // this asserts the combination is accepted and the depth attachment is real.
+    GraphicsDevice gd;
+    if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable))
+        GTEST_SKIP() << "this renderer/driver has no RGBA16F render targets";
+
+    RenderTarget2D target(gd, kSize, kSize, false, SurfaceFormat::HdrBlendable,
+                          DepthFormat::Depth24Stencil8);
+
+    EXPECT_EQ(target.getDepthStencilFormatProperty(), DepthFormat::Depth24Stencil8);
+
+    gd.SetRenderTarget(&target);
+    gd.Clear(kRed, kGreen, kBlue, 1.0f);
+    gd.SetRenderTarget(nullptr);
+
+    std::vector<HalfVector4> pixels(static_cast<std::size_t>(kSize) * kSize);
+    target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+    EXPECT_FLOAT_EQ(pixels.front().ToVector4().X, kRed);
+}
+
+TEST(HdrRenderTargetRoundTripTest, AMultisampledFloatTargetResolvesWithoutClamping)
+{
+    // MOD-121: the multisample colour buffer and the resolve texture must share a format, or the
+    // resolve blit either fails or lands in 8-bit storage. Reading back after the unbind exercises
+    // the resolve path, so a clamped value here would mean the multisample side stayed RGBA8.
+    GraphicsDevice gd;
+    if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable))
+        GTEST_SKIP() << "this renderer/driver has no RGBA16F render targets";
+
+    RenderTarget2D target(gd, kSize, kSize, false, SurfaceFormat::HdrBlendable,
+                          DepthFormat::None, 4);
+    if (target.getMultiSampleCountProperty() <= 0)
+        GTEST_SKIP() << "this device clamped the request to single-sample; nothing to resolve";
+
+    gd.SetRenderTarget(&target);
+    gd.Clear(kRed, kGreen, kBlue, 1.0f);
+    gd.SetRenderTarget(nullptr);
+
+    std::vector<HalfVector4> pixels(static_cast<std::size_t>(kSize) * kSize);
+    target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+
+    for (const HalfVector4& packed : pixels)
+    {
+        const Vector4 texel = packed.ToVector4();
+        EXPECT_FLOAT_EQ(texel.X, kRed);
+        EXPECT_FLOAT_EQ(texel.Y, kGreen);
+    }
+}
+
+TEST(HdrRenderTargetRoundTripTest, AFloatTargetGeneratesAMipChain)
+{
+    // MOD-122: IBL prefiltering stores each roughness level in a mip of a float target, so the mip
+    // chain has to exist and carry the same unclamped values. A uniform clear makes every level's
+    // expected content identical, which is what lets level 1 be asserted at all.
+    GraphicsDevice gd;
+    if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable))
+        GTEST_SKIP() << "this renderer/driver has no RGBA16F render targets";
+
+    constexpr int kMippedSize = 8;
+    RenderTarget2D target(gd, kMippedSize, kMippedSize, true, SurfaceFormat::HdrBlendable,
+                          DepthFormat::None);
+    ASSERT_GT(target.getLevelCountProperty(), 1);
+
+    gd.SetRenderTarget(&target);
+    gd.Clear(kRed, kGreen, kBlue, 1.0f);
+    gd.SetRenderTarget(nullptr);
+
+    std::vector<HalfVector4> level1(static_cast<std::size_t>(kMippedSize / 2) * (kMippedSize / 2));
+    target.GetData(1, nullptr, level1.data(), 0, static_cast<int>(level1.size()));
+
+    for (const HalfVector4& packed : level1)
+    {
+        const Vector4 texel = packed.ToVector4();
+        EXPECT_FLOAT_EQ(texel.X, kRed);
+        EXPECT_FLOAT_EQ(texel.Y, kGreen);
+    }
+}
+
+TEST(HdrRenderTargetRoundTripTest, AMixedFloatAndColourTargetSetBinds)
+{
+    // MOD-125: the depth/normal prepass SSAO needs writes linear depth to a float attachment and
+    // encoded normals to a Color one in a single pass, so a mixed-format set has to bind and draw.
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets))
+        GTEST_SKIP() << "this renderer has no MRT";
+    if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfVector2))
+        GTEST_SKIP() << "this renderer/driver has no RG16F render targets";
+
+    RenderTarget2D depthLike(gd, kSize, kSize, false, SurfaceFormat::HalfVector2,
+                             DepthFormat::None);
+    RenderTarget2D normals(gd, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None);
+
+    const std::vector<RenderTargetBinding> bindings{
+        RenderTargetBinding(&depthLike), RenderTargetBinding(&normals)};
+
+    gd.SetRenderTargets(bindings);
+    gd.Clear(kRed, kGreen, kBlue, 1.0f);
+    gd.SetRenderTargets({});
+
+    std::vector<Color> normalTexels(static_cast<std::size_t>(kSize) * kSize, Color(0, 0, 0, 0));
+    normals.GetData(normalTexels.data(), static_cast<int>(normalTexels.size()));
+    EXPECT_EQ(normalTexels.front().getRProperty(), 255);
 }
 
 } // namespace

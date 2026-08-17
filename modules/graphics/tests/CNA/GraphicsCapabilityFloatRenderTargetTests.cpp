@@ -126,6 +126,7 @@ TEST(GraphicsCapabilityFloatRenderTargetTest, ExistingCapabilityOrdinalsAreUncha
     EXPECT_EQ(static_cast<int>(GraphicsCapability::CompiledEffects), 13);
     EXPECT_EQ(static_cast<int>(GraphicsCapability::FloatRenderTargets), 14);
     EXPECT_EQ(static_cast<int>(GraphicsCapability::HalfFloatRenderTargets), 15);
+    EXPECT_EQ(static_cast<int>(GraphicsCapability::HalfFloatTextureLinearFiltering), 16);
 }
 
 TEST(GraphicsCapabilityFloatRenderTargetTest, ThePreExistingAnswersAreUnchanged)
@@ -159,6 +160,20 @@ TEST(GraphicsCapabilityFloatRenderTargetTest, EachCapabilityAgreesWithItsReprese
               gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4));
     EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::HalfFloatRenderTargets),
               gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable));
+}
+
+TEST(GraphicsCapabilityFloatRenderTargetTest, HalfFloatFilteringIsAnsweredSeparatelyFromRenderability)
+{
+    // MOD-123: rendering into a half-float target and sampling one with a linear filter are
+    // different hardware features. Keeping them separate is the point -- a pass that needs
+    // filtered reads (bloom's down/upsample chain) must be able to ask about filtering alone.
+    GraphicsDevice gd;
+
+    EXPECT_NO_THROW({
+        (void)gd.SupportsCapability(GraphicsCapability::HalfFloatTextureLinearFiltering);
+    });
+    EXPECT_NE(static_cast<int>(GraphicsCapability::HalfFloatTextureLinearFiltering),
+              static_cast<int>(GraphicsCapability::HalfFloatRenderTargets));
 }
 
 } // namespace

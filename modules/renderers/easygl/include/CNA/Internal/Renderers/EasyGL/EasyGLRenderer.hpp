@@ -1023,6 +1023,10 @@ namespace CNA::Internal::Renderers::EasyGL
         /// of the driver and its extensions rather than of the compile-time GL profile. Every other
         /// format defers to the framework rule, unchanged.
         [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
+        /// plan_modern.md MOD-123: half-float texture filtering. Core from OpenGL ES 3.0 and
+        /// desktop GL 3.0 onward; on the ES 2.0 API generation it needs an extension that this
+        /// renderer does not rely on, so it is reported false there.
+        [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
         /// plan_modern.md MOD-107: the cube counterpart of CreateRenderTarget2DEXT -- real float
         /// storage for the formats this context can render to, and a refusal for the rest.
