@@ -58,4 +58,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
     cna_register_renderer_test(NAME Igl_RenderTarget COMMAND cna_test_igl_rendertarget
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # IGL-55: the first stock-effect parity test beyond BasicEffect's colour-only path.
+    cna_igl_test(cna_test_igl_alphatesteffect igl_alphatesteffect_test.cpp)
+    cna_register_renderer_test(NAME Igl_AlphaTestEffect COMMAND cna_test_igl_alphatesteffect
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # IGL-55: DualTextureEffect -- two texture units and the diffuse tint in one shader.
+    cna_igl_test(cna_test_igl_dualtextureeffect igl_dualtextureeffect_test.cpp)
+    cna_register_renderer_test(NAME Igl_DualTextureEffect COMMAND cna_test_igl_dualtextureeffect
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
