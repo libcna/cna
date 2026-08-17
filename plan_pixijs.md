@@ -260,11 +260,16 @@
    - ~~**PIXIJS-43/44** — verify the anchor/origin and `SpriteEffects` flip math.~~ **Verified**:
      rotation-around-origin passed as designed; flip did not (`REMED-PIXIJS-2`, negative-scale
      footprint-shift bug, fixed by switching to `PIXI.Texture`'s GroupD8 `rotate` parameter).
-   - ~~**PIXIJS-50/51** — real per-blend-mode PixiJS behavior.~~ **Verified for the 3 presets this
-     smoke test exercises** (`Opaque`, `AlphaBlend`, `Additive`; `NonPremultiplied` shares
-     `AlphaBlend`'s code path but has no test of its own yet): `Opaque` now maps to real
-     `BLEND_MODES.NONE` and textures upload with `ALPHA_MODES.NPM` instead of the silently-
-     premultiplying `UNPACK` (`REMED-PIXIJS-3`/`REMED-PIXIJS-4`).
+   - ~~**PIXIJS-50/51** — real per-blend-mode PixiJS behavior.~~ **Verified for straight-alpha
+     content** (`Opaque`, `AlphaBlend`, `Additive`): `Opaque` now maps to real `BLEND_MODES.NONE` and
+     textures upload with `ALPHA_MODES.NPM` instead of the silently-premultiplying `UNPACK`
+     (`REMED-PIXIJS-3`/`REMED-PIXIJS-4`). **Real remaining gap, precisely characterized (not just
+     "not implemented")**: `AlphaBlend` on genuinely *premultiplied* source content would render
+     wrong today, since texture upload is always `NPM` regardless of which `BlendState` a later
+     `Draw()` uses -- confirmed via a standalone probe (see PIXIJS-51's own table row for the exact
+     numbers). Fixing it needs per-flush `baseTexture.alphaMode` switching (the same pattern
+     `PIXIJS-46`/`53` established) and is plausibly a CNA-wide `Texture2D` semantics question, not
+     PixiJS-only -- not attempted this session.
    - ~~**PIXIJS-31** — decide the real mip-level (`level > 0`) policy.~~ **Investigated and
      decided**: PixiJS's `BufferResource`/`BaseTexture` have no public API for a custom CPU-authored
      mip chain (confirmed via a live prototype probe) -- the throw for level>0 stays, but now for a
@@ -590,7 +595,7 @@ For every task: at minimum, get a real Emscripten toolchain in a later session a
 | # | Task | Status | Notes |
 |---|---|---|---|
 | PIXIJS-50 | `ApplyBlendState` → the 4 standard presets, mapped to a `PixiJsBlendMode` as a pure C++ function (`BlendStateToPixiJsBlendMode`) | 🟨 | Verified 2026-08-17 for `Opaque` (frame 5), `AlphaBlend` (frame 6), and `Additive` (frame 4) with exact compositing math confirmed via standalone probes. `PixiBlendModeToPixiJsCode()` added as the single source of truth (`REMED-PIXIJS-3`) so `PixiJsRenderer.cpp`/`PixiJsSpriteBatchRenderer.cpp` can't drift apart. Stays 🟨, not ✅: `NonPremultiplied` shares `AlphaBlend`'s code path but has no test distinguishing it yet. |
-| PIXIJS-51 | Premultiply/straight-alpha handling for `AlphaBlend` vs `NonPremultiplied` via per-texture `PIXI.ALPHA_MODES` | 🟨 | Textures now upload with `PIXI.ALPHA_MODES.NPM` instead of the silently-premultiplying `UNPACK` (`REMED-PIXIJS-4`, found and fixed 2026-08-17 — `UNPACK` is actually `PREMULTIPLY_ON_UPLOAD`). This makes straight-alpha sampling correct (verified via frames 5/6), but `NonPremultiplied` still has no distinct code path or test from `AlphaBlend`. |
+| PIXIJS-51 | Premultiply/straight-alpha handling for `AlphaBlend` vs `NonPremultiplied` via per-texture `PIXI.ALPHA_MODES` | 🟨 | Textures now upload with `PIXI.ALPHA_MODES.NPM` instead of the silently-premultiplying `UNPACK` (`REMED-PIXIJS-4`, found and fixed 2026-08-17 — `UNPACK` is actually `PREMULTIPLY_ON_UPLOAD`). This makes straight-alpha sampling correct (verified via frames 5/6) for straight-alpha *content*. **Real gap precisely characterized 2026-08-17 via a standalone probe** (not just "not implemented"): real XNA's `BlendState.AlphaBlend` formula `(One, InvSourceAlpha)` expects the source texture's RGB to already be premultiplied by its own alpha (the content pipeline's default `TextureProcessor` does this at build time); `BlendState.NonPremultiplied` `(SourceAlpha, InvSourceAlpha)` is the preset for straight-alpha (e.g. runtime-loaded) content. Confirmed live: `ALPHA_MODES.PMA` + genuinely premultiplied source pixels + `BLEND_MODES.NORMAL` gives the exact correct composite (178,74,118,255, matching frame 6's straight-alpha result exactly) -- PixiJS *can* do both correctly -- but uploading premultiplied content as `NPM` (what this renderer always does today, regardless of which `BlendState` a later `Draw()` uses) gives a wrong result (114,74,118,255 in the same probe). Since `Texture2D::CreateFromPixels` (this renderer's own test fixtures, and CNA's general runtime-load path) supplies straight-alpha data, not premultiplied, this gap is invisible to every check in this smoke test — it would only surface with genuinely premultiplied source content drawn under `BlendState::AlphaBlend`. Fixing it for real would mean tracking, per-`Draw()`, which alpha convention the active texture's content follows and switching `baseTexture.alphaMode` (+ `.update()`) accordingly -- the same per-flush baseTexture-mutation pattern `PIXIJS-46`/`PIXIJS-53` already established for wrap/scale mode -- and is plausibly a CNA-wide `Texture2D`/`BlendState` semantics question (does CNA's content pipeline premultiply by default anywhere yet?) rather than a PixiJS-only fix, so it was not attempted this session. |
 | PIXIJS-52 | **Stretch goal**: fully generic `ApplyBlendState` (arbitrary `Blend`/`BlendFunction`) via on-demand custom blend-mode registration (Design decision 6) — real, cheap-looking API surface, but unimplemented and unverified; do not claim this without actually building and testing it | ⬜ | |
 | PIXIJS-53 | `SetSamplerFilter` → `PIXI.SCALE_MODES.{NEAREST,LINEAR}` | ✅ | Implemented and verified 2026-08-17 (frame 8): an explicit `SamplerState` with `TextureFilter::Point` keeps a texel-boundary pixel unblended, a value empirically confirmed (via a standalone probe) to differ from the `LinearClamp` default's own blended result at that exact pixel — the check can only pass if the real sampler state changed. |
 

@@ -112,9 +112,10 @@ obtained copy (e.g. via `npm pack pixi.js@7.4.2`) was used instead; both paths a
   renderer, not just `PIXIJS`, and is out of this renderer's own scope. See `plan_pixijs.md`'s
   2026-08-17 update for the full account, including the (unrelated) workaround needed for
   Emscripten's own blocked `zlib` port fetch in a network-restricted sandbox.
-- **Still open**: `NonPremultiplied` blend (shares `AlphaBlend`'s code path, no distinct test yet),
-  and the generic-`BlendState` stretch goal remain unverified or
-  unimplemented -- see `plan_pixijs.md`'s own "What remains" list for the current, precise picture.
+- **Still open**: `AlphaBlend` on premultiplied-alpha content, `NonPremultiplied` blend (shares
+  `AlphaBlend`'s code path, no distinct test yet), and the generic-`BlendState` stretch goal remain
+  unverified or unimplemented -- see `plan_pixijs.md`'s own "What remains" list for the current,
+  precise picture.
 
 The renderer's C++ source compiles conditionally behind `#if defined(__EMSCRIPTEN__)` for every
 `EM_JS` block, so the pure-C++ logic (blend-state mapping, the 2D-only `ThrowNo3D` surface) is
@@ -171,12 +172,22 @@ described as complete until that task actually closes with real verification:
 - **Custom `Effect` support throws** (`PIXIJS-47`) -- unlike `CANVAS`/`HTML_DOM`, this is *not* a
   structural boundary (PixiJS has a real GLSL shader stage via `PIXI.Filter`/`PIXI.Shader`); it is
   simply out of this plan's v1 scope.
-- **`ApplyBlendState` only supports the 4 standard presets** (`PIXIJS-50`/`PIXIJS-51`) -- the 3
-  presets this renderer's own smoke test exercises (`Opaque`, `AlphaBlend`, `Additive`) are verified
-  with correct compositing math; `NonPremultiplied` shares `AlphaBlend`'s code path but has no test
-  distinguishing it yet. A fully generic mapping via on-demand custom PixiJS blend-mode registration
-  is believed straightforward (PixiJS exposes `renderer.state.blendModes` as a real, extensible GL
-  blend-factor table) and is tracked as a stretch goal (`PIXIJS-52`), not assumed free.
+- **`ApplyBlendState` only supports the 4 standard presets, and `AlphaBlend` is only correct for
+  straight-alpha content** (`PIXIJS-50`/`PIXIJS-51`) -- the 3 presets this renderer's own smoke test
+  exercises (`Opaque`, `AlphaBlend`, `Additive`) are verified with correct compositing math for
+  straight-alpha (non-premultiplied) source textures. A real, precisely-characterized gap (not just
+  "not implemented"): real XNA's `BlendState.AlphaBlend` expects the source texture's RGB to already
+  be premultiplied by its own alpha (the content pipeline's default behavior); this renderer always
+  uploads textures as `ALPHA_MODES.NPM` (straight) regardless of which `BlendState` a later `Draw()`
+  uses, so genuinely premultiplied content drawn under `AlphaBlend` would render wrong -- confirmed
+  via a standalone probe (a premultiplied source uploaded as `NPM` under `BLEND_MODES.NORMAL` gave a
+  visibly wrong composite, while uploading the same content as `PMA` gave the exact correct result).
+  Fixing it needs per-flush `baseTexture.alphaMode` switching (the same pattern `PIXIJS-46`/`53`
+  already established) and is plausibly a CNA-wide `Texture2D` semantics question, not PixiJS-only --
+  not attempted. `NonPremultiplied` itself shares `AlphaBlend`'s code path with no distinct test. A
+  fully generic blend mapping via on-demand custom PixiJS blend-mode registration is believed
+  straightforward (PixiJS exposes `renderer.state.blendModes` as a real, extensible GL blend-factor
+  table) and is tracked as a stretch goal (`PIXIJS-52`), not assumed free.
 - **`TextureAddressMode`/sampler filtering are implemented and verified, with a real architectural
   boundary** (`PIXIJS-46`/`PIXIJS-53`) -- `SetSamplerFilter`/`SetSamplerAddressMode` genuinely set
   `PIXI.SCALE_MODES`/`PIXI.WRAP_MODES` on the sampled `baseTexture` (confirmed live). But PixiJS's
