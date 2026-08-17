@@ -1734,6 +1734,27 @@ namespace CNA::Internal::Renderers
             return CreateRenderTarget2D(w, h, depthFormat, preserveContents, mipMap, multiSampleCount);
         }
 
+        /// plan_modern.md MOD-104: whether CreateRenderTarget2DEXT() really creates a colour
+        /// attachment of the given Microsoft::Xna::Framework::Graphics::SurfaceFormat (as an `int`
+        /// ordinal, same convention as CreateRenderTarget2DEXT's own parameter), rather than
+        /// silently producing a Color target of some other format.
+        ///
+        /// The default answers `Color` (ordinal 0) alone, which is the literal truth for every
+        /// renderer that leaves CreateRenderTarget2DEXT at its forwarding default above. A renderer
+        /// that implements additional render-target formats overrides both together: this query is
+        /// how GraphicsDevice derives GraphicsCapability::FloatRenderTargets and
+        /// HalfFloatRenderTargets, and how a caller asks about one specific format
+        /// (GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT).
+        ///
+        /// Deliberately a separate virtual rather than more cases in SupportsCapability(): most
+        /// renderer capability switches end in `default: return true`, so a new capability answered
+        /// there would be claimed by every renderer that has never heard of it -- the same hazard
+        /// that made CompiledEffects its own explicit opt-in.
+        [[nodiscard]] virtual bool SupportsRenderTargetFormat(int surfaceFormat) const
+        {
+            return surfaceFormat == 0; // SurfaceFormat::Color
+        }
+
         /// Activates the given render target (binds its FBO). Pass nullptr to
         /// restore the default back buffer.
         virtual void SetRenderTarget2D(IRenderTargetRenderer* rt) {}
@@ -2114,10 +2135,11 @@ namespace CNA::Internal::Renderers
 
         /// Returns whether this renderer (and, for device-dependent entries, the current runtime
         /// device/driver) supports the given CNA::GraphicsCapability. Default implementation
-        /// returns true except for multi-stream input and compiled effects, both of which require
-        /// explicit renderer opt-in. Every renderer with a narrower contract --
-        /// including no-renderer, 2D-only, fixed-function, experimental, or device-dependent
-        /// capability gaps -- must override the applicable entries truthfully.
+        /// returns true except for multi-stream input, compiled effects and the float
+        /// render-target entries, each of which requires explicit renderer opt-in. Every renderer
+        /// with a narrower contract -- including no-renderer, 2D-only, fixed-function,
+        /// experimental, or device-dependent capability gaps -- must override the applicable
+        /// entries truthfully.
         [[nodiscard]] virtual bool SupportsCapability(CNA::GraphicsCapability capability) const
         {
             if (capability == CNA::GraphicsCapability::StencilBuffer)
@@ -2133,6 +2155,14 @@ namespace CNA::Internal::Renderers
             // can opt in. The corresponding creation default above returns nullptr.
             if (capability == CNA::GraphicsCapability::CompiledEffects)
                 return SupportsCompiledEffects();
+            // plan_modern.md MOD-100/MOD-101: float colour render targets are opt-in for the same
+            // reason. CreateRenderTarget2DEXT's own shared default drops the requested
+            // SurfaceFormat and produces an 8-bit Color target, so a renderer that has not been
+            // taught float formats would, under a true default, promise that values above 1.0
+            // survive a render-to-target -- the exact promise the HDR pipeline is built on.
+            if (capability == CNA::GraphicsCapability::FloatRenderTargets ||
+                capability == CNA::GraphicsCapability::HalfFloatRenderTargets)
+                return false;
             return true;
         }
 

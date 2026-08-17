@@ -120,6 +120,45 @@ namespace CNA
          * ShaderEffect's caller-supplied source-pair contract. A renderer may support either
          * format independently. Appended to preserve every existing numeric capability value.
          */
-        CompiledEffects
+        CompiledEffects,
+
+        /**
+         * @brief 32-bit-per-channel floating-point colour render targets -- a `RenderTarget2D` (or
+         * `RenderTargetCube`) created with `SurfaceFormat::Single`, `Vector2` or `Vector4` really
+         * stores unclamped float values, instead of the 8-bit `Color` target every renderer creates
+         * today regardless of the requested format.
+         *
+         * This is the foundation of the CNAEXT engine layer's HDR pipeline (`plan_modern.md`
+         * Phase 1): without it a scene rendered to an off-screen target is clamped to [0,1] before
+         * tonemapping ever runs, which defeats the purpose of tonemapping. It is reported separately
+         * from `HalfFloatRenderTargets` because 16-bit float targets are far more widely available
+         * than 32-bit ones -- notably on GLES 3.0 devices, where `GL_EXT_color_buffer_half_float`
+         * is common and full float colour buffers are not.
+         *
+         * A renderer reports true only when it actually creates the requested float format through
+         * `CreateRenderTarget2DEXT()`; the shared default of that factory ignores the format and
+         * produces a `Color` target, so a renderer that has not been taught float formats must
+         * leave this false rather than let a caller believe values above 1.0 survive.
+         *
+         * @note This entry and `HalfFloatRenderTargets` are **derived**: a renderer opts in by
+         * reporting the individual formats it can really create (`plan_modern.md` MOD-104's
+         * `IGraphicsRenderer::SupportsRenderTargetFormat()`), not by adding a case to its own
+         * `SupportsCapability()` override. Many renderer overrides end in `default: return true`,
+         * so answering a brand-new capability there is opt-out rather than opt-in -- the wrong
+         * direction for a promise this specific.
+         */
+        FloatRenderTargets,
+
+        /**
+         * @brief 16-bit-per-channel (half) floating-point colour render targets --
+         * `SurfaceFormat::HalfSingle`, `HalfVector2`, `HalfVector4` and `HdrBlendable`.
+         *
+         * The practical HDR format: half the bandwidth and memory of a 32-bit float target, enough
+         * range and precision for scene-referred colour, and blendable on far more hardware. The
+         * CNAEXT engine layer's HDR scene target prefers `HdrBlendable` (an alias of `HalfVector4`
+         * in CNA) and falls back to `Color` with a one-time log when neither float capability is
+         * present. See `FloatRenderTargets` for why the two are separate entries.
+         */
+        HalfFloatRenderTargets
     };
 } // CNA

@@ -2138,7 +2138,22 @@ namespace Microsoft::Xna::Framework::Graphics
         // security/compatibility boundary requires a separate explicit renderer opt-in.
         if (capability == CNA::GraphicsCapability::CompiledEffects)
             return GetRenderer().SupportsCompiledEffects();
+        // plan_modern.md MOD-100/MOD-101: the float render-target entries are derived, for the same
+        // reason CompiledEffects is -- a renderer whose capability switch ends in
+        // `default: return true` would otherwise claim that values above 1.0 survive a
+        // render-to-target purely because it has never heard of the enumerator. Each is answered by
+        // the format the CNAEXT engine layer's HDR pipeline would actually allocate: RGBA32F for
+        // the 32-bit entry, and HdrBlendable (CNA's RGBA16F) for the half-float one.
+        if (capability == CNA::GraphicsCapability::FloatRenderTargets)
+            return SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4);
+        if (capability == CNA::GraphicsCapability::HalfFloatRenderTargets)
+            return SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable);
         return GetRenderer().SupportsCapability(capability);
+    }
+
+    bool GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat format) const
+    {
+        return GetRenderer().SupportsRenderTargetFormat(static_cast<int>(format));
     }
 
     int GraphicsDevice::GetMaxTextureDimension() const

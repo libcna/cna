@@ -1031,6 +1031,22 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const;
 
         /**
+         * @brief Returns whether the active renderer really creates a render target of the given
+         *        surface format, instead of substituting an 8-bit Color target for it.
+         *
+         * `RenderTarget2D` has always accepted a `SurfaceFormat`, but every renderer that has not
+         * implemented additional formats quietly produces a `Color` target regardless -- so a
+         * caller that needs an HDR target (`HdrBlendable`, `HalfVector4`, `Vector4`, ...) has no way
+         * to tell whether values above 1.0 will survive. This is that way, per format;
+         * `GraphicsCapability::FloatRenderTargets` and `HalfFloatRenderTargets` are the coarse
+         * summaries derived from it.
+         *
+         * @param format The surface format to ask about.
+         * @return True when a render target of that format is created faithfully.
+         */
+        CNAEXT [[nodiscard]] bool SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat format) const;
+
+        /**
          * @brief Returns the active renderer's real maximum single-axis texture dimension.
          *
          * REMED-CONTENT-001: query this before creating or accepting a texture of
