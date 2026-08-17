@@ -45,6 +45,7 @@
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <type_traits>
 #include <vector>
@@ -641,6 +642,115 @@ TEST_F(ShadowVisibilityTest, TheFilterRadiusChangesHowSoftTheEdgeIs)
 
     EXPECT_EQ(countPartials(0), 0) << "a single tap cannot produce a partially shadowed pixel";
     EXPECT_GT(countPartials(2), 0) << "a 5x5 kernel produced no soft edge at all";
+}
+
+/// Where the shadowed pixels are, as a centroid in frame coordinates. Returns false when nothing
+/// is shadowed at all, which is a different failure from a shadow in the wrong place.
+bool ShadowCentroid(const Frame& frame, float& x, float& y)
+{
+    const int lit = frame.BrightnessAt(0, 0);
+    double sumX = 0.0, sumY = 0.0;
+    int count = 0;
+    for (int py = 0; py < kFrame; ++py)
+        for (int px = 0; px < kFrame; ++px)
+            if (frame.BrightnessAt(px, py) < lit - 16)
+            {
+                sumX += px;
+                sumY += py;
+                ++count;
+            }
+    if (count == 0)
+        return false;
+    x = static_cast<float>(sumX / count);
+    y = static_cast<float>(sumY / count);
+    return true;
+}
+
+/// The frame pixel a world position lands on, computed the way the rasterizer will. Independent of
+/// anything under test: it uses the camera matrices only, never the light's.
+void ExpectedPixel(const Vector3& world, float& x, float& y)
+{
+    const Matrix viewProjection = TopDownView() * FitToGround();
+    const float cx = world.X * viewProjection.M11 + world.Y * viewProjection.M21
+                   + world.Z * viewProjection.M31 + viewProjection.M41;
+    const float cy = world.X * viewProjection.M12 + world.Y * viewProjection.M22
+                   + world.Z * viewProjection.M32 + viewProjection.M42;
+    const float w  = world.X * viewProjection.M14 + world.Y * viewProjection.M24
+                   + world.Z * viewProjection.M34 + viewProjection.M44;
+    const float inverseW = std::abs(w) > 1e-6f ? 1.0f / w : 1.0f;
+    x = (cx * inverseW * 0.5f + 0.5f) * kFrame;
+    // Row 0 of a readback is the top of the frame, which is where clip-space +Y lands.
+    y = (0.5f - cy * inverseW * 0.5f) * kFrame;
+}
+
+TEST_F(ShadowVisibilityTest, TheShadowLandsWhereTheCasterIs)
+{
+    // MOD-842, and the case the centred scene above structurally cannot fail: with the caster over
+    // the middle of the frame, a shadow lookup that flipped V, or swapped the two texture axes,
+    // produces exactly the same square. Real shadow-mapping code gets both of those wrong at least
+    // once -- the XNA sample this renderer's own easygl_shadowmapping example ports has an explicit
+    // `ShadowTexCoord.y = 1 - y` in it, correct there and wrong here, because a CNA render target's
+    // texel memory already matches the clip space it was rendered in.
+    //
+    // So the caster is moved off centre along each world axis in turn and the shadow's centroid is
+    // compared against where the camera alone says that point lands.
+    ShadowMap shadowMap(device, ShadowQuality::Medium);
+    RenderTarget2D target(device, kFrame, kFrame, false, SurfaceFormat::Color,
+                          DepthFormat::Depth24);
+
+    BasicEffect effect(device);
+    ConfigureLighting(effect);
+    effect.setShadowMapEXT(shadowMap.getShadowTexture());
+    effect.setShadowsEnabledEXT(true);
+
+    const auto ground = Quad(0.0f, kGroundHalfExtent);
+
+    struct Offset { float dx, dz; const char* name; };
+    const Offset offsets[] = {
+        {5.0f, 0.0f, "+X"}, {-5.0f, 0.0f, "-X"}, {0.0f, 5.0f, "+Z"}, {0.0f, -5.0f, "-Z"},
+    };
+
+    for (const Offset& offset : offsets)
+    {
+        auto caster = Quad(kCasterHeight, kCasterHalfExtent);
+        for (auto& vertex : caster)
+        {
+            vertex.Position.X += offset.dx;
+            vertex.Position.Z += offset.dz;
+        }
+
+        // Two passes: begin() computes the light matrix, so the first frame is the one that
+        // produces it and the second is the one that uses it.
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::Default);
+            device.setBlendStateProperty(BlendState::Opaque);
+
+            shadowMap.begin(Sun(), SceneBounds());
+            device.DrawUserPrimitives(PrimitiveType::TriangleList, caster.data(), 0, 2);
+            shadowMap.end();
+            effect.setLightViewProjectionEXT(shadowMap.getLightViewProjection());
+
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Black);
+            effect.Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList, ground.data(), 0, 2);
+            device.SetRenderTarget(nullptr);
+        }
+
+        float gotX = 0.0f, gotY = 0.0f;
+        ASSERT_TRUE(ShadowCentroid(Capture(target), gotX, gotY))
+            << "no shadow at all with the caster at " << offset.name;
+
+        float wantX = 0.0f, wantY = 0.0f;
+        ExpectedPixel(Vector3(offset.dx, 0.0f, offset.dz), wantX, wantY);
+
+        // Two pixels of slack for the PCF skirt and the map's own resolution; a flipped or
+        // swapped axis is off by tens of pixels, not by two.
+        EXPECT_NEAR(gotX, wantX, 2.0f) << "caster at " << offset.name << ": shadow column";
+        EXPECT_NEAR(gotY, wantY, 2.0f) << "caster at " << offset.name << ": shadow row";
+    }
 }
 
 TEST_F(ShadowVisibilityTest, TheQualityToRadiusTableIsWhatTheEffectIsGiven)
