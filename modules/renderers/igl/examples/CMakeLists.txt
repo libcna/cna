@@ -137,4 +137,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
         COMMAND cna_test_igl_skinnedeffect_translation_bone
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # IGL-35/IGL-55: EnvironmentMapEffect's Fresnel edge-weighting.
+    cna_igl_test(cna_test_igl_environmentmapeffect_fresnel igl_environmentmapeffect_fresnel_test.cpp)
+    cna_register_renderer_test(NAME Igl_EnvironmentMapEffectFresnel
+        COMMAND cna_test_igl_environmentmapeffect_fresnel
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
