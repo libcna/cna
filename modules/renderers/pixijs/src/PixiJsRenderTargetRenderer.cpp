@@ -45,10 +45,17 @@ EM_JS(void, CNA_PixiJs_BindRenderTarget, (int id), {
 // plan_pixijs.md Design decision 9: app.renderer.extract.pixels() reads back synchronously from
 // whichever target is passed -- ONE target's own RenderTexture here, unlike
 // CNA_PixiJs_ReadCurrentPixels in PixiJsRenderer.cpp, which reads whichever target is current.
+//
+// REMED-PIXIJS-1 (see PixiJsRenderer.cpp's own CNA_PixiJs_ReadCurrentPixels comment): re-render
+// this target's own container into its own texture before reading -- PixiJS is retained-mode, so a
+// Draw() into this target queues sprite-property changes without painting anything. Safe even when
+// this target isn't the currently-bound one: entry.container's children are exactly whatever was
+// last drawn into it, so re-rendering is an idempotent refresh, not a content change.
 EM_JS(int, CNA_PixiJs_ReadTexturePixels, (int id, int x, int y, int w, int h, uint8_t* outPixels), {
     const app = Module['cnaPixiApp'];
     const entry = Module['cnaPixiTextures'] && Module['cnaPixiTextures'][id];
     if (!app || !entry) return 0;
+    if (entry.container) app.renderer.render(entry.container, { renderTexture: entry.texture });
     const pixels = app.renderer.extract.pixels(entry.texture);
     const fullWidth = entry.texture.width;
     const bytesPerRow = w * 4;

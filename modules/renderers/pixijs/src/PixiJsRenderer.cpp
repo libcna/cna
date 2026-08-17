@@ -76,9 +76,23 @@ EM_JS(void, CNA_PixiJs_Render, (), {
 // plan_pixijs.md Design decision 9: app.renderer.extract.pixels() is PixiJS's own supported,
 // genuinely synchronous readback API -- no getImageData-style plumbing needed. Writes w*h*4 RGBA8
 // bytes to outPixels.
+//
+// REMED-PIXIJS-1 (found by the first real browser run, 2026-08-17): PixiJS is retained-mode --
+// SpriteBatch::Draw() only mutates pooled sprite properties (CNA_PixiJs_FlushSprites), it does not
+// paint anything. XNA's GraphicsDevice::GetBackBufferData() is legitimately callable mid-frame,
+// before the framework's own end-of-frame Present() (which is the only other place that calls
+// render()) -- so reading extract.pixels() here without rendering first returned the PREVIOUS
+// frame's stale backbuffer content (or a blank one on the first frame), not what was just drawn.
+// Force a render immediately before extracting, mirroring every other CNA renderer's "a draw call's
+// effect is visible to an immediate readback" contract.
 EM_JS(void, CNA_PixiJs_ReadCurrentPixels, (int x, int y, int w, int h, uint8_t* outPixels), {
     const app = Module['cnaPixiApp'];
     if (!app) return;
+    if (Module['cnaPixiActiveRenderTexture']) {
+        app.renderer.render(Module['cnaPixiActiveContainer'], { renderTexture: Module['cnaPixiActiveRenderTexture'] });
+    } else {
+        app.renderer.render(app.stage);
+    }
     const target = Module['cnaPixiActiveRenderTexture'] || undefined;
     const pixels = app.renderer.extract.pixels(target);
     // extract.pixels() returns the FULL target's pixels; slice the requested x/y/w/h rectangle out

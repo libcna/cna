@@ -4,11 +4,11 @@
 
 `PIXIJS` was authored on **2026-08-16** per direct task instruction and is CNA's newest, most
 experimental renderer. On **2026-08-17** a real Emscripten toolchain build was performed for the
-first time: `cna_renderer_pixijs` and the `cna_test_pixijs_smoke` example both compile and link
-successfully under real `emcc`/`em++` (emsdk, pinned PixiJS v7.4.2 UMD build). See `plan_pixijs.md`
-for the full task breakdown, design decisions, and this renderer's own honest, continuously-updated
-status legend -- what follows here is the real, current verification picture, not the original
-zero-verification starting point.
+first time, and later the same day `cna_test_pixijs_smoke` was run in a **real browser** (headless
+Chromium) and reached **5/5 PASS** -- the first proof this renderer draws correct pixels at all. See
+`plan_pixijs.md` for the full task breakdown, design decisions, and this renderer's own honest,
+continuously-updated status legend -- what follows here is the real, current verification picture,
+not the original zero-verification starting point.
 
 Select it with (Emscripten only -- see "Important limitations"):
 
@@ -37,11 +37,28 @@ obtained copy (e.g. via `npm pack pixi.js@7.4.2`) was used instead; both paths a
 - **`cna_renderer_pixijs` compiles and links cleanly under real Emscripten** (emsdk 6.0.6). One real
   bug was found and fixed in the process: `Vector2::getZeroProperty()` doesn't exist (`Vector2::Zero`
   is the real accessor) -- everything else compiled on the first attempt.
-- **`cna_test_pixijs_smoke` compiles and links into a real, runnable `.js`/`.wasm`.** Running it
-  under plain `node` reproduces `CANVAS-15`'s own documented finding exactly: `SDL_Init` throws
-  `ReferenceError: window is not defined` before any renderer-specific code runs, because Node has
-  no real DOM. This is the expected, already-known boundary (needs a real browser via `emrun`), not
-  a new PixiJS-specific failure.
+- **`cna_test_pixijs_smoke` compiles and links into a real, runnable `.js`/`.wasm`/`.html`.** Running
+  it under plain `node` reproduces `CANVAS-15`'s own documented finding exactly: `SDL_Init` throws
+  `ReferenceError: window is not defined` before any renderer-specific code runs, because Node has no
+  real DOM.
+- **Run in a real browser (headless Chromium, driven by Playwright, `--use-gl=swiftshader`), served
+  over local HTTP: `5/5 PASS` on the first genuinely successful run.** The first attempt scored
+  3/5 -- window/renderer plumbing checks passed, but both pixel-value checks (`GetBackBufferData`
+  after a scaled `Draw`) failed. Diagnosed live in the page (`page.evaluate()` dumping texture
+  buffers, sprite state, and a manually-forced re-render + `extract.pixels()`), which showed the
+  texture upload, sprite anchor/scale math, and readback mechanism were ALL already correct in
+  isolation. The real bug: PixiJS is **retained-mode** -- `SpriteBatch::Draw()` only mutates pooled
+  sprite properties, nothing paints until `renderer.render()` runs, and `Present()` was the only
+  place that called it. XNA's `GetBackBufferData()` is legally callable mid-frame, before the
+  framework's own end-of-frame `Present()` -- exactly what the smoke test does -- so the readback saw
+  the *previous* frame's stale backbuffer. **Fixed** (`REMED-PIXIJS-1`): both readback `EM_JS`
+  functions (`CNA_PixiJs_ReadCurrentPixels`, `CNA_PixiJs_ReadTexturePixels`) now force a render of
+  the relevant container/target immediately before extracting pixels. After the fix: **5/5 PASS**,
+  verifying real `PIXI.Application` construction, exact-byte-correct buffer-backed texture upload and
+  sampling, a scaled unrotated `anchor=(0,0)` `SpriteBatch::Draw` producing exact destination pixels,
+  and `extract.pixels()`-based readback all working together end to end. **Not yet exercised**:
+  rotation/origin away from (0,0), `SpriteEffects` flip, non-`Opaque` blend modes, render-target
+  bind/draw/readback, and `SpriteFont`.
 - **Confirmed blocked, and confirmed NOT an emsdk-version issue**: the shared `CnaTests` target
   (built with `-sASYNCIFY=1` and `-fwasm-exceptions`) fails to link under Emscripten --
   `em++` itself warns `ASYNCIFY=1 is not compatible with -fwasm-exceptions`, and `wasm-opt --asyncify`
@@ -53,9 +70,10 @@ obtained copy (e.g. via `npm pack pixi.js@7.4.2`) was used instead; both paths a
   renderer, not just `PIXIJS`, and is out of this renderer's own scope. See `plan_pixijs.md`'s
   2026-08-17 update for the full account, including the (unrelated) workaround needed for
   Emscripten's own blocked `zlib` port fetch in a network-restricted sandbox.
-- **Not yet verified, and still the real headline gap**: nothing has been proven to draw a single
-  correct pixel. `cna_test_pixijs_smoke` has never run to completion in a real browser. Everything
-  below "What has actually been verified" is still exactly as provisional as it reads.
+- **Still open**: only one narrow scenario has real browser evidence (see above). Rotation, flip,
+  every blend mode besides the default, render targets, mip levels, sampler wrap/filter,
+  `SetTransformMatrix`, and `SpriteFont` remain exactly as unverified as before this update --
+  "one thing works" is not "the renderer works."
 
 The renderer's C++ source compiles conditionally behind `#if defined(__EMSCRIPTEN__)` for every
 `EM_JS` block, so the pure-C++ logic (blend-state mapping, the 2D-only `ThrowNo3D` surface) is
