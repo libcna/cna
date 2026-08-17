@@ -534,7 +534,7 @@ values everywhere except inside a structure.
 |---|---|---|---|
 | FX-060 | Extract a reusable shared backend conformance suite from the FNA3D tests | FX-057 | **Done.** `tests/support/CNA/TestSupport/` holds the Direct3D 9 Effect Framework format constants, the deterministic fixture builders (including the hand-assembled Shader Model 2.0 program) and nine contract sections -- format, reflection, techniques/passes, render state, state policy, samplers, texture binding, clone and lifecycle -- plus an explicit unsupported-backend contract. A backend adds one test that builds its device and calls `RunCompiledEffectContract`. FNA3D runs it and static-asserts the neutral constants against its parser's own enumerations |
 | FX-061 | Implement and gate SDL_GPU through the MojoShader SDL adapter | FX-030, FX-060 | **Done -- `SupportsCompiledEffects()` reports true.** `cna_configure_mojoshader()` separates the dependency from FNA3D, the renderer-neutral translation moved to `modules/renderers/common/mojoshader` and is shared with FNA3D, and `SdlGpuCompiledEffect` creates, clones, reflects, selects techniques and passes, translates render and sampler states, and validates parameter and texture assignment against MojoShader's own SDL_GPU adapter. Two existence gates plus dedicated tests cover it, and one of those tests caught a real crash: several MojoShader parse failures are static sentinels rather than allocations, and deleting one walks static storage -- now guarded in the shared module for every backend. `FX-071` closed the remaining gaps: a real draw route, a golden-pixel test, and the FX-060 shared suite passing through the public `Effect`/`GraphicsDevice` API. Still refused explicitly rather than silently mishandled: vertex-stage sampling, 3D/cube textures, and multi-stream declarations |
-| FX-062 | Implement and gate EasyGL/OpenGL-family support through MojoShader GL | FX-030, FX-060 | Full shared suite passes and GL state caches remain coherent |
+| FX-062 | Implement and gate EasyGL/OpenGL-family support through MojoShader GL | FX-030, FX-060 | **Existence gate passed; renderer code not yet started.** `tools/graphics/mojoshader_gl_probe.cpp` proves the pinned MojoShader's OpenGL adapter (`mojoshader_opengl.c`) links and renders a committed effect against a real GLES3 context, byte-identical to the SDL_GPU adapter's own golden pixels (`(3,6,10,13)` for `MainPixelShader`, `(20,41,61,82)` for `FlatPixelShader`) -- see the FX-062 existence-gate note below the task table for the two real GL-adapter-specific bugs it found and worked around before any EasyGL renderer code exists. Full shared suite passes and GL state caches remain coherent |
 | FX-063 | Implement and gate DirectX 11 through the MojoShader D3D11 adapter | FX-030, FX-060 | Full shared suite passes on the supported Windows CI matrix |
 | FX-064 | Prototype direct MojoShader SPIR-V generation/linking for Vulkan | FX-030, FX-060 | Reflection, uniform binding, vertex linkage, and one multi-pass fixture work without glslang |
 | FX-065 | Complete and gate Vulkan after the prototype | FX-064 | Full shared suite and Vulkan validation layers pass |
@@ -618,6 +618,63 @@ no-op. What actually matters at draw time is `SdlGpuRenderer::CaptureRenderState
 renderer's own live cull/blend/depth state -- set via the ordinary public
 `GraphicsDevice.RasterizerState`/`BlendState`/`DepthStencilState` properties, exactly like any other
 draw family, not through the compiled-effect-specific state plumbing at all.
+
+#### FX-062 existence-gate findings (2026-08-17)
+
+`tools/graphics/mojoshader_gl_probe.cpp` (mirroring `mojoshader_sdlgpu_probe.cpp`'s structure and
+golden-pixel methodology, linking only MojoShader and SDL3 -- no CNA, no EasyGL) proves MojoShader's
+OpenGL adapter renders a committed effect correctly against a real GLES3 context. Both `--render`
+technique/pass combinations land on the exact same bytes as the SDL_GPU adapter's independently
+hand-verified golden pixels: `(3,6,10,13)` for `MainPixelShader` (texture sampling, a struct-driven
+preshader) and `(20,41,61,82)` for `FlatPixelShader` (no sampling, an array-driven preshader). That
+match is also a second, independent confirmation that FX-071's `mojoshader_effects.c` preshader fix
+(the two register-count/float-count unit bugs) is correct -- both backends share that exact code.
+
+Two real, GL-adapter-specific bugs surfaced before any of this rendered, both fixed in the probe and
+both things `SdlGpuCompiledEffect`'s eventual `EasyGL` counterpart will need to get right from the
+start:
+
+1. **A calling-convention mismatch, not a MojoShader defect.** Every `MOJOSHADER_gl*` function
+   relevant to `MOJOSHADER_effectShaderContext` omits the leading context-pointer argument the
+   backend struct's typedefs declare -- the OpenGL adapter keeps its context as implicit
+   thread-local state (`MOJOSHADER_glMakeContextCurrent`), unlike SDL_GPU/D3D11's explicit
+   per-call context pointer, and `MOJOSHADER_glCompileShader` additionally has no `mainfn`
+   parameter at all. Casting the real functions directly into those slots -- the natural first
+   attempt, mirroring `MakeSdlBackend` -- silently misaligns every argument. It reproduced as
+   `MOJOSHADER_parse()` failing with `"invalid swizzle"` on every committed effect, immediately,
+   regardless of which GLSL/GLSLES/GLSLES3 profile was requested, which is what proved it was a
+   calling-convention bug rather than a profile-specific codegen defect. Fixed with thin trampoline
+   functions dropping the unused leading argument(s) (`CompileShaderTrampoline` and five siblings in
+   the probe; `shaderAddRef`/`getParseData` are the only two slots whose real signature already
+   matches, with no context argument in either form).
+2. **A required, GL-only uniform the Effect Framework never populates.** The generated GLSL vertex
+   shader references a `uniform float vpFlip` for the GL/D3D9 clip-space Y mismatch (plus a paired
+   D3D9-`[0,1]`-to-GL-`[-1,1]` depth remap on `gl_Position.z`) that `MOJOSHADER_effectCommitChanges`'s
+   ordinary register-file uniform push never touches -- a separate call,
+   `MOJOSHADER_glProgramViewportInfo(viewportW, viewportH, backbufferW, backbufferH,
+   renderTargetBound)`, is required after every `MOJOSHADER_glProgramReady()`, whenever the render
+   target could have changed. Skipping it leaves `vpFlip` at GLSL's zero-initialized default, which
+   zeroes `gl_Position.y` for every vertex and collapses any geometry to zero screen area --
+   reproduced as a draw that reported no GL error at any step (valid program bound, attributes
+   correctly located and enabled, no culling/depth/scissor/blend interference) yet changed zero
+   pixels. Root-caused by dumping the generated GLSL source via `parseData->output` (the GL/GLSL
+   profiles return readable source text here, unlike SPIR-V's binary output) and reading it, not by
+   further trial-and-error state probing.
+
+A third, unrelated bug was in the probe itself, not MojoShader: binding `colorTarget` to set up the
+FBO attachment clobbered texture unit 0's binding (left over from binding `whiteTexture` there
+earlier), and the render then sampled the same texture it was rendering into -- caught because
+alpha came back plausible (a real preshader/uniform value) while RGB did not, which pointed at
+sampled-texture content rather than the uniform/preshader pipeline already proven correct by
+FX-071. Fixed by rebinding `whiteTexture` to unit 0 immediately before the draw.
+
+Not yet started: `EasyGLCompiledEffect` (the reflection/clone/state-translation work is already
+done, renderer-neutral, in `modules/renderers/common/mojoshader/EffectTranslation.{hpp,cpp}` since
+FX-061 -- only the EasyGL-specific adapter wiring around MojoShader's GL backend is new), and the
+draw route. EasyGL draws immediately rather than deferring to a `Present()`-time replay the way
+SDL_GPU does, which should make the draw route simpler than FX-071's: no queue/upload/replay split,
+and no uniform-snapshot-capture-before-overwrite concern, since nothing else can touch MojoShader's
+shared register files between `ApplyPass()` and the draw call in the same synchronous call chain.
 
 ### Phase H - Optional future formats and tooling
 
