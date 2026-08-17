@@ -5,6 +5,7 @@
 
 #include "CNA/Graphics/BloomPass.hpp"
 #include "CNA/Graphics/FxaaPass.hpp"
+#include "CNA/Graphics/ShadowMap.hpp"
 #include "CNA/Graphics/SsaoPass.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
@@ -95,6 +96,19 @@ namespace CNA::Graphics {
         frameOpen_        = true;
         usingSceneTarget_ = wantsSceneTarget();
 
+        // MOD-858: before anything else, and before the scene target is bound. The shadow pass
+        // binds a target of its own and restores the back buffer when it ends, so running it
+        // after the scene target was bound would silently unbind it and send the whole frame to
+        // the screen instead.
+        shadowPassRan_ = false;
+        if (settings_.isShadowsEnabled() && shadowMap_ != nullptr && drawCasters_)
+        {
+            shadowMap_->begin(shadowLight_, shadowBounds_);
+            drawCasters_();
+            shadowMap_->end();
+            shadowPassRan_ = true;
+        }
+
         if (!usingSceneTarget_)
         {
             device_.SetRenderTarget(nullptr);
@@ -177,6 +191,26 @@ namespace CNA::Graphics {
     {
         sceneDepth_   = depth;
         sceneNormals_ = normals;
+    }
+
+    void RenderPipeline::setShadowScene(ShadowMap* shadowMap, const DirectionalLightEXT& light,
+                                        const Microsoft::Xna::Framework::BoundingBox& sceneBounds,
+                                        std::function<void()> drawCasters)
+    {
+        shadowMap_    = shadowMap;
+        shadowLight_  = light;
+        shadowBounds_ = sceneBounds;
+        drawCasters_  = std::move(drawCasters);
+    }
+
+    bool RenderPipeline::didShadowPassRun() const
+    {
+        return shadowPassRan_;
+    }
+
+    ShadowMap* RenderPipeline::getShadowMap() const
+    {
+        return shadowMap_;
     }
 
     void RenderPipeline::clearUserPasses()

@@ -3,10 +3,13 @@
 
 #ifdef CNA_CNAEXT
 
+#include "CNA/Graphics/DirectionalLightEXT.hpp"
 #include "CNA/Graphics/PostProcessChain.hpp"
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
+#include "Microsoft/Xna/Framework/BoundingBox.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -26,6 +29,7 @@ namespace CNA::Graphics {
     class BloomPass;
     class FxaaPass;
     class PostProcessPass;
+    class ShadowMap;
     class SsaoPass;
     class TonemapPass;
 
@@ -134,6 +138,51 @@ namespace CNA::Graphics {
                                   Microsoft::Xna::Framework::Graphics::Texture2D* normals);
 
         /**
+         * @brief Supplies the shadow pass `begin` should run before the frame.
+         *
+         * plan_modern.md MOD-858/MOD-859. The pipeline cannot draw the scene by itself, for the
+         * same reason it cannot produce the depth and normals SSAO wants: only the game knows what
+         * its casters are. Registering the draw here is a convenience over calling
+         * `ShadowMap::begin`/`end` directly, not a replacement for it -- `ShadowMap` stays usable
+         * on its own, which is the decision recorded in `MOD-860`.
+         *
+         * The contract this puts on the app is worth stating plainly, because it is not free: the
+         * scene must be drawable twice per frame, once from the light and once from the camera.
+         * @p drawCasters is called with the map already bound and cleared, and must draw only
+         * geometry, never change render target or clear.
+         *
+         * @param shadowMap   The map to fill, or null to stop running a shadow pass.
+         * @param light       The light to generate from.
+         * @param sceneBounds The bounds to fit the light's volume to.
+         * @param drawCasters The app's own caster draw calls. An empty function disables the pass
+         *                    as surely as a null map does, and @ref didShadowPassRun reports it.
+         */
+        void setShadowScene(ShadowMap* shadowMap, const DirectionalLightEXT& light,
+                            const Microsoft::Xna::Framework::BoundingBox& sceneBounds,
+                            std::function<void()> drawCasters);
+
+        /**
+         * @brief Returns whether the last `begin` actually ran a shadow pass.
+         *
+         * False when shadows are switched off in the settings, when no map has been supplied, or
+         * when a map was supplied without a caster callback -- three different reasons the app can
+         * tell apart from what it set, and one answer it can assert on.
+         *
+         * @return True if the most recent frame filled the shadow map.
+         */
+        [[nodiscard]] bool didShadowPassRun() const;
+
+        /**
+         * @brief Returns the shadow map the pipeline fills, or null.
+         *
+         * The map, not a copy of its texture: an app needs it to configure the effects that will
+         * receive the shadow, which the pipeline deliberately does not do on its behalf.
+         *
+         * @return The registered shadow map, or null.
+         */
+        [[nodiscard]] ShadowMap* getShadowMap() const;
+
+        /**
          * @brief Returns the scene target the frame is being rendered into.
          *
          * Null outside `begin`/`end`, and null when the pipeline is rendering straight to the back
@@ -192,6 +241,13 @@ namespace CNA::Graphics {
         std::unique_ptr<TonemapPass> tonemapPass_;
         std::unique_ptr<FxaaPass> fxaaPass_;
         std::unique_ptr<SsaoPass> ssaoPass_;
+        ShadowMap* shadowMap_ = nullptr;
+        DirectionalLightEXT shadowLight_{};
+        Microsoft::Xna::Framework::BoundingBox shadowBounds_{
+            Microsoft::Xna::Framework::Vector3(-1.0f, -1.0f, -1.0f),
+            Microsoft::Xna::Framework::Vector3(1.0f, 1.0f, 1.0f)};
+        std::function<void()> drawCasters_;
+        bool shadowPassRan_ = false;
         Microsoft::Xna::Framework::Graphics::Texture2D* sceneDepth_   = nullptr;
         Microsoft::Xna::Framework::Graphics::Texture2D* sceneNormals_ = nullptr;
         std::vector<PostProcessPass*> userPasses_;

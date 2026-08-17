@@ -51,6 +51,7 @@ orchestration that pulls in extra render targets and GPU memory lives in the gat
 | `PostProcessPass`, `PostProcessContext`, `PostProcessChain` | same directory | The pass abstraction, its one invocation struct, and the chain that ping-pongs between intermediates. |
 | `SsaoPass`, `BloomPass`, `TonemapPass`, `FxaaPass`, `BlitPass` | same directory | The built-in passes, in pipeline order. |
 | `FullscreenPass`, `RenderTargetPool` | same directory | The screen-covering draw and the intermediate-target cache every pass shares. |
+| `ShadowMap`, `DirectionalLightEXT` | `CNA/Graphics/ShadowMap.hpp` | Directional shadow-map generation: fits the light's volume to the scene, opens a pass the app draws its casters into. |
 | `CNAEXT.hpp` | `CNA/Graphics/CNAEXT.hpp` | Master include — pulls in every public type above. |
 
 ## Conventions for this layer
@@ -87,7 +88,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ⬜ | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |
 | Float/HDR render targets | ✅ RGBA16F + RGBA32F, runtime-probed | ⬜ | ⬜ | ⬜ — each reports `false` and `RenderTarget2D` refuses the format rather than substituting `Color` |
 | `RenderPipeline` + post-process passes | ✅ | ⬜ | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
-| Shadow maps | ⬜ | ⬜ | ⬜ | ⬜ |
+| Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ⬜ | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
 | Skybox + IBL | ⬜ | ⬜ | ⬜ | ⬜ |
 | Compute / storage buffers | ⬜ | ⬜ | ⬜ | ⬜ |
 
@@ -114,6 +115,63 @@ which is what makes it safe to add to an existing title before deciding whether 
 Ambient occlusion needs one thing the pipeline cannot do for a game: scene depth and view-space
 normals, which means drawing the geometry a second time with a different effect. Supply them with
 `setDepthNormalInputs()`; without them SSAO renders an unoccluded frame rather than failing.
+
+### Shadows, and the contract they put on the app
+
+Shadows cost the app something no library can pay on its behalf: **the scene has to be drawable
+twice per frame** — once from the light, to fill the map, and once from the camera, to shade it.
+That is inherent to shadow mapping, not to this implementation, and it is the reason the split
+below exists rather than a single `enableShadows(true)`.
+
+There are two ways to run the pass, and the plain one is the default:
+
+```cpp
+// 1. App-driven. ShadowMap is usable entirely on its own.
+CNA::Graphics::ShadowMap shadowMap(device, CNA::Graphics::ShadowQuality::High);
+
+shadowMap.begin(sun, sceneBounds);
+drawEveryCaster();                       // geometry only -- no clear, no target change
+shadowMap.end();
+```
+
+```cpp
+// 2. Registered with the pipeline, which then runs it inside begin(), before the scene target is
+//    bound. Same two calls, made for you, in the right order.
+pipeline.getSettings().setShadowsEnabled(true);
+pipeline.setShadowScene(&shadowMap, sun, sceneBounds, [&] { drawEveryCaster(); });
+```
+
+Either way, the receiving half is the app's: shadows arrive at a surface through the effect that
+shades it, so each lit effect is told about the map.
+
+```cpp
+effect.setShadowMapEXT(shadowMap.getShadowTexture());
+effect.setLightViewProjectionEXT(shadowMap.getLightViewProjection());   // after begin() has run
+effect.setShadowFilterRadiusEXT(shadowMap.getFilterRadius());
+effect.setShadowsEnabledEXT(true);
+```
+
+`BasicEffect`, `SkinnedEffect`, `PbrEffect` and `SkinnedPbrEffect` all implement
+`IShadowReceiverEXT`, so a shadow subsystem can hold an `IShadowReceiverEXT&` and not care which.
+That interface is always compiled, unlike everything else on this page: receiving a shadow is a
+per-draw property of a material, and an effect's public surface must not change with a build flag.
+
+Three things about it are worth knowing before the first frame looks wrong:
+
+- **The map holds light-space distance, not depth.** CNA cannot sample a depth attachment as a
+  texture on every renderer, so the caster shader writes distance into an ordinary colour target.
+  A `Single` (R32F) target where the renderer has one, `Color` otherwise — 256 distinguishable
+  depths, which is enough for a demo and visibly stepped in anything larger.
+- **`getLightViewProjection()` is only valid after `begin()`.** The matrix is computed from the
+  light and the scene bounds when the pass opens, so an effect configured before the first pass
+  carries an identity matrix for one frame.
+- **Bias is a trade, and the default sits in the middle of it.** At `0` a surface shadows itself:
+  in the acne scene the test suite renders, 55% of a plane goes dark. At the default `0.0015`
+  only the real shadow remains (9%). At `0.2` the shadow leaves its caster entirely (0%). Raising
+  the bias to remove an artefact is never free.
+
+Outside the light's fitted volume nothing is shadowed, by an explicit range check rather than a
+clamped sampler — clamping would smear the caster's silhouette outward to the edges of the world.
 
 Legend: ✅ implemented and verified · 🟨 partial · ⬜ not implemented · ⛔ deliberately unsupported.
 

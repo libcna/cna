@@ -13,12 +13,19 @@
 #include "CNA/Graphics/BlitPass.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
+#include "CNA/Graphics/DirectionalLightEXT.hpp"
 #include "CNA/Graphics/RenderPipeline.hpp"
+#include "CNA/Graphics/ShadowMap.hpp"
+#include "CNA/Graphics/ShadowQuality.hpp"
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
 #include "CNA/Graphics/TonemappingMode.hpp"
+#include "Microsoft/Xna/Framework/BoundingBox.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include <stdexcept>
 #include <string>
@@ -33,6 +40,7 @@ using CNA::Graphics::TonemappingMode;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+using Microsoft::Xna::Framework::Graphics::Texture;
 
 constexpr int kWidth  = 32;
 constexpr int kHeight = 16;
@@ -312,6 +320,106 @@ TEST(RenderPipelineTest, TheFixedPassOrderIsSsaoThenBloomThenTonemapThenFxaa)
 
     EXPECT_EQ(pipeline.getLastFramePassCount(), 5);   // ssao, bloom, tonemap, fxaa, user
     EXPECT_EQ(user.applyCount, 1);
+}
+
+// =====================================================================================
+// Shadow integration (MOD-858)
+// =====================================================================================
+
+TEST(RenderPipelineTest, TheShadowPassRunsBeforeTheSceneTargetIsBound)
+{
+    // Ordering is the whole assertion. ShadowMap::end() restores the back buffer, so a shadow pass
+    // running after the scene target was bound would unbind it and send the frame to the screen --
+    // a mistake whose symptom is post-processing silently doing nothing.
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+    pipeline.getSettings().setHDREnabled(true);
+    pipeline.getSettings().setShadowsEnabled(true);
+
+    CNA::Graphics::ShadowMap shadowMap(gd, CNA::Graphics::ShadowQuality::Low);
+    const Texture* boundWhenCastersDrew = nullptr;
+    pipeline.setShadowScene(&shadowMap, CNA::Graphics::DirectionalLightEXT{},
+                            Microsoft::Xna::Framework::BoundingBox(
+                                Microsoft::Xna::Framework::Vector3(-1.0f, -1.0f, -1.0f),
+                                Microsoft::Xna::Framework::Vector3(1.0f, 1.0f, 1.0f)),
+                            [&] {
+                                const auto bound = gd.GetRenderTargets();
+                                boundWhenCastersDrew =
+                                    bound.empty() ? nullptr
+                                                  : bound[0].getRenderTargetProperty();
+                            });
+
+    pipeline.begin(Color::Black);
+    pipeline.end();
+
+    EXPECT_TRUE(pipeline.didShadowPassRun());
+    EXPECT_EQ(boundWhenCastersDrew, static_cast<const Texture*>(shadowMap.getShadowTexture()))
+        << "the casters were drawn into something other than the shadow map";
+    EXPECT_EQ(pipeline.getShadowMap(), &shadowMap);
+}
+
+TEST(RenderPipelineTest, EachMissingIngredientLeavesTheShadowPassUnrun)
+{
+    // Three separate reasons not to run one, and the app can tell them apart from what it set.
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+    CNA::Graphics::ShadowMap shadowMap(gd, CNA::Graphics::ShadowQuality::Low);
+    const Microsoft::Xna::Framework::BoundingBox bounds(
+        Microsoft::Xna::Framework::Vector3(-1.0f, -1.0f, -1.0f),
+        Microsoft::Xna::Framework::Vector3(1.0f, 1.0f, 1.0f));
+
+    int drawCount = 0;
+    const auto draw = [&] { ++drawCount; };
+
+    // Settings off.
+    pipeline.setShadowScene(&shadowMap, CNA::Graphics::DirectionalLightEXT{}, bounds, draw);
+    pipeline.begin(Color::Black);
+    pipeline.end();
+    EXPECT_FALSE(pipeline.didShadowPassRun());
+
+    // Settings on, but no map.
+    pipeline.getSettings().setShadowsEnabled(true);
+    pipeline.setShadowScene(nullptr, CNA::Graphics::DirectionalLightEXT{}, bounds, draw);
+    pipeline.begin(Color::Black);
+    pipeline.end();
+    EXPECT_FALSE(pipeline.didShadowPassRun());
+    EXPECT_EQ(pipeline.getShadowMap(), nullptr);
+
+    // Map, but nothing to draw into it -- the pipeline cannot invent the app's geometry.
+    pipeline.setShadowScene(&shadowMap, CNA::Graphics::DirectionalLightEXT{}, bounds, {});
+    pipeline.begin(Color::Black);
+    pipeline.end();
+    EXPECT_FALSE(pipeline.didShadowPassRun());
+
+    EXPECT_EQ(drawCount, 0);
+}
+
+TEST(RenderPipelineTest, AShadowPassAloneDoesNotForceASceneTarget)
+{
+    // Shadows and post-processing are independent: a game that wants shadows and no HDR must not
+    // start paying for an off-screen target it has no use for.
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+    pipeline.getSettings().setShadowsEnabled(true);
+
+    CNA::Graphics::ShadowMap shadowMap(gd, CNA::Graphics::ShadowQuality::Low);
+    int drawCount = 0;
+    pipeline.setShadowScene(&shadowMap, CNA::Graphics::DirectionalLightEXT{},
+                            Microsoft::Xna::Framework::BoundingBox(
+                                Microsoft::Xna::Framework::Vector3(-1.0f, -1.0f, -1.0f),
+                                Microsoft::Xna::Framework::Vector3(1.0f, 1.0f, 1.0f)),
+                            [&] { ++drawCount; });
+
+    pipeline.begin(Color::Black);
+    EXPECT_FALSE(pipeline.isUsingSceneTarget());
+    pipeline.end();
+
+    EXPECT_TRUE(pipeline.didShadowPassRun());
+    EXPECT_EQ(drawCount, 1);
+    EXPECT_EQ(pipeline.getGpuMemoryEstimateBytes(), 0u);
 }
 
 } // namespace
