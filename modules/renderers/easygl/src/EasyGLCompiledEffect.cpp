@@ -14,7 +14,10 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "System/NotSupportedException.hpp"
 
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
@@ -24,6 +27,10 @@ namespace CNA::Internal::Renderers::EasyGL
 {
     namespace
     {
+        using Microsoft::Xna::Framework::Graphics::VertexElement;
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+
         /// Same ceiling the shared translation applies to reflected tables.
         constexpr std::size_t kMaximumReflectedItems = 64u * 1024u;
 
@@ -108,6 +115,64 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             auto loader = reinterpret_cast<CNA::Platform::GlProcAddressLoader>(data);
             return loader != nullptr ? loader(fnname) : nullptr;
+        }
+
+        MOJOSHADER_usage ToMojoShaderUsage(VertexElementUsage usage)
+        {
+            switch (usage)
+            {
+                case VertexElementUsage::Position:          return MOJOSHADER_USAGE_POSITION;
+                case VertexElementUsage::Color:              return MOJOSHADER_USAGE_COLOR;
+                case VertexElementUsage::TextureCoordinate:  return MOJOSHADER_USAGE_TEXCOORD;
+                case VertexElementUsage::Normal:             return MOJOSHADER_USAGE_NORMAL;
+                case VertexElementUsage::Binormal:           return MOJOSHADER_USAGE_BINORMAL;
+                case VertexElementUsage::Tangent:            return MOJOSHADER_USAGE_TANGENT;
+                case VertexElementUsage::BlendIndices:       return MOJOSHADER_USAGE_BLENDINDICES;
+                case VertexElementUsage::BlendWeight:        return MOJOSHADER_USAGE_BLENDWEIGHT;
+                case VertexElementUsage::Depth:              return MOJOSHADER_USAGE_DEPTH;
+                case VertexElementUsage::Fog:                return MOJOSHADER_USAGE_FOG;
+                case VertexElementUsage::PointSize:          return MOJOSHADER_USAGE_POINTSIZE;
+                case VertexElementUsage::Sample:             return MOJOSHADER_USAGE_SAMPLE;
+                case VertexElementUsage::TessellateFactor:   return MOJOSHADER_USAGE_TESSFACTOR;
+            }
+            throw std::invalid_argument(
+                "EasyGL compiled effect: unrecognized VertexElementUsage ordinal " +
+                std::to_string(static_cast<int>(usage)));
+        }
+
+        /// (component count, whether the wire format needs a float upconvert, normalized) for one
+        /// XNA VertexElementFormat's MOJOSHADER_glSetVertexAttribute call.
+        struct GlAttributeFormat
+        {
+            unsigned int size = 0;
+            MOJOSHADER_attributeType type = MOJOSHADER_ATTRIBUTE_FLOAT;
+            int normalized = 0;
+        };
+
+        GlAttributeFormat ToGlAttributeFormat(VertexElementFormat format)
+        {
+            switch (format)
+            {
+                case VertexElementFormat::Single:  return {1, MOJOSHADER_ATTRIBUTE_FLOAT, 0};
+                case VertexElementFormat::Vector2: return {2, MOJOSHADER_ATTRIBUTE_FLOAT, 0};
+                case VertexElementFormat::Vector3: return {3, MOJOSHADER_ATTRIBUTE_FLOAT, 0};
+                case VertexElementFormat::Vector4: return {4, MOJOSHADER_ATTRIBUTE_FLOAT, 0};
+                case VertexElementFormat::Color:   return {4, MOJOSHADER_ATTRIBUTE_UBYTE, 1};
+                case VertexElementFormat::Byte4:   return {4, MOJOSHADER_ATTRIBUTE_UBYTE, 0};
+                case VertexElementFormat::Short2:  return {2, MOJOSHADER_ATTRIBUTE_SHORT, 0};
+                case VertexElementFormat::Short4:  return {4, MOJOSHADER_ATTRIBUTE_SHORT, 0};
+                case VertexElementFormat::NormalizedShort2:
+                    return {2, MOJOSHADER_ATTRIBUTE_SHORT, 1};
+                case VertexElementFormat::NormalizedShort4:
+                    return {4, MOJOSHADER_ATTRIBUTE_SHORT, 1};
+                case VertexElementFormat::HalfVector2:
+                    return {2, MOJOSHADER_ATTRIBUTE_HALF_FLOAT, 0};
+                case VertexElementFormat::HalfVector4:
+                    return {4, MOJOSHADER_ATTRIBUTE_HALF_FLOAT, 0};
+            }
+            throw std::invalid_argument(
+                "EasyGL compiled effect: unrecognized VertexElementFormat ordinal " +
+                std::to_string(static_cast<int>(format)));
         }
 
         MOJOSHADER_effectShaderContext MakeBackend(MOJOSHADER_glContext* context)
@@ -394,6 +459,127 @@ namespace CNA::Internal::Renderers::EasyGL
         const std::uint8_t* effectCode, std::size_t effectCodeBytes)
     {
         return std::make_unique<EasyGLCompiledEffect>(*this, effectCode, effectCodeBytes);
+    }
+
+    void EasyGLRenderer::BindCompiledEffectForDrawEXT(
+        const std::vector<VertexElement>& declaredElements, std::size_t stride,
+        ICompiledEffectRuntime& runtime)
+    {
+        auto* effect = dynamic_cast<EasyGLCompiledEffect*>(&runtime);
+        if (effect == nullptr)
+        {
+            throw std::runtime_error(
+                "EasyGL compiled effect: the applied effect was not created by this renderer.");
+        }
+
+        MOJOSHADER_glShader* vertexShader = nullptr;
+        MOJOSHADER_glShader* pixelShader = nullptr;
+        MOJOSHADER_glGetBoundShaders(&vertexShader, &pixelShader);
+        if (vertexShader == nullptr || pixelShader == nullptr)
+        {
+            throw std::runtime_error(
+                "EasyGL compiled effect: the applied pass bound no shader pair.");
+        }
+
+        const MOJOSHADER_parseData* vertexParseData = MOJOSHADER_glGetShaderParseData(vertexShader);
+        const MOJOSHADER_parseData* pixelParseData = MOJOSHADER_glGetShaderParseData(pixelShader);
+        if (vertexParseData == nullptr || pixelParseData == nullptr)
+        {
+            throw std::runtime_error(
+                "EasyGL compiled effect: the applied pass's shaders have no reflection.");
+        }
+
+        // plan_fx.md FX-062, matching FX-071's own scope: a compiled effect's vertex shader
+        // sampling a texture is refused explicitly rather than silently mishandled -- this
+        // renderer's compiled-effect draw route does not bind vertex-stage sampler textures.
+        if (vertexParseData->sampler_count > 0)
+        {
+            throw System::NotSupportedException(
+                "CNA EasyGL: this compiled effect's vertex shader samples a texture, which this "
+                "renderer's compiled-effect draw route does not yet support.");
+        }
+
+        // Vertex attributes: MOJOSHADER_glSetVertexAttribute no-ops for an attribute the bound
+        // program's vertex shader does not use, so every declared element could be bound
+        // unconditionally -- but a shader input the declaration does NOT supply has to fail
+        // loudly rather than sample stale/undefined vertex data.
+        for (int i = 0; i < vertexParseData->attribute_count; ++i)
+        {
+            const MOJOSHADER_attribute& shaderInput = vertexParseData->attributes[i];
+            const VertexElement* match = nullptr;
+            for (const VertexElement& element : declaredElements)
+            {
+                if (ToMojoShaderUsage(element.getVertexElementUsageProperty()) == shaderInput.usage &&
+                    element.getUsageIndexProperty() == shaderInput.index)
+                {
+                    match = &element;
+                    break;
+                }
+            }
+            if (match == nullptr)
+            {
+                const char* name = shaderInput.name != nullptr ? shaderInput.name : "<unnamed>";
+                throw System::NotSupportedException(
+                    "CNA EasyGL: this compiled effect's vertex shader requires attribute '" +
+                    std::string(name) + "' (usage " + std::to_string(static_cast<int>(shaderInput.usage)) +
+                    ", index " + std::to_string(shaderInput.index) +
+                    "), but the VertexDeclaration supplied to this draw does not declare an "
+                    "element with that usage and usage index.");
+            }
+
+            const GlAttributeFormat glFormat = ToGlAttributeFormat(match->getVertexElementFormatProperty());
+            const void* offset = reinterpret_cast<const void*>(
+                static_cast<std::uintptr_t>(match->getOffsetProperty()));
+            MOJOSHADER_glSetVertexAttribute(
+                shaderInput.usage, shaderInput.index, glFormat.size, glFormat.type,
+                glFormat.normalized, static_cast<unsigned int>(stride), offset);
+        }
+
+        // Pixel-stage sampler textures: every reflected sampler must have a texture bound (a
+        // reflected-but-unbound slot is a real error, not a "sample black" default), and 3D/cube
+        // textures are refused here for the same reason vertex-stage sampling is above -- the
+        // resolver only recognizes a 2D texture's own renderer identity.
+        for (int i = 0; i < pixelParseData->sampler_count; ++i)
+        {
+            const MOJOSHADER_sampler& sampler = pixelParseData->samplers[i];
+            Texture* texture = nullptr;
+            Microsoft::Xna::Framework::Graphics::SamplerState samplerState;
+            effect->GetBoundSamplerEXT(static_cast<std::uint32_t>(sampler.index), /*vertexStage=*/false,
+                                       texture, samplerState);
+            const ITextureRenderer* nativeTexture = AsEasyGLTexture(texture);
+            if (nativeTexture == nullptr)
+            {
+                throw System::NotSupportedException(
+                    "CNA EasyGL: this compiled effect's pixel shader samples slot " +
+                    std::to_string(sampler.index) + " ('" +
+                    (sampler.name != nullptr ? sampler.name : "<unnamed>") +
+                    "'), but no 2D texture is bound there (an unbound slot, or a 3D/cube texture, "
+                    "which this renderer's compiled-effect draw route does not yet support).");
+            }
+            nativeTexture->BindGL(sampler.index);
+        }
+
+        // Pushes uniforms from the shared register files (already populated by ApplyPass()'s
+        // internal MOJOSHADER_effectCommitChanges call) into the bound program, and enables the
+        // vertex attribute arrays MOJOSHADER_glSetVertexAttribute flagged above.
+        MOJOSHADER_glProgramReady();
+
+        // GL/D3D9 coordinate-system fixups the generated GLSL applies via injected uniforms
+        // (vpFlip, and a D3D9 [0,1] -> GL [-1,1] depth remap): unlike the Effect Framework's
+        // ordinary register-file uniforms, these are NOT populated by MOJOSHADER_effectCommitChanges
+        // at all -- they need this separate call, after ProgramReady, every time the render target
+        // could have changed (tools/graphics/mojoshader_gl_probe.cpp's existence-gate finding).
+        int viewportW = 0, viewportH = 0;
+        const bool renderTargetBound = GetCurrentRenderTarget2DSize(viewportW, viewportH);
+        int backbufferW = 0, backbufferH = 0;
+        getPhysicalSize(backbufferW, backbufferH);
+        if (!renderTargetBound)
+        {
+            viewportW = backbufferW;
+            viewportH = backbufferH;
+        }
+        MOJOSHADER_glProgramViewportInfo(viewportW, viewportH, backbufferW, backbufferH,
+                                         renderTargetBound ? 1 : 0);
     }
 }
 

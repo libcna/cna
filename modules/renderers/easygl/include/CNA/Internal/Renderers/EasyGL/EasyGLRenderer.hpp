@@ -5,6 +5,7 @@
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/Platform/IPlatformGlContext.hpp"
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "mojoshader.h"
 #endif
 #include <easygl/easygl.hpp>
@@ -834,6 +835,18 @@ namespace CNA::Internal::Renderers::EasyGL
             const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
 
         /**
+         * @brief True: this renderer executes compiled XNA Effect Framework bytecode
+         * (plan_fx.md FX-062). Ordinary 3D draws have a working compiled-effect route, verified by
+         * a real golden-pixel test and the FX-060 shared conformance suite. Still refused
+         * explicitly rather than silently mishandled: a compiled effect's vertex shader sampling a
+         * texture, a 3D/cube (not 2D) sampler binding, sampler state translation (a bound texture's
+         * own GL creation-time filter/wrap parameters apply instead of the effect's declared
+         * sampler_state block), and instanced/multi-stream compiled-effect draws.
+         * @return true.
+         */
+        [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
+
+        /**
          * @brief CNAEXT. Returns this device's MojoShader context, creating it on first use.
          *
          * MojoShader allows one context per GL context, so it is owned here rather than by each
@@ -852,6 +865,28 @@ namespace CNA::Internal::Renderers::EasyGL
          * unit from where EasyGLPlatformContext is defined).
          */
         CNAEXT [[nodiscard]] CNA::Platform::GlProcAddressLoader GetProcAddressLoaderEXT() const;
+
+        /**
+         * @brief CNAEXT. Binds a compiled effect's currently-applied-pass shader program, vertex
+         * attributes and pixel-stage sampler textures, and pushes its uniforms -- everything a
+         * compiled-effect draw needs immediately before issuing the actual GL draw call.
+         *
+         * plan_fx.md FX-062: EasyGL draws immediately (no `Present()`-deferred queue), so this is
+         * called directly from `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`'s own compiled-effect
+         * branch rather than captured for later replay the way SDL_GPU's draw route has to.
+         *
+         * @param declaredElements The caller's `VertexDeclaration` elements for this draw.
+         * @param stride The vertex buffer's byte stride (`glVertexAttribPointer`'s own stride).
+         * @param runtime The applied compiled effect.
+         * @throws std::runtime_error if the applied pass bound no shader pair, or @p runtime was
+         *         not created by this renderer.
+         * @throws System::NotSupportedException if @p declaredElements does not supply an input
+         *         the vertex shader consumes, the vertex shader itself samples a texture, or a
+         *         reflected pixel-stage sampler has no texture bound.
+         */
+        CNAEXT void BindCompiledEffectForDrawEXT(
+            const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
+            std::size_t stride, ICompiledEffectRuntime& runtime);
 #endif
         // AnisotropicFiltering/MultiSampleAntiAliasing re-query the same live GL state the
         // startup capability dump (EnsureGL()) already prints, since they're cheap, idempotent GL

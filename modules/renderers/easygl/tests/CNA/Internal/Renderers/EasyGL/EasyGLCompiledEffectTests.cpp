@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fx.md FX-062: the EasyGL compiled-effect runtime, exercised directly.
+// plan_fx.md FX-062: the EasyGL compiled-effect runtime and its draw route, exercised directly.
 //
-// SupportsCompiledEffects() still reports false: the draw route (plan_fx.md FX-062's own
-// equivalent of FX-071) does not exist yet, only the runtime does. These tests go through
-// CNA::Internal::Renderers::EasyGL::EasyGLRenderer::CreateCompiledEffect rather than the public
-// Effect class for exactly that reason -- the public Effect(device, bytecode) constructor would
-// refuse until the capability is true.
+// SupportsCompiledEffects() reports true (FX-062 is done: ordinary 3D draws draw with a compiled
+// pass, verified by RendersTheAppliedPassesExpectedPixelsIntoARenderTarget below and by
+// SharedBackendConformanceContract). Most tests here still go through
+// CNA::Internal::Renderers::EasyGL::EasyGLRenderer::CreateCompiledEffect directly rather than the
+// public Effect class -- that predates the draw route and stays useful as a lower-level check of
+// the runtime itself (reflection, state translation, parameter/texture validation, clone
+// independence) independent of whatever draws it.
 //
 // What this proves that the existence-gate probe does not: the runtime honours CNA's own contract
 // -- reflection matching the source, technique and pass selection, parameter and texture
@@ -17,7 +19,9 @@
 
 #include "CNA/Internal/Renderers/EasyGL/EasyGLCompiledEffect.hpp"
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
+#include "CNA/TestSupport/CompiledEffectConformance.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include <gtest/gtest.h>
@@ -64,15 +68,16 @@ namespace
     }
 }
 
-TEST(EasyGLCompiledEffectTest, TheCapabilityStaysFalseUntilDrawsExecuteTheEffect)
+TEST(EasyGLCompiledEffectTest, TheCapabilityIsTrueNowThatDrawsExecuteTheEffect)
 {
     GraphicsDevice device;
     if (RendererOf(device) == nullptr)
         GTEST_SKIP() << "this build did not select the EasyGL renderer";
-    // The runtime works, and the renderer does not claim it yet: a compiled pass cannot yet take
-    // over this renderer's draw path (plan_fx.md FX-062's own equivalent of FX-071), and a true
-    // here would mean a game silently rendered with a stock shader instead.
-    EXPECT_FALSE(device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects));
+    // plan_fx.md FX-062: ordinary 3D draws draw with a compiled pass now
+    // (RendersTheAppliedPassesExpectedPixelsIntoARenderTarget), verified by a real golden-pixel
+    // readback and the FX-060 shared conformance contract (SharedBackendConformanceContract) -- so
+    // this capability no longer means "will silently render with a stock shader instead".
+    EXPECT_TRUE(device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects));
 }
 
 TEST(EasyGLCompiledEffectTest, ReflectionMatchesTheConformanceSource)
@@ -227,6 +232,136 @@ TEST(EasyGLCompiledEffectTest, EveryCommittedStockEffectParses)
         ASSERT_NE(runtime, nullptr) << name;
         EXPECT_FALSE(runtime->GetDescription().techniques.empty()) << name;
     }
+}
+
+TEST(EasyGLCompiledEffectDrawTest, RefusesADrawWithNoVertexDeclaration)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+
+    auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
+    ASSERT_NE(runtime, nullptr);
+
+    CompiledEffectDeviceState deviceState;
+    CompiledEffectPassStateChanges changes;
+    runtime->SetTechnique(0);
+    runtime->ApplyPass(0, deviceState, changes);
+
+    GpuDrawParams params{};
+    params.compiledEffectRuntime = runtime.get();
+
+    // No SetVertexDeclaration call -- DeclaredVertexLayout stays empty.
+    auto vb = renderer->CreateVertexBuffer(3);
+    struct Vertex { float x, y, z; };
+    const std::vector<Vertex> triangle = {{0, 0, 0}, {1, 0, 0}, {0, 1, 0}};
+    vb->SetData(triangle.data(), 3, sizeof(Vertex));
+
+    EXPECT_THROW(
+        renderer->DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                   Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params),
+        System::NotSupportedException);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, RendersTheAppliedPassesExpectedPixelsIntoARenderTarget)
+{
+    // plan_fx.md FX-062 golden-pixel test: draws CnaConformanceEffect.fxb's MainPixelShader
+    // (texture-sampling, struct-driven preshader) and FlatPixelShader (no sampling, array-driven
+    // preshader) into a RenderTarget2D through the real EasyGLRenderer::DrawPrimitivesEx path and
+    // reads the centre pixel back via RenderTarget2D::GetData(), matching the exact bytes
+    // independently hand-verified for both the SDL_GPU adapter
+    // (SdlGpuCompiledEffectDrawTest.RendersTheAppliedPassesExpectedPixelsIntoARenderTarget) and
+    // this renderer's own standalone existence-gate probe
+    // (tools/graphics/mojoshader_gl_probe.cpp --render).
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+
+    auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
+    ASSERT_NE(runtime, nullptr);
+
+    Texture2D white = Texture2D::CreateFromPixels(
+        device, 1, 1, std::vector<std::uint8_t>{255, 255, 255, 255});
+    runtime->SetParameterTexture(5, &white);  // FxTexture is parameter 5.
+
+    const VertexDeclaration declaration(20, {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+    });
+    struct Vertex { float x, y, z, u, v; };
+    // Full-screen quad in clip space: Transform is the identity, so MainVertexShader's
+    // mul(Position, Transform) passes Position straight through -- these need to already be NDC.
+    const std::vector<Vertex> quad = {
+        {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f},
+        {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
+        { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f},
+        {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f},
+        { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f},
+        { 1.0f,  1.0f, 0.0f, 1.0f, 0.0f},
+    };
+
+    auto drawQuadAndReadCentre = [&](int techniqueIndex, int passIndex, const char* label) -> Color
+    {
+        RenderTarget2D rt(device, 8, 8);
+        device.SetRenderTarget(&rt);
+        device.Clear(Color(50, 50, 50, 255));  // a colour neither expected result is close to
+        // Neither P0 nor P1 assign a CullMode render state of their own (only StatePass does), so
+        // CompiledEffectDeviceState::rasterizer is never consulted for these two passes -- it only
+        // matters to a pass that itself changes that state group (plan_fx.md FX-071's own finding,
+        // confirmed here too). What actually matters at draw time is this renderer's own live GL
+        // rasterizer state, set through the ordinary public GraphicsDevice.RasterizerState.
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+
+        CompiledEffectDeviceState deviceState;
+        CompiledEffectPassStateChanges changes;
+        runtime->SetTechnique(techniqueIndex);
+        runtime->ApplyPass(passIndex, deviceState, changes);
+
+        GpuDrawParams params{};
+        params.compiledEffectRuntime = runtime.get();
+
+        auto vb = renderer->CreateVertexBuffer(6);
+        vb->SetVertexDeclaration(declaration);
+        vb->SetData(quad.data(), 6, sizeof(Vertex));
+        EXPECT_NO_THROW(renderer->DrawPrimitivesEx(
+            *vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 2, params)) << label;
+
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color pixel(0, 0, 0, 0);
+        const Rectangle centre(4, 4, 1, 1);
+        rt.GetData(0, &centre, &pixel, 0, 1);
+        return pixel;
+    };
+
+    // Technique 0 pass 0 (P0): MainVertexShader/MainPixelShader -- samples FxTexture, and its
+    // preshader combines the Lighting struct's Intensity/Thresholds[0] via saturate().
+    const Color mainPixel = drawQuadAndReadCentre(0, 0, "P0/MainPixelShader");
+    EXPECT_NEAR(mainPixel.getRProperty(), 3, 3);
+    EXPECT_NEAR(mainPixel.getGProperty(), 6, 3);
+    EXPECT_NEAR(mainPixel.getBProperty(), 10, 3);
+    EXPECT_NEAR(mainPixel.getAProperty(), 13, 3);
+
+    // Technique 1 pass 0 (P1): MainVertexShader/FlatPixelShader -- no sampling at all, its
+    // preshader combines the Tint and Weights[2] array parameters via a single MUL_SCALAR.
+    const Color flatPixel = drawQuadAndReadCentre(1, 0, "P1/FlatPixelShader");
+    EXPECT_NEAR(flatPixel.getRProperty(), 20, 3);
+    EXPECT_NEAR(flatPixel.getGProperty(), 41, 3);
+    EXPECT_NEAR(flatPixel.getBProperty(), 61, 3);
+    EXPECT_NEAR(flatPixel.getAProperty(), 82, 3);
+}
+
+TEST(EasyGLCompiledEffectTest, SharedBackendConformanceContract)
+{
+    // plan_fx.md FX-060/FX-062: the same cross-renderer contract FNA3D's and SDL_GPU's own
+    // SharedBackendConformanceContract tests run -- format, reflection, techniques/passes, render
+    // state, state policy, samplers, texture binding, clone and lifetime -- now through the public
+    // Effect/GraphicsDevice API, since SupportsCompiledEffects() is true.
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectContract(device);
 }
 
 #endif  // CNA_EASYGL_COMPILED_EFFECTS
