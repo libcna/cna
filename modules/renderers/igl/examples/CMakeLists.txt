@@ -130,4 +130,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
     cna_register_renderer_test(NAME Igl_Instancing COMMAND cna_test_igl_instancing
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # IGL-36/IGL-55: SkinnedEffect with a real, non-identity bone transform.
+    cna_igl_test(cna_test_igl_skinnedeffect_translation_bone igl_skinnedeffect_translation_bone_test.cpp)
+    cna_register_renderer_test(NAME Igl_SkinnedEffectTranslationBone
+        COMMAND cna_test_igl_skinnedeffect_translation_bone
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
