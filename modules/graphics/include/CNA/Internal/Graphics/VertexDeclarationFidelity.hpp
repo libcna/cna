@@ -366,6 +366,21 @@ namespace CNA::Internal::Graphics
             {VertexElementUsage::TextureCoordinate, 1, 68, VertexElementFormat::Vector2},
         };
 
+        // GLTF-463: the skinned counterpart of stride 60's colour slot. The skinned PBR record has no
+        // reserved bytes to reuse -- stride 76 is exactly its seven fields -- so a skinned,
+        // vertex-coloured metallic-roughness primitive gets its own stride, with the whole stride-76
+        // record as a byte-for-byte prefix and the colour appended.
+        inline constexpr InferredVertexElement kStride80[] = {
+            {VertexElementUsage::Position,          0,  0, VertexElementFormat::Vector3},
+            {VertexElementUsage::Normal,            0, 12, VertexElementFormat::Vector3},
+            {VertexElementUsage::Tangent,           0, 24, VertexElementFormat::Vector4},
+            {VertexElementUsage::TextureCoordinate, 0, 40, VertexElementFormat::Vector2},
+            {VertexElementUsage::BlendWeight,       0, 48, VertexElementFormat::Vector4},
+            {VertexElementUsage::BlendIndices,      0, 64, VertexElementFormat::Byte4},
+            {VertexElementUsage::TextureCoordinate, 1, 68, VertexElementFormat::Vector2},
+            {VertexElementUsage::Color,             0, 76, VertexElementFormat::Color},
+        };
+
 
         // The two fallbacks a renderer uses for a stride the table above does not list. Both are
         // measured behaviours, not guesses: Vulkan's ordinary route renders a position-only
@@ -410,6 +425,7 @@ namespace CNA::Internal::Graphics
             case 60: return detail::Layout(detail::kStride60);
             case 68: return detail::Layout(detail::kStride68);
             case 76: return detail::Layout(detail::kStride76);
+            case 80: return detail::Layout(detail::kStride80);
             default: break;
         }
         switch (fallback)

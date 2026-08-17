@@ -2077,10 +2077,16 @@ TEST(GltfToCnjToolTest, BaseColorAndOcclusionTexturesImportThroughPbrEffectWithA
     EXPECT_EQ(255, occlusionPixel.getAProperty());
 }
 
-// CNB-66/67/68: a skinned mesh with a COLOR_0 attribute must import through the new stride-56
-// (skinned + Color) layout, wiring "vertexColorEnabled": true to SkinnedEffect's new CNAEXT
-// VertexColorEnabled property, and the loaded vertex buffer must carry the real per-vertex colors.
-TEST(GltfToCnjToolTest, ExtractsVertexColorOnASkinnedMeshAndEnablesItOnSkinnedEffect)
+// plan_gltf.md GLTF-463. This document is a skinned primitive with COLOR_0 and no material, so
+// glTF's own default metallic-roughness applies -- and that used to cost it the material model
+// entirely: CNB-66/67/68 imported it through SkinnedEffect on the stride-56 layout, which has no
+// tangent slot, and `MeshOut::unsupportedMaterialModelEXT` named the loss.
+//
+// GLTF-463 carries it on stride 80: the whole stride-76 skinned PBR record with the packed COLOR_0
+// appended. This test is the end-to-end witness on the OFFLINE path -- the colour has to survive
+// BuildMorphBytes' sibling, the `.cnj` mesh entry's `vertexColorEnabled` flag and
+// `SkinnedPbrEffect::VertexColorEnabledEXT`, and the skinning has to survive with it.
+TEST(GltfToCnjToolTest, ASkinnedVertexColouredPrimitiveKeepsItsPbrMaterialThroughTheOfflineCnjPath)
 {
     ScratchDir gltfDir;
     ScratchDir contentRoot;
@@ -2094,15 +2100,59 @@ TEST(GltfToCnjToolTest, ExtractsVertexColorOnASkinnedMeshAndEnablesItOnSkinnedEf
     const std::filesystem::path vertsPath = contentRoot.path() / "skincolor_mesh0_verts.bin";
     std::ifstream f(vertsPath, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    ASSERT_EQ(bytes.size(), 3u * 56u); // stride 56, skinned + Color
+    ASSERT_EQ(bytes.size(), 3u * 80u)
+        << "a skinned vertex-coloured metallic-roughness primitive belongs on the stride-80 layout, "
+           "not on a layout that drops its material";
 
-    // Color is appended after BlendIndices (offset 52); vertex 0 was authored fully-opaque red.
+    // Every slot read through the canonical stride table rather than at a hardcoded offset
+    // (GLTF-278): a test carrying its own copy of an ABI asserts the copy.
+    const CNA::Internal::Graphics::InferredVertexLayout layout =
+        CNA::Internal::Graphics::InferredLayoutForStride(
+            80, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+    ASSERT_TRUE(layout.known);
+    const auto offsetOf = [&](VertexElementUsage usage, int usageIndex) {
+        for (std::size_t i = 0; i < layout.count; ++i)
+        {
+            if (layout.elements[i].usage == usage &&
+                layout.elements[i].usageIndex == usageIndex)
+            {
+                return layout.elements[i].offset;
+            }
+        }
+        return -1;
+    };
+    const int colorOffset = offsetOf(VertexElementUsage::Color, 0);
+    const int normalOffset = offsetOf(VertexElementUsage::Normal, 0);
+    const int weightOffset = offsetOf(VertexElementUsage::BlendWeight, 0);
+    const int indicesOffset = offsetOf(VertexElementUsage::BlendIndices, 0);
+    ASSERT_GE(colorOffset, 0);
+    ASSERT_GE(normalOffset, 0);
+    ASSERT_GE(weightOffset, 0);
+    ASSERT_GE(indicesOffset, 0);
+
+    // The colour survives -- vertex 0 was authored fully-opaque red.
     unsigned char color0[4];
-    std::memcpy(color0, bytes.data() + 0 * 56 + 52, sizeof(color0));
-    EXPECT_EQ(static_cast<int>(color0[0]), 255);
-    EXPECT_EQ(static_cast<int>(color0[1]), 0);
-    EXPECT_EQ(static_cast<int>(color0[2]), 0);
-    EXPECT_EQ(static_cast<int>(color0[3]), 255);
+    std::memcpy(color0, bytes.data() + 0 * 80 + colorOffset, sizeof(color0));
+    EXPECT_EQ(255, static_cast<int>(color0[0]));
+    EXPECT_EQ(0, static_cast<int>(color0[1]));
+    EXPECT_EQ(0, static_cast<int>(color0[2]));
+    EXPECT_EQ(255, static_cast<int>(color0[3]));
+
+    // The authored NORMAL survives -- the stride-56 layout it used to land on had no slot for one.
+    float normal0[3];
+    std::memcpy(normal0, bytes.data() + 0 * 80 + normalOffset, sizeof(normal0));
+    EXPECT_NEAR(0.0f, normal0[0], 1e-5f);
+    EXPECT_NEAR(0.0f, normal0[1], 1e-5f);
+    EXPECT_NEAR(1.0f, normal0[2], 1e-5f);
+
+    // And so does the skinning, which is the half a colour must not cost.
+    float weights0[4];
+    std::memcpy(weights0, bytes.data() + 0 * 80 + weightOffset, sizeof(weights0));
+    EXPECT_NEAR(1.0f, weights0[0] + weights0[1] + weights0[2] + weights0[3], 1e-5f)
+        << "the joint weights did not survive the layout change";
+    unsigned char joints0[4];
+    std::memcpy(joints0, bytes.data() + 0 * 80 + indicesOffset, sizeof(joints0));
+    EXPECT_EQ(0, static_cast<int>(joints0[0]));
 
     GraphicsDevice gd;
     // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
@@ -2117,9 +2167,23 @@ TEST(GltfToCnjToolTest, ExtractsVertexColorOnASkinnedMeshAndEnablesItOnSkinnedEf
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
     ModelMesh* mesh = model.getMeshesProperty()[0];
 
-    auto* skinnedFx = dynamic_cast<SkinnedEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
-    ASSERT_NE(skinnedFx, nullptr);
-    EXPECT_TRUE(skinnedFx->VertexColorEnabled);
+    auto* skinnedPbr =
+        dynamic_cast<SkinnedPbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(nullptr, skinnedPbr)
+        << "a colour stream is a multiplier on base colour, not a reason to leave the "
+           "metallic-roughness model (GLTF-463)";
+    EXPECT_TRUE(skinnedPbr->VertexColorEnabledEXT)
+        << "the colour reached the GPU record but the effect was not told to read it";
+
+    // The direct path must agree: the two loaders load the same content and several tests in this
+    // file exist only to assert exactly that.
+    ContentManager directCm(nullptr, gltfDir.path().string());
+    directCm.setGraphicsDevice(gd);
+    Model direct = directCm.Load<Model>("skincolor");
+    auto* directSkinnedPbr = dynamic_cast<SkinnedPbrEffect*>(
+        direct.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(nullptr, directSkinnedPbr);
+    EXPECT_TRUE(directSkinnedPbr->VertexColorEnabledEXT);
 }
 
 // plan_gltf.md GLTF-236/GLTF-237: every core material field must survive the offline .cnj path,

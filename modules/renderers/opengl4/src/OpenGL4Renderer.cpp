@@ -857,6 +857,9 @@ out vec3 vTangent;
 out float vBitangentSign;
 out vec2 vUV;
 out vec3 vWorldPos;
+// plan_gltf.md GLTF-462/GLTF-463: COLOR_0, carried by the stride-60 and stride-80 records.
+layout(location = 6) in vec4 aColor;
+out vec4 vColor;
 out float vFogFactor;
 float cnaDirectionHandedness(mat3 m)
 {
@@ -874,6 +877,7 @@ void main()
     vTangent = mat3(uWorld) * aTangent.xyz;
     vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(uWorld));
     vUV = aUV;
+    vColor = aColor;
     vWorldPos = (uWorld * vec4(aPos, 1.0)).xyz;
     // REMED-GFX-010: see kColoredParams3DVertSrc's own comment for the fog-vector formula.
     vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), uFogVector), 0.0, 1.0);
@@ -898,6 +902,9 @@ out vec3 vTangent;
 out float vBitangentSign;
 out vec2 vUV;
 out vec3 vWorldPos;
+// plan_gltf.md GLTF-462/GLTF-463: COLOR_0, carried by the stride-60 and stride-80 records.
+layout(location = 6) in vec4 aColor;
+out vec4 vColor;
 out float vFogFactor;
 vec3 cnaSkinNormal(mat3 m, vec3 n)
 {
@@ -931,6 +938,7 @@ void main()
     vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(uWorld))
                                 * cnaDirectionHandedness(mat3(skinMat));
     vUV = aUV;
+    vColor = aColor;
     vWorldPos = (uWorld * skinnedPos).xyz;
     vFogFactor = 1.0 - clamp(dot(skinnedPos, uFogVector), 0.0, 1.0);
 }
@@ -943,6 +951,8 @@ in vec3 vTangent;
 in float vBitangentSign;
 in vec2 vUV;
 in vec3 vWorldPos;
+in vec4 vColor;
+uniform float uVertexColorEnabled;
 in float vFogFactor;
 uniform sampler2D uTexture;
 uniform sampler2D uNormalMap;
@@ -1030,8 +1040,13 @@ void main()
 {
     vec4 baseColorTex = texture(uTexture, cnaPbrTransformUV(vUV, 0));
     vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), uSrgb.x);
-    vec3 albedo = baseColor * uDiffuseColor.rgb;
-    float alpha = baseColorTex.a * uDiffuseColor.a;
+    // plan_gltf.md GLTF-465. §3.7.2.1: COLOR_0 "acts as an additional linear multiplier to base
+    // color". LINEAR is why there is no transfer function here -- the attribute is a normalized
+    // integer already in linear space, unlike the base-colour TEXTURE -- and both RGB and alpha are
+    // multiplied because §3.9.2's base colour is an RGBA product.
+    vec4 cnaVertexColor = uVertexColorEnabled > 0.5 ? vColor : vec4(1.0);
+    vec3 albedo = baseColor * uDiffuseColor.rgb * cnaVertexColor.rgb;
+    float alpha = baseColorTex.a * uDiffuseColor.a * cnaVertexColor.a;
     bool passesAlphaTest = (uAlphaTest.y > 0.0)
         ? (abs(alpha - uAlphaTest.x) < uAlphaTest.y)
         : (alpha < uAlphaTest.x);
@@ -2154,6 +2169,11 @@ void main()
         // because this renderer's PBR shader samples one UV set and reads no colour attribute;
         // GLTF-465 owns consuming them.
         case 60:
+        // plan_gltf.md GLTF-463: strides 76 and 80 are the skinned PBR record with UV1 and, for 80,
+        // a packed COLOR_0 appended; their first six fields are byte-identical to stride 68, and the
+        // colour is bound below so the shader can multiply it.
+        case 76:
+        case 80:
         case 68:
             // plan_opengl4.md GL4-23: VertexPositionNormalTangentTexture (packed): float3
             // position + float3 normal + float4 tangent (xyz + bitangent-handedness sign in w)
@@ -2169,12 +2189,22 @@ void main()
             gl4_glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, s, (void*)24);
             gl4_glEnableVertexAttribArray(3);
             gl4_glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, s, (void*)40);
-            if (stride == 68)
+            if (stride == 68 || stride == 76 || stride == 80)
             {
                 gl4_glEnableVertexAttribArray(4);
                 gl4_glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, s, (void*)48);
                 gl4_glEnableVertexAttribArray(5);
                 gl4_glVertexAttribIPointer(5, 4, GL_UNSIGNED_BYTE, s, (void*)64);
+            }
+            // plan_gltf.md GLTF-465: the two colour-carrying PBR records bind COLOR_0 at location 6,
+            // which the PBR shaders declare and gate on uVertexColorEnabled. An uncoloured
+            // stride-60/80 buffer has opaque white there -- the multiplier's identity -- so the gate
+            // is the intent and the fill is the safety net.
+            if (stride == 60 || stride == 80)
+            {
+                gl4_glEnableVertexAttribArray(6);
+                gl4_glVertexAttribPointer(6, 4, GL_UNSIGNED_BYTE, GL_TRUE, s,
+                                          (void*)(stride == 60 ? 56 : 76));
             }
             break;
         default:
@@ -3351,10 +3381,16 @@ void main()
             else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_);
         }
 
-        if (params.pbr && (strideInBytes == 48 || strideInBytes == 68))
+        if (params.pbr && (strideInBytes == 48 || strideInBytes == 60 ||
+                           strideInBytes == 68 || strideInBytes == 76 || strideInBytes == 80))
         {
-            OpenGL4RawProgram& prog = (strideInBytes == 68) ? pbrSkinned3DProgram_ : pbr3DProgram_;
-            if (strideInBytes == 68) EnsurePbrSkinned3DProgram(); else EnsurePbr3DProgram();
+            // plan_gltf.md GLTF-463/GLTF-465: the skinned strides are 68, 76 and 80, and the program
+            // must be chosen by the same predicate that compiles it -- picking pbr3DProgram_ for 76
+            // or 80 would run the rigid shader over a skinned record.
+            const bool skinnedPbr = strideInBytes == 68 || strideInBytes == 76 ||
+                                    strideInBytes == 80;
+            OpenGL4RawProgram& prog = skinnedPbr ? pbrSkinned3DProgram_ : pbr3DProgram_;
+            if (skinnedPbr) EnsurePbrSkinned3DProgram(); else EnsurePbr3DProgram();
             prog.Use();
             float worldCol[16];
             world.ToColumnMajor(worldCol);
@@ -3381,6 +3417,12 @@ void main()
                                                  params.diffuseColor[2], params.diffuseColor[3]);
             setV3("uAmbientColor", params.ambientColor);
             setV3("uEmissiveColor", params.emissiveColor);
+            // plan_gltf.md GLTF-465: the stride-60 and stride-80 records always carry a colour
+            // slot, so the PBR shaders must be told whether it means anything. A negative location
+            // is a silent no-op, exactly like every other optional uniform here.
+            const int vertexColorLoc = prog.UniformLocation("uVertexColorEnabled");
+            if (vertexColorLoc >= 0)
+                gl4_glUniform1f(vertexColorLoc, params.vertexColorEnabled ? 1.0f : 0.0f);
             const int metallicLoc = prog.UniformLocation("uMetallicFactor");
             if (metallicLoc >= 0) gl4_glUniform1f(metallicLoc, params.pbrMetallicFactor);
             const int roughnessLoc = prog.UniformLocation("uRoughnessFactor");

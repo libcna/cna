@@ -575,7 +575,7 @@ namespace
             R"(gl_FragData[0]=vec4(ambient+Lo+emissive,alpha))",
             R"(if(_at<0.0)discard)"}}},
         {"opengl4", {{
-            R"(OpenGL4RawProgram& prog = (strideInBytes == 68) ? pbrSkinned3DProgram_ : pbr3DProgram_)",
+            R"(OpenGL4RawProgram& prog = skinnedPbr ? pbrSkinned3DProgram_ : pbr3DProgram_)",
             R"(gl4_glUniform4f(alphaTestLoc, params.alphaTest[0], params.alphaTest[1], params.alphaTest[2], params.alphaTest[3]))",
             R"(bool passesAlphaTest = (uAlphaTest.y > 0.0))",
             R"(if ((passesAlphaTest ? uAlphaTest.z : uAlphaTest.w) < 0.0) discard;)"}}},
@@ -1336,15 +1336,18 @@ namespace
         {"opengl2", {{
             "if (cullMode == 0) { glDisable(GL_CULL_FACE); }",
             "glCullFace(cullMode == 1 ? GL_BACK : GL_FRONT)",
-            "const bool pbrSkinned = params && params->pbr && params->skinned && vb->stride == 68",
-            "const bool pbr = params && params->pbr && !params->skinned && vb->stride == 48",
+            "const bool pbrSkinned = params && params->pbr && params->skinned && "
+            "(vb->stride == 68 || vb->stride == 76 || vb->stride == 80)",
+            "const bool pbr = params && params->pbr && !params->skinned && "
+            "(vb->stride == 48 || vb->stride == 60)",
             "const GLuint program = pbrSkinned ? pbrSkinnedProgram_ : pbr ? pbrProgram_"}}},
         {"opengl4", {{
             "if (cullMode == 0) { glDisable(GL_CULL_FACE); }",
             "glCullFace(cullMode == 1 ? GL_BACK : GL_FRONT)",
-            "if (params.pbr && (strideInBytes == 48 || strideInBytes == 68))",
-            "OpenGL4RawProgram& prog = (strideInBytes == 68) ? pbrSkinned3DProgram_ : pbr3DProgram_",
-            "if (strideInBytes == 68) EnsurePbrSkinned3DProgram(); else EnsurePbr3DProgram()"}}},
+            "if (params.pbr && (strideInBytes == 48 || strideInBytes == 60 || "
+            "strideInBytes == 68 || strideInBytes == 76 || strideInBytes == 80))",
+            "OpenGL4RawProgram& prog = skinnedPbr ? pbrSkinned3DProgram_ : pbr3DProgram_",
+            "if (skinnedPbr) EnsurePbrSkinned3DProgram(); else EnsurePbr3DProgram()"}}},
         {"sdl-gpu", {{
             "default: return SDL_GPU_CULLMODE_NONE",
             "cullMode_ = cullMode",
@@ -2712,6 +2715,80 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherBindsTheStride60Record
     }
 }
 
+TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrRendererEitherBindsTheStride80RecordOrRefusesIt)
+{
+    // plan_gltf.md GLTF-463: stride 80 is the whole stride-76 skinned PBR record with a packed
+    // COLOR_0 appended, and it is where a SKINNED vertex-coloured metallic-roughness primitive now
+    // imports to -- so it is ordinary content, not a corner case. Unlike stride 60 there is no
+    // pre-existing row to grow a meaning: a renderer either declares the layout and its shader's
+    // colour input, or it never sees the stride at all and refuses the draw by its own established
+    // unsupported-stride path. What must not exist is a third state -- accepting the stride and
+    // reading the record with a layout that does not describe it.
+    const std::filesystem::path renderers = RepositoryRoot() / "modules" / "renderers";
+    ASSERT_TRUE(std::filesystem::is_directory(renderers));
+
+    struct Stride80Audit
+    {
+        const char* name;
+        const char* evidence;
+    };
+    // Binds the record. EasyGL serves five GL profiles; SOFTWARE rasterises it on the CPU; the two
+    // D3D families share one input-element table and one HLSL pair, which is why one row each of
+    // shared code covers both.
+    constexpr std::array<Stride80Audit, 7> binds{{
+        {"easygl", "case 80:"},
+        {"software", "if (stride == 80) UnpackColorBytes(raw.At(76), out.r, out.g, out.b, out.a);"},
+        {"opengl2", "colorOffset = (stride == 60) ? 56u : 76u;"},
+        {"opengl4", "case 80:"},
+        {"vulkan", "attrs[7] = { 7, 0, VK_FORMAT_R8G8B8A8_UNORM, 76 }; // aColor"},
+        {"directx11", "case 80: count = static_cast<UINT>(std::size(kStride80)); return kStride80;"},
+        {"directx12", "case 80: count = static_cast<UINT>(std::size(kStride80D3D12)); return kStride80D3D12;"},
+    }};
+    // Declaration-driven: IGL builds its vertex input and generates its shader from the public
+    // VertexDeclaration, so stride 80 needs no row and no shader variant of its own.
+    constexpr std::array<const char*, 1> declarationDriven{{"igl"}};
+    // Never sees stride 80: its skinned PBR path accepts only the strides it has layouts for, so an
+    // 80-byte record refuses rather than being mis-read. GLTF-465 records what each would need.
+    constexpr std::array<const char*, 9> refuses{{
+        "bgfx", "diligent", "directx9", "llgl", "magnum",
+        "metal", "sdl-gpu", "webgpu", "wicked",
+    }};
+
+    std::set<std::string> classified;
+    for (const Stride80Audit& audit : binds) { classified.insert(audit.name); }
+    for (const char* name : declarationDriven) { classified.insert(name); }
+    for (const char* name : refuses) { classified.insert(name); }
+    ASSERT_EQ(17u, classified.size()) << "the three dispositions must be disjoint";
+    std::set<std::string> expected;
+    for (const RendererAudit& audit : kAudits) { expected.insert(audit.name); }
+    expected.insert("software");
+    EXPECT_EQ(expected, classified)
+        << "a PBR renderer was added or removed without a GLTF-463 stride-80 disposition";
+
+    for (const Stride80Audit& audit : binds)
+    {
+        SCOPED_TRACE(audit.name);
+        const std::string source = RendererSlotText(renderers, audit.name);
+        ASSERT_FALSE(source.empty());
+        EXPECT_NE(std::string::npos, source.find(Normalize(audit.evidence)))
+            << "listed as binding the stride-80 record, but its layout row is not there";
+        // The colour lives at offset 76 in that record; a row that binds the stride without reaching
+        // that offset would be the mis-read this test exists to forbid.
+        EXPECT_NE(std::string::npos, source.find(Normalize("76")))
+            << "the stride-80 row never mentions the colour's offset";
+    }
+    for (const char* name : refuses)
+    {
+        SCOPED_TRACE(name);
+        const std::string source = RendererSlotText(renderers, name);
+        ASSERT_FALSE(source.empty());
+        EXPECT_EQ(std::string::npos, source.find(Normalize("case 80:")))
+            << "this renderer grew a stride-80 row; move it out of the refusing list";
+        EXPECT_EQ(std::string::npos, source.find(Normalize("stride == 80")))
+            << "this renderer grew a stride-80 row; move it out of the refusing list";
+    }
+}
+
 TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyWhereItIsImplemented)
 {
     // §3.7.2.1: "if a primitive specifies a vertex color using the attribute semantic property
@@ -2744,10 +2821,17 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
     // is the abstraction paying for itself, and it is why this row was checked rather than assumed:
     // the first draft of this audit listed `igl` as not-yet on the strength of it having no stride
     // table, which is exactly backwards.
-    constexpr std::array<VertexColourPbrAudit, 3> implemented{{
+    // DIRECTX11 and DIRECTX12 share one HLSL pair and one constant-buffer struct, so their single
+    // shared multiply serves both identities -- the same "improve what is shared" shape as EasyGL's.
+    constexpr std::array<VertexColourPbrAudit, 8> implemented{{
         {"easygl", "vec3 albedo=baseRGB*uDiffuseColor.rgb*cnaVertexColor.rgb;"},
         {"igl", "if (cnaHas(CNA_VERTEX_COLOR_ENABLED)) color *= aColor;"},
         {"software", "if (stride == 60) UnpackColorBytes(raw.At(56), out.r, out.g, out.b, out.a);"},
+        {"opengl2", "albedo = baseColor * uDiffuse.rgb * cnaVertexColor.rgb;"},
+        {"opengl4", "vec3 albedo = baseColor * uDiffuseColor.rgb * cnaVertexColor.rgb;"},
+        {"vulkan", "albedo *= vColor.rgb;"},
+        {"directx11", "albedo *= input.Color.rgb;"},
+        {"directx12", "albedo *= input.Color.rgb;"},
     }};
     for (const VertexColourPbrAudit& audit : implemented)
     {
@@ -2758,6 +2842,72 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
             << "listed as multiplying COLOR_0 into base colour, but the product is not there";
     }
 
+    // The multiply is only half of §3.9.2: the same factor applies to the base colour's ALPHA, which
+    // is what a BLEND-mode vertex-coloured primitive's transparency comes from. A renderer that
+    // multiplied only the RGB would look right on an opaque asset and be wrong on a transparent one.
+    constexpr std::array<VertexColourPbrAudit, 7> alphaProduct{{
+        {"easygl", "alpha=baseColorTex.a*uDiffuseColor.a*cnaVertexColor.a;"},
+        // SOFTWARE has no separate PBR fragment program: the interpolated vertex colour IS the
+        // start of the product, alpha included, and the base colour factor multiplies into it.
+        {"software", "float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;"},
+        {"opengl2", "alpha = baseColorTex.a * uDiffuse.a * cnaVertexColor.a;"},
+        {"opengl4", "float alpha = baseColorTex.a * uDiffuseColor.a * cnaVertexColor.a;"},
+        {"vulkan", "alpha *= vColor.a;"},
+        {"directx11", "alpha *= input.Color.a;"},
+        {"directx12", "alpha *= input.Color.a;"},
+    }};
+    for (const VertexColourPbrAudit& audit : alphaProduct)
+    {
+        SCOPED_TRACE(audit.name);
+        const std::string source = RendererSlotText(renderers, audit.name);
+        ASSERT_FALSE(source.empty());
+        EXPECT_NE(std::string::npos, source.find(Normalize(audit.evidence)))
+            << "COLOR_0 multiplies base colour but not its alpha";
+    }
+
+    // Every implementing renderer must also ASK whether the effect enabled the colour. The stride-60
+    // and stride-80 records always carry a colour slot, so a shader that multiplied unconditionally
+    // would be relying on the opaque-white fill rather than on what the effect requested -- and would
+    // silently ignore an application that set VertexColorEnabledEXT to false on coloured geometry.
+    constexpr std::array<VertexColourPbrAudit, 8> gate{{
+        {"easygl", "vec4 cnaVertexColor=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);"},
+        {"igl", "if (cnaHas(CNA_VERTEX_COLOR_ENABLED)) color *= aColor;"},
+        {"software", "params.vertexColorEnabled"},
+        {"opengl2", "vec4 cnaVertexColor=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);"},
+        {"opengl4", "vec4 cnaVertexColor = uVertexColorEnabled > 0.5 ? vColor : vec4(1.0);"},
+        {"vulkan", "if (pc.vertexColorEnabled > 0.5)"},
+        {"directx11", "if (VertexColorFlags.x > 0.5)"},
+        {"directx12", "if (VertexColorFlags.x > 0.5)"},
+    }};
+    for (const VertexColourPbrAudit& audit : gate)
+    {
+        SCOPED_TRACE(audit.name);
+        const std::string source = RendererSlotText(renderers, audit.name);
+        ASSERT_FALSE(source.empty());
+        EXPECT_NE(std::string::npos, source.find(Normalize(audit.evidence)))
+            << "the colour is multiplied in without asking whether the effect enabled it";
+    }
+
+    // The gate is worthless if nothing ever uploads it, and a uniform/constant that no draw writes is
+    // exactly the shape of bug this whole audit keeps finding. Each implementing renderer must carry
+    // GpuDrawParams::vertexColorEnabled to its own PBR draw.
+    constexpr std::array<VertexColourPbrAudit, 6> upload{{
+        {"easygl", "p.loc_vertexcolor"},
+        {"opengl2", "if (lit || skinned || pbr || pbrSkinned)"},
+        {"opengl4", "gl4_glUniform1f(vertexColorLoc, params.vertexColorEnabled ? 1.0f : 0.0f);"},
+        {"vulkan", "pc[31] = p.vertexColorEnabled ? 1.f : 0.f;"},
+        {"directx11", "perDraw.VertexColorFlags[0] = params.vertexColorEnabled ? 1.0f : 0.0f;"},
+        {"directx12", "perDraw.VertexColorFlags[0] = params.vertexColorEnabled ? 1.0f : 0.0f;"},
+    }};
+    for (const VertexColourPbrAudit& audit : upload)
+    {
+        SCOPED_TRACE(audit.name);
+        const std::string source = RendererSlotText(renderers, audit.name);
+        ASSERT_FALSE(source.empty());
+        EXPECT_NE(std::string::npos, source.find(Normalize(audit.evidence)))
+            << "the effect's vertex-colour switch never reaches this renderer's PBR draw";
+    }
+
     // IGL's product has to reach the BRDF, not merely exist: the colour is multiplied in the VERTEX
     // stage, so what proves it is PBR-relevant is that the same value is what `cnaShadePbr` receives.
     const std::string igl = RendererSlotText(renderers, "igl");
@@ -2766,31 +2916,57 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
     EXPECT_NE(std::string::npos, igl.find(Normalize("cnaShadePbr(color.rgb, normal, eyeVector,")))
         << "the colour product never reaches the PBR BRDF";
 
-    // EasyGL's gate has to exist as well as its product: the stride-60 record ALWAYS carries a
-    // colour, so a shader that multiplied unconditionally would be relying on the opaque-white fill
-    // rather than on what the effect asked for.
+    // EasyGL's binding has to exist as well as its product, in BOTH families: stride 60 carries the
+    // colour at 56 and stride 80 at 76, and a shader reading an unbound attribute takes stale VAO
+    // state rather than the record's bytes.
     const std::string easygl = RendererSlotText(renderers, "easygl");
-    EXPECT_NE(std::string::npos, easygl.find(Normalize(
-        "vec4 cnaVertexColor=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);")))
-        << "the colour is multiplied in without asking whether the effect enabled it";
     EXPECT_NE(std::string::npos, easygl.find(Normalize(
         "vao.set_attribute_pointer(5, 4, ::easygl::DataType::UnsignedByte, true, s, (void*)56);")))
         << "the stride-60 colour slot is never bound, so the shader reads stale VAO state";
+    EXPECT_NE(std::string::npos, easygl.find(Normalize(
+        "vao.set_attribute_pointer(7, 4, ::easygl::DataType::UnsignedByte, true, s, (void*)76);")))
+        << "the stride-80 colour slot is never bound, so the skinned shader reads stale VAO state";
 
-    // And the whole of the residue, named. Anything else in kAudits multiplies by the identity.
-    constexpr std::array<const char*, 14> notYet{{
-        "bgfx", "diligent", "directx9", "directx11", "directx12", "llgl",
-        "magnum", "metal", "opengl2", "opengl4", "sdl-gpu", "vulkan", "webgpu", "wicked",
+    // And the whole of the residue, named, with the reason each one is still open recorded next to
+    // it. Anything here multiplies by the identity instead: the colour is dropped, nothing else is.
+    struct OpenVertexColourRenderer
+    {
+        const char* name;
+        const char* reason;
+    };
+    constexpr std::array<OpenVertexColourRenderer, 9> notYet{{
+        {"bgfx", "shaders are precompiled bgfx bytecode; regenerating needs bgfx's own shaderc"},
+        {"diligent", "runtime-substituted HLSL is tractable, but DiligentCore is not built here"},
+        {"directx9", "vs_3_0/ps_3_0 bytecode needs the pinned native d3dcompiler_47.dll prefix"},
+        {"llgl", "the SPIR-V flavour needs glslangValidator, absent in this environment"},
+        {"magnum", "runtime-generated GLSL is tractable, but Magnum is not built here"},
+        {"metal", "no stride-60/80 layout at all; Metal cannot be built or run on this host"},
+        {"sdl-gpu", "no stride-60/80 layout at all; needs precompiled SPIR-V variants"},
+        {"webgpu", "no stride-60/80 layout at all; needs new WGSL pipeline variants"},
+        {"wicked", "no stride-60/80 layout at all; needs WickedEngine shader work"},
     }};
     std::set<std::string> classified;
     for (const VertexColourPbrAudit& audit : implemented) { classified.insert(audit.name); }
-    for (const char* name : notYet) { classified.insert(name); }
+    for (const OpenVertexColourRenderer& open : notYet) { classified.insert(open.name); }
     ASSERT_EQ(17u, classified.size()) << "the two dispositions must be disjoint";
     std::set<std::string> expected;
     for (const RendererAudit& audit : kAudits) { expected.insert(audit.name); }
     expected.insert("software");
     EXPECT_EQ(expected, classified)
         << "a PBR renderer was added or removed without a GLTF-462 vertex-colour disposition";
+
+    // A renderer named as not-yet must not silently have grown the product: that is how an inventory
+    // rots into fiction. The multiply is spelled differently per renderer, so what is checked here is
+    // the one thing all of them would need -- reading the effect's own switch inside a PBR shader.
+    for (const OpenVertexColourRenderer& open : notYet)
+    {
+        SCOPED_TRACE(open.name);
+        ASSERT_NE(nullptr, open.reason);
+        const std::string source = RendererSlotText(renderers, open.name);
+        ASSERT_FALSE(source.empty());
+        EXPECT_EQ(std::string::npos, source.find(Normalize("cnaVertexColor")))
+            << "this renderer grew the glTF colour product; move it into the implemented list";
+    }
 }
 
 TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)

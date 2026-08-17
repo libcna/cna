@@ -2883,13 +2883,12 @@ namespace CNA::Internal::GltfImport
         // dropped together, and only the drop was reported. The colour now rides in the four bytes
         // stride 60 had reserved as a discriminator (skinned: stride 80), so nothing has to be
         // chosen between.
-        // A SKINNED vertex-coloured primitive is the one case that stays out: the skinned PBR
-        // record (stride 76) is exactly its seven fields, so there are no reserved bytes to reuse
-        // and the colour would need a stride no renderer's input layout knows. GLTF-463 owns that
-        // ABI addition; until it lands such a primitive keeps SkinnedEffect with its colours intact
-        // and the material is NAMED as dropped, which is the same disposition GLTF-241 chose for
-        // the rigid case and is now narrowed to the combination that really cannot be expressed.
-        out.usePbr = metallicRoughnessMaterial && !(out.colored && out.skinned);
+        // plan_gltf.md GLTF-463 closed the last exclusion. A SKINNED vertex-coloured primitive used
+        // to stay out because the skinned PBR record (stride 76) is exactly its seven fields, with no
+        // reserved bytes for a colour the way stride 60 had -- so it needed a stride of its own.
+        // Stride 80 is that stride, and the rule is now simply the material MODEL, with no
+        // attribute combination able to take a material away from a primitive that declares one.
+        out.usePbr = metallicRoughnessMaterial;
         // plan_gltf.md GLTF-337. Its own flag rather than "not usePbr", because the two mean
         // different things: a vertex-coloured metallic-roughness primitive is also non-PBR
         // (GLTF-241) and must still be LIT. Conflating them would darken a surface the file asked
@@ -2897,13 +2896,13 @@ namespace CNA::Internal::GltfImport
         out.unlitEXT = (prim.material != nullptr) && (prim.material->unlit != 0);
         // GLTF-238: the material's identity, for effect sharing in the loaders.
         out.material.sourceMaterialEXT = prim.material;
-        // plan_gltf.md GLTF-241/GLTF-462: `colored && metallicRoughnessMaterial` used to be refused
-        // outright, and the rigid half of it is now carried in full. What remains is the SKINNED
-        // half, and it is a vertex-layout limit rather than a shading one -- see the comment above.
-        if (out.colored && out.skinned && metallicRoughnessMaterial)
-        {
-            out.unsupportedMaterialModelEXT = "metallic-roughness";
-        }
+        // plan_gltf.md GLTF-241/GLTF-462/GLTF-463: `colored && metallicRoughnessMaterial` used to be
+        // refused outright, then only in its skinned half, and is now carried in both. Nothing sets
+        // `unsupportedMaterialModelEXT` any more: a material CNA genuinely cannot shade as
+        // metallic-roughness is one declaring a different MODEL, and KHR_materials_unlit is reported
+        // through `unlitEXT` rather than as a loss. The field stays on MeshOut because a future
+        // material model would need it, and because a report field that disappears is a report field
+        // whose absence nobody notices.
         // GLTF-219/GLTF-221: the factors are read for ANY metallic-roughness material, not only
         // one that also selected PBR. They were assigned inside the old `usePbr` guard, so a
         // factor-only material left them at MaterialOut's defaults -- the second half of D7, and the
@@ -4387,14 +4386,16 @@ namespace CNA::Internal::GltfImport
     {
         static const std::vector<VertexLayoutRuleEXT> table = {
             // Skinned. A skinned primitive always carries a Normal, so nothing here loses one.
-            // plan_gltf.md GLTF-462/GLTF-463: a skinned, vertex-coloured primitive is the one
-            // combination that still loses its metallic-roughness material. Stride 76 is exactly the
-            // skinned PBR record's seven fields -- unlike stride 60, it has no reserved bytes the
-            // colour could occupy -- so carrying it needs a stride every renderer's input layout
-            // would have to learn. GLTF-463 owns that; the loss is named here and reported.
-            {{true, true, true, false, false}, 56,
-             "the material's PBR factors and maps: the skinned PBR record has no colour slot, so a "
-             "skinned vertex-coloured primitive falls back to SkinnedEffect (GLTF-463)"},
+            // plan_gltf.md GLTF-463: a skinned, vertex-coloured metallic-roughness primitive keeps
+            // its material. Stride 76 is exactly the skinned PBR record's seven fields -- unlike
+            // stride 60 it has no reserved bytes a colour could occupy -- so it gets stride 80: the
+            // whole stride-76 record as a byte-for-byte prefix with the colour appended. Both UV
+            // rows land on it, because a colour forces the second UV slot to exist whether or not
+            // the material samples two sets, exactly as it does at stride 60.
+            {{true, true, true, false, true}, 80, ""},
+            {{true, true, true, false, false}, 80, ""},
+            // Stride 56 is now reached only by a skinned coloured primitive whose material declares
+            // KHR_materials_unlit, which has no lighting to lose anything to.
             {{true, true, false, false, false}, 56, ""},
             {{true, false, true, false, true}, 76, ""},
             {{true, false, true, false, false}, 68, ""},

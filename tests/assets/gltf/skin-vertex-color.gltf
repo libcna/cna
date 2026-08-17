@@ -3,6 +3,9 @@
     "version": "2.0",
     "generator": "CNA gltf_fixtures"
   },
+  "extensionsUsed": [
+    "KHR_materials_unlit"
+  ],
   "scene": 0,
   "scenes": [
     {
@@ -37,9 +40,26 @@
             "WEIGHTS_0": 5
           },
           "indices": 6,
+          "material": 0,
           "mode": 4
         }
       ]
+    }
+  ],
+  "materials": [
+    {
+      "name": "UnlitColoredSkin",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.6,
+          0.2,
+          0.9,
+          1.0
+        ]
+      },
+      "extensions": {
+        "KHR_materials_unlit": {}
+      }
     }
   ],
   "skins": [

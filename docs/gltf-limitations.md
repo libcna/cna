@@ -88,7 +88,6 @@ field that tells a caller it happened**.
 |---|---|---|---|
 | A primitive with no `NORMAL` | Computes §3.7.2.1's flat normals: a real geometric normal per face, and a vertex shared between differently oriented faces is **duplicated** once per orientation so each face carries its own. Faces whose unit normals agree to within ~0.081° share one copy and get their area-weighted sum, which is a reproducibility floor rather than a smoothing threshold — topology decided by float noise would make the generated corpus non-reproducible — and the vertices where that tolerance actually merged non-identical faces are counted separately. An authored `TANGENT` is ignored, as the same sentence requires, and a basis is generated from the computed normals. | `generatedNormalsEXT`, `flatNormalDuplicatedVertexCountEXT`, `flatNormalMergedVertexCountEXT`, `ignoredTangentForGeneratedNormalsEXT` | `GLTF-173`, `GLTF-461` |
 | A primitive with no `NORMAL` **and** morph targets | §3.7.2.2 requires flat normals for each morph target, and a `POSITION` delta can rotate a face — so the normals are a function of the weights and cannot be baked. Every corner is split into its own vertex at import (a rest-pose split cannot serve every reachable pose) and `BlendMorphTargetsEXT` recomputes the face normals from the morphed positions on every weight change. Tangents are the one approximation left: §3.7.2.2's SHOULD is a full MikkTSpace regeneration per target, and CNA instead re-orthogonalises the generated basis against the recomputed normal, which preserves the property tangent-space normal mapping depends on without re-solving the UV gradients. A `NORMAL` delta on such a target is not legal (§3.7.2.2 requires an original attribute) and is dropped rather than blended. | `morphedFlatNormalsEXT`, `ignoredMorphNormalDeltasForGeneratedNormalsEXT`, `ignoredTangentForGeneratedNormalsEXT` | `GLTF-461` |
-| `COLOR_0` on a **skinned** metallic-roughness primitive | The rigid case is carried in full — stride 60's four reserved discriminator bytes are the packed colour, so Position, Normal, Tangent, two UV sets and `COLOR_0` all fit and the colour multiplies base colour. The skinned record (stride 76) is exactly its seven fields and has no bytes to reuse, so a skinned vertex-coloured primitive keeps `SkinnedEffect`: its `NORMAL` and its colours arrive, and the material's metallic-roughness factors and maps are not applied. Named, not silent. | `unsupportedMaterialModelEXT` | `GLTF-241`, `GLTF-462`, `GLTF-463` |
 | `TRIANGLE_STRIP` / `TRIANGLE_FAN` / `LINE_LOOP` | Converted to the equivalent list at import, so no renderer needs the topology. The conversion is exact — the same triangles, in the same winding — and the source mode is still carried, so the conversion is checkable rather than assumed. | *(exact; reported at debug severity)* | `GLTF-081` |
 | An index run that does not complete a primitive | The trailing remainder is dropped and counted. §3.7.2.1 requires a whole number of primitives; `cgltf_validate` does not check it, and neither reading nor refusing the remainder is safe by default. | `droppedIncompleteIndicesEXT` | `GLTF-079` |
 | Joint weights that do not sum to 1 | Renormalised, with the worst deviation recorded so a quantised exporter (a few 1e-3) is distinguishable from a broken file. An all-zero weight set is left alone — `0/0` is not a normalisation — and counted separately. | `renormalisedWeightVertexCountEXT`, `worstWeightSumDeviationEXT`, `zeroWeightVertexCountEXT` | `GLTF-256` |
@@ -117,8 +116,7 @@ which is what distinguishes a documented limitation from a silent drop.
 | `COLOR_1` and beyond | XNA's vertex layouts carry exactly one colour channel. | `extraColorSetsEXT` | `GLTF-091` |
 | `_*` custom attributes | §3.7.2.1 reserves the underscore prefix so a reader *may* ignore them, and ignoring one is not an error — but a file whose geometry depends on `_BATCHID` deserves to be told. | `ignoredCustomAttributesEXT` | `GLTF-092` |
 | An authored `TANGENT` on a non-PBR layout | Only strides 48/60 and 68/76 carry a tangent, and those are the PBR layouts. | `droppedTangentForStrideEXT` | `GLTF-086` |
-| An authored `NORMAL` on a coloured or dual-texture layout | Strides 20 and 24 have no Normal slot, so such a primitive cannot be lit at all. | `droppedNormalForStrideEXT` | `GLTF-241` |
-| A metallic-roughness material on a primitive with `COLOR_0` | No CNA vertex layout carries a colour alongside a tangent and no PBR shader reads a colour stream. The primitive imports through `BasicEffect` with its vertex colours intact and **without** its material. | `unsupportedMaterialModelEXT`, `unrepresentableForStrideEXT` | `GLTF-241` |
+| An authored `NORMAL` on an unlit or dual-texture layout | Strides 20 and 24 have no Normal slot. Since `GLTF-462`/`GLTF-463` those two are reached only by a primitive whose material declares `KHR_materials_unlit` or by `DualTextureEffect` — neither of which has any lighting for a normal to feed — so this is no longer a loss a lit primitive can suffer. | `droppedNormalForStrideEXT` | `GLTF-241`, `GLTF-462` |
 | A texture whose image is KTX2/Basis or WebP, with no fallback `source` | No decoder. When the file provides a plain PNG/JPEG fallback it is used instead and nothing is lost. | `unsupportedTextureSourcesEXT` | `GLTF-200`, `GLTF-350` |
 | A third distinct sampled UV set (`TEXCOORD_n`) | PBR layouts carry two packed UV channels. A material sampling three distinct authored sets cannot represent the third; see §2's `uvSetMismatchedMapsEXT` row. | `uvSetMismatchedMapsEXT` | `GLTF-188` |
 | Per-instance transforms of `EXT_mesh_gpu_instancing` | The node's own single placement is imported; the file renders one copy where it describes many. | `gpuInstancedNodeCount` | `GLTF-352` |
@@ -170,6 +168,18 @@ and five renderers instead selected their non-PBR alpha-test program. Both failu
 PBR `MASK` draw stays PBR and every PBR fragment path evaluates the same coverage expression.
 `docs/gltf-api-change-review.md` §1.3 records where the line falls and why the other two stay on this
 side of it; `docs/gltf-renderer-pbr-fallbacks.md` records the renderer matrix and evidence.
+
+`COLOR_0` on a metallic-roughness material is the same shape of statement, one step further out: the
+importer carries it in full (stride 60 for a rigid primitive, stride 80 for a skinned one since
+`GLTF-463`), `PbrEffect::VertexColorEnabledEXT` and `SkinnedPbrEffect::VertexColorEnabledEXT` carry the
+switch, and §3.9.2's product — `baseColorFactor` × `baseColorTexture` × `COLOR_0`, alpha included — is
+evaluated by **eight of the seventeen** PBR renderers. The other nine multiply by **opaque white**, the
+multiplier's identity, so they lose the vertex colour and nothing else: every factor, every map, the
+authored `NORMAL` and the tangent basis all still arrive, and an uncoloured primitive is bit-identical
+to what it was before the slot existed. A renderer with no stride-80 layout **refuses** a skinned
+vertex-coloured PBR draw rather than mis-reading it. There is no importer report field for this because
+there is no importer loss; the per-renderer state, the specific blocker for each open one, and the
+numerical golden-pixel witness are in `docs/gltf-renderer-pbr-fallbacks.md` (`GLTF-465`).
 
 ---
 

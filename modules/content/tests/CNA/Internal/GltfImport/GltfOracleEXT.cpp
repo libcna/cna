@@ -639,6 +639,9 @@ namespace CnaTest::GltfOracle
                      jointOffset = 64; break;
             case 76: normalOffset = 12; tangentOffset = 24; uvOffset = 40; weightOffset = 48;
                      jointOffset = 64; uv1Offset = 68; break;
+            // GLTF-463: skinned PBR + UV1 + packed COLOR_0.
+            case 80: normalOffset = 12; tangentOffset = 24; uvOffset = 40; weightOffset = 48;
+                     jointOffset = 64; uv1Offset = 68; colorOffset = 76; break;
             default: break;
         }
 

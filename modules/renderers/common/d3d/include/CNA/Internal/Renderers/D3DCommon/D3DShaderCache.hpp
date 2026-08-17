@@ -53,6 +53,9 @@ namespace CNA::Internal::Renderers::D3DCommon
         PbrSkinned3d,
         /// GLTF-386: PbrSkinned3d with the canonical stride-76 TEXCOORD_1 suffix.
         PbrSkinned3dDualUv,
+        /// plan_gltf.md GLTF-463: PbrSkinned3dDualUv with a packed COLOR_0 appended -- stride 80,
+        /// the layout a skinned vertex-coloured metallic-roughness primitive imports to.
+        PbrSkinned3dDualUvColor,
         /// plan_cnj.md CNB-67 follow-up: Skinned3d's own stride-56 sibling carrying a per-vertex
         /// Color attribute (SkinnedEffect::VertexColorEnabled), HLSL port of
         /// EasyGLRenderer::EnsureSkinnedProgram()'s vertex-color wiring.

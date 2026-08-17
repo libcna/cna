@@ -466,7 +466,7 @@ The source-policy lock proves implementation agreement, not hardware availabilit
 runtime executable retain their renderer plan's own verification limitation; they do not weaken or
 silently redefine the fallback.
 
-## The stride-60 record and `COLOR_0` (`GLTF-462` / `GLTF-465`)
+## The stride-60 and stride-80 records and `COLOR_0` (`GLTF-462` / `GLTF-463` / `GLTF-465`)
 
 Stride 60 is the rigid PBR vertex record: Position, Normal, Tangent, `TEXCOORD_0`, `TEXCOORD_1` and
 a packed `COLOR_0`. `GLTF-182` created it for dual-UV materials and reserved its last four bytes
@@ -475,52 +475,81 @@ purely to keep the stride distinct from 56; `GLTF-462` gave those bytes a job, b
 rather than a reason to abandon the model, which is what CNA did before (a vertex-coloured primitive
 fell to the stride-24 layout, which has **no Normal slot at all**, so it could not be lit).
 
+Stride 80 is its skinned counterpart, added by `GLTF-463`: the whole stride-76 skinned PBR record as a
+byte-for-byte prefix with the packed `COLOR_0` appended at offset 76. Before it existed, a skinned
+vertex-coloured metallic-roughness primitive lost its material model entirely and fell back to
+`SkinnedEffect`.
+
 Auditing that change found a **pre-existing defect this table now prevents recurring**: most PBR
 renderers had never learned stride 60 even though it has been live since `GLTF-182`. `OPENGL2` fell
 through a `stride >= 32` catch-all that reads `TEXCOORD` at offset 24 — inside the tangent — so a
 dual-UV PBR mesh textured itself from tangent bytes, silently. `OPENGL4`, `MAGNUM`, `LLGL` and
-`DIRECTX9` degraded visibly instead (position-only, no attributes, or an outright refusal).
+`DIRECTX9` degraded visibly instead (position-only, no attributes, or an outright refusal). `GLTF-465`
+then found a second layer of the same defect in `OPENGL2` and `OPENGL4`: binding the record correctly
+was **not** enough, because their PBR *program* selection was still keyed on the old stride sets, so a
+stride-60 draw was shaded by the Blinn-Phong program (OpenGL 2) and a stride-76/80 draw would have run
+the rigid PBR program over a skinned record (OpenGL 4).
 
-Two dispositions, both machine-checked by
-`GltfRendererPbrFallbackPolicy.EveryPbrRendererEitherBindsTheStride60RecordOrIsNamedAsNotYet` and
-`GltfRendererPbrFallbackPolicy.VertexColourReachesTheBaseColourProductOnlyWhereItIsImplemented` —
-read those, not this table, which is a snapshot.
+Three dispositions, all machine-checked — read the tests, not this table, which is a snapshot:
 
-| Renderer | Binds the stride-60 record | Multiplies `COLOR_0` into base colour |
-|---|---|---|
-| EasyGL (OPENGLES2/3, OPENGL33, WEBGL1/2) | yes | **yes** — `uVertexColorEnabled` gates `albedo *= cnaVertexColor.rgb` and `alpha *= cnaVertexColor.a` |
-| Software | yes | **yes** — the CPU raster path already multiplies the decoded vertex colour into the sampled base colour |
-| Bgfx | yes | not yet (`GLTF-465`) |
-| Diligent | yes | not yet (`GLTF-465`) |
-| DirectX 9 | yes (`GLTF-462`: the stride-48 element list describes the record; a D3D9 declaration carries offsets while the stride travels with `SetStreamSource`) | not yet (`GLTF-465`) |
-| DirectX 11 | yes | not yet (`GLTF-465`) |
-| DirectX 12 | yes | not yet (`GLTF-465`) |
-| IGL | yes, **without a stride row**: it builds its vertex input from the public `VertexDeclaration`, so the canonical layout reaches it colour element included | **yes, also without per-renderer work** — its shader library is generated per feature set, so it declares `aColor` exactly when the declaration carries a Color, multiplies it into the colour that becomes `vColor`, and feeds that to `cnaShadePbr`. Both halves of this row are the declaration-driven abstraction paying for itself |
-| LLGL | yes (`GLTF-462` added the row; it previously produced no attributes at all) | not yet (`GLTF-465`) |
-| Magnum | yes (`GLTF-462` added the row; it previously produced no attributes at all) | not yet (`GLTF-465`) |
-| OpenGL 2 | yes (`GLTF-462` **fixed a silent mis-binding**: the record reached a catch-all that read UV inside the tangent) | not yet (`GLTF-465`) |
-| OpenGL 4 | yes (`GLTF-462` added the row; it previously fell to a position-only fallback) | not yet (`GLTF-465`) |
-| Vulkan | yes | not yet (`GLTF-465`) |
-| Metal | **not yet** (`GLTF-465`) | not yet |
-| SDL GPU | **not yet** (`GLTF-465`) | not yet |
-| WebGPU | **not yet** (`GLTF-465`) | not yet |
-| Wicked | **not yet** (`GLTF-465`) | not yet |
+- `GltfRendererPbrFallbackPolicy.EveryPbrRendererEitherBindsTheStride60RecordOrIsNamedAsNotYet`
+- `GltfRendererPbrFallbackPolicy.EverySkinnedPbrRendererEitherBindsTheStride80RecordOrRefusesIt`
+- `GltfRendererPbrFallbackPolicy.VertexColourReachesTheBaseColourProductOnlyWhereItIsImplemented`
 
-**Three of the seventeen implement it, and one of the three cost nothing.** EasyGL is five GL
-profiles, SOFTWARE is the CPU rasteriser, and IGL needed no change at all — which is the argument for
-moving renderers off stride-keyed dispatch and onto the public `VertexDeclaration`, not merely a
-convenience.
+| Renderer | Stride 60 | Stride 80 | Multiplies `COLOR_0` into base colour (RGB **and** alpha) |
+|---|---|---|---|
+| EasyGL (OPENGLES2/3, OPENGL33, WEBGL1/2) | yes | yes | **yes** — `uVertexColorEnabled` gates `albedo *= cnaVertexColor.rgb` and `alpha *= cnaVertexColor.a` in both the rigid and the skinned program |
+| Software | yes | yes | **yes** — the interpolated vertex colour *is* the start of the CPU product, alpha included |
+| IGL | yes, **without a stride row**: it builds its vertex input from the public `VertexDeclaration`, so the canonical layout reaches it colour element included | yes, same way | **yes, also without per-renderer work** — its shader library is generated per feature set, so it declares `aColor` exactly when the declaration carries a Color, multiplies it into the colour that becomes `vColor`, and feeds that to `cnaShadePbr` |
+| OpenGL 2 | yes (`GLTF-462` **fixed a silent mis-binding**; `GLTF-465` fixed the program selection) | yes | **yes** |
+| OpenGL 4 | yes (`GLTF-462` added the row; `GLTF-465` fixed the skinned program selection) | yes | **yes** |
+| Vulkan | yes | yes (its own SPIR-V variant, since stride 76 has no colour slot to bind) | **yes** |
+| DirectX 11 | yes | yes | **yes** — one shared HLSL pair and one shared `VertexColorFlags` constant serve both D3D families |
+| DirectX 12 | yes | yes | **yes** — same shared HLSL and constant as DirectX 11 |
+| Bgfx | yes | refuses | not yet (`GLTF-465`): shaders are precompiled bgfx bytecode, and regenerating them needs bgfx's own `shaderc` |
+| Diligent | yes | refuses | not yet (`GLTF-465`): its runtime-substituted HLSL is tractable, but DiligentCore is not built in this environment, so the change could not be compiled or run |
+| DirectX 9 | yes (`GLTF-462`: the stride-48 element list describes the record; a D3D9 declaration carries offsets while the stride travels with `SetStreamSource`) | refuses | not yet (`GLTF-465`): `vs_3_0`/`ps_3_0` bytecode is regenerated only through the pinned native `d3dcompiler_47.dll` Wine prefix, which this environment does not have |
+| LLGL | yes (`GLTF-462` added the row) | refuses | not yet (`GLTF-465`): its Vulkan flavour is SPIR-V generated by `glslangValidator`, absent here, and editing only the GLSL flavour would desynchronise the two |
+| Magnum | yes (`GLTF-462` added the row) | refuses | not yet (`GLTF-465`): its PBR GLSL is generated at runtime and is tractable, but Magnum is not built in this environment |
+| Metal | **not yet** | refuses | not yet (`GLTF-465`): no stride-60/80 layout at all, and Metal cannot be built or run on this host |
+| SDL GPU | **not yet** | refuses | not yet (`GLTF-465`): no stride-60/80 layout at all; needs precompiled SPIR-V variants |
+| WebGPU | **not yet** | refuses | not yet (`GLTF-465`): no stride-60/80 layout at all; needs new WGSL pipeline variants |
+| Wicked | **not yet** | refuses | not yet (`GLTF-465`): no stride-60/80 layout at all; needs WickedEngine shader work |
+
+**Eight of the seventeen implement it, and two of the eight cost almost nothing.** EasyGL is five GL
+profiles, SOFTWARE is the CPU rasteriser, IGL needed no change at all, and DirectX 11/12 shared a
+single HLSL pair — which is the argument for moving renderers off stride-keyed dispatch and onto the
+public `VertexDeclaration`, not merely a convenience. Every renderer still in the "not yet" column is
+blocked on a shader toolchain or an SDK that is not available in this environment, not on a design
+question: each row above names the specific missing piece.
 
 **The residue is safe, and that is the property the tests pin.** A primitive with no `COLOR_0` fills
 the slot with **opaque white**, which is the multiplier's identity — so a renderer that ignores the
 slot draws exactly what it drew before `GLTF-462`, and one that starts reading it cannot darken
 anything that used to be right. A renderer in the "not yet" column loses the vertex colour, not the
 material: the authored `NORMAL`, the tangent basis, every PBR factor and every PBR map all arrive,
-which is strictly more than the stride-24 fallback carried.
+which is strictly more than the stride-24 fallback carried. For stride 80 the residue is a **refusal**
+rather than a silent loss, because a renderer that has no 80-byte layout never accepts the draw — and
+that is deliberate: accepting the stride with a layout that does not describe it is the one state
+`EverySkinnedPbrRendererEitherBindsTheStride80RecordOrRefusesIt` forbids.
 
-One combination is still **not** carried anywhere: a **skinned** vertex-coloured metallic-roughness
-primitive. Stride 76 is exactly the skinned PBR record's seven fields and has no reserved bytes to
-reuse, so it needs a stride every renderer's input layout would have to learn. `GLTF-463` owns that;
-until it lands such a primitive keeps `SkinnedEffect` — so it keeps its normals and its colours, and
-loses only the metallic-roughness factors and maps, which `MeshOut::unsupportedMaterialModelEXT`
-names and both loaders log.
+**How far each "yes" is verified, precisely.** Four of the eight are proven at the pixel level,
+because they are the four renderers the L7 corpus oracle has policies for: **EasyGL/OPENGLES3**,
+**Vulkan** (lavapipe), **SOFTWARE** and **DirectX11** (Wine + DXVK) each rendered all 146 corpus assets
+twice on this revision and their `skin-vertex-color-pbr` captures carry the authored per-vertex alpha
+product. **OpenGL 2**, **OpenGL 4** and **DirectX 12** are compiled and source-verified but have no L7
+policy, so their colour product is asserted from their shader text and their layout rows rather than
+from pixels — DirectX 12 additionally shares its HLSL, its constant buffer and its input-element table
+with DirectX 11, which *is* pixel-proven. **IGL** is verified by construction and by its own generated
+shader library. That distinction is worth keeping in mind before treating this table as eight equal
+rows.
+
+**The rendered product itself is verified numerically, not by reading shader source.**
+`GltfFixtureCorpus.EveryL7GoldenCarriesTheVertexColourAlphaProductRatherThanTheWhiteIdentity` reads
+the committed L7 goldens of all four capture policies (EasyGL, Vulkan, SOFTWARE, DirectX11/DXVK). Base
+colour **alpha** is the one part of the product with no view dependence, so a BLEND-mode PBR primitive
+without a `COLOR_0` (`mat-factor-only-gold`) must capture exactly one alpha value everywhere, while
+`skin-vertex-color-pbr` must capture a spread whose end points match `baseColorFactor.a` times the
+authored per-vertex alphas. The rig's own alpha composite is calibrated from the control asset in the
+same golden set rather than assumed, so the test survives a legitimate rig change and still fails if
+the colour is dropped.

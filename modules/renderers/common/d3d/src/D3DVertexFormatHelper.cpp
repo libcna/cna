@@ -53,14 +53,16 @@ namespace CNA::Internal::Renderers::D3DCommon
         };
 
         // GLTF-386: the canonical rigid PBR dual-UV layout keeps stride 48's prefix byte-for-byte
-        // and appends TEXCOORD_1 at offset 48. Four trailing padding bytes preserve CNA's shared
-        // 60-byte CPU/GPU vertex contract.
+        // and appends TEXCOORD_1 at offset 48. GLTF-462 gave the four trailing bytes GLTF-182 had
+        // reserved to a packed COLOR_0, so every stride-60 record carries a colour -- the authored
+        // one, or opaque white, the multiplier's identity.
         const D3D11_INPUT_ELEMENT_DESC kStride60[] = {
             { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
             { "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
             { "TANGENT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 },
             { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, 40, D3D11_INPUT_PER_VERTEX_DATA, 0 },
             { "TEXCOORD", 1, DXGI_FORMAT_R32G32_FLOAT,       0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            { "COLOR",    0, DXGI_FORMAT_R8G8B8A8_UNORM,     0, 56, D3D11_INPUT_PER_VERTEX_DATA, 0 },
         };
 
         // plan_cnj.md CNB-67 follow-up: stride 56, the stride-52 SkinnedVertex layout above with a
@@ -89,6 +91,19 @@ namespace CNA::Internal::Renderers::D3DCommon
             { "BLENDINDICES", 0, DXGI_FORMAT_R8G8B8A8_UINT,      0, 64, D3D11_INPUT_PER_VERTEX_DATA, 0 },
         };
 
+        // plan_gltf.md GLTF-463: stride 80 is stride 76's record with a packed COLOR_0 appended --
+        // the skinned counterpart of stride 60's own colour slot.
+        const D3D11_INPUT_ELEMENT_DESC kStride80[] = {
+            { "POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            { "NORMAL",       0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            { "TANGENT",      0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,       0, 40, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            { "BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            { "BLENDINDICES", 0, DXGI_FORMAT_R8G8B8A8_UINT,      0, 64, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD",     1, DXGI_FORMAT_R32G32_FLOAT,       0, 68, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            { "COLOR",        0, DXGI_FORMAT_R8G8B8A8_UNORM,     0, 76, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        };
+
         // GLTF-386: skinned PBR dual-UV appends TEXCOORD_1 after stride 68's complete prefix.
         const D3D11_INPUT_ELEMENT_DESC kStride76[] = {
             { "POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -115,6 +130,7 @@ namespace CNA::Internal::Renderers::D3DCommon
             case 60: count = static_cast<UINT>(std::size(kStride60)); return kStride60;
             case 68: count = static_cast<UINT>(std::size(kStride68)); return kStride68;
             case 76: count = static_cast<UINT>(std::size(kStride76)); return kStride76;
+            case 80: count = static_cast<UINT>(std::size(kStride80)); return kStride80;
             default: count = 0; return nullptr;
         }
     }
@@ -172,14 +188,15 @@ namespace CNA::Internal::Renderers::D3DCommon
             { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, 40, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
-        // GLTF-386: stride 48 plus TEXCOORD_1 at offset 48 and four bytes of shared-layout
-        // padding, matching kStride60 exactly.
+        // GLTF-386: stride 48 plus TEXCOORD_1 at offset 48, and since GLTF-462 a packed COLOR_0 in
+        // the four trailing bytes -- matching kStride60 exactly.
         const D3D12_INPUT_ELEMENT_DESC kStride60D3D12[] = {
             { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "TANGENT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, 40, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "TEXCOORD", 1, DXGI_FORMAT_R32G32_FLOAT,       0, 48, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "COLOR",    0, DXGI_FORMAT_R8G8B8A8_UNORM,     0, 56, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
         // Stride 56: the stride-52 SkinnedVertex layout with a per-vertex Color appended at offset
@@ -215,6 +232,18 @@ namespace CNA::Internal::Renderers::D3DCommon
             { "BLENDINDICES", 0, DXGI_FORMAT_R8G8B8A8_UINT,      0, 64, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "TEXCOORD",     1, DXGI_FORMAT_R32G32_FLOAT,       0, 68, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
+
+        // plan_gltf.md GLTF-463: stride 80, matching kStride80 exactly.
+        const D3D12_INPUT_ELEMENT_DESC kStride80D3D12[] = {
+            { "POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "NORMAL",       0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TANGENT",      0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,       0, 40, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 48, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "BLENDINDICES", 0, DXGI_FORMAT_R8G8B8A8_UINT,      0, 64, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD",     1, DXGI_FORMAT_R32G32_FLOAT,       0, 68, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "COLOR",        0, DXGI_FORMAT_R8G8B8A8_UNORM,     0, 76, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+        };
     }
 
     const D3D12_INPUT_ELEMENT_DESC* InputElementsForStrideD3D12(std::size_t strideInBytes, UINT& count)
@@ -231,6 +260,7 @@ namespace CNA::Internal::Renderers::D3DCommon
             case 60: count = static_cast<UINT>(std::size(kStride60D3D12)); return kStride60D3D12;
             case 68: count = static_cast<UINT>(std::size(kStride68D3D12)); return kStride68D3D12;
             case 76: count = static_cast<UINT>(std::size(kStride76D3D12)); return kStride76D3D12;
+            case 80: count = static_cast<UINT>(std::size(kStride80D3D12)); return kStride80D3D12;
             default: count = 0; return nullptr;
         }
     }

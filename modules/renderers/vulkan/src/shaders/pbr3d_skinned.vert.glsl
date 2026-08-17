@@ -15,6 +15,9 @@ layout(location = 5) in uvec4 aBoneIndices;
 #ifdef CNA_PBR_DUAL_UV
 layout(location = 6) in vec2  aUV1;
 #endif
+#ifdef CNA_PBR_VERTEX_COLOR
+layout(location = 7) in vec4  aColor;
+#endif
 
 layout(location = 0) out vec3  vNormal;
 layout(location = 1) out vec3  vTangent;
@@ -24,6 +27,9 @@ layout(location = 4) out float vFogFactor;
 layout(location = 5) out vec3  vWorldPos;
 #ifdef CNA_PBR_DUAL_UV
 layout(location = 6) out vec2  vUV1;
+#endif
+#ifdef CNA_PBR_VERTEX_COLOR
+layout(location = 7) out vec4  vColor;
 #endif
 
 layout(push_constant) uniform PC {
@@ -105,6 +111,9 @@ void main() {
     vUV = aUV;
 #ifdef CNA_PBR_DUAL_UV
     vUV1 = aUV1;
+#endif
+#ifdef CNA_PBR_VERTEX_COLOR
+    vColor = aColor;
 #endif
     vWorldPos = (pbr.world * skinnedPos).xyz;
     vFogFactor = 1.0 - clamp(dot(vec4(skinnedPos.xyz, 1.0), pbr.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector

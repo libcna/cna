@@ -1627,7 +1627,7 @@ namespace CNA::Internal::Renderers::Software
             bool haveNormal = false;
 
             const bool skinnedLayout =
-                stride == 52 || stride == 56 || stride == 68 || stride == 76;
+                stride == 52 || stride == 56 || stride == 68 || stride == 76 || stride == 80;
             if (skinnedLayout && params.skinned)
             {
                 // The stride-52/56 layouts carry BlendWeight@32 and BlendIndices@48; the
@@ -1636,7 +1636,7 @@ namespace CNA::Internal::Renderers::Software
                 // own layout -- Task 895's "only sum the first N pairs" behavior) and apply the
                 // blended matrix to Position/Normal BEFORE the standard World*View*Projection
                 // transform below, mirroring FNA's own Skin(vin, boneCount) step.
-                const bool tangentSkinned = stride == 68 || stride == 76;
+                const bool tangentSkinned = stride == 68 || stride == 76 || stride == 80;
                 const int blendWeightOffset = tangentSkinned ? 48 : 32;
                 const int blendIndicesOffset = tangentSkinned ? 64 : 48;
                 Vector4 blendWeight;
@@ -1719,18 +1719,26 @@ namespace CNA::Internal::Renderers::Software
                 if (stride == 56)
                     UnpackColorBytes(raw.At(52), out.r, out.g, out.b, out.a);
             }
-            else if (stride == 68 || stride == 76)
+            else if (stride == 68 || stride == 76 || stride == 80)
             {
                 std::memcpy(&out.u, raw.At(40), sizeof(float));
                 std::memcpy(&out.v, raw.At(44), sizeof(float));
-                if (stride == 76 && (params.pbrTextureCoordinateSetMask & 1u) != 0u)
+                if ((stride == 76 || stride == 80) &&
+                    (params.pbrTextureCoordinateSetMask & 1u) != 0u)
                 {
                     std::memcpy(&out.u, raw.At(68), sizeof(float));
                     std::memcpy(&out.v, raw.At(72), sizeof(float));
                 }
+                // plan_gltf.md GLTF-463: stride 80 is the stride-76 skinned PBR record with a packed
+                // COLOR_0 appended. This raster path already multiplies out.r/g/b/a into the sampled
+                // base colour, so reading it here is the whole of skinned vertex-coloured PBR for
+                // this renderer -- and `!params.vertexColorEnabled` further down replaces it with
+                // white for an uncoloured primitive, exactly as it does for strides 56 and 60.
+                if (stride == 80)
+                    UnpackColorBytes(raw.At(76), out.r, out.g, out.b, out.a);
             }
 
-            if (stride == 48 || stride == 60 || stride == 68 || stride == 76)
+            if (stride == 48 || stride == 60 || stride == 68 || stride == 76 || stride == 80)
             {
                 // PbrEffect's base-colour transform is slot zero. Identity rows make this an exact
                 // no-op for old callers and materials without KHR_texture_transform.
@@ -3133,7 +3141,7 @@ namespace CNA::Internal::Renderers::Software
         // single buffer is bound.
         const std::size_t stride = CombinedVertexStrideOr(params, swVb.Stride());
         if (stride != 16 && stride != 20 && stride != 24 && stride != 32 &&
-            stride != 48 && stride != 52 && stride != 56 && stride != 60 &&
+            stride != 48 && stride != 52 && stride != 56 && stride != 60 && stride != 80 &&
             stride != 68 && stride != 76)
             throw std::runtime_error(
                 "SoftwareRenderer::DrawPrimitivesEx: unsupported vertex stride "
@@ -3282,7 +3290,7 @@ namespace CNA::Internal::Renderers::Software
         // per-vertex streams' strides, identical to this one stream's whenever one is bound.
         const std::size_t stride = CombinedVertexStrideOr(params, swVb.Stride());
         if (stride != 16 && stride != 20 && stride != 24 && stride != 32 &&
-            stride != 48 && stride != 52 && stride != 56 && stride != 60 &&
+            stride != 48 && stride != 52 && stride != 56 && stride != 60 && stride != 80 &&
             stride != 68 && stride != 76)
             throw std::runtime_error(
                 "SoftwareRenderer::DrawIndexedPrimitivesEx: unsupported vertex stride "

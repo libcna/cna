@@ -173,6 +173,41 @@ namespace CNA::Internal::Graphics
     static_assert(offsetof(PositionNormalTangentTextureSkinned2Stream, i0) == 64);
     static_assert(offsetof(PositionNormalTangentTextureSkinned2Stream, u1) == 68);
 
+    /**
+     * @brief GPU stream for a skinned PBR vertex carrying two UV sets and a packed colour.
+     *
+     * plan_gltf.md `GLTF-463`. §3.7.2.1 makes `COLOR_0` "an additional linear multiplier to base
+     * color", and `GLTF-462` carried that for rigid primitives in the four bytes stride 60 had
+     * reserved as a discriminator. The skinned record has no such bytes -- stride 76 is exactly its
+     * seven fields -- so the skinned combination needs its own stride, and this is it: the whole
+     * stride-76 record as a byte-for-byte prefix with the colour appended, which is the same
+     * "append, never insert" rule strides 56 and 76 were built on.
+     *
+     * `TextureCoordinate1` is present whatever the material samples, exactly as it is at stride 60:
+     * a stride is a layout, not a promise that every slot is used, and the per-map selector mask
+     * already tells a shader which channel to read.
+     */
+    struct PositionNormalTangentTextureSkinned2ColorStream
+    {
+        float x, y, z;
+        float nx, ny, nz;
+        float tx, ty, tz, tw;
+        float u0, v0;
+        float w0, w1, w2, w3;
+        std::uint8_t i0, i1, i2, i3;
+        float u1, v1;
+        std::uint8_t r, g, b, a;
+    };
+    static_assert(sizeof(PositionNormalTangentTextureSkinned2ColorStream) == 80);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2ColorStream, x) == 0);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2ColorStream, nx) == 12);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2ColorStream, tx) == 24);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2ColorStream, u0) == 40);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2ColorStream, w0) == 48);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2ColorStream, i0) == 64);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2ColorStream, u1) == 68);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2ColorStream, r) == 76);
+
 
     /**
      * @brief Maps a built-in vertex structure to the GPU stream that carries its values.

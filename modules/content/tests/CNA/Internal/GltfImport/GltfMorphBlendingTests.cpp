@@ -13,6 +13,7 @@
 // the same sum while making it far harder to say which term was wrong.
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -711,6 +712,95 @@ TEST(GltfMorphBlending, ARecomputedFlatNormalReachesTheNormalSlotOfASkinnedLayou
         EXPECT_NEAR(expected.X, normal[0], kTolerance);
         EXPECT_NEAR(expected.Y, normal[1], kTolerance);
         EXPECT_NEAR(expected.Z, normal[2], kTolerance);
+    }
+}
+
+TEST(GltfMorphBlending, AMorphedStride80RecordKeepsItsPackedVertexColourByteForByte)
+{
+    // plan_gltf.md GLTF-463/GLTF-465. Stride 80 is the skinned PBR record with a packed COLOR_0 at
+    // offset 76, and a morphed skinned vertex-coloured metallic-roughness primitive is an ordinary
+    // combination now rather than a corner case. The blend rewrites position, normal and tangent in
+    // place, so the risk is not that the colour is blended wrongly -- it is that a writer built for a
+    // 76-byte record walks off the end of each vertex and lands in the next one's colour. That
+    // corruption is invisible in a normal assertion, because the normals would still be right.
+    //
+    // The colours here are deliberately three DIFFERENT values with no channel in common, so a
+    // one-vertex slide, a truncation to 76 bytes and an opaque-white overwrite each produce a
+    // different wrong answer.
+    constexpr int kStride = 80;
+    const CNA::Internal::Graphics::InferredVertexLayout layout =
+        CNA::Internal::Graphics::InferredLayoutForStride(
+            kStride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+    ASSERT_TRUE(layout.known) << "stride 80 is not in the canonical table";
+    int colorOffset = -1;
+    for (std::size_t i = 0; i < layout.count; ++i)
+    {
+        if (layout.elements[i].usage == VertexElementUsage::Color &&
+            layout.elements[i].usageIndex == 0)
+        {
+            colorOffset = layout.elements[i].offset;
+        }
+    }
+    ASSERT_EQ(76, colorOffset);
+
+    MorphTargetDataEXT morph;
+    morph.BaseVertexBytes = BaseVerticesAt(
+        {Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 0.0f, 0.0f), Vector3(0.0f, 1.0f, 0.0f)}, kStride);
+    morph.Stride = kStride;
+    const std::array<std::array<std::uint8_t, 4>, 3> colors{{
+        {{255, 0, 64, 255}}, {{0, 128, 255, 191}}, {{64, 191, 0, 128}},
+    }};
+    for (int v = 0; v < 3; ++v)
+    {
+        for (int c = 0; c < 4; ++c)
+        {
+            morph.BaseVertexBytes[static_cast<std::size_t>(v) * kStride +
+                                  static_cast<std::size_t>(colorOffset) + c] = colors[v][c];
+        }
+    }
+    morph.PositionDeltas.push_back(
+        {Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 1.0f)});
+    morph.NormalDeltas.push_back({});
+    morph.TangentDeltas.push_back({});
+    morph.RecomputeFlatNormalsEXT = true;
+    morph.TriangleIndicesEXT = {0, 1, 2};
+
+    const std::vector<std::uint8_t> blended = BlendMorphTargetsEXT(morph, {1.0f});
+    ASSERT_EQ(3u * static_cast<std::size_t>(kStride), blended.size());
+
+    // The normal really was recomputed -- otherwise this test could pass over a blend that did
+    // nothing at all, which would also leave the colours alone.
+    const Vector3 expected = FaceNormalOf(blended, kStride, 0, 1, 2);
+    int normalOffset = -1;
+    for (std::size_t i = 0; i < layout.count; ++i)
+    {
+        if (layout.elements[i].usage == VertexElementUsage::Normal &&
+            layout.elements[i].usageIndex == 0)
+        {
+            normalOffset = layout.elements[i].offset;
+        }
+    }
+    ASSERT_GE(normalOffset, 0);
+    for (int v = 0; v < 3; ++v)
+    {
+        SCOPED_TRACE("normal of vertex " + std::to_string(v));
+        const std::vector<float> normal = ReadAt(blended, kStride, v, normalOffset, 3);
+        EXPECT_NEAR(expected.X, normal[0], kTolerance);
+        EXPECT_NEAR(expected.Y, normal[1], kTolerance);
+        EXPECT_NEAR(expected.Z, normal[2], kTolerance);
+        EXPECT_GT(std::abs(expected.Z), 0.1f) << "the target did not rotate the face at all";
+    }
+
+    for (int v = 0; v < 3; ++v)
+    {
+        SCOPED_TRACE("colour of vertex " + std::to_string(v));
+        for (int c = 0; c < 4; ++c)
+        {
+            EXPECT_EQ(colors[v][c],
+                      blended[static_cast<std::size_t>(v) * kStride +
+                              static_cast<std::size_t>(colorOffset) + c])
+                << "channel " << c << " of the packed COLOR_0 did not survive the blend";
+        }
     }
 }
 

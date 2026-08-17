@@ -21,6 +21,7 @@
 // conformance assertions never read it.
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -33,9 +34,12 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "System/Security/Cryptography/SHA256.hpp"
+
+#include "CNA/Internal/Graphics/ImageLoader.hpp"
 
 #include "GltfFixtureCorpus.hpp"
 #include "GltfOracleEXT.hpp"
@@ -510,8 +514,8 @@ TEST(GltfFixtureCorpus, VulkanMaterialL7ReportIsCompleteExactAndReproducible)
 TEST(GltfFixtureCorpus, VulkanCorpusL7ReportIsCompleteExactAndReproducible)
 {
     // GLTF-385/390/391: verify the permanent evidence without requiring Vulkan, SDL or a display.
-    // The system retake proves pixels; this integrity gate proves that its claimed 145 inputs,
-    // exact 137 renderer-owned goldens, eight safe rejections and zero-delta policy are the bytes
+    // The system retake proves pixels; this integrity gate proves that its claimed 146 inputs,
+    // exact 138 renderer-owned goldens, eight safe rejections and zero-delta policy are the bytes
     // actually present in this checkout.
     const std::filesystem::path repository =
         CorpusDirectory().parent_path().parent_path().parent_path();
@@ -539,8 +543,8 @@ TEST(GltfFixtureCorpus, VulkanCorpusL7ReportIsCompleteExactAndReproducible)
         std::string(reportBytes.begin(), reportBytes.end())));
     ASSERT_EQ(JsonType::Object, report.type);
     EXPECT_EQ("VULKAN", StringOr(report, "renderer", ""));
-    EXPECT_EQ(145.0, NumberOr(report, "distinctAssetCount", -1.0));
-    EXPECT_EQ(137.0, NumberOr(report, "capturedAssetCount", -1.0));
+    EXPECT_EQ(146.0, NumberOr(report, "distinctAssetCount", -1.0));
+    EXPECT_EQ(138.0, NumberOr(report, "capturedAssetCount", -1.0));
     EXPECT_EQ(8.0, NumberOr(report, "rejectedAssetCount", -1.0));
     EXPECT_EQ(2.0, NumberOr(Member(report, "capture"), "processesPerAsset", -1.0));
     EXPECT_EQ(0.0, NumberOr(Member(report, "goldenComparison"), "rgbTolerance", -1.0));
@@ -557,7 +561,7 @@ TEST(GltfFixtureCorpus, VulkanCorpusL7ReportIsCompleteExactAndReproducible)
     EXPECT_TRUE(activeDivergences.arrayValue.empty());
 
     const std::vector<std::string> fixtureIds = CorpusFixtureIds();
-    ASSERT_EQ(145u, fixtureIds.size());
+    ASSERT_EQ(146u, fixtureIds.size());
     const std::set<std::string> expectedIds(fixtureIds.begin(), fixtureIds.end());
     const JsonValue& assets = Member(report, "assets");
     ASSERT_EQ(JsonType::Array, assets.type);
@@ -608,7 +612,7 @@ TEST(GltfFixtureCorpus, VulkanCorpusL7ReportIsCompleteExactAndReproducible)
         }
     }
     EXPECT_EQ(expectedIds, seen);
-    EXPECT_EQ(137u, capturedIds.size());
+    EXPECT_EQ(138u, capturedIds.size());
     EXPECT_EQ(8u, rejected);
 
     std::set<std::string> goldenIds;
@@ -664,8 +668,8 @@ TEST(GltfFixtureCorpus, DirectX11CorpusL7ReportIsCompleteExactAndReproducible)
         std::string(reportBytes.begin(), reportBytes.end())));
     ASSERT_EQ(JsonType::Object, report.type);
     EXPECT_EQ("DIRECTX11/DXVK", StringOr(report, "renderer", ""));
-    EXPECT_EQ(145.0, NumberOr(report, "distinctAssetCount", -1.0));
-    EXPECT_EQ(137.0, NumberOr(report, "capturedAssetCount", -1.0));
+    EXPECT_EQ(146.0, NumberOr(report, "distinctAssetCount", -1.0));
+    EXPECT_EQ(138.0, NumberOr(report, "capturedAssetCount", -1.0));
     EXPECT_EQ(8.0, NumberOr(report, "rejectedAssetCount", -1.0));
     EXPECT_EQ(2.0, NumberOr(Member(report, "capture"), "processesPerAsset", -1.0));
     EXPECT_EQ(0.0, NumberOr(Member(report, "goldenComparison"), "rgbTolerance", -1.0));
@@ -708,7 +712,7 @@ TEST(GltfFixtureCorpus, DirectX11CorpusL7ReportIsCompleteExactAndReproducible)
     EXPECT_EQ(StringOr(report, "viewerRunnerSha256", ""),
               HexDigest(sha.ComputeHash(ReadAllBytes(repository / "scripts" / "run-wine-dxvk.sh"))));
     const std::vector<std::string> fixtureIds = CorpusFixtureIds();
-    ASSERT_EQ(145u, fixtureIds.size());
+    ASSERT_EQ(146u, fixtureIds.size());
     const std::set<std::string> expectedIds(fixtureIds.begin(), fixtureIds.end());
     const JsonValue& assets = Member(report, "assets");
     ASSERT_EQ(JsonType::Array, assets.type);
@@ -758,7 +762,7 @@ TEST(GltfFixtureCorpus, DirectX11CorpusL7ReportIsCompleteExactAndReproducible)
         }
     }
     EXPECT_EQ(expectedIds, seen);
-    EXPECT_EQ(137u, capturedIds.size());
+    EXPECT_EQ(138u, capturedIds.size());
     EXPECT_EQ(8u, rejected);
 
     std::set<std::string> goldenIds;
@@ -785,7 +789,7 @@ TEST(GltfFixtureCorpus, SoftwareCorpusL7ReportIsCompleteExactAndReproducible)
 {
     // GLTF-387/390/391: the production-viewer retake proves CPU-rendered pixels. This ordinary
     // no-display integrity test proves that the report still names every canonical input, the
-    // exact 137 SOFTWARE-owned goldens, all eight safe rejections and a zero-delta comparison.
+    // exact 138 SOFTWARE-owned goldens, all eight safe rejections and a zero-delta comparison.
     const std::filesystem::path repository =
         CorpusDirectory().parent_path().parent_path().parent_path();
     const std::filesystem::path policyPath =
@@ -812,8 +816,8 @@ TEST(GltfFixtureCorpus, SoftwareCorpusL7ReportIsCompleteExactAndReproducible)
         std::string(reportBytes.begin(), reportBytes.end())));
     ASSERT_EQ(JsonType::Object, report.type);
     EXPECT_EQ("SOFTWARE", StringOr(report, "renderer", ""));
-    EXPECT_EQ(145.0, NumberOr(report, "distinctAssetCount", -1.0));
-    EXPECT_EQ(137.0, NumberOr(report, "capturedAssetCount", -1.0));
+    EXPECT_EQ(146.0, NumberOr(report, "distinctAssetCount", -1.0));
+    EXPECT_EQ(138.0, NumberOr(report, "capturedAssetCount", -1.0));
     EXPECT_EQ(8.0, NumberOr(report, "rejectedAssetCount", -1.0));
     EXPECT_EQ(2.0, NumberOr(Member(report, "capture"), "processesPerAsset", -1.0));
     EXPECT_EQ(0.0, NumberOr(Member(report, "goldenComparison"), "rgbTolerance", -1.0));
@@ -834,7 +838,7 @@ TEST(GltfFixtureCorpus, SoftwareCorpusL7ReportIsCompleteExactAndReproducible)
     EXPECT_EQ(StringOr(report, "corpusManifestSha256", ""),
               HexDigest(sha.ComputeHash(ReadAllBytes(CorpusDirectory() / "manifest.json"))));
     const std::vector<std::string> fixtureIds = CorpusFixtureIds();
-    ASSERT_EQ(145u, fixtureIds.size());
+    ASSERT_EQ(146u, fixtureIds.size());
     const std::set<std::string> expectedIds(fixtureIds.begin(), fixtureIds.end());
     const JsonValue& assets = Member(report, "assets");
     ASSERT_EQ(JsonType::Array, assets.type);
@@ -884,7 +888,7 @@ TEST(GltfFixtureCorpus, SoftwareCorpusL7ReportIsCompleteExactAndReproducible)
         }
     }
     EXPECT_EQ(expectedIds, seen);
-    EXPECT_EQ(137u, capturedIds.size());
+    EXPECT_EQ(138u, capturedIds.size());
     EXPECT_EQ(8u, rejected);
 
     std::set<std::string> goldenIds;
@@ -905,6 +909,114 @@ TEST(GltfFixtureCorpus, SoftwareCorpusL7ReportIsCompleteExactAndReproducible)
     EXPECT_NE(std::string::npos, scriptText.find("CNA: graphics renderer: "));
     EXPECT_NE(std::string::npos, scriptText.find("SDL_VIDEODRIVER"));
     EXPECT_NE(std::string::npos, scriptText.find("if len(renderers) != 1"));
+}
+
+TEST(GltfFixtureCorpus, EveryL7GoldenCarriesTheVertexColourAlphaProductRatherThanTheWhiteIdentity)
+{
+    // plan_gltf.md GLTF-465. §3.9.2/§3.7.2.1: COLOR_0 is "an additional linear multiplier to base
+    // color" -- ITS ALPHA INCLUDED. Every other check in this suite proves the colour reaches the
+    // renderer; this one proves the renderer USED it, from the committed pixels, with no display and
+    // no shader-source string matching.
+    //
+    // It works because base-colour ALPHA is the one part of the product with no view dependence at
+    // all: baseColorTexture.a x baseColorFactor.a x COLOR_0.a, interpolated across the triangle.
+    // Specular highlights, normal mapping and lighting all vary spatially and could mask an RGB
+    // regression, but alpha cannot -- so a BLEND-mode PBR primitive WITHOUT a COLOR_0 must capture
+    // ONE alpha value everywhere, and the same primitive WITH one must capture a spread that matches
+    // the authored per-vertex alphas.
+    //
+    // `mat-factor-only-gold` is the control: PBR, alphaMode BLEND, baseColorFactor alpha 0.5, no
+    // COLOR_0. `skin-vertex-color-pbr` is GLTF-463's witness: baseColorFactor alpha 0.6 and authored
+    // COLOR_0 alphas 255/191/128. The rig's own alpha composite is CALIBRATED from the control rather
+    // than assumed, so a legitimate change to how the viewer composites (one draw instead of two, a
+    // different clear) moves both readings together and this test keeps its meaning; what it can
+    // never absorb is the colour being dropped, because that collapses the spread to a single value.
+    const std::filesystem::path repository =
+        CorpusDirectory().parent_path().parent_path().parent_path();
+
+    struct GoldenPolicy
+    {
+        const char* directory;
+        const char* renderer;
+    };
+    constexpr std::array<GoldenPolicy, 4> policies{{
+        {"easygl", "OPENGLES3/EasyGL"},
+        {"vulkan", "VULKAN"},
+        {"software", "SOFTWARE"},
+        {"directx11", "DIRECTX11/DXVK"},
+    }};
+
+    // The authored numbers, from tools/gltf_fixtures/defs/skinning.py and the mat-* material set.
+    constexpr double kControlFactorAlpha = 0.5;
+    constexpr double kWitnessFactorAlpha = 0.6;
+    constexpr double kWitnessLowestVertexAlpha = 128.0 / 255.0;
+    constexpr double kWitnessHighestVertexAlpha = 255.0 / 255.0;
+
+    for (const GoldenPolicy& policy : policies)
+    {
+        SCOPED_TRACE(policy.renderer);
+        const std::filesystem::path goldens = repository / "tests" / "gltf-l7" / policy.directory;
+        const std::filesystem::path controlPath = goldens / "mat-factor-only-gold.png";
+        const std::filesystem::path witnessPath = goldens / "skin-vertex-color-pbr.png";
+        ASSERT_TRUE(std::filesystem::is_regular_file(controlPath)) << controlPath;
+        ASSERT_TRUE(std::filesystem::is_regular_file(witnessPath)) << witnessPath;
+
+        const auto foregroundAlphas = [](const std::filesystem::path& path) {
+            const CNA::Internal::Graphics::ImageData image =
+                CNA::Internal::Graphics::ImageLoader::Load(path.string());
+            std::vector<int> alphas;
+            std::vector<int> reds;
+            for (std::size_t at = 0; at + 3 < image.pixels.size(); at += 4)
+            {
+                if (image.pixels[at + 3] == 0) { continue; }
+                alphas.push_back(static_cast<int>(image.pixels[at + 3]));
+                reds.push_back(static_cast<int>(image.pixels[at]));
+            }
+            return std::pair<std::vector<int>, std::vector<int>>(std::move(alphas), std::move(reds));
+        };
+
+        const auto [controlAlphas, controlReds] = foregroundAlphas(controlPath);
+        const auto [witnessAlphas, witnessReds] = foregroundAlphas(witnessPath);
+        ASSERT_FALSE(controlAlphas.empty()) << "the control capture has no foreground at all";
+        ASSERT_FALSE(witnessAlphas.empty()) << "the witness capture has no foreground at all";
+
+        const std::set<int> controlDistinct(controlAlphas.begin(), controlAlphas.end());
+        EXPECT_EQ(1u, controlDistinct.size())
+            << "a BLEND-mode PBR primitive with no COLOR_0 must have exactly one alpha everywhere; "
+               "more than one means something other than the base colour product is moving it";
+
+        const int witnessLow = *std::min_element(witnessAlphas.begin(), witnessAlphas.end());
+        const int witnessHigh = *std::max_element(witnessAlphas.begin(), witnessAlphas.end());
+        const std::set<int> witnessDistinct(witnessAlphas.begin(), witnessAlphas.end());
+        EXPECT_GT(witnessDistinct.size(), 8u)
+            << "the vertex-coloured capture has a nearly flat alpha, which is what substituting the "
+               "opaque-white identity for COLOR_0 looks like";
+
+        // Calibrate the rig's own alpha composite from the control: it maps an authored alpha to a
+        // captured one, and one sample plus the assumption that it is a fixed power is enough.
+        const double controlCaptured = static_cast<double>(*controlDistinct.begin()) / 255.0;
+        ASSERT_GT(controlCaptured, 0.0);
+        const double exponent = std::log(controlCaptured) / std::log(kControlFactorAlpha);
+        const auto composite = [exponent](double authored) {
+            return std::pow(authored, exponent) * 255.0;
+        };
+        const double expectedLow = composite(kWitnessFactorAlpha * kWitnessLowestVertexAlpha);
+        const double expectedHigh = composite(kWitnessFactorAlpha * kWitnessHighestVertexAlpha);
+
+        // Two units of slack for the renderer's own rounding of an 8-bit channel; the values being
+        // separated by roughly a factor of four is the whole point, so this cannot pass by accident.
+        EXPECT_NEAR(expectedLow, static_cast<double>(witnessLow), 2.0)
+            << "the darkest captured alpha does not match baseColorFactor.a x the lowest COLOR_0.a";
+        EXPECT_NEAR(expectedHigh, static_cast<double>(witnessHigh), 2.0)
+            << "the brightest captured alpha does not match baseColorFactor.a x the highest COLOR_0.a";
+
+        // And the RGB product moved too: with the identity substituted, the only remaining spatial
+        // variation on this flat, flat-normal-mapped triangle would be the specular term.
+        const int redLow = *std::min_element(witnessReds.begin(), witnessReds.end());
+        const int redHigh = *std::max_element(witnessReds.begin(), witnessReds.end());
+        EXPECT_GT(redHigh - redLow, 5)
+            << "the vertex-coloured capture's base colour is spatially flat";
+    }
 }
 
 TEST(GltfFixtureCorpus, KhronosValidatorPinIsImmutableAndNotARuntimeDependency)
@@ -1947,7 +2059,7 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
     // the vertex both its triangles share (§3.7.2.2's "MUST calculate flat normals for each morph
     // target"), and a triangle authoring TANGENT but no NORMAL (§3.7.2.1's "the provided tangents
     // MUST be ignored"). Both ARE conformance statements and both belong in tools/gltf_fixtures/ by
-    // §3.8's rule -- they are inline only because the corpus asset count is pinned at 145 by four
+    // §3.8's rule -- they are inline only because the corpus asset count is pinned at 146 by four
     // committed L7 provenance reports that enumerate every asset, and one of the four
     // (`directx11`) cannot be re-captured in this environment. Promoting them is GLTF-464.
     //

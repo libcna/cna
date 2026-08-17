@@ -40,6 +40,9 @@ cbuffer PerDraw : register(b0)
     float4 SpecularFresnelInputs; // xyz = unclamped F0, w = specular factor
     float4 SpecularMapFlags; // x = decode specular-colour sample from sRGB
     float4 SpecularTextureTransformRows[4]; // two affine rows per specular map
+    // plan_gltf.md GLTF-465: x = COLOR_0 multiplier enable (PbrEffect/SkinnedPbrEffect's
+    // VertexColorEnabledEXT). Read only by the variants whose vertex record has a colour slot.
+    float4 VertexColorFlags;
 };
 
 cbuffer PbrLights : register(b1)
@@ -65,6 +68,9 @@ struct PSInput
     float3 WorldPos  : TEXCOORD4;
 #ifdef CNA_PBR_DUAL_UV
     float2 UV1       : TEXCOORD5;
+#endif
+#ifdef CNA_PBR_VERTEX_COLOR
+    float4 Color     : TEXCOORD6;
 #endif
 };
 
@@ -138,6 +144,16 @@ float4 main(PSInput input) : SV_Target
     float3 baseColor = lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), PbrMapScales.z);
     float3 albedo = baseColor * DiffuseColor.rgb;
     float alpha = baseColorTex.a * DiffuseColor.a;
+#ifdef CNA_PBR_VERTEX_COLOR
+    // plan_gltf.md GLTF-465: glTF 2.0 §3.9.2 -- COLOR_0 is an additional linear multiplier on the
+    // base colour product, its alpha included. VertexColorFlags.x is the effect's own switch, so a
+    // record that carries the slot without an authored colour keeps the opaque-white identity.
+    if (VertexColorFlags.x > 0.5)
+    {
+        albedo *= input.Color.rgb;
+        alpha  *= input.Color.a;
+    }
+#endif
     bool passesAlphaTest = (AlphaTest.y > 0.0)
         ? (abs(alpha - AlphaTest.x) < AlphaTest.y)
         : (alpha < AlphaTest.x);

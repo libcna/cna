@@ -49,6 +49,9 @@ STRIDE_LAYOUTS: dict[int, list[tuple[str, int, int]]] = {
     76: [("Position", 0, 12), ("Normal", 12, 12), ("Tangent", 24, 16),
          ("TextureCoordinate", 40, 8), ("BlendWeight", 48, 16),
          ("BlendIndices", 64, 4), ("TextureCoordinate1", 68, 8)],
+    80: [("Position", 0, 12), ("Normal", 12, 12), ("Tangent", 24, 16),
+         ("TextureCoordinate", 40, 8), ("BlendWeight", 48, 16),
+         ("BlendIndices", 64, 4), ("TextureCoordinate1", 68, 8), ("Color", 76, 4)],
 }
 
 #: What ExtractMesh writes into a slot whose attribute the source file does not author. These are
@@ -133,13 +136,15 @@ def select_stride(primitive: dict[str, Any]) -> int:
     # colour, which is a TERM in that model rather than a reason to leave it -- so the layout is the
     # PBR one and the colour rides in the four bytes stride 60 had reserved as its discriminator
     # (skinned: stride 80, which appends the slot to the whole stride-76 record).
-    # The SKINNED colour case is the one exception, and it is a vertex-layout limit rather than a
-    # shading one: stride 76 is exactly the skinned PBR record's seven fields, so there are no
-    # reserved bytes for a colour and GLTF-463 owns the stride that would carry it.
-    use_pbr = (not non_pbr_model) and not (colored and skinned)
+    # GLTF-463 closed the last exclusion: a SKINNED vertex-coloured primitive keeps its material too,
+    # on stride 80 -- the whole stride-76 record with the colour appended, because stride 76 is
+    # exactly its seven fields and has no reserved bytes a colour could occupy the way stride 60 did.
+    use_pbr = not non_pbr_model
     if skinned:
         if not use_pbr:
             return 56 if colored else 52
+        if colored:
+            return 80
         return 76 if primitive.get("texcoords1") else 68
     if not use_pbr:
         return 24 if colored else 32

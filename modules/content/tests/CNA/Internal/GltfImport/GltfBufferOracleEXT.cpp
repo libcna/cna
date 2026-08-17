@@ -128,6 +128,13 @@ namespace CnaTest::GltfOracle
                                  {"TextureCoordinate", 40, 8}, {"BlendWeight", 48, 16},
                                  {"BlendIndices", 64, 4}, {"TextureCoordinate1", 68, 8}};
                 break;
+            case 80:
+                // GLTF-463: the skinned counterpart of stride 60's colour slot.
+                layout.fields = {{"Position", 0, 12}, {"Normal", 12, 12}, {"Tangent", 24, 16},
+                                 {"TextureCoordinate", 40, 8}, {"BlendWeight", 48, 16},
+                                 {"BlendIndices", 64, 4}, {"TextureCoordinate1", 68, 8},
+                                 {"Color", 76, 4}};
+                break;
             default:
                 layout.known = false;
                 break;

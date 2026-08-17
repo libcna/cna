@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 145,
+  "distinctAssetCount": 146,
   "owningGroupCounts": {
     "container": 8,
     "accessors": 13,
@@ -22,7 +22,7 @@
     "transforms": 17,
     "materials": 14,
     "textures": 10,
-    "skinning": 16,
+    "skinning": 17,
     "animation": 23,
     "cameras": 5,
     "lights": 2,
@@ -30,7 +30,7 @@
     "draco": 4,
     "robustness": 8
   },
-  "targetDistinctAssetCount": 145,
+  "targetDistinctAssetCount": 146,
   "targetOwningGroupCounts": {
     "container": 8,
     "accessors": 13,
@@ -40,7 +40,7 @@
     "transforms": 17,
     "materials": 14,
     "textures": 10,
-    "skinning": 16,
+    "skinning": 17,
     "animation": 23,
     "cameras": 5,
     "lights": 2,
@@ -1852,8 +1852,35 @@
       ],
       "features": [
         "COLOR_0 on a skinned mesh",
+        "KHR_materials_unlit",
         "JOINTS_0 / WEIGHTS_0",
         "vertex stride 56"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "skin-vertex-color-pbr",
+      "owningGroup": "skinning",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "COLOR_0 with a PBR material",
+        "COLOR_0 on a skinned mesh",
+        "vertex stride 80",
+        "authored TANGENT with w = -1",
+        "translucent baseColorFactor",
+        "alphaMode BLEND",
+        "doubleSided",
+        "baseColorTexture",
+        "normalTexture",
+        "metallicRoughnessTexture",
+        "JOINTS_0 / WEIGHTS_0"
       ],
       "auditFixture": null
     },
@@ -5511,19 +5538,44 @@
       "sha256": "7d040c821cbf867885e2712328d809438cee6f60760c724a1a502b888bdf1d69"
     },
     {
+      "path": "skin-vertex-color-pbr.expected.json",
+      "bytes": 13288,
+      "sha256": "aef32d0773ba73f762366e2c19d567492d491522a8cb79d514298a93ca2dcd39"
+    },
+    {
+      "path": "skin-vertex-color-pbr.glb",
+      "bytes": 2872,
+      "sha256": "76afc80ffba92e98e473522e7336fe2cfa93a37612ba24d885819fc7df298ea7"
+    },
+    {
+      "path": "skin-vertex-color-pbr.gltf",
+      "bytes": 4687,
+      "sha256": "87083cb6cb6868958b79a11ab6b29909e56643eaf4167c4cdf3898de3a0a4ebc"
+    },
+    {
+      "path": "skin-vertex-color-pbr.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "skin-vertex-color-pbr.vb.bin",
+      "bytes": 240,
+      "sha256": "97c956700f7366c24a5530d5d615f3d7a57c9929aeda216b537d5addd7b6b788"
+    },
+    {
       "path": "skin-vertex-color.expected.json",
-      "bytes": 10744,
-      "sha256": "3f23663a9b71d3353e57e63ab4594cde38e0e5d83a34798de34e79fd5ea96c3a"
+      "bytes": 11570,
+      "sha256": "3d09e59f671499e72c8b13ec574fb451147d5b1fc592dc84a4fc85bd35a222c6"
     },
     {
       "path": "skin-vertex-color.glb",
-      "bytes": 1684,
-      "sha256": "05d7d8859f3a680927d0ae321a1f90e6dae52c085e78272d32ea330ba37175c4"
+      "bytes": 1880,
+      "sha256": "57fb14ad7515f93d5f19bfa26b906ec2b1af0dffdf5ba9d0c939fd67170c7aaf"
     },
     {
       "path": "skin-vertex-color.gltf",
-      "bytes": 2920,
-      "sha256": "ff20b76a3f6b49acc5edae79c4c3f90c35bbc9ebce90f4f552163303faf55fb0"
+      "bytes": 3269,
+      "sha256": "4e513ff9c69fa6e4b0f50b5ff94a593b721bdacedc02f62fb1fa3e98972830f8"
     },
     {
       "path": "skin-vertex-color.ib.bin",

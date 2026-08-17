@@ -45,6 +45,9 @@ struct VSInput
 #ifdef CNA_PBR_DUAL_UV
     float2 UV1          : TEXCOORD1;
 #endif
+#ifdef CNA_PBR_VERTEX_COLOR
+    float4 Color    : COLOR0;
+#endif
 };
 
 struct VSOutput
@@ -57,6 +60,9 @@ struct VSOutput
     float3 WorldPos  : TEXCOORD4;
 #ifdef CNA_PBR_DUAL_UV
     float2 UV1       : TEXCOORD5;
+#endif
+#ifdef CNA_PBR_VERTEX_COLOR
+    float4 Color     : TEXCOORD6;
 #endif
 };
 
@@ -114,6 +120,9 @@ VSOutput main(VSInput input)
     output.UV = input.UV;
 #ifdef CNA_PBR_DUAL_UV
     output.UV1 = input.UV1;
+#endif
+#ifdef CNA_PBR_VERTEX_COLOR
+    output.Color = input.Color;
 #endif
     output.WorldPos = mul(skinnedPos, World).xyz;
 

@@ -2220,6 +2220,10 @@ namespace Microsoft::Xna::Framework::Content
                 // GLTF-182: skinned PBR with a second texture-coordinate set appended to the
                 // byte-compatible stride-68 prefix.
                 vb->SetDataRaw(vertBytes.data(), numVertices, 76);
+            } else if (stride == 80) {
+                // plan_gltf.md GLTF-463: the stride-76 skinned PBR record with a packed COLOR_0
+                // appended -- the skinned counterpart of stride 60's own colour slot.
+                vb->SetDataRaw(vertBytes.data(), numVertices, 80);
             }
             else
             {

@@ -4486,6 +4486,8 @@ namespace CNA::Internal::Renderers::Vulkan
                           // SkinnedPbrEffect (68, or dual-UV 76).
                           case 48: s = 5; break; case 56: s = 6; break; case 68: s = 7; break;
                           case 60: s = 8; break; case 76: s = 9; break;
+                          // plan_gltf.md GLTF-463: skinned PBR + COLOR_0.
+                          case 80: s = 10; break;
                           default: s = 0; }
         uint64_t t = 0;
         switch (topo) {
@@ -6815,18 +6817,26 @@ namespace CNA::Internal::Renderers::Vulkan
             : CreateShaderModule(kPbr3dFragSpv, kPbr3dFragSpv_size);
 
         VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(stride), VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[5]{};
+        VkVertexInputAttributeDescription attrs[6]{};
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT,    0  }; // aPos
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT,    12 }; // aNormal
         attrs[2] = { 2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 24 }; // aTangent
         attrs[3] = { 3, 0, VK_FORMAT_R32G32_SFLOAT,       40 }; // aUV
         if (dualUv)
+        {
             attrs[4] = { 4, 0, VK_FORMAT_R32G32_SFLOAT,   48 }; // aUV1
+            // plan_gltf.md GLTF-462/GLTF-465: stride 60 always carries a packed COLOR_0 here --
+            // InferredLayoutForStride(60) has a Color element at 56 whether the primitive authored
+            // one or the importer wrote the opaque-white identity, so the attribute is
+            // unconditional for this variant and the shader's own uVertexColorEnabled decides
+            // whether it multiplies.
+            attrs[5] = { 5, 0, VK_FORMAT_R8G8B8A8_UNORM,  56 }; // aColor
+        }
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
-        vis.vertexAttributeDescriptionCount = dualUv ? 5u : 4u;
+        vis.vertexAttributeDescriptionCount = dualUv ? 6u : 4u;
         vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};
@@ -7092,23 +7102,30 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         EnsurePbrSkinnedResources();
 
-        if (stride != 68 && stride != 76)
-            throw std::runtime_error("Vulkan SkinnedPbrEffect requires vertex stride 68 or 76");
-        const bool dualUv = stride == 76;
+        if (stride != 68 && stride != 76 && stride != 80)
+            throw std::runtime_error("Vulkan SkinnedPbrEffect requires vertex stride 68, 76 or 80");
+        // plan_gltf.md GLTF-463: stride 80 is stride 76's record with a packed COLOR_0 appended, so
+        // it is a dual-UV layout that additionally binds a colour.
+        const bool dualUv  = stride == 76 || stride == 80;
+        const bool colored = stride == 80;
         PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
         auto it = pipelinesPbrSkinned3D_.find(key);
         if (it != pipelinesPbrSkinned3D_.end()) return it->second;
 
         using namespace Shaders;
-        VkShaderModule vert = dualUv
+        VkShaderModule vert = colored
+            ? CreateShaderModule(kPbr3dSkinnedDualUvColorVertSpv, kPbr3dSkinnedDualUvColorVertSpv_size)
+            : dualUv
             ? CreateShaderModule(kPbr3dSkinnedDualUvVertSpv, kPbr3dSkinnedDualUvVertSpv_size)
             : CreateShaderModule(kPbr3dSkinnedVertSpv, kPbr3dSkinnedVertSpv_size);
-        VkShaderModule frag = dualUv
+        VkShaderModule frag = colored
+            ? CreateShaderModule(kPbr3dSkinnedDualUvColorFragSpv, kPbr3dSkinnedDualUvColorFragSpv_size)
+            : dualUv
             ? CreateShaderModule(kPbr3dSkinnedDualUvFragSpv, kPbr3dSkinnedDualUvFragSpv_size)
             : CreateShaderModule(kPbr3dSkinnedFragSpv, kPbr3dSkinnedFragSpv_size);
 
         VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(stride), VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[7]{};
+        VkVertexInputAttributeDescription attrs[8]{};
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT,    0  }; // aPos
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT,    12 }; // aNormal
         attrs[2] = { 2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 24 }; // aTangent
@@ -7117,11 +7134,13 @@ namespace CNA::Internal::Renderers::Vulkan
         attrs[5] = { 5, 0, VK_FORMAT_R8G8B8A8_UINT,       64 }; // aBoneIndices
         if (dualUv)
             attrs[6] = { 6, 0, VK_FORMAT_R32G32_SFLOAT,   68 }; // aUV1
+        if (colored)
+            attrs[7] = { 7, 0, VK_FORMAT_R8G8B8A8_UNORM,  76 }; // aColor
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
-        vis.vertexAttributeDescriptionCount = dualUv ? 7u : 6u;
+        vis.vertexAttributeDescriptionCount = colored ? 8u : dualUv ? 7u : 6u;
         vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};

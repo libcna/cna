@@ -199,6 +199,35 @@ namespace
     static_assert(fidelity::kStride76[6].offset ==
                       static_cast<int>(offsetof(PositionNormalTangentTextureSkinned2Stream, u1)));
 
+    // --- stride 80: PositionNormalTangentTextureSkinned2ColorStream ---------------------------
+    // GLTF-463: the skinned counterpart of stride 60's colour slot.
+    static_assert(sizeof(PositionNormalTangentTextureSkinned2ColorStream) == 80,
+                  "the skinned PBR + UV1 + colour stream no longer matches its stride-80 record");
+    static_assert(TableOffset(fidelity::kStride80, 8, VertexElementUsage::Position) ==
+                      static_cast<int>(
+                          offsetof(PositionNormalTangentTextureSkinned2ColorStream, x)));
+    static_assert(TableOffset(fidelity::kStride80, 8, VertexElementUsage::Normal) ==
+                      static_cast<int>(
+                          offsetof(PositionNormalTangentTextureSkinned2ColorStream, nx)));
+    static_assert(TableOffset(fidelity::kStride80, 8, VertexElementUsage::Tangent) ==
+                      static_cast<int>(
+                          offsetof(PositionNormalTangentTextureSkinned2ColorStream, tx)));
+    static_assert(fidelity::kStride80[3].offset ==
+                      static_cast<int>(
+                          offsetof(PositionNormalTangentTextureSkinned2ColorStream, u0)));
+    static_assert(TableOffset(fidelity::kStride80, 8, VertexElementUsage::BlendWeight) ==
+                      static_cast<int>(
+                          offsetof(PositionNormalTangentTextureSkinned2ColorStream, w0)));
+    static_assert(TableOffset(fidelity::kStride80, 8, VertexElementUsage::BlendIndices) ==
+                      static_cast<int>(
+                          offsetof(PositionNormalTangentTextureSkinned2ColorStream, i0)));
+    static_assert(fidelity::kStride80[6].offset ==
+                      static_cast<int>(
+                          offsetof(PositionNormalTangentTextureSkinned2ColorStream, u1)));
+    static_assert(TableOffset(fidelity::kStride80, 8, VertexElementUsage::Color) ==
+                      static_cast<int>(
+                          offsetof(PositionNormalTangentTextureSkinned2ColorStream, r)));
+
     // --- stride 56 -----------------------------------------------------------------------------
     //
     // Not tied to a struct, and the omission is the point of saying so: stride 56 is the skinned

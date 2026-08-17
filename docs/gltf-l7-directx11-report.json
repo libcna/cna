@@ -7,9 +7,9 @@
   ],
   "capturedOn": "2026-08-17",
   "corpusManifest": "tests/assets/gltf/manifest.json",
-  "corpusManifestSha256": "451d1f6fe43053632a070c734e78c6539ef5d3fbf626713c3402562afe17aedd",
-  "distinctAssetCount": 145,
-  "capturedAssetCount": 137,
+  "corpusManifestSha256": "9451aae6888ca54e99180b23e28a0410e0310fed690c7397ecaf35bbf370c2da",
+  "distinctAssetCount": 146,
+  "capturedAssetCount": 138,
   "rejectedAssetCount": 8,
   "renderer": "DIRECTX11/DXVK",
   "rendererEnvironment": [
@@ -18,9 +18,9 @@
   "translationLayerEnvironment": [
     "DXVK 2.6.0"
   ],
-  "cnaCommit": "6cd9a1b62cbdf4f9e4e191ae0adbf3a177379261",
+  "cnaCommit": "a0db093ed9560e82625091d0dfcbf3b949934808",
   "viewerCommit": "d17d9777c407b199a9ae9eadd253dccc0220c684",
-  "viewerExecutableSha256": "e25e1e27e1079b4052e613c5760fe58325bd03a86e229b2cc0852bc738d004fd",
+  "viewerExecutableSha256": "1ca4312fefb56b960c65771fc63df62aedc66f70eebf5f98138b8038bd655229",
   "viewerRunnerSha256": "335576b4cf016f6e40c852a99cc69ba0b86dc757fcd81f7de1fd21cb7784bb83",
   "capture": {
     "processesPerAsset": 2,
@@ -472,8 +472,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/directx11/interleaved-mixed-widths.png",
-      "goldenPngSha256": "df624f83ba29bae84e3c547b1f23b96095a36a63a1cc452549c2c60ecdd716ba",
-      "twoProcessPngSha256": "df624f83ba29bae84e3c547b1f23b96095a36a63a1cc452549c2c60ecdd716ba",
+      "goldenPngSha256": "00b5bd72d2eaa4aa1e9eb5335d674b0e1258ab7425dfe328607186c2f2a8ebeb",
+      "twoProcessPngSha256": "00b5bd72d2eaa4aa1e9eb5335d674b0e1258ab7425dfe328607186c2f2a8ebeb",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -796,8 +796,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/directx11/normalized-u8-color.png",
-      "goldenPngSha256": "df624f83ba29bae84e3c547b1f23b96095a36a63a1cc452549c2c60ecdd716ba",
-      "twoProcessPngSha256": "df624f83ba29bae84e3c547b1f23b96095a36a63a1cc452549c2c60ecdd716ba",
+      "goldenPngSha256": "9a1a8bb5a73f1a8d7046ccd5fb4d116a24515e4079c2822536a38de240b54282",
+      "twoProcessPngSha256": "9a1a8bb5a73f1a8d7046ccd5fb4d116a24515e4079c2822536a38de240b54282",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -823,8 +823,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/directx11/normalized-u16-color.png",
-      "goldenPngSha256": "df624f83ba29bae84e3c547b1f23b96095a36a63a1cc452549c2c60ecdd716ba",
-      "twoProcessPngSha256": "df624f83ba29bae84e3c547b1f23b96095a36a63a1cc452549c2c60ecdd716ba",
+      "goldenPngSha256": "6292514bfd057af2d858a6df96509f9509c71c56366d384aac31db58c54725a3",
+      "twoProcessPngSha256": "6292514bfd057af2d858a6df96509f9509c71c56366d384aac31db58c54725a3",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -833,7 +833,7 @@
       "nonClearPixelCount": 23729,
       "nonClearBoundingBox": [
         185,
-        61,
+        62,
         397,
         372
       ],
@@ -850,8 +850,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/directx11/float-color.png",
-      "goldenPngSha256": "df624f83ba29bae84e3c547b1f23b96095a36a63a1cc452549c2c60ecdd716ba",
-      "twoProcessPngSha256": "df624f83ba29bae84e3c547b1f23b96095a36a63a1cc452549c2c60ecdd716ba",
+      "goldenPngSha256": "8840850ee777dafc36f33a305e4326e13ae65021059da315ee80dfa006b49191",
+      "twoProcessPngSha256": "8840850ee777dafc36f33a305e4326e13ae65021059da315ee80dfa006b49191",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -1880,8 +1880,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/directx11/mat-vertex-color-pbr.png",
-      "goldenPngSha256": "aef7c6c72866544577b0001cbd53d65cd341cdae2ca7c3a5fd10b3ad5bf0582b",
-      "twoProcessPngSha256": "aef7c6c72866544577b0001cbd53d65cd341cdae2ca7c3a5fd10b3ad5bf0582b",
+      "goldenPngSha256": "b6b67bd65c67a7eb9072e4884b9e1fae1659b85da01ebe506c77c6e5341189c9",
+      "twoProcessPngSha256": "b6b67bd65c67a7eb9072e4884b9e1fae1659b85da01ebe506c77c6e5341189c9",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -2497,12 +2497,39 @@
     {
       "id": "skin-vertex-color",
       "source": "skin-vertex-color.gltf",
-      "sourceSha256": "ff20b76a3f6b49acc5edae79c4c3f90c35bbc9ebce90f4f552163303faf55fb0",
+      "sourceSha256": "4e513ff9c69fa6e4b0f50b5ff94a593b721bdacedc02f62fb1fa3e98972830f8",
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/directx11/skin-vertex-color.png",
-      "goldenPngSha256": "7db73a21fd380ea760dd2a1210441a32e9cbc6481111ad7fea9095dbb6a6d6b8",
-      "twoProcessPngSha256": "7db73a21fd380ea760dd2a1210441a32e9cbc6481111ad7fea9095dbb6a6d6b8",
+      "goldenPngSha256": "c5046ed83c5e6d633f3ef09173590d1b1ce4a149e6a0f574c56dbe78ad18566f",
+      "twoProcessPngSha256": "c5046ed83c5e6d633f3ef09173590d1b1ce4a149e6a0f574c56dbe78ad18566f",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "skin-vertex-color-pbr",
+      "source": "skin-vertex-color-pbr.gltf",
+      "sourceSha256": "87083cb6cb6868958b79a11ab6b29909e56643eaf4167c4cdf3898de3a0a4ebc",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/directx11/skin-vertex-color-pbr.png",
+      "goldenPngSha256": "bbedc8b1efd6e6a806c40449410c2f6a891d8aeaae53a7a745c153addedc64b2",
+      "twoProcessPngSha256": "bbedc8b1efd6e6a806c40449410c2f6a891d8aeaae53a7a745c153addedc64b2",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -3723,8 +3750,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/directx11/draco-vs-uncompressed-pair.png",
-      "goldenPngSha256": "df624f83ba29bae84e3c547b1f23b96095a36a63a1cc452549c2c60ecdd716ba",
-      "twoProcessPngSha256": "df624f83ba29bae84e3c547b1f23b96095a36a63a1cc452549c2c60ecdd716ba",
+      "goldenPngSha256": "79943f266b2119f4f448e71bb4bedc98ad64251898228db13db48c4caffc5ada",
+      "twoProcessPngSha256": "79943f266b2119f4f448e71bb4bedc98ad64251898228db13db48c4caffc5ada",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,

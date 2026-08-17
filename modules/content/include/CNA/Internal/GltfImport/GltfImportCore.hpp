@@ -524,14 +524,18 @@ namespace CNA::Internal::GltfImport
         /**
          * @brief Names the material model this primitive could not be imported with, or empty.
          *
-         * plan_gltf.md `GLTF-241`. A primitive with `COLOR_0` **and** a metallic-roughness material
-         * cannot be imported as PBR: no CNA vertex layout carries a colour alongside a tangent, and
-         * no PBR shader reads a colour stream. It is imported through `BasicEffect` with its vertex
-         * colours intact, and the material's factors and maps are **not applied**.
+         * plan_gltf.md `GLTF-241`, `GLTF-462`, `GLTF-463`. **No attribute combination sets this any
+         * more, and that is the current state rather than an oversight.** It existed for a primitive
+         * carrying `COLOR_0` **and** a metallic-roughness material, which `GLTF-241` imported through
+         * `BasicEffect` because no vertex layout carried a colour alongside a tangent. `GLTF-462` gave
+         * the rigid case stride 60's own colour slot and `GLTF-463` added stride 80 for the skinned
+         * one, so both now keep their material, their authored `NORMAL` and their tangent basis.
          *
-         * That is a downgrade, and the whole point of this field is that it is no longer a *silent*
-         * one: the loaders log it by name, and a test can assert it happened rather than inferring
-         * it from a stride. Empty for every primitive that was imported as the file asked.
+         * The field stays because it is the channel for exactly this class of loss — a material model
+         * a primitive's own attributes prevent CNA from representing — and a caller reading the
+         * structured report should not have to change when the next such case appears. It is empty for
+         * every primitive today; `GltfKnownDefect` asserts that, so a regression that reintroduces the
+         * downgrade fails rather than quietly logging it again.
          */
         std::string unsupportedMaterialModelEXT;
         /**

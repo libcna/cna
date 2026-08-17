@@ -7,18 +7,18 @@
   ],
   "capturedOn": "2026-08-17",
   "corpusManifest": "tests/assets/gltf/manifest.json",
-  "corpusManifestSha256": "451d1f6fe43053632a070c734e78c6539ef5d3fbf626713c3402562afe17aedd",
-  "distinctAssetCount": 145,
-  "capturedAssetCount": 137,
+  "corpusManifestSha256": "9451aae6888ca54e99180b23e28a0410e0310fed690c7397ecaf35bbf370c2da",
+  "distinctAssetCount": 146,
+  "capturedAssetCount": 138,
   "rejectedAssetCount": 8,
   "renderer": "OPENGLES3/EasyGL",
   "rendererEnvironment": [
     "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1"
   ],
   "translationLayerEnvironment": [],
-  "cnaCommit": "e29c7811e6bfa9525b75466042b5190fa846b273",
+  "cnaCommit": "a0db093ed9560e82625091d0dfcbf3b949934808",
   "viewerCommit": "d17d9777c407b199a9ae9eadd253dccc0220c684",
-  "viewerExecutableSha256": "d906d915cc1d8875b74ba4793e4d68a8a627789771137ab66d5bdcf9e8476183",
+  "viewerExecutableSha256": "d476b05c96553051bce354be700fd1029be27c9db8bd8a6413547be4c7b44e6b",
   "viewerRunnerSha256": null,
   "capture": {
     "processesPerAsset": 2,
@@ -2486,12 +2486,39 @@
     {
       "id": "skin-vertex-color",
       "source": "skin-vertex-color.gltf",
-      "sourceSha256": "ff20b76a3f6b49acc5edae79c4c3f90c35bbc9ebce90f4f552163303faf55fb0",
+      "sourceSha256": "4e513ff9c69fa6e4b0f50b5ff94a593b721bdacedc02f62fb1fa3e98972830f8",
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/easygl/skin-vertex-color.png",
-      "goldenPngSha256": "a549b33e0d3b4121c842c4b06bd3e78aac6680130cd3557bff4636156a7e98b8",
-      "twoProcessPngSha256": "a549b33e0d3b4121c842c4b06bd3e78aac6680130cd3557bff4636156a7e98b8",
+      "goldenPngSha256": "7952260b6729dea9306243ad0581c5dc8ecef2bcd507a9909ece1b3995658735",
+      "twoProcessPngSha256": "7952260b6729dea9306243ad0581c5dc8ecef2bcd507a9909ece1b3995658735",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "skin-vertex-color-pbr",
+      "source": "skin-vertex-color-pbr.gltf",
+      "sourceSha256": "87083cb6cb6868958b79a11ab6b29909e56643eaf4167c4cdf3898de3a0a4ebc",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/skin-vertex-color-pbr.png",
+      "goldenPngSha256": "ed56c8f05b8a940cc941ad189b7615b8bf5aaabd9c58805671ff1c2b4cef61d0",
+      "twoProcessPngSha256": "ed56c8f05b8a940cc941ad189b7615b8bf5aaabd9c58805671ff1c2b4cef61d0",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,

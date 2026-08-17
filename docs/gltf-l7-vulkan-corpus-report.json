@@ -7,18 +7,18 @@
   ],
   "capturedOn": "2026-08-17",
   "corpusManifest": "tests/assets/gltf/manifest.json",
-  "corpusManifestSha256": "451d1f6fe43053632a070c734e78c6539ef5d3fbf626713c3402562afe17aedd",
-  "distinctAssetCount": 145,
-  "capturedAssetCount": 137,
+  "corpusManifestSha256": "9451aae6888ca54e99180b23e28a0410e0310fed690c7397ecaf35bbf370c2da",
+  "distinctAssetCount": 146,
+  "capturedAssetCount": 138,
   "rejectedAssetCount": 8,
   "renderer": "VULKAN",
   "rendererEnvironment": [
     "llvmpipe (LLVM 19.1.7, 256 bits)"
   ],
   "translationLayerEnvironment": [],
-  "cnaCommit": "db8fceb1145badf1cad2f2e6cdc41e38f2a22a20",
+  "cnaCommit": "a0db093ed9560e82625091d0dfcbf3b949934808",
   "viewerCommit": "d17d9777c407b199a9ae9eadd253dccc0220c684",
-  "viewerExecutableSha256": "699d2f6d76a5216ffe9ead9b0bf55d03accca2a0a25bc710705d08540aa2aba6",
+  "viewerExecutableSha256": "2da42cfb7794f8430ae532d21db928d9e7d6f6b1841e3d36aedb6729ec73187c",
   "viewerRunnerSha256": null,
   "capture": {
     "processesPerAsset": 2,
@@ -451,8 +451,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/vulkan/interleaved-mixed-widths.png",
-      "goldenPngSha256": "f1f87682042d5b59c0bb8ce8c77011df1aac78e008d05c418893472e8821b247",
-      "twoProcessPngSha256": "f1f87682042d5b59c0bb8ce8c77011df1aac78e008d05c418893472e8821b247",
+      "goldenPngSha256": "1484f114463dbdebb2ef35e068cdf08011e808bb42511e2f30ce19f64b424d0d",
+      "twoProcessPngSha256": "1484f114463dbdebb2ef35e068cdf08011e808bb42511e2f30ce19f64b424d0d",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -775,8 +775,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/vulkan/normalized-u8-color.png",
-      "goldenPngSha256": "f1f87682042d5b59c0bb8ce8c77011df1aac78e008d05c418893472e8821b247",
-      "twoProcessPngSha256": "f1f87682042d5b59c0bb8ce8c77011df1aac78e008d05c418893472e8821b247",
+      "goldenPngSha256": "2754dd6fbba4ff2ea94395162102b3d2e3f52f5a2d6bb7e3142361d5337c6f17",
+      "twoProcessPngSha256": "2754dd6fbba4ff2ea94395162102b3d2e3f52f5a2d6bb7e3142361d5337c6f17",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -802,8 +802,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/vulkan/normalized-u16-color.png",
-      "goldenPngSha256": "f1f87682042d5b59c0bb8ce8c77011df1aac78e008d05c418893472e8821b247",
-      "twoProcessPngSha256": "f1f87682042d5b59c0bb8ce8c77011df1aac78e008d05c418893472e8821b247",
+      "goldenPngSha256": "a4ca582161a1a5de1e07bb36acab35af66af8673b3cc8beb6e86362b7744b770",
+      "twoProcessPngSha256": "a4ca582161a1a5de1e07bb36acab35af66af8673b3cc8beb6e86362b7744b770",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -812,7 +812,7 @@
       "nonClearPixelCount": 23729,
       "nonClearBoundingBox": [
         185,
-        61,
+        62,
         397,
         372
       ],
@@ -829,8 +829,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/vulkan/float-color.png",
-      "goldenPngSha256": "f1f87682042d5b59c0bb8ce8c77011df1aac78e008d05c418893472e8821b247",
-      "twoProcessPngSha256": "f1f87682042d5b59c0bb8ce8c77011df1aac78e008d05c418893472e8821b247",
+      "goldenPngSha256": "238e2e06277c974518f867526daac4eb063ce51f4024793d7249838a0bff5e02",
+      "twoProcessPngSha256": "238e2e06277c974518f867526daac4eb063ce51f4024793d7249838a0bff5e02",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -1859,8 +1859,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/vulkan/mat-vertex-color-pbr.png",
-      "goldenPngSha256": "aef7c6c72866544577b0001cbd53d65cd341cdae2ca7c3a5fd10b3ad5bf0582b",
-      "twoProcessPngSha256": "aef7c6c72866544577b0001cbd53d65cd341cdae2ca7c3a5fd10b3ad5bf0582b",
+      "goldenPngSha256": "1d818ffffcd8ebe9b679b86c5ba1d9a151c4d534f49534beaa78a4b8b8f50b6a",
+      "twoProcessPngSha256": "1d818ffffcd8ebe9b679b86c5ba1d9a151c4d534f49534beaa78a4b8b8f50b6a",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -2476,12 +2476,39 @@
     {
       "id": "skin-vertex-color",
       "source": "skin-vertex-color.gltf",
-      "sourceSha256": "ff20b76a3f6b49acc5edae79c4c3f90c35bbc9ebce90f4f552163303faf55fb0",
+      "sourceSha256": "4e513ff9c69fa6e4b0f50b5ff94a593b721bdacedc02f62fb1fa3e98972830f8",
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/vulkan/skin-vertex-color.png",
-      "goldenPngSha256": "34a0b211e6a7af4f48646eb38b52ae7b4d414532ac772cb54b2d4291d37ee3ff",
-      "twoProcessPngSha256": "34a0b211e6a7af4f48646eb38b52ae7b4d414532ac772cb54b2d4291d37ee3ff",
+      "goldenPngSha256": "b82915820331eeed3070928d5cb07b6a7036dd7e7d6f442d5244682a8ce94871",
+      "twoProcessPngSha256": "b82915820331eeed3070928d5cb07b6a7036dd7e7d6f442d5244682a8ce94871",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 23729,
+      "nonClearBoundingBox": [
+        185,
+        61,
+        397,
+        372
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "skin-vertex-color-pbr",
+      "source": "skin-vertex-color-pbr.gltf",
+      "sourceSha256": "87083cb6cb6868958b79a11ab6b29909e56643eaf4167c4cdf3898de3a0a4ebc",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/vulkan/skin-vertex-color-pbr.png",
+      "goldenPngSha256": "aba450f59285926cfd4956b351055c93c2362192cc76f3a7c03798d6621426d2",
+      "twoProcessPngSha256": "aba450f59285926cfd4956b351055c93c2362192cc76f3a7c03798d6621426d2",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -3702,8 +3729,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/vulkan/draco-vs-uncompressed-pair.png",
-      "goldenPngSha256": "f1f87682042d5b59c0bb8ce8c77011df1aac78e008d05c418893472e8821b247",
-      "twoProcessPngSha256": "f1f87682042d5b59c0bb8ce8c77011df1aac78e008d05c418893472e8821b247",
+      "goldenPngSha256": "211ff6fdba14f256ffa46088f306bef91dc5245cc9ed451f70dc182e88ffe698",
+      "twoProcessPngSha256": "211ff6fdba14f256ffa46088f306bef91dc5245cc9ed451f70dc182e88ffe698",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
