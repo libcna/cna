@@ -23,6 +23,16 @@
 > dummy texture added by GLTF-374, so every example test aborted at process exit on IGL's own
 > dangling-context assert *after* printing all its passes.
 >
+> A second theme worth carrying: **four shared, renderer-keyed test tables had no IGL arm**, so an
+> IGL build was asserted against the default renderer's profile and stood red on behaviour
+> `plan_igl.md` documents as correct — an occlusion query IGL cannot have, an instanced path it does
+> implement, cube storage treated as implying cube readback, and a `RenderTargetCube.SetData`
+> refusal it deliberately does not make. Adding a renderer identity is not finished when the
+> registries accept it; these tables are part of the registry surface too. Fixing the cube one also
+> surfaced a real ODR bug: two test translation units defined the same `inline` predicate at
+> namespace scope with different bodies, so the linker kept one arbitrarily and the first edit to
+> that table changed nothing at all.
+>
 > **Still open for IGL** (details in `plan_igl.md`):
 >
 > * **IGL-60** — `Igl_2D` on the Vulkan backend. Narrowed to a readback defect, not a rendering one;

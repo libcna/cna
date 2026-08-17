@@ -210,8 +210,13 @@ namespace
     ///     subresource this renderer does not create.
     [[nodiscard]] inline bool RenderTargetCubeAcceptsSetData()
     {
+        // plan_igl.md IGL-21: IGL belongs here too. Its RenderTargetCube's colour attachment is an
+        // ordinary sampleable `igl::TextureType::Cube` image, so `IglRenderTargetCubeRenderer::
+        // SetData` seeds a face with a real upload rather than accepting and discarding one --
+        // which is what this test forbids. Without the entry an IGL build asserted a refusal the
+        // renderer deliberately does not make.
         return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                               Magnum, OpenGL4, Wicked);
+                               Magnum, OpenGL4, Wicked, Igl);
     }
 }
 
