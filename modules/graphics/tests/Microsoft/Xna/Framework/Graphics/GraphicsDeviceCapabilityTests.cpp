@@ -190,6 +190,20 @@ struct CapabilityExpectation
         case GraphicsRendererType::Software:
             return {false, true, true};
 
+        // plan_igl.md IGL-61: IGL v1.1.1 exposes no occlusion-query object on any of its backends
+        // -- there is no IDevice factory for one and no encoder call to begin or end one, verified
+        // against the pinned source rather than assumed. IglRenderer reports the capability false
+        // and its IOcclusionQueryRenderer completes immediately with 0 samples, which is what keeps
+        // OcclusionQuery.IsComplete from spinning forever. MRT (2-4 RenderTarget2D slots,
+        // igl_mrt_test.cpp / igl_mrt4_test.cpp) and custom effects (igl_shadereffect_texture3d_test
+        // .cpp on the OpenGL backend) are genuinely implemented.
+        //
+        // This arm was missing entirely, so an IGL build took the default below and asserted a
+        // query capability the renderer documents that it does not have -- a standing red for the
+        // whole family rather than an honest expectation.
+        case GraphicsRendererType::Igl:
+            return {true, false, true};
+
         default:
             return {true, true, true};
     }

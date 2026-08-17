@@ -7,7 +7,9 @@
 #include "CNA/LogCategory.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
+#include <igl/Assert.h>
 #include <igl/CommandBuffer.h>
 #include <igl/CommandQueue.h>
 #include <igl/Device.h>
@@ -37,10 +39,37 @@ namespace CNA::Internal::Renderers::Igl
             }
             return levels;
         }
+
+        /**
+         * @brief Stops IGL turning a reported error into a process trap, once per process.
+         *
+         * IGL's debug builds answer an internal failure by logging it AND raising `SIGTRAP`
+         * (`igl::_IGLDebugBreak`, reached from every `IGL_DEBUG_ABORT`/`IGL_SOFT_ASSERT`). That is
+         * the right default for IGL's own samples and the wrong one for an embedder: the very same
+         * call sites also fill in the `igl::Result` this renderer already checks and reports by
+         * name, so the trap removes CNA's ability to report a failure it is fully equipped to
+         * handle. A `ShaderEffect` whose GLSL does not compile is the plain case -- IGL's
+         * `verifyResult` records "failed to compile vertex shader" in the Result, hands back a null
+         * module, and then takes the process down before `IglEffectRenderer` can raise the
+         * exception plan_igl.md IGL-42 promises ("real compile errors").
+         *
+         * Only the BREAK is disabled. IGL still logs every such failure at error level, and CNA
+         * still checks every Result and throws by name -- nothing is swallowed here.
+         */
+        void DisableIglDebugTrapOnce()
+        {
+            static const bool disabled = [] {
+                igl::setDebugBreakEnabled(false);
+                return true;
+            }();
+            (void)disabled;
+        }
     }
 
     IglRenderer::IglRenderer(const GraphicsRendererCreateArgs& args)
     {
+        DisableIglDebugTrapOnce();
+
         const Detail::RendererBackend backend = Detail::ResolveRendererBackend();
         surface_ = std::make_unique<IglPlatformSurface>(args, backend);
 
@@ -84,6 +113,12 @@ namespace CNA::Internal::Renderers::Igl
         samplerStates_.clear();
         dummyTexture2D_.reset();
         dummyTextureCube_.reset();
+        // Added with the flat-normal fallback (GLTF-374) but not with its teardown: every IGL
+        // OpenGL resource holds a reference to igl::opengl::IContext, so one surviving texture is
+        // enough for the context's own destructor to report "Dangling IContext reference left
+        // behind" -- a debug-build abort at process exit, after every check in a test has already
+        // passed.
+        dummyFlatNormal2D_.reset();
         multiRenderTarget_.reset();
         backBufferTarget_.reset();
         dynamicVertexPool_.reset();
@@ -673,9 +708,27 @@ namespace CNA::Internal::Renderers::Igl
         }
 
         auto renderer = std::make_unique<IglTextureRenderer>(this, std::move(texture), width, height,
-                                                             mipLevels);
+                                                             mipLevels, data.surfaceFormat);
         if (!data.pixels.empty())
-            renderer->UpdatePixels(data.pixels.data(), width * 4);
+        {
+            // `ImageData::pixels` is tightly packed in its OWN SurfaceFormat, whose texel is 1, 2,
+            // 4, 8 or 16 bytes. This used to pass `width * 4` unconditionally, which is the right
+            // row pitch for exactly one of those cases: a narrower format was uploaded from twice
+            // (or four times) the bytes it owns -- reading past the end of the vector -- and a
+            // wider one had its rows sliced short.
+            const int rowBytes = FormatRowByteCount(data.surfaceFormat, width);
+            const std::size_t levelBytes = static_cast<std::size_t>(
+                FormatRegionByteCount(data.surfaceFormat, width, height));
+            if (data.pixels.size() < levelBytes)
+            {
+                throw std::runtime_error(
+                    "IGL renderer: a " + std::string(GetSurfaceFormatName(data.surfaceFormat)) +
+                    " image of " + std::to_string(width) + "x" + std::to_string(height) +
+                    " needs " + std::to_string(levelBytes) + " bytes, but only " +
+                    std::to_string(data.pixels.size()) + " were supplied");
+            }
+            renderer->UpdatePixels(data.pixels.data(), rowBytes);
+        }
         return renderer;
     }
 
@@ -702,7 +755,8 @@ namespace CNA::Internal::Renderers::Igl
                                      result.message + ")");
         }
 
-        return std::make_unique<IglTextureCubeRenderer>(this, std::move(texture), size, mipLevels);
+        return std::make_unique<IglTextureCubeRenderer>(this, std::move(texture), size, mipLevels,
+                                                        surfaceFormat);
     }
 
     std::unique_ptr<ITexture3DRenderer> IglRenderer::CreateTexture3D(const int w, const int h,
@@ -730,7 +784,7 @@ namespace CNA::Internal::Renderers::Igl
         }
 
         return std::make_unique<IglTexture3DRenderer>(this, std::move(texture), w, h, depth,
-                                                      mipLevels);
+                                                      mipLevels, surfaceFormat);
     }
 
     std::unique_ptr<ISpriteBatchRenderer> IglRenderer::CreateSpriteBatch()
@@ -858,7 +912,7 @@ namespace CNA::Internal::Renderers::Igl
         return std::make_unique<IglRenderTargetRenderer>(
             this, std::move(color), std::move(multisampleColor), std::move(depth),
             std::move(framebuffer), w, h, mipLevels, appliedSamples, preserveContents,
-            appliedDepthFormat);
+            appliedDepthFormat, surfaceFormat);
     }
 
     std::unique_ptr<IRenderTargetCubeRenderer> IglRenderer::CreateRenderTargetCube(
@@ -923,9 +977,13 @@ namespace CNA::Internal::Renderers::Igl
         // reported as 1 rather than echoing the request.
         (void)samples;
 
-        return std::make_unique<IglRenderTargetCubeRenderer>(this, std::move(color),
-                                                             std::move(depth), std::move(faces),
-                                                             size, mipLevels, 1, preserveContents);
+        // The colour image above is created RGBA_UNorm8 unconditionally (XNA's RenderTargetCube
+        // carries no preferredFormat parameter through this renderer contract), so its transfer
+        // arithmetic is SurfaceFormat::Color's.
+        return std::make_unique<IglRenderTargetCubeRenderer>(
+            this, std::move(color), std::move(depth), std::move(faces), size, mipLevels, 1,
+            preserveContents,
+            static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color));
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -1314,6 +1372,21 @@ namespace CNA::Internal::Renderers::Igl
     bool IglRenderer::SupportsDepthStencil() const
     {
         return surface_->GetBackBufferDepthFormat() != igl::TextureFormat::Invalid;
+    }
+
+    RendererFormatVerdict IglRenderer::ClassifySurfaceFormatEXT(const int surfaceFormat) const
+    {
+        // Narrowing only (see the declaration's own comment). Without this, a format IGL cannot
+        // represent reached ToIglSurfaceFormat and used to be silently substituted with RGBA8 --
+        // a texture of a different texel size and channel order than the caller asked for.
+        return IsSupportedSurfaceFormat(surfaceFormat) ? RendererFormatVerdict::Defer
+                                                       : RendererFormatVerdict::Unsupported;
+    }
+
+    RendererFormatVerdict IglRenderer::ClassifyRenderTargetFormatEXT(const int surfaceFormat) const
+    {
+        return IsSupportedSurfaceFormat(surfaceFormat) ? RendererFormatVerdict::Defer
+                                                       : RendererFormatVerdict::Unsupported;
     }
 
     int IglRenderer::GetMaxTextureDimension() const

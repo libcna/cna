@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 
 #include <vector>
 
@@ -120,4 +121,51 @@ namespace CNA::Internal::Renderers::Igl::Detail
      * @return True if the platform window must be created with Vulkan render intent.
      */
     [[nodiscard]] bool RendererBackendNeedsVulkanWindow(RendererBackend backend);
+
+    /**
+     * @brief Returns the window classification the given backend requires.
+     *
+     * The renderer-selection layer -- not the descriptor translation unit -- owns this answer,
+     * because it already owns the two boolean forms of the same question above and because
+     * `GraphicsDevice` and `IglPlatformSurface` must not be able to reach different conclusions
+     * about one window. This is expressed in terms of those two queries rather than beside them.
+     *
+     * @param backend Backend to describe.
+     * @return `RendererWindowKind::OpenGL` for the OpenGL backend, `::Vulkan` for the Vulkan one.
+     */
+    [[nodiscard]] RendererWindowKind GetRendererBackendWindowKind(RendererBackend backend);
+
+    /**
+     * @brief Returns the framebuffer attributes that must be fixed before the window is created.
+     *
+     * GLX chooses a window's visual -- and therefore its depth, stencil and multisample bits --
+     * when the window is created, so a renderer asking for them afterwards silently gets whatever
+     * the default visual happened to carry (in practice a 0-bit stencil buffer, which makes every
+     * `DepthStencilState::StencilEnable` a permanent no-op). This renderer's own OpenGL context
+     * request (`IglPlatformSurface.cpp`) is built from the very same values, so the two statements
+     * about one window cannot drift apart.
+     *
+     * @param backend Backend to describe.
+     * @return The request for the OpenGL backend; an all-zero ("no request") value for Vulkan,
+     *         whose window carries no OpenGL visual at all.
+     */
+    [[nodiscard]] RendererGlFramebufferRequest GetRendererBackendGlFramebufferRequest(
+        RendererBackend backend);
+
+    /**
+     * @brief Resolves the backend for the pre-window decision, without ever throwing.
+     *
+     * Same answer as @ref ResolveRendererBackend for every valid configuration, and backed by the
+     * same cache, so the window kind chosen here and the device built later cannot disagree. It
+     * exists because the renderer descriptor that carries the window kind is built from a static
+     * initializer (the generated registry publishes the compiled-in set before `main()`), where a
+     * thrown exception would terminate the process instead of reporting a bad `CNA_IGL_BACKEND`.
+     *
+     * When the environment names a backend this build does not contain, this reports the build's
+     * own first preference so the window is still created for something real; the renderer's own
+     * @ref ResolveRendererBackend then fails loudly by name when the device is constructed.
+     *
+     * @return The backend this process will use.
+     */
+    [[nodiscard]] RendererBackend ResolveRendererBackendForWindow() noexcept;
 }

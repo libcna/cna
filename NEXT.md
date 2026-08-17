@@ -1,5 +1,44 @@
 # NEXT.md
 
+## IGL renderer — audited and repaired (2026-08-17), with four items still open
+
+> A full audit of the IGL renderer against `plan_igl.md` found four real defects and fixed them;
+> what remains open is listed below and in `plan_igl.md`'s own task table, which is the detailed
+> record. The theme of the fixed set is worth carrying forward: **a task marked "written, not yet
+> compiled" is not evidence that the code was ever written.** `IGL-7` (the window's render intent)
+> had carried that marker since the renderer landed, and the commit that added the renderer does
+> not touch `GraphicsDevice.cpp` at all — the two helper functions the row named existed, were unit
+> tested, and were called by nothing. The later runtime-renderer port then wrote a *constant*
+> `windowKind` into the family's new descriptor, which looked like a faithful port of a decision
+> that had never actually been made.
+>
+> **Fixed.** IGL's descriptor now derives its window kind, its pre-window OpenGL framebuffer request
+> and its GL-context service from `Detail::ResolveRendererBackendForWindow()` — the same cached
+> answer the device is later built from — so `CNA_IGL_BACKEND=vulkan` gets a Vulkan-intent window
+> and `CNA_IGL_BACKEND=opengl` gets a 24/8/double-buffered/multisample-capable GLX visual instead of
+> the platform default (whose 0-bit stencil silently disables every `StencilEnable`). The
+> surface-format layer was rebuilt: `width * 4` was the row pitch of every texture upload regardless
+> of format, `Rgba64` was mapped to a texel twice its size with integer sampling, and every other
+> unrepresentable format silently became RGBA8. And `~IglRenderer` never released the flat-normal
+> dummy texture added by GLTF-374, so every example test aborted at process exit on IGL's own
+> dangling-context assert *after* printing all its passes.
+>
+> **Still open for IGL** (details in `plan_igl.md`):
+>
+> * **IGL-60** — `Igl_2D` on the Vulkan backend. Narrowed to a readback defect, not a rendering one;
+>   no safe fix found.
+> * **IGL-67** — new: uploading pixels into a `RenderTarget2D` and reading them back returns the
+>   rows reversed on Vulkan (IGL's Vulkan readback always flips, which cancels only for content
+>   this renderer rendered). Correct on OpenGL. Pinned by `Igl_SurfaceFormat_Vulkan`.
+> * **IGL-53** — no feature-matrix row yet, deliberately, on the same bar LLGL and WebGPU are held
+>   to.
+> * **IGL-61/62/63** — occlusion queries, sampler LOD bias and cube-target MSAA are not
+>   implementable at IGL `v1.1.1`; re-verified against the pinned headers rather than restated.
+> * **Non-`Color` surface formats stay out of the public API.** The renderer knows which formats it
+>   can genuinely store and refuses the rest by name, but it deliberately answers `Defer` for the
+>   supported ones rather than promoting them: promotion is a public-API change that needs
+>   per-format verification of upload, sampling *and* readback, and only storage is verified today.
+
 ## The 2026-08-17 merge of `next`, and what it exposed
 
 > `next` was merged again on 2026-08-17 (`ba0dbbf3e`, 331 commits, merge base `fbc599ab8`). The

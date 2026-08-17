@@ -7,8 +7,8 @@
 #include <igl/Device.h>
 
 #include <algorithm>
-#include <cstring>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace CNA::Internal::Renderers::Igl
@@ -30,21 +30,6 @@ namespace CNA::Internal::Renderers::Igl
             if (alignment <= 1)
                 return value;
             return (value + alignment - 1) / alignment * alignment;
-        }
-
-        /// Flips a tightly packed RGBA8 image vertically, in place.
-        void FlipRowsInPlace(std::uint8_t* pixels, const int width, const int height)
-        {
-            const std::size_t rowBytes = static_cast<std::size_t>(width) * 4;
-            std::vector<std::uint8_t> scratch(rowBytes);
-            for (int y = 0; y < height / 2; ++y)
-            {
-                std::uint8_t* top = pixels + static_cast<std::size_t>(y) * rowBytes;
-                std::uint8_t* bottom = pixels + static_cast<std::size_t>(height - 1 - y) * rowBytes;
-                std::memcpy(scratch.data(), top, rowBytes);
-                std::memcpy(top, bottom, rowBytes);
-                std::memcpy(bottom, scratch.data(), rowBytes);
-            }
         }
     }
 
@@ -126,12 +111,14 @@ namespace CNA::Internal::Renderers::Igl
 
     IglTextureRenderer::IglTextureRenderer(IglRenderer* owner,
                                            std::shared_ptr<igl::ITexture> texture,
-                                           const int width, const int height, const int mipLevels)
+                                           const int width, const int height, const int mipLevels,
+                                           const int surfaceFormat)
         : owner_(owner)
         , texture_(std::move(texture))
         , width_(width)
         , height_(height)
         , mipLevels_(std::max(1, mipLevels))
+        , surfaceFormat_(surfaceFormat)
     {
     }
 
@@ -139,6 +126,18 @@ namespace CNA::Internal::Renderers::Igl
     {
         if (!texture_ || rgba == nullptr)
             return;
+
+        // A row narrower than one packed row of this format cannot hold the level, and IGL would
+        // read whatever follows the caller's buffer to fill the rest of it. Refusing by name beats
+        // an out-of-bounds read that only shows up as corrupted pixels.
+        const int tightStride = FormatRowByteCount(surfaceFormat_, width_);
+        if (stride > 0 && tightStride > 0 && stride < tightStride)
+        {
+            throw std::runtime_error(
+                "IGL renderer: a " + std::string(GetSurfaceFormatName(surfaceFormat_)) +
+                " row of " + std::to_string(width_) + " texels is " + std::to_string(tightStride) +
+                " bytes, but the upload supplied a row pitch of " + std::to_string(stride));
+        }
 
         const igl::TextureRangeDesc range = igl::TextureRangeDesc::new2D(
             0, 0, static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_));
@@ -192,11 +191,13 @@ namespace CNA::Internal::Renderers::Igl
 
     IglTextureCubeRenderer::IglTextureCubeRenderer(IglRenderer* owner,
                                                    std::shared_ptr<igl::ITexture> texture,
-                                                   const int size, const int mipLevels)
+                                                   const int size, const int mipLevels,
+                                                   const int surfaceFormat)
         : owner_(owner)
         , texture_(std::move(texture))
         , size_(size)
         , mipLevels_(std::max(1, mipLevels))
+        , surfaceFormat_(surfaceFormat)
     {
     }
 
@@ -208,7 +209,7 @@ namespace CNA::Internal::Renderers::Igl
             return false;
         if (face < 0 || face > 5 || level < 0 || level >= mipLevels_)
             return false;
-        if (w <= 0 || h <= 0 || dataLength < w * h * 4)
+        if (w <= 0 || h <= 0 || dataLength < FormatRegionByteCount(surfaceFormat_, w, h))
             return false;
 
         const igl::TextureRangeDesc range = igl::TextureRangeDesc::newCubeFace(
@@ -235,13 +236,14 @@ namespace CNA::Internal::Renderers::Igl
     IglTexture3DRenderer::IglTexture3DRenderer(IglRenderer* owner,
                                                std::shared_ptr<igl::ITexture> texture,
                                                const int width, const int height, const int depth,
-                                               const int mipLevels)
+                                               const int mipLevels, const int surfaceFormat)
         : owner_(owner)
         , texture_(std::move(texture))
         , width_(width)
         , height_(height)
         , depth_(depth)
         , mipLevels_(std::max(1, mipLevels))
+        , surfaceFormat_(surfaceFormat)
     {
     }
 
@@ -253,7 +255,7 @@ namespace CNA::Internal::Renderers::Igl
             return false;
         if (level < 0 || level >= mipLevels_ || w <= 0 || h <= 0 || depth <= 0)
             return false;
-        if (dataLength < w * h * depth * 4)
+        if (dataLength < FormatBoxByteCount(surfaceFormat_, w, h, depth))
             return false;
 
         const igl::TextureRangeDesc range = igl::TextureRangeDesc::new3D(
@@ -421,7 +423,7 @@ namespace CNA::Internal::Renderers::Igl
         std::shared_ptr<igl::ITexture> multisampleColor, std::shared_ptr<igl::ITexture> depth,
         std::shared_ptr<igl::IFramebuffer> framebuffer, const int width, const int height,
         const int mipLevels, const int sampleCount, const bool preserveContents,
-        const int appliedDepthStencilFormat)
+        const int appliedDepthStencilFormat, const int surfaceFormat)
         : owner_(owner)
         , color_(std::move(color))
         , multisampleColor_(std::move(multisampleColor))
@@ -433,6 +435,7 @@ namespace CNA::Internal::Renderers::Igl
         , sampleCount_(std::max(1, sampleCount))
         , preserveContents_(preserveContents)
         , appliedDepthStencilFormat_(appliedDepthStencilFormat)
+        , surfaceFormat_(surfaceFormat)
     {
     }
 
@@ -440,6 +443,16 @@ namespace CNA::Internal::Renderers::Igl
     {
         if (!color_ || rgba == nullptr)
             return;
+
+        const int tightStride = FormatRowByteCount(surfaceFormat_, width_);
+        if (stride > 0 && tightStride > 0 && stride < tightStride)
+        {
+            throw std::runtime_error(
+                "IGL renderer: a " + std::string(GetSurfaceFormatName(surfaceFormat_)) +
+                " row of " + std::to_string(width_) + " texels is " + std::to_string(tightStride) +
+                " bytes, but the render-target upload supplied a row pitch of " +
+                std::to_string(stride));
+        }
 
         const igl::TextureRangeDesc range = igl::TextureRangeDesc::new2D(
             0, 0, static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_));
@@ -483,7 +496,7 @@ namespace CNA::Internal::Renderers::Igl
     {
         if (!framebuffer_ || data == nullptr || w <= 0 || h <= 0)
             return false;
-        if (dataLength < w * h * 4)
+        if (dataLength < FormatRegionByteCount(surfaceFormat_, w, h))
             return false;
         if (level != 0)
         {
@@ -571,7 +584,8 @@ namespace CNA::Internal::Renderers::Igl
         IglRenderer* owner, std::shared_ptr<igl::ITexture> color,
         std::shared_ptr<igl::ITexture> depth,
         std::array<std::shared_ptr<igl::IFramebuffer>, 6> faces, const int size,
-        const int mipLevels, const int sampleCount, const bool preserveContents)
+        const int mipLevels, const int sampleCount, const bool preserveContents,
+        const int surfaceFormat)
         : owner_(owner)
         , color_(std::move(color))
         , depth_(std::move(depth))
@@ -580,6 +594,7 @@ namespace CNA::Internal::Renderers::Igl
         , faceFramebuffers_(std::move(faces))
         , sampleCount_(std::max(1, sampleCount))
         , preserveContents_(preserveContents)
+        , surfaceFormat_(surfaceFormat)
     {
         for (int face = 0; face < 6; ++face)
         {
@@ -601,7 +616,7 @@ namespace CNA::Internal::Renderers::Igl
             return false;
         if (face < 0 || face > 5 || level < 0 || level >= mipLevels_)
             return false;
-        if (w <= 0 || h <= 0 || dataLength < w * h * 4)
+        if (w <= 0 || h <= 0 || dataLength < FormatRegionByteCount(surfaceFormat_, w, h))
             return false;
 
         const igl::TextureRangeDesc range = igl::TextureRangeDesc::newCubeFace(
@@ -615,8 +630,11 @@ namespace CNA::Internal::Renderers::Igl
                                               const int y, const int w, const int h, void* data,
                                               const int dataLength) const
     {
-        if (data == nullptr || w <= 0 || h <= 0 || dataLength < w * h * 4)
+        if (data == nullptr || w <= 0 || h <= 0 ||
+            dataLength < FormatRegionByteCount(surfaceFormat_, w, h))
+        {
             return false;
+        }
         if (face < 0 || face > 5 || level != 0 || owner_ == nullptr)
             return false;
 

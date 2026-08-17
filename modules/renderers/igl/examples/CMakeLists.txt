@@ -189,4 +189,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
         COMMAND cna_test_igl_vulkan_backbuffer_bgr
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
+
+    # IGL-65: surface-format transfers against a real device -- one upload/readback round trip per
+    # byte class, which is what a `width * 4` row pitch cannot survive.
+    cna_igl_test(cna_test_igl_surfaceformat igl_surfaceformat_test.cpp)
+    cna_register_renderer_test(NAME Igl_SurfaceFormat COMMAND cna_test_igl_surfaceformat
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    # The same binary on the other backend: IGL's two backends have genuinely different format
+    # tables, so a format this renderer claims must survive both.
+    cna_register_renderer_test(NAME Igl_SurfaceFormat_Vulkan COMMAND cna_test_igl_surfaceformat
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
 endif()

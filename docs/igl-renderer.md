@@ -4,9 +4,17 @@
 [facebook/igl](https://github.com/facebook/igl), Meta's "Intermediate Graphics Library", pinned at
 `v1.1.1`.
 
-> **Status: experimental, and not yet compiled.** The implementation is complete in shape but has
-> never been built; see `plan_igl.md` §1 and §7. Treat every capability below as *intended and
-> written*, not *verified*, until the Phase H tasks close.
+> **Status: experimental, and built.** This banner used to read "not yet compiled"; that stopped
+> being true on 2026-08-16, when the renderer first configured, compiled, rendered a frame and
+> passed its pixel-conformance tests against Mesa llvmpipe, and it has been built and run in every
+> session since. What is *verified* is narrower than what is *implemented*, and `plan_igl.md` §1
+> is the per-phase record of which is which. The short version: the OpenGL/GLX backend is verified
+> across the whole example suite; the Vulkan backend brings up a device, renders 3D, depth and
+> render targets correctly, and has one open readback defect (`plan_igl.md` IGL-60) that keeps
+> `SpriteBatch`'s own pixel test from confirming it. As of the 2026-08-17 audit the registered suite
+> is 61/61 green (34 host-portable unit cases plus 27 example tests), and running all 24 example
+> binaries explicitly on each backend gives 24/24 on OpenGL and 20/24 on Vulkan — the four Vulkan
+> shortfalls are in the gap table below and in `plan_igl.md` §1.
 
 ## What this renderer is
 
@@ -26,6 +34,22 @@ The choice is **resolved once, cached, and never falls back**. It has to be: `Gr
 it to decide the platform window's render intent *before the renderer exists*, and a native window
 cannot be both OpenGL- and Vulkan-capable. An explicit backend this build does not contain is an
 error by name, not a silent substitution.
+
+That resolution is what the renderer's own `GraphicsRendererDescriptor` is built from
+(`IglRendererDescriptor.cpp`), so all three of its window-facing answers follow the backend rather
+than the compile-time fact that CNA selected IGL:
+
+| Backend | `windowKind` | `glFramebuffer` | `needsGlContext` |
+|---------|--------------|-----------------|------------------|
+| OpenGL | `RendererWindowKind::OpenGL` | depth 24, stencil 8, double-buffered, multisample-capable | yes — it adopts the platform's GL context |
+| Vulkan | `RendererWindowKind::Vulkan` | none (a Vulkan-intent window carries no GL visual) | no — it builds its surface from the native window handle |
+
+Both halves matter. The window kind is what `AreWindowKindsCompatible` compares when a fallback
+chain moves from one renderer to another, so recording OpenGL for a Vulkan run would let a
+later candidate adopt a window it cannot render into. The framebuffer request matters because GLX
+fixes a window's visual — and therefore its depth, stencil and multisample bits — when the window
+is created: asking afterwards silently yields whatever the default visual carried, in practice a
+0-bit stencil buffer that turns every `DepthStencilState.StencilEnable` into a no-op.
 
 OpenGL leads the default preference because IGL's OpenGL backend can **adopt** the GL context CNA's
 own `CNA::Platform::IPlatformGlContext` already creates for the window
@@ -57,6 +81,46 @@ own display connection and leaves the drawable unset, which cannot present to a 
 | `OcclusionQuery` | **No** — IGL exposes no query object on any backend at `v1.1.1` |
 | `AdditiveBlending` | Yes |
 
+## Surface formats
+
+`igl::TextureFormat` is not a superset of XNA's `SurfaceFormat`, and the gaps are not all missing
+names: several IGL formats carry a familiar name and a different texel layout, and a few differ
+between IGL's own two backends. Since this renderer picks its backend at run time, a format whose
+layout depends on which backend was chosen is no use to it.
+
+These formats have an IGL counterpart with the same texel size, channel order and
+normalized/integer/float interpretation on **both** backends:
+
+`Color`, `ColorBgraEXT`, `ColorSrgbEXT`, `ByteEXT`, `UShortEXT`, `Rg32`, `Single`, `Vector2`,
+`Vector4`, `HalfSingle`, `HalfVector2`, `HalfVector4`, `HdrBlendable`.
+
+Everything else is **refused by name** rather than substituted:
+
+| Format | Why |
+|--------|-----|
+| `Bgr565` | XNA packs R5G6B5; IGL's `B5G6R5_UNorm` is the reverse order, and its OpenGL backend refuses that format outright |
+| `Bgra5551` | XNA packs A1R5G5B5; IGL offers only B5G5R5A1 and R5G5B5A1 |
+| `Bgra4444` | XNA packs A4R4G4B4; IGL's `ABGR_UNorm4` is R4G4B4A4 on OpenGL and B4G4R4A4 on Vulkan |
+| `Rgba1010102` | XNA packs A2B10G10R10; IGL's `RGB10_A2_UNorm_Rev` is that on OpenGL and A2R10G10B10 on Vulkan |
+| `Rgba64` | An 8-byte R16G16B16A16 unsigned-normalized texel. IGL v1.1.1 has no 16-bit-per-channel RGBA format; `RGBA_UInt32` is a 16-byte integer-sampled texel, not a wider match |
+| `Alpha8` | `VK_FORMAT_UNDEFINED` on Vulkan, and the `GL_ALPHA` family is not in the OpenGL core profile this renderer requests |
+| `Dxt1` / `Dxt3` / `Dxt5` / `Dxt5SrgbEXT` | IGL v1.1.1 carries no BC1/BC2/BC3 format |
+| `Bc7EXT` / `Bc7SrgbEXT` | IGL has the format, but this renderer has no compressed-block upload path — every transfer goes through `ITexture::upload`, which moves linear rows |
+| `NormalizedByte2` / `NormalizedByte4` | IGL v1.1.1 has no signed-normalized texture format |
+
+**What a game sees today.** The renderer reports `Unsupported` for the refused set and `Defer` for
+the supported one, so the framework's own rule (`Texture::ValidateFormat`, `SurfaceFormat.Color`
+only — the same rule 47 of the 49 renderers use) still decides what a public `Texture2D` or
+`RenderTarget2D` may be. The supported set above is reachable through the renderer contract
+(`IGraphicsRenderer::CreateTexture`, `CreateRenderTarget2DEXT`), which is where
+`igl_surfaceformat_test.cpp` exercises it. Promoting those formats to the public API is a
+deliberate non-goal for now: it would need per-format end-to-end verification of upload, sampling
+*and* readback, not just of storage.
+
+Transfer sizes come from the shared `Texture::GetFormatSizeEXT` / `GetBlockSizeSquaredEXT`
+metadata, never from `width * 4` — a texel here may be 1, 2, 4, 8 or 16 bytes, and an upload whose
+row pitch is shorter than one packed row is refused rather than read past.
+
 ## Known gaps, and why
 
 | Gap | Cause | Behaviour |
@@ -67,6 +131,21 @@ own display connection and leaves the drawable unset, which cannot present to a 
 | Sampler LOD bias | `igl::SamplerStateDesc` has no such field | recorded for diagnostics, not applied |
 | Cube render-target MSAA | `igl::FramebufferDesc` cannot express a multisampled cube attachment with a per-face resolve | applied count reported as 1 |
 | `ShaderEffect` parameters on Vulkan | Loose (non-block) uniforms do not exist in Vulkan GLSL, and IGL's Vulkan encoder leaves `bindUniform` unimplemented | the draw throws by name; use a std140 block, or `CNA_IGL_BACKEND=opengl` |
+| Non-`Color` surface formats in the public API | Promoting them needs per-format verification of upload, sampling and readback, which has not been done | the renderer refuses what IGL cannot store and defers the rest to the framework's `Color`-only rule (see *Surface formats* above) |
+| Uploading pixels into a render target on Vulkan | IGL's Vulkan `copyBytesColorAttachment` always reads back vertically flipped, which cancels out for content this renderer *rendered* but not for content it *uploaded* | `RenderTarget2D.SetData` followed by `GetData` returns the rows reversed on `CNA_IGL_BACKEND=vulkan`; rendering into a target and reading it back is correct on both backends (`plan_igl.md` IGL-67) |
+
+## IGL's debug trap is turned off deliberately
+
+IGL's debug builds answer an internal failure by logging it **and** raising `SIGTRAP`
+(`igl::_IGLDebugBreak`, reached from every `IGL_DEBUG_ABORT` and `IGL_SOFT_ASSERT`). That is the
+right default for IGL's own samples and the wrong one for an embedder: the same call sites also fill
+in the `igl::Result` this renderer already checks, so the trap removes CNA's ability to report a
+failure it is equipped to handle — a `ShaderEffect` whose GLSL does not compile used to take the
+process down instead of raising the compile error.
+
+`IglRenderer`'s constructor therefore calls `igl::setDebugBreakEnabled(false)` once per process.
+Only the break is disabled: IGL still logs every such failure at error level, and CNA still checks
+every `Result` and throws by name.
 
 ## How the frame is built
 

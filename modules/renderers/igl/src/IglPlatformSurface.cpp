@@ -46,9 +46,20 @@ namespace CNA::Internal::Renderers::Igl
 {
     namespace
     {
-        /** @brief The GL context attributes IGL's OpenGL backend needs on this window. */
+        /**
+         * @brief The GL context attributes IGL's OpenGL backend needs on this window.
+         *
+         * The depth/stencil/double-buffer bits are read from the same place the renderer
+         * descriptor states them (`IglRendererDescriptor.cpp` asks the same function), not
+         * restated here: GLX has already fixed the window's visual by the time this runs, so two
+         * independent statements about one window could only ever differ silently -- the window
+         * would carry one set of bits and this request would ask for another.
+         */
         CNA::Platform::GlContextDescription RequestedGlContext(const int multiSampleCount)
         {
+            const CNA::Internal::Renderers::RendererGlFramebufferRequest framebuffer =
+                Detail::GetRendererBackendGlFramebufferRequest(Detail::RendererBackend::OpenGL);
+
             CNA::Platform::GlContextDescription description;
             // IGL's OpenGL backend targets desktop GL 4.x; its own samples request 4.6 and fall
             // back through the driver. 4.1 is the floor at which every feature this renderer uses
@@ -56,10 +67,10 @@ namespace CNA::Internal::Renderers::Igl
             description.majorVersion = 4;
             description.minorVersion = 1;
             description.profile = CNA::Platform::GlProfile::Core;
-            description.depthBits = 24;
-            description.stencilBits = 8;
-            description.doubleBuffer = true;
-            if (multiSampleCount > 1)
+            description.depthBits = framebuffer.depthBits;
+            description.stencilBits = framebuffer.stencilBits;
+            description.doubleBuffer = framebuffer.doubleBuffered;
+            if (framebuffer.wantsMultiSample && multiSampleCount > 1)
             {
                 description.multisampleBuffers = 1;
                 description.multisampleSamples = multiSampleCount;
