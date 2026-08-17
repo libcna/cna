@@ -163,4 +163,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
     cna_register_renderer_test(NAME Igl_Mrt4 COMMAND cna_test_igl_mrt4
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # IGL-22: a RenderTargetCube face is refused in a multi-render-target bind.
+    cna_igl_test(cna_test_igl_mrt_cube_refuse igl_mrt_cube_refuse_test.cpp)
+    cna_register_renderer_test(NAME Igl_MrtCubeRefuse COMMAND cna_test_igl_mrt_cube_refuse
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
