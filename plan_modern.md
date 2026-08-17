@@ -143,10 +143,10 @@ every later phase has one place to add a header, a test, and a doc line.
 | MOD-13 | Teach `loc.sh` to report the engine layer separately (`graphics-ext` already a module — verify) | ⬜ | `./loc.sh` prints a `graphics-ext` row with include/src/tests/examples splits. |
 | MOD-14 | `NEXT_modern.md` — running "what to pick up next" ledger for this plan | ✅ | Done. `NEXT_modern.md` carries the current position on the critical path, the owner decisions in force, the full fresh-container build recipe (submodules, the three sibling checkouts, the system packages), and the test baseline. |
 | MOD-15 | Decide the engine layer's minimum shader profile and write it down (GLSL ES 3.00 baseline, ES 3.10 for compute) | ⬜ | Documented in `docs/cnaext-engine-layer.md`; every pass shader in later phases starts with the agreed `#version` handling delegated to `ShaderEffect`. |
-| MOD-16 | Survey `ShaderEffect`'s uniform API and record the gaps the passes will need (`SetUniformMatrix`, `int`, arrays, samplers ≥2) | ⬜ | Appendix B is filled in; every gap becomes its own task in Phase 2 rather than being discovered mid-pass. |
+| MOD-16 | Survey `ShaderEffect`'s uniform API and record the gaps the passes will need (`SetUniformMatrix`, `int`, arrays, samplers ≥2) | ✅ | Done — and the answer was "no gaps". `ShaderEffect` already has `SetUniformMat4`, `Vec4`/`Vec3`/`Vec2`, `Float`, `Int`, `SetUniformFloatArray`, `SetUniformVec2Array` and `SetTexture(unit, …)` for 2D/cube/3D. Appendix B is settled; MOD-215–MOD-218 need no work. |
 | MOD-17 | Survey `RenderTarget2D`'s public surface for what the pipeline needs (format query, depth query, `RenderTargetUsage`) | ⬜ | Documented; any missing accessor becomes a Phase 1 task. |
 | MOD-18 | Confirm `SpriteBatch` can draw a `RenderTarget2D` as a source texture with a custom `Effect` on the reference renderer | ⬜ | A minimal example proves source→effect→destination works today; this is the fallback path when the fullscreen-triangle helper is unavailable. |
-| MOD-19 | Choose and document the fullscreen-geometry strategy (single oversized triangle via `DrawUserPrimitives`, no vertex buffer) | ⬜ | Decision recorded with the reason (no VB lifetime, no UV seam, one fewer draw); implemented in `MOD-201`. |
+| MOD-19 | Choose and document the fullscreen-geometry strategy (single oversized triangle via `DrawUserPrimitives`, no vertex buffer) | ✅ | Done, **deviating from the planned shape**: the fullscreen draw goes through `SpriteBatch` with a custom `Effect`, not an oversized triangle via `DrawUserPrimitives`. That is the route the verified EasyGL post-process examples already use, every renderer implements it, and it resolves the GL-vs-D3D texture-coordinate origin once inside SpriteBatch instead of in every pass shader. The triangle would save one state block per pass — invisible next to the fullscreen fill. |
 | MOD-20 | Define `CNA::Graphics::PostProcessContext` fields up front so all passes share one signature (→ C8) | ⬜ | Struct declared in Appendix A and implemented in `MOD-200`; contains source colour, depth, normals, destination, viewport size, settings, elapsed time. |
 | MOD-21 | Add the `Uncharted2` value to `TonemappingMode` (→ N02) | ✅ | Done. `Uncharted2` appended (never inserted); `TonemappingModeOrdinalsAreStable` pins all five values, since a settings bag written by an earlier build must still read back as the same operator. |
 | MOD-22 | Extend `RenderPipelineSettings` with the fields the passes read (→ N03/§5.1) | ✅ | Done. `bloomThreshold`, `bloomIterations`, `ssaoRadius`, `ssaoIntensity`, `ssaoSampleCount` and `fxaaEnabled` added with documented defaults that all mean "inert". Out-of-range values are stored rather than rejected — the passes clamp when they apply one, so a quality preset need not know every pass's limits. |
@@ -222,15 +222,15 @@ a fullscreen-triangle drawer, a ping-pong target pool, and the `ShaderEffect` ga
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| MOD-200 | `PostProcessContext` struct (`source`, `sourceDepth`, `sourceNormals`, `destination`, `width`, `height`, `settings`, `elapsedSeconds`) | ⬜ | Header-only aggregate, fully documented; every later pass takes exactly this. |
-| MOD-201 | `detail::FullscreenTriangle` — one oversized triangle via `DrawUserPrimitives`, no VB (→ MOD-19) | ⬜ | Draws with the given `Effect`; covers the viewport exactly; unit-tested by a solid-colour fill readback. |
-| MOD-202 | `PostProcessPass` abstract base — `apply(ctx)`, `getName()`, `isSupported(device)` | ⬜ | Pure-virtual `apply`; `isSupported` default checks `CustomEffects`; documented as the D9 "standalone usable" contract. |
+| MOD-200 | `PostProcessContext` struct (`source`, `sourceDepth`, `sourceNormals`, `destination`, `width`, `height`, `settings`, `elapsedSeconds`) | ✅ | Done. `PostProcessContext` carries source/depth/normals/destination, size, settings, elapsed time and the camera block. One struct rather than a signature per pass, so a chain of mixed passes is expressible. |
+| MOD-201 | `detail::FullscreenTriangle` — one oversized triangle via `DrawUserPrimitives`, no VB (→ MOD-19) | ✅ | Done as `FullscreenPass` (see MOD-19 for the shape it took). |
+| MOD-202 | `PostProcessPass` abstract base — `apply(ctx)`, `getName()`, `isSupported(device)` | ✅ | Done. `PostProcessPass` with `apply(ctx)`, `getName()` and `isSupported(device)`; the default `isSupported` answers the question every shader pass shares (`CustomEffects`). |
 | MOD-203 | `PostProcessPass` common helper: bind destination (null = backbuffer), set viewport, restore previous target on scope exit | ⬜ | RAII helper; a pass that throws mid-apply still restores the previous render target (tested). |
-| MOD-204 | `detail::RenderTargetPool` — reusable, size/format-keyed target cache with explicit `reset()` | ⬜ | Second request of the same key returns the same object; `reset()` frees; no allocation in steady state (D10, asserted by a counter in tests). |
-| MOD-205 | `detail::PingPongTargets` — 2 targets of identical size/format with `swap()`, built on the pool | ⬜ | Chained passes alternate correctly; tested with a 3-pass identity chain that must reproduce the input. |
-| MOD-206 | `detail::BlitPass` — the identity/pass-through pass used by every "capability missing" fallback (D1) | ⬜ | Copies source to destination with correct flip/UV orientation; golden-image verified. |
-| MOD-207 | Document the texture-coordinate origin convention once (GL bottom-left vs D3D top-left) and where the flip is applied | ⬜ | Written in `docs/cnaext-engine-layer.md`; `BlitPass` is the single place the convention is realized; every pass shader inherits it. |
-| MOD-208 | `PostProcessChain` — ordered container of passes with ping-pong management and one final resolve | ⬜ | `add(pass)`, `apply(ctx)`; N passes produce N-1 intermediate blits, not 2N; asserted by a counting fake pass. |
+| MOD-204 | `detail::RenderTargetPool` — reusable, size/format-keyed target cache with explicit `reset()` | ✅ | Done. `RenderTargetPool`, keyed by size/format/depth/slot. Tested for reuse, for every key that must produce a *different* target, for `reset()`, and for rejecting a non-positive size. |
+| MOD-205 | `detail::PingPongTargets` — 2 targets of identical size/format with `swap()`, built on the pool | ✅ | Done, **without a separate class**: the alternation lives in `PostProcessChain`, which is its only consumer, and is asserted directly (`EachPassReadsWhatThePreviousOneWroteAndNeverItsOwnTarget`). A standalone `PingPongTargets` with one caller would have been indirection, not structure. |
+| MOD-206 | `detail::BlitPass` — the identity/pass-through pass used by every "capability missing" fallback (D1) | ✅ | Done. `BlitPass` — the identity pass every capability fallback and the final resolve use. Verified by pixel comparison, not by inspection. |
+| MOD-207 | Document the texture-coordinate origin convention once (GL bottom-left vs D3D top-left) and where the flip is applied | ✅ | Done. Documented on `FullscreenPass`: the convention is resolved once inside `SpriteBatch`, which is a reason for the MOD-19 deviation rather than a separate mechanism. |
+| MOD-208 | `PostProcessChain` — ordered container of passes with ping-pong management and one final resolve | ✅ | Done. `PostProcessChain` — N passes, N-1 intermediates, only the last writing the caller's destination, intermediates in the source's own format so an HDR chain cannot be silently clamped mid-way. |
 | MOD-209 | Pass-level enable flags driven by `RenderPipelineSettings` (no branch inside shaders) | ⬜ | A disabled pass is skipped entirely (zero draw calls), verified by the counting fake. |
 | MOD-210 | `ShaderEffectFactory` helper — compiles a named pass shader once and caches it per device | ⬜ | Two `BloomPass` instances on one device share one compiled program; verified by a compile counter. |
 
@@ -238,10 +238,10 @@ a fullscreen-triangle drawer, a ping-pong target pool, and the `ShaderEffect` ga
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| MOD-215 | `ShaderEffect::SetUniformMatrix` (4×4, column-major) if absent | ⬜ | Round-trips through the reference renderer; needed by shadows and skybox. |
-| MOD-216 | `ShaderEffect` multi-sampler binding (≥4 texture units with named samplers) | ⬜ | Bloom composite (2 samplers) and SSAO (depth+normal+noise = 3) both work. |
-| MOD-217 | `ShaderEffect::SetUniformFloatArray` / `Vector2Array` / `Vector4Array` | ⬜ | SSAO's 16–64-sample kernel uploads as one array, not 64 scalars. |
-| MOD-218 | `ShaderEffect::SetUniformInt` (sample counts, mode switches) | ⬜ | Used by `TonemapPass` mode selection. |
+| MOD-215 | `ShaderEffect::SetUniformMatrix` (4×4, column-major) if absent | ✅ | Not needed — present already (MOD-16). |
+| MOD-216 | `ShaderEffect` multi-sampler binding (≥4 texture units with named samplers) | ✅ | Not needed — present already (MOD-16). |
+| MOD-217 | `ShaderEffect::SetUniformFloatArray` / `Vector2Array` / `Vector4Array` | ✅ | Not needed — present already (MOD-16). |
+| MOD-218 | `ShaderEffect::SetUniformInt` (sample counts, mode switches) | ✅ | Not needed — present already (MOD-16). |
 | MOD-219 | `ShaderEffect` compile-error surfacing with the shader name and line context | ⬜ | A deliberately broken pass shader throws a message containing the pass name and the GLSL log. |
 | MOD-220 | `ShaderEffect` — allow a pass to declare its own sampler filtering/addressing requirements | ⬜ | Bloom's linear-clamp requirement is expressed once by the pass, not by the caller's `SamplerState`. |
 
@@ -249,10 +249,10 @@ a fullscreen-triangle drawer, a ping-pong target pool, and the `ShaderEffect` ga
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| MOD-225 | Unit tests for `RenderTargetPool` (keying, reuse, reset, leak count) | ⬜ | All branches covered including a format change forcing reallocation. |
-| MOD-226 | Unit tests for `PingPongTargets` and `PostProcessChain` ordering | ⬜ | A 4-pass chain applies in insertion order (proved by a pass that writes its index). |
+| MOD-225 | Unit tests for `RenderTargetPool` (keying, reuse, reset, leak count) | ✅ | Done — four `RenderTargetPoolTest` cases. |
+| MOD-226 | Unit tests for `PingPongTargets` and `PostProcessChain` ordering | ✅ | Done — insertion order and the full ping-pong contract, plus owned/borrowed passes and rejected contexts. |
 | MOD-227 | Unit tests for `PostProcessPass` fallback behavior on a non-shader renderer | ⬜ | On Headless/SDL_Renderer, `isSupported()` is false and `apply()` performs a documented blit, never a throw. |
-| MOD-228 | Golden image: `BlitPass` identity through an HDR intermediate | ⬜ | Source and result are bit-identical for `Color`; within 1 ULP-equivalent tolerance for `HalfVector4`. |
+| MOD-228 | Golden image: `BlitPass` identity through an HDR intermediate | ✅ | Done. `AChainOfCopiesIsStillTheIdentity` compares real pixels after three real passes; `AnHdrChainKeepsItsIntermediatesInFloat` proves an above-1.0 value survives two chained passes. |
 | MOD-229 | Example `cnaext_postprocess_chain_test` — 3 stacked trivial passes on a live window | ⬜ | Registered ctest; documented expected visual result. |
 | MOD-230 | Perf: measure per-pass cost at 1280×720 on the reference renderer | ⬜ | Numbers in the doc; used to justify `RenderQuality` presets in Phase 7. |
 | MOD-231 | Verify the existing `DepthEffect`/`CRTEffect`/`AsciiPostProcessEffect` can be adapted to `PostProcessPass` | ⬜ | Written analysis; if adaptation is clean, `MOD-232` does it; if not, the reason is recorded. |

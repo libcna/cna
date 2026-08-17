@@ -25,12 +25,14 @@ do not reconstruct the layer's state from the general `NEXT.md`.
 | ⛔ | `MOD-106` — lenient-substitution opt-out, dropped (it would preserve a behaviour that never existed) |
 | ✅ | `MOD-107` — `RenderTargetCube` carries its `SurfaceFormat` to the renderer too (the path IBL needs) |
 | ✅ | `MOD-118`–`MOD-123`, `MOD-125` — completeness diagnostic, depth/MSAA/mip/MRT on float targets, half-float filtering query |
+| ✅ | `MOD-21`/`MOD-22` — `Uncharted2` and the settings fields the passes read |
+| ✅ | Phase 2 core — `PostProcessContext`, `FullscreenPass`, `PostProcessPass`, `RenderTargetPool`, `BlitPass`, `PostProcessChain` (`MOD-16`, `19`, `200`–`208`, `225`–`228`) |
 
-**Next up (critical path to a first HDR frame):** Phase 1 is complete for the reference renderer.
-Next is `MOD-200`–`MOD-210` (fullscreen-pass infrastructure) → `MOD-300`–`MOD-305` (tonemapping) →
-`MOD-700`–`MOD-712` (`RenderPipeline`). `MOD-5`, `MOD-21`, `MOD-22` remain open from Phase 0 and
-`MOD-21`/`MOD-22` are prerequisites of Phase 3, so they come first. `MOD-130`–`MOD-141` (Phase 1's
-remaining verification and documentation rows) trail the implementation.
+**Next up (critical path to a first HDR frame):** `MOD-300`–`MOD-305` (`TonemapPass` and its five
+operators) → `MOD-700`–`MOD-712` (`RenderPipeline`). Then Phase 4 (bloom) reuses the same
+infrastructure. Still open behind that: `MOD-203` (restore-on-exception around a pass),
+`MOD-209`/`MOD-210` (settings-driven skipping, shader cache), `MOD-5`, and Phase 1's remaining
+verification/documentation rows `MOD-130`–`MOD-141`.
 
 **Owner decisions in force** (asked 2026-08-17): start with the HDR spine; EasyGL is the
 reference renderer with Vulkan and D3D11 as the committed follow-ups and the rest opportunistic;
