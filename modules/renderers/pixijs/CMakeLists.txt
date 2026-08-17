@@ -1,7 +1,7 @@
-# plan_pixijs.md Design decision 2: reuses the existing SDL-created window/canvas element, so still
-# links SDL3 even though actual rendering goes through EM_JS/PixiJS, not SDL_Renderer.
+# plan_pixijs.md Design decision 2: the browser platform owns the canvas element; this renderer
+# consumes only the platform-neutral surface snapshot while actual rendering goes through
+# EM_JS/PixiJS. It therefore links no windowing library at all, exactly like CANVAS and HTML_DOM.
 cna_add_renderer()
-target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3)
 
 # plan_pixijs.md Design decision 4: prepend the vendored PixiJS UMD build into the generated glue
 # code via --pre-js, so PIXI.* is a real global before any CNA_PixiJs_* EM_JS function in this

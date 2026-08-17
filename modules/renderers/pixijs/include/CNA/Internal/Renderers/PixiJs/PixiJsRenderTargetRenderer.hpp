@@ -25,7 +25,6 @@ namespace CNA::Internal::Renderers::PixiJs
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         /**
          * @brief Direct CPU pixel upload into a bound PixiJS RenderTexture.
          *

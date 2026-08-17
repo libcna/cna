@@ -2,12 +2,15 @@
 //
 // plan_pixijs.md PIXIJS-80: structural GTest coverage for everything on the PIXIJS renderer that
 // doesn't need a real PIXI.Application -- ThrowNo3D coverage and the blend-state ->
-// PixiJsBlendMode pure-function mapping. plan_pixijs.md's own status block: this has never
-// actually been run (no Emscripten toolchain in the session that wrote it) -- written so a future
-// session with a real emsdk has something to run immediately.
+// PixiJsBlendMode pure-function mapping. Compiled either under the selected PIXIJS renderer or in
+// the opt-in native host-contract target (CNA_PIXIJS_HOST_TESTS, modules/renderers/CMakeLists.txt),
+// exactly like the CANVAS/HTML_DOM/SVG_DOM suites this one is modelled on: the EM_JS bodies are
+// excluded on a native host, so the platform-neutral half of the renderer is testable without a
+// browser.
 #include <gtest/gtest.h>
 
-#if defined(CNA_RENDERER_PIXIJS)
+#if defined(CNA_RENDERER_PIXIJS) || defined(CNA_RENDERER_PRESENT_PIXIJS) \
+    || defined(CNA_PIXIJS_HOST_TESTS)
 #include "CNA/Internal/Renderers/PixiJs/PixiJsRenderer.hpp"
 #include "CNA/Internal/Renderers/PixiJs/PixiJsSpriteBatchRenderer.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -20,11 +23,19 @@ using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 
 namespace
 {
-    // Non-null but never-dereferenced, same rationale as CanvasRendererTests.cpp's own FakeWindow():
-    // PixiJsRenderer's constructor only null-checks its window pointer and registers it in a
-    // pointer-keyed map -- it never calls a real SDL API on it, and none of the ThrowNo3D-only
-    // methods exercised below touch window_ either.
-    SDL_Window* FakeWindow() { return reinterpret_cast<SDL_Window*>(0x1); }
+    // plan_platform.md PLAT-58/PLAT-61: the renderer receives a platform-neutral surface snapshot,
+    // never a windowing-library handle. Same fixture shape as CanvasRendererTests.cpp's TestArgs().
+    GraphicsRendererCreateArgs TestArgs()
+    {
+        GraphicsRendererCreateArgs args;
+        args.surface.windowId = 1;
+        args.surface.nativeHandle.system = CNA::Platform::NativeWindowSystem::Web;
+        args.surface.drawableSize = {64, 64};
+        args.virtualWidth = 64;
+        args.virtualHeight = 64;
+        args.presentationMode = CnaPresentationMode::FixedHeightDynamicWidth;
+        return args;
+    }
 
     struct DummyVertexBuffer final : IVertexBufferRenderer
     {
@@ -98,7 +109,7 @@ TEST(PixiJsBlendStateMapping, XnaBlendFunctionToGlEquationCoversEveryEnumerator)
 
 TEST(PixiJsRendererThrowNo3D, ClearVariantsThrow)
 {
-    PixiJsRenderer renderer(FakeWindow(), 64, 64, CnaPresentationMode::FixedHeightDynamicWidth);
+    PixiJsRenderer renderer(TestArgs());
     EXPECT_THROW(renderer.ClearColorAndDepth(0, 0, 0, 1, 1.0f), std::runtime_error);
     EXPECT_THROW(renderer.ClearDepth(1.0f), std::runtime_error);
     EXPECT_THROW(renderer.ClearStencil(0), std::runtime_error);
@@ -109,7 +120,7 @@ TEST(PixiJsRendererThrowNo3D, ClearVariantsThrow)
 
 TEST(PixiJsRendererThrowNo3D, DepthAndBlendStateSettersThrow)
 {
-    PixiJsRenderer renderer(FakeWindow(), 64, 64, CnaPresentationMode::FixedHeightDynamicWidth);
+    PixiJsRenderer renderer(TestArgs());
     EXPECT_THROW(renderer.SetDepthTestEnabled(true), std::runtime_error);
     EXPECT_THROW(renderer.SetBlendEnabled(true), std::runtime_error);
     EXPECT_THROW(renderer.SetDepthWriteEnabled(true), std::runtime_error);
@@ -118,7 +129,7 @@ TEST(PixiJsRendererThrowNo3D, DepthAndBlendStateSettersThrow)
 
 TEST(PixiJsRendererThrowNo3D, VertexAndIndexBufferCreationThrows)
 {
-    PixiJsRenderer renderer(FakeWindow(), 64, 64, CnaPresentationMode::FixedHeightDynamicWidth);
+    PixiJsRenderer renderer(TestArgs());
     EXPECT_THROW(renderer.CreateVertexBuffer(3), std::runtime_error);
     EXPECT_THROW(renderer.CreateIndexBuffer16(3), std::runtime_error);
     EXPECT_THROW(renderer.CreateIndexBuffer32(3), std::runtime_error);
@@ -126,7 +137,7 @@ TEST(PixiJsRendererThrowNo3D, VertexAndIndexBufferCreationThrows)
 
 TEST(PixiJsRendererThrowNo3D, DrawCallsThrow)
 {
-    PixiJsRenderer renderer(FakeWindow(), 64, 64, CnaPresentationMode::FixedHeightDynamicWidth);
+    PixiJsRenderer renderer(TestArgs());
     DummyVertexBuffer vb;
     DummyIndexBuffer ib;
     const Matrix identity = Matrix::getIdentityProperty();
@@ -140,7 +151,7 @@ TEST(PixiJsRendererThrowNo3D, DrawCallsThrow)
 
 TEST(PixiJsRendererThrowNo3D, SharedDefaultsReturnNullptr)
 {
-    PixiJsRenderer renderer(FakeWindow(), 64, 64, CnaPresentationMode::FixedHeightDynamicWidth);
+    PixiJsRenderer renderer(TestArgs());
     EXPECT_EQ(renderer.CreateOcclusionQuery(), nullptr);
     EXPECT_EQ(renderer.CreateTexture3D(4, 4, 4, false, 0), nullptr);
     EXPECT_EQ(renderer.CreateTextureCube(4, false, 0), nullptr);
@@ -150,7 +161,7 @@ TEST(PixiJsRendererThrowNo3D, SharedDefaultsReturnNullptr)
 
 TEST(PixiJsRendererCapability, ReportsAdditiveBlendingOnlyIn2DOnlyV1Scope)
 {
-    PixiJsRenderer renderer(FakeWindow(), 64, 64, CnaPresentationMode::FixedHeightDynamicWidth);
+    PixiJsRenderer renderer(TestArgs());
     EXPECT_TRUE(renderer.SupportsCapability(CNA::GraphicsCapability::AdditiveBlending));
     EXPECT_FALSE(renderer.SupportsCapability(CNA::GraphicsCapability::ThreeD));
     EXPECT_FALSE(renderer.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets));
@@ -174,5 +185,72 @@ TEST(PixiJsSpriteBatchRendererTest, NonIdentityTransformDoesNotThrow)
     m.M11 = 2.0f;
     EXPECT_NO_THROW(batch.SetTransformMatrix(m));
     EXPECT_NO_THROW(batch.SetTransformMatrix(Matrix::getIdentityProperty()));
+}
+
+// --- platform-neutral creation contract (plan_platform.md PLAT-58/PLAT-61) -----------------------
+//
+// PIXIJS was authored before the platform abstraction landed and took a raw windowing-library
+// window pointer plus two native-handle accessors on its public interface. These four cases pin
+// the migrated contract so the coupling cannot come back unnoticed: the renderer is driven
+// entirely by the surface snapshot GraphicsDevice hands it, and it never asks a native toolkit
+// anything.
+
+TEST(PixiJsRendererSurfaceContract, RefusesConstructionWithoutAPlatformWindow)
+{
+    GraphicsRendererCreateArgs args = TestArgs();
+    args.surface.windowId = 0;
+    EXPECT_THROW(PixiJsRenderer{args}, std::runtime_error);
+}
+
+TEST(PixiJsRendererSurfaceContract, ViewportComesFromTheSurfaceSnapshot)
+{
+    GraphicsRendererCreateArgs args = TestArgs();
+    args.surface.drawableSize = {800, 400};
+    args.virtualWidth = 0;
+    args.virtualHeight = 240;
+    PixiJsRenderer renderer(args);
+
+    int width = 0;
+    int height = 0;
+    renderer.GetViewportSize(width, height);
+    // FixedHeightDynamicWidth: the height is the requested 240 and the width follows the surface's
+    // 2:1 aspect ratio, with no windowing-library query anywhere in the path.
+    EXPECT_EQ(height, 240);
+    EXPECT_EQ(width, 480);
+}
+
+TEST(PixiJsRendererSurfaceContract, DisplayScaleSeparatesLogicalFromPhysicalPixels)
+{
+    GraphicsRendererCreateArgs args = TestArgs();
+    args.surface.drawableSize = {1280, 720};
+    args.surface.displayScale = 2.0f;
+    args.virtualWidth = 0;
+    args.virtualHeight = 0;
+    PixiJsRenderer renderer(args);
+
+    int width = 0;
+    int height = 0;
+    renderer.GetViewportSize(width, height);
+    EXPECT_EQ(width, 640);
+    EXPECT_EQ(height, 360);
+}
+
+TEST(PixiJsRendererSurfaceContract, OnSurfaceChangedAdoptsResizesAndRejectsAForeignWindow)
+{
+    PixiJsRenderer renderer(TestArgs());
+
+    RendererSurfaceInfo resized = TestArgs().surface;
+    resized.drawableSize = {320, 160};
+    ASSERT_NO_THROW(renderer.OnSurfaceChanged(resized));
+
+    int width = 0;
+    int height = 0;
+    renderer.GetViewportSize(width, height);
+    EXPECT_EQ(height, 64);
+    EXPECT_EQ(width, 128);
+
+    RendererSurfaceInfo foreign = resized;
+    foreign.windowId = 2;
+    EXPECT_THROW(renderer.OnSurfaceChanged(foreign), std::runtime_error);
 }
 #endif

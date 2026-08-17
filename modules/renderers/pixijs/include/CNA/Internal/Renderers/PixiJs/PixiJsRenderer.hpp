@@ -69,15 +69,16 @@ namespace CNA::Internal::Renderers::PixiJs
     {
     public:
         /**
-         * @brief Constructs the renderer against an existing SDL window (Design decision 2).
+         * @brief Constructs the renderer against the platform's presentation surface.
          *
-         * @param window Real SDL window already created by GraphicsDeviceManager; must not be null.
-         * @param virtualWidth Initial virtual (game-logic) resolution width.
-         * @param virtualHeight Initial virtual (game-logic) resolution height.
-         * @param mode Presentation/scaling policy for virtual-vs-physical resolution.
+         * The browser platform owns the `<canvas>` element; this renderer consumes only the
+         * platform-neutral surface snapshot (window id, drawable size, display scale) and does
+         * its drawing through PixiJS.
+         *
+         * @param args Construction arguments, already populated by GraphicsDevice.
+         * @throws std::runtime_error If no platform window backs the surface.
          */
-        PixiJsRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                       CnaPresentationMode mode);
+        explicit PixiJsRenderer(const GraphicsRendererCreateArgs& args);
         /** @brief Unregisters this renderer from the window registry. */
         ~PixiJsRenderer() override;
 
@@ -86,15 +87,11 @@ namespace CNA::Internal::Renderers::PixiJs
         void GetViewportSize(int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         bool TransformWindowToLogical(float windowX, float windowY,
                                       float& logX, float& logY) const override;
         bool TransformLogicalToWindow(float logX, float logY,
                                       float& windowX, float& windowY) const override;
-
-        /** @brief Returns the real SDL window this renderer was constructed with. */
-        SDL_Window* GetWindowInternal() const override { return window_; }
-        /** @brief Always null -- no SDL_Renderer exists on this renderer (PixiJS owns its own WebGL context). */
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
@@ -157,14 +154,14 @@ namespace CNA::Internal::Renderers::PixiJs
                                           PrimitiveType primitive, int primitiveCount) override;
 
     private:
-        // Derives the logical (virtual) viewport size from the real canvas/window's physical pixel
-        // size and virtualWidth_/virtualHeight_/presentationMode_ -- verbatim port of
-        // CanvasRenderer::getLogicalSize (plan_pixijs.md Phase P2/PIXIJS-23): this math is
-        // renderer-agnostic, only the underlying physical-size query is renderer-specific, and that
-        // query is just SDL_GetWindowSize() here too.
+        // Derives the logical (virtual) viewport size from the canvas/window's client pixel size
+        // and virtualWidth_/virtualHeight_/presentationMode_ -- the same FixedHeightDynamicWidth
+        // math CanvasRenderer::getLogicalSize uses (plan_pixijs.md Phase P2/PIXIJS-23): the math is
+        // renderer-agnostic, and the platform snapshot supplies the drawable size and density.
         void getLogicalSize(int& width, int& height) const;
+        void getWindowSize(int& width, int& height) const;
 
-        SDL_Window* window_ = nullptr;
+        RendererSurfaceInfo surface_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;

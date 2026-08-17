@@ -2,10 +2,12 @@
 # Renderer module composition. Every implementation family owns
 # modules/renderers/<family>/{CMakeLists.txt,src/,include/,tests/}; exactly one family
 # builds the selected ${RENDERER_TARGET} per configuration (RendererSelection.cmake resolves
-# the public identity to RENDERER_DIR = modules/renderers/<family>). The 47 public renderer
+# the public identity to RENDERER_DIR = modules/renderers/<family>). The public renderer
 # identities live in RendererSelection.cmake + GraphicsRendererType.hpp and are pinned by
-# scripts/check_renderer_identities.py; families and helper targets here are
-# implementation structure, not identities.
+# scripts/check_renderer_identities.py -- 49 of them today, over 45 families, since one family may
+# serve several identities. Deliberately not restated as a number anywhere a reader could trust it
+# instead of the script: this comment carried "47" for two identities longer than it was true.
+# Families and helper targets here are implementation structure, not identities.
 # =====================================================================================
 
 # Common renderer interface: the shared public compile definitions. Public include roots
@@ -190,7 +192,7 @@ endforeach()
 
 set(CNA_GRAPHICS_RENDERER "${_cna_saved_graphics_renderer}")
 
-# CANVAS, HTML_DOM and SVG_DOM are Emscripten-only selections, but their
+# CANVAS, HTML_DOM, SVG_DOM and PIXIJS are Emscripten-only selections, but their
 # implementation-independent contract tests deliberately compile on a native host with EM_JS
 # bodies excluded. Register those opt-in host targets here, outside selected-renderer dispatch, so
 # they remain reachable without weakening any renderer's platform gate.
@@ -254,4 +256,28 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_SVG_DOM_HOST_TESTS AND NOT EMSCRIPTEN)
     add_test(NAME SvgDomHostContracts COMMAND cna_test_svgdom_host)
     set_tests_properties(SvgDomHostContracts PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
     set_tests_properties(SvgDomHostContracts PROPERTIES LABELS "SVG_DOM;host-only")
+endif()
+
+# plan_platform.md PLAT-58/PLAT-61: PIXIJS gained the same opt-in host target as its three
+# browser-only siblings when it was migrated off its raw SDL_Window* creation contract. Without
+# it the family's surface-contract tests would only ever compile under an Emscripten toolchain,
+# which is exactly how the regression stayed invisible on a native host.
+option(CNA_BUILD_PIXIJS_HOST_TESTS
+    "Build native host-side PixiJS renderer contract tests" OFF)
+if(CNA_BUILD_TESTS AND CNA_BUILD_PIXIJS_HOST_TESTS AND NOT EMSCRIPTEN)
+    add_executable(cna_test_pixijs_host
+        ${CMAKE_CURRENT_SOURCE_DIR}/pixijs/tests/CNA/Internal/Renderers/PixiJs/PixiJsRendererTests.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/pixijs/src/PixiJsRenderer.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/pixijs/src/PixiJsRenderTargetRenderer.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/pixijs/src/PixiJsSpriteBatchRenderer.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/pixijs/src/PixiJsTextureRenderer.cpp)
+    target_include_directories(cna_test_pixijs_host PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/pixijs/include)
+    target_compile_definitions(cna_test_pixijs_host PRIVATE CNA_PIXIJS_HOST_TESTS=1)
+    target_link_libraries(cna_test_pixijs_host PRIVATE
+        cna_graphics_core cna_core cna_math gtest_main)
+    cna_link_sharp_runtime(cna_test_pixijs_host PRIVATE)
+    add_test(NAME PixiJsHostContracts COMMAND cna_test_pixijs_host)
+    set_tests_properties(PixiJsHostContracts PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+    set_tests_properties(PixiJsHostContracts PROPERTIES LABELS "PIXIJS;host-only")
 endif()
