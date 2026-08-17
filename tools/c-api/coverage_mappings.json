@@ -2152,33 +2152,60 @@
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Model\\.hpp$",
       "kinds": [
+        "alias",
         "class",
+        "constant",
         "constructor",
         "destructor",
+        "field",
         "method",
         "operator",
-        "field",
-        "constant",
-        "alias"
+        "struct"
       ],
-      "mapping": "owned stable `CNA_ModelHandle` with default, device aggregate and explicit mesh-parent/root constructors; retained immutable bone/mesh collection views, optional root, opaque 64-bit C tag, C context/release-callback ownership replacing `shared_ptr<void>`, count/copy local and absolute matrix operations, copied transform input and capability-gated Draw",
-      "tests": "default and both aggregate constructors, empty and retained bone/mesh views, arbitrary root and nullable mesh-parent selection, opaque tag, deterministic owned-context replacement/clear release, local set/copy and parent-composed absolute transforms with capacity atomicity, transitive lifetime after original handles, invalid array/count/root combinations, draw capability and wrong-thread/stale paths in strict-C `ModelSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze handle and tag",
+      "mapping": "owned stable `CNA_ModelHandle` with default, device aggregate and explicit mesh-parent/root constructors; retained immutable bone/mesh collection views, optional root, opaque 64-bit C tag, C context/release-callback ownership replacing `shared_ptr<void>`, count/copy local and absolute matrix operations, copied transform input and capability-gated Draw; imported cameras and skins read per index off the same handle and built by clear/append, the camera a versioned POD with its name read by count/copy and the skin naming this model's own meshes by index rather than by handle, since the model already owns them; the skeleton a skin borrows is retained beside it and handed out as a freshly owned handle, so destroying either handle never destroys the other's object; the merged bounding sphere as an optional; and the declared material variants read by index with a validated selection",
+      "tests": "default and both aggregate constructors, empty and retained bone/mesh views, arbitrary root and nullable mesh-parent selection, opaque tag, deterministic owned-context replacement/clear release, local set/copy and parent-composed absolute transforms with capacity atomicity, transitive lifetime after original handles, invalid array/count/root combinations, draw capability and wrong-thread/stale paths in strict-C `ModelSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze handle and tag; the empty defaults of a model with no scene data, a camera round-tripping field by field with its name read separately, a skin outliving the caller's skeleton handle, a skeleton-less skin refusing to hand one back, mesh indices validated against the model's own meshes, variant selection refused past the declared names and below -1, clearing both lists, and null/malformed/out-of-range/stale-handle refusals throughout",
       "status": "implemented",
-      "task": "CBIND-035E4",
+      "task": "CBIND-051D",
       "approved_symbols": [
+        "CPP-02AF3A52BA7F",
         "CPP-12E2E4845DE8",
+        "CPP-220BE7F5A4B2",
+        "CPP-22CD1A739CBF",
+        "CPP-2C046312BDD7",
         "CPP-2C148B01DC71",
+        "CPP-2E99AB0F23FA",
+        "CPP-338FC1863133",
+        "CPP-3AE2108F0E42",
+        "CPP-3F0BAD6500B3",
+        "CPP-4239028C57E3",
+        "CPP-46CF0E22B94A",
+        "CPP-487E7122D509",
         "CPP-4C5BD52DBA4A",
         "CPP-57999292F574",
+        "CPP-5883665E1888",
         "CPP-5AF2E3600D4B",
+        "CPP-5BB8C156DC3E",
+        "CPP-5CA4D96952F5",
         "CPP-5FD3A649842F",
+        "CPP-65CDD83E1259",
+        "CPP-682C0BFF3ECD",
         "CPP-79FBD57F32B6",
+        "CPP-87576477E8AE",
+        "CPP-875B9B7C17CA",
         "CPP-8FF3F34AD9A6",
+        "CPP-998E740DF0A6",
+        "CPP-9B181BEB5A44",
+        "CPP-9B66B5C5B63E",
+        "CPP-AE6DC9187B9F",
+        "CPP-B02C416D72E0",
+        "CPP-BC283954A738",
         "CPP-CC900FD2E84F",
+        "CPP-E4B1B976B6DC",
         "CPP-E70C82E0DD03",
         "CPP-EDABF3BCA315",
         "CPP-F10A73F7B383",
         "CPP-F3F3243114DE",
+        "CPP-F90FD39FF6C1",
         "CPP-FF15B4ECAAF4"
       ]
     },
@@ -14079,6 +14106,36 @@
         "CPP-4D0A035DD296",
         "CPP-9577AA47F845",
         "CPP-CC79234ED8A7"
+      ]
+    },
+    {
+      "id": "model-infinite-perspective-factory",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::CreateInfinitePerspectiveFieldOfViewEXT$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Model\\.hpp$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_matrix_create_infinite_perspective_field_of_view_ext`, producing the same projection as the native factory",
+      "tests": "the limit form of the third column and a null-output refusal in strict-C `ModelSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-051D",
+      "approved_symbols": [
+        "CPP-68B1481A6D1B"
+      ]
+    },
+    {
+      "id": "model-material-variant-configuration-internal",
+      "qualified_name_regex": "^CNA::Internal::Graphics::ConfigureModelMaterialVariantsEXT$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Model\\.hpp$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "No C mapping: a `CNA::Internal` entry point, which this inventory excludes by path everywhere else and reaches here only because it happens to be declared in a public header. It is how the glTF importer installs a model's variant bindings, not an operation an application performs; what an application does with variants -- read the declared names, select one -- is bound on `CNA_ModelHandle`",
+      "tests": "Doxygen declaration inventory; the public variant selection it configures is covered by `ModelSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-051D",
+      "approved_symbols": [
+        "CPP-C26D156BA9CC"
       ]
     }
   ]

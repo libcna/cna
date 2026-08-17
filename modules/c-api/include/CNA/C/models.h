@@ -2146,6 +2146,281 @@ CNA_C_API CNA_Result cna_morph_target_data_ext_set_tangent_deltas(
     const CNA_Vector3* deltas,
     uint64_t delta_count);
 
+/**
+ * @brief A camera imported from a source scene, without its name.
+ *
+ * CNA extension. The name is read separately, because a string of unbounded length never goes in
+ * a fixed structure in this ABI.
+ */
+typedef struct CNA_ModelCameraEXT {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Index of the scene node that carries this camera, or -1 when unknown. */
+    int32_t scene_node_index;
+
+    /** @brief Whether the projection is perspective rather than orthographic. */
+    CNA_Bool is_perspective;
+
+    /** @brief Whether the perspective projection has no far plane. */
+    CNA_Bool has_infinite_far_plane;
+
+    /** @brief Whether the source declared an aspect ratio of its own. */
+    CNA_Bool has_authored_aspect_ratio;
+
+    /** @brief The projection matrix as imported. */
+    CNA_Matrix projection;
+
+    /** @brief The camera's world transform as imported. */
+    CNA_Matrix world_transform;
+
+    /** @brief Aspect ratio; 1 when the source declared none. */
+    float aspect_ratio;
+
+    /** @brief Vertical field of view in radians; 0 for an orthographic camera. */
+    float field_of_view;
+
+    /** @brief Near plane distance. */
+    float near_plane_distance;
+
+    /** @brief Far plane distance; meaningless when the far plane is infinite. */
+    float far_plane_distance;
+} CNA_ModelCameraEXT;
+
+/** @brief A camera to append, with its name borrowed for the duration of the call. */
+typedef struct CNA_ModelCameraDescriptorEXT {
+    /** @brief The source camera's display name; may be empty. */
+    CNA_StringView name;
+
+    /** @brief The camera state to copy in. */
+    CNA_ModelCameraEXT camera;
+} CNA_ModelCameraDescriptorEXT;
+
+/** @brief Gets how many imported cameras this model carries. */
+CNA_C_API CNA_Result cna_model_get_camera_count_ext(
+    CNA_ModelHandle model,
+    uint64_t* out_count);
+
+/**
+ * @brief Gets one imported camera by source order.
+ * @param model Model handle.
+ * @param index Camera index below the camera count.
+ * @param out_camera Receives the camera; its size and version headers must be set.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_get_camera_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    CNA_ModelCameraEXT* out_camera);
+
+/** @brief Gets the exact UTF-8 byte count of one camera's name. */
+CNA_C_API CNA_Result cna_model_get_camera_name_byte_count_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies one camera's display name without a terminator.
+ * @param model Model handle.
+ * @param index Camera index.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_model_copy_camera_name_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/** @brief Removes every imported camera from this model. */
+CNA_C_API CNA_Result cna_model_clear_cameras_ext(CNA_ModelHandle model);
+
+/**
+ * @brief Appends one imported camera to this model.
+ * @param model Model handle.
+ * @param descriptor The camera to copy in; its name is borrowed for the call only.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_add_camera_ext(
+    CNA_ModelHandle model,
+    const CNA_ModelCameraDescriptorEXT* descriptor);
+
+/** @brief Gets how many independent skins this model carries. */
+CNA_C_API CNA_Result cna_model_get_skin_count_ext(
+    CNA_ModelHandle model,
+    uint64_t* out_count);
+
+/**
+ * @brief Gets whether one skin names a skeleton, and how many meshes it poses.
+ * @param model Model handle.
+ * @param index Skin index below the skin count.
+ * @param out_has_data Receives whether the skin names a skeleton.
+ * @param out_mesh_count Receives how many mesh placements consume this skin's palette.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_get_skin_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    CNA_Bool* out_has_data,
+    uint64_t* out_mesh_count);
+
+/**
+ * @brief Creates a new owned handle for one skin's skeleton.
+ *
+ * A fresh handle rather than the one the caller passed to `cna_model_add_skin_ext`, because that
+ * handle may have been destroyed since. The model keeps the skeleton alive for as long as the
+ * skin exists, so destroying either handle never destroys the other's object.
+ *
+ * @param model Model handle.
+ * @param index Skin index.
+ * @param out_data Receives an owned SkinningData handle the caller destroys.
+ * @return `CNA_RESULT_INVALID_STATE` when the skin names no skeleton.
+ */
+CNA_C_API CNA_Result cna_model_create_skin_skeleton_handle_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    CNA_SkinningDataHandle* out_data);
+
+/** @brief Gets the exact UTF-8 byte count of one skin's name. */
+CNA_C_API CNA_Result cna_model_get_skin_name_byte_count_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies one skin's display name without a terminator.
+ * @param model Model handle.
+ * @param index Skin index.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_model_copy_skin_name_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Gets which of this model's meshes one skin poses.
+ * @param model Model handle.
+ * @param index Skin index.
+ * @param mesh_index Index below the skin's mesh count.
+ * @param out_model_mesh_index Receives the index into this model's own mesh collection.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_get_skin_mesh_index_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    uint64_t mesh_index,
+    uint64_t* out_model_mesh_index);
+
+/** @brief Removes every skin from this model and releases the SkinningData it retained. */
+CNA_C_API CNA_Result cna_model_clear_skins_ext(CNA_ModelHandle model);
+
+/**
+ * @brief Appends one skin to this model, retaining its skeleton.
+ *
+ * The meshes are named by index into this model's own mesh collection rather than by handle: the
+ * model already owns those meshes, so an index cannot outlive what it points at. The SkinningData
+ * is retained for as long as the skin exists, so destroying the caller's handle afterwards is
+ * safe.
+ *
+ * @param model Model handle.
+ * @param name The skin's display name; may be empty.
+ * @param data SkinningData handle, or `CNA_INVALID_HANDLE` for a skin with no skeleton.
+ * @param mesh_indices Indices into this model's mesh collection, borrowed for the call.
+ * @param mesh_index_count Number of indices, which may be zero.
+ * @return `CNA_RESULT_INVALID_ARGUMENT` for an out-of-range mesh index or a null array.
+ */
+CNA_C_API CNA_Result cna_model_add_skin_ext(
+    CNA_ModelHandle model,
+    CNA_StringView name,
+    CNA_SkinningDataHandle data,
+    const uint64_t* mesh_indices,
+    uint64_t mesh_index_count);
+
+/**
+ * @brief Gets the sphere containing every mesh's bounding sphere.
+ * @param model Model handle.
+ * @param out_has_value Receives whether the model has any mesh at all.
+ * @param out_sphere Receives the merged sphere when one exists.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_get_bounding_sphere_ext(
+    CNA_ModelHandle model,
+    CNA_Bool* out_has_value,
+    CNA_BoundingSphere* out_sphere);
+
+/** @brief Gets how many material variants the imported asset declared. */
+CNA_C_API CNA_Result cna_model_get_material_variant_count_ext(
+    CNA_ModelHandle model,
+    uint64_t* out_count);
+
+/** @brief Gets the exact UTF-8 byte count of one material-variant name. */
+CNA_C_API CNA_Result cna_model_get_material_variant_name_byte_count_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies one material-variant name without a terminator.
+ * @param model Model handle.
+ * @param index Variant index in source order.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_model_copy_material_variant_name_ext(
+    CNA_ModelHandle model,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/** @brief Gets the selected material-variant index, or -1 for default materials. */
+CNA_C_API CNA_Result cna_model_get_material_variant_ext(
+    CNA_ModelHandle model,
+    int32_t* out_value);
+
+/**
+ * @brief Selects one imported material variant, or restores defaults with -1.
+ * @param model Model handle.
+ * @param value Variant index in source order, or -1.
+ * @return `CNA_RESULT_INVALID_ARGUMENT` for a value below -1 or past the declared variants.
+ */
+CNA_C_API CNA_Result cna_model_set_material_variant_ext(
+    CNA_ModelHandle model,
+    int32_t value);
+
+/**
+ * @brief Builds a perspective projection with no far plane.
+ *
+ * CNA extension: XNA's perspective factories all take a far plane. A glTF camera may declare
+ * none, and clamping one in would move geometry the source meant to remain visible.
+ *
+ * @param field_of_view Vertical field of view in radians.
+ * @param aspect_ratio Width divided by height.
+ * @param near_plane_distance Near plane distance.
+ * @param out_matrix Receives the projection.
+ * @return `CNA_RESULT_INVALID_ARGUMENT` for a null output or an argument the native factory
+ *         rejects.
+ */
+CNA_C_API CNA_Result cna_matrix_create_infinite_perspective_field_of_view_ext(
+    float field_of_view,
+    float aspect_ratio,
+    float near_plane_distance,
+    CNA_Matrix* out_matrix);
+
 #ifdef __cplusplus
 }
 #endif

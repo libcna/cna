@@ -334,6 +334,162 @@ static int validate_gltf_import_report(void)
     return 1;
 }
 
+/* CBIND-051D: the cameras, skins, bounding sphere and material variants a glTF import leaves on
+   a Model, and the infinite-perspective factory a camera without a far plane needs. */
+static int validate_model_scene_extensions(void)
+{
+    CNA_ModelHandle model = CNA_INVALID_HANDLE;
+    CNA_SkinningDataHandle skeleton = CNA_INVALID_HANDLE;
+    CNA_SkinningDataHandle borrowed = CNA_INVALID_HANDLE;
+    CNA_ModelCameraEXT camera;
+    CNA_ModelCameraEXT malformed;
+    CNA_ModelCameraDescriptorEXT descriptor;
+    CNA_BoundingSphere sphere = {{0.0F, 0.0F, 0.0F}, 0.0F};
+    CNA_Matrix identity = {0};
+    CNA_Matrix infinite = {0};
+    CNA_Bool has = CNA_TRUE;
+    char buffer[32];
+    uint64_t count = UINT64_MAX;
+    uint64_t length = UINT64_MAX;
+    int32_t variant = INT32_MIN;
+
+    memset(&camera, 0, sizeof(camera));
+    camera.struct_size = sizeof(CNA_ModelCameraEXT);
+    camera.struct_version = UINT32_C(1);
+    memset(&malformed, 0, sizeof(malformed));
+    REQUIRE(cna_model_create_default(&model) == CNA_RESULT_SUCCESS &&
+            cna_matrix_get_identity(&identity) == CNA_RESULT_SUCCESS);
+
+    /* An empty model declares no cameras, no skins, no variants and no bounds. */
+    REQUIRE(cna_model_get_camera_count_ext(model, &count) == CNA_RESULT_SUCCESS && count == 0U &&
+            cna_model_get_skin_count_ext(model, &count) == CNA_RESULT_SUCCESS && count == 0U &&
+            cna_model_get_material_variant_count_ext(model, &count) == CNA_RESULT_SUCCESS &&
+            count == 0U &&
+            cna_model_get_material_variant_ext(model, &variant) == CNA_RESULT_SUCCESS &&
+            variant == -1 &&
+            cna_model_get_bounding_sphere_ext(model, &has, &sphere) == CNA_RESULT_SUCCESS &&
+            has == CNA_FALSE);
+
+    /* A camera round-trips field by field, and its name is read separately. */
+    camera.scene_node_index = 7;
+    camera.is_perspective = CNA_TRUE;
+    camera.has_infinite_far_plane = CNA_TRUE;
+    camera.has_authored_aspect_ratio = CNA_TRUE;
+    camera.projection = identity;
+    camera.world_transform = identity;
+    camera.aspect_ratio = 1.75F;
+    camera.field_of_view = 0.75F;
+    camera.near_plane_distance = 0.1F;
+    camera.far_plane_distance = 500.0F;
+    descriptor.name = view("MainCamera");
+    descriptor.camera = camera;
+    REQUIRE(cna_model_add_camera_ext(model, &descriptor) == CNA_RESULT_SUCCESS &&
+            cna_model_get_camera_count_ext(model, &count) == CNA_RESULT_SUCCESS && count == 1U);
+    memset(&camera, 0, sizeof(camera));
+    camera.struct_size = sizeof(CNA_ModelCameraEXT);
+    camera.struct_version = UINT32_C(1);
+    REQUIRE(cna_model_get_camera_ext(model, 0U, &camera) == CNA_RESULT_SUCCESS &&
+            camera.scene_node_index == 7 && camera.is_perspective == CNA_TRUE &&
+            camera.has_infinite_far_plane == CNA_TRUE &&
+            camera.has_authored_aspect_ratio == CNA_TRUE &&
+            camera.aspect_ratio == 1.75F && camera.field_of_view == 0.75F &&
+            camera.near_plane_distance == 0.1F && camera.far_plane_distance == 500.0F &&
+            camera.projection.m11 == identity.m11 && camera.world_transform.m44 == 1.0F);
+    REQUIRE(cna_model_get_camera_name_byte_count_ext(model, 0U, &length) == CNA_RESULT_SUCCESS &&
+            length == 10U &&
+            cna_model_copy_camera_name_ext(model, 0U, buffer, sizeof(buffer), &length) ==
+                CNA_RESULT_SUCCESS && string_equals(buffer, length, "MainCamera"));
+    memset(buffer, '#', sizeof(buffer));
+    REQUIRE(cna_model_copy_camera_name_ext(model, 0U, buffer, 3U, &length) ==
+                CNA_RESULT_BUFFER_TOO_SMALL && length == 10U && buffer[0] == '#');
+
+    /* A skin retains its skeleton, so destroying the caller's handle leaves the model intact. */
+    {
+        const CNA_Matrix bind[1] = {{1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F,
+                                     0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F}};
+        const int32_t hierarchy[1] = {-1};
+        const CNA_SkinningDataDescriptor skinning = {
+            1, 0U, hierarchy, bind, bind, 0, 0U, 0, 0U};
+        REQUIRE(cna_skinning_data_create(&skinning, &skeleton) == CNA_RESULT_SUCCESS);
+    }
+    REQUIRE(cna_model_add_skin_ext(model, view("Body"), skeleton, 0, 0U) == CNA_RESULT_SUCCESS &&
+            cna_model_get_skin_count_ext(model, &count) == CNA_RESULT_SUCCESS && count == 1U &&
+            cna_model_get_skin_ext(model, 0U, &has, &count) == CNA_RESULT_SUCCESS &&
+            has == CNA_TRUE && count == 0U &&
+            cna_model_copy_skin_name_ext(model, 0U, buffer, sizeof(buffer), &length) ==
+                CNA_RESULT_SUCCESS && string_equals(buffer, length, "Body") &&
+            cna_model_get_skin_name_byte_count_ext(model, 0U, &length) == CNA_RESULT_SUCCESS &&
+            length == 4U);
+    REQUIRE(cna_skinning_data_destroy(skeleton) == CNA_RESULT_SUCCESS &&
+            cna_model_create_skin_skeleton_handle_ext(model, 0U, &borrowed) ==
+                CNA_RESULT_SUCCESS &&
+            cna_skinning_data_get_bone_count(borrowed, &count) == CNA_RESULT_SUCCESS &&
+            count == 1U &&
+            cna_skinning_data_destroy(borrowed) == CNA_RESULT_SUCCESS);
+
+    /* A skin with no skeleton is legal and says so rather than handing back a handle. */
+    REQUIRE(cna_model_add_skin_ext(model, view(""), CNA_INVALID_HANDLE, 0, 0U) ==
+                CNA_RESULT_SUCCESS &&
+            cna_model_get_skin_ext(model, 1U, &has, &count) == CNA_RESULT_SUCCESS &&
+            has == CNA_FALSE &&
+            cna_model_create_skin_skeleton_handle_ext(model, 1U, &borrowed) ==
+                CNA_RESULT_INVALID_STATE && borrowed == CNA_INVALID_HANDLE);
+
+    /* Mesh indices name this model's own meshes, and an empty model owns none. */
+    {
+        const uint64_t meshes[1] = {0U};
+        REQUIRE(cna_model_add_skin_ext(model, view("Bad"), CNA_INVALID_HANDLE, meshes, 1U) ==
+                    CNA_RESULT_INVALID_ARGUMENT &&
+                cna_model_add_skin_ext(model, view("Bad"), CNA_INVALID_HANDLE, 0, 1U) ==
+                    CNA_RESULT_INVALID_ARGUMENT &&
+                cna_model_get_skin_count_ext(model, &count) == CNA_RESULT_SUCCESS &&
+                count == 2U &&
+                cna_model_get_skin_mesh_index_ext(model, 0U, 0U, &count) ==
+                    CNA_RESULT_INVALID_ARGUMENT);
+    }
+
+    /* Selecting a variant a model does not declare is refused; -1 always restores defaults. */
+    REQUIRE(cna_model_set_material_variant_ext(model, -1) == CNA_RESULT_SUCCESS &&
+            cna_model_get_material_variant_ext(model, &variant) == CNA_RESULT_SUCCESS &&
+            variant == -1 &&
+            cna_model_set_material_variant_ext(model, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_set_material_variant_ext(model, -2) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_get_material_variant_name_byte_count_ext(model, 0U, &length) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_copy_material_variant_name_ext(
+                model, 0U, buffer, sizeof(buffer), &length) == CNA_RESULT_INVALID_ARGUMENT);
+
+    /* A projection with no far plane: the third column is the limit as far goes to infinity. */
+    REQUIRE(cna_matrix_create_infinite_perspective_field_of_view_ext(
+                1.0F, 1.5F, 0.5F, &infinite) == CNA_RESULT_SUCCESS &&
+            infinite.m33 == -1.0F && infinite.m34 == -1.0F && infinite.m44 == 0.0F &&
+            cna_matrix_create_infinite_perspective_field_of_view_ext(1.0F, 1.5F, 0.5F, 0) ==
+                CNA_RESULT_INVALID_ARGUMENT);
+
+    /* Out-of-range indices, malformed structures and null outputs are refused throughout. */
+    REQUIRE(cna_model_get_camera_ext(model, 1U, &camera) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_get_camera_ext(model, 0U, &malformed) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_get_camera_name_byte_count_ext(model, 1U, &length) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_get_camera_count_ext(model, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_add_camera_ext(model, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_get_skin_ext(model, 2U, &has, &count) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_get_bounding_sphere_ext(model, 0, &sphere) == CNA_RESULT_INVALID_ARGUMENT);
+    descriptor.camera = malformed;
+    REQUIRE(cna_model_add_camera_ext(model, &descriptor) == CNA_RESULT_INVALID_ARGUMENT);
+
+    /* Clearing removes both lists, and the retained skeletons with them. */
+    REQUIRE(cna_model_clear_cameras_ext(model) == CNA_RESULT_SUCCESS &&
+            cna_model_clear_skins_ext(model) == CNA_RESULT_SUCCESS &&
+            cna_model_get_camera_count_ext(model, &count) == CNA_RESULT_SUCCESS && count == 0U &&
+            cna_model_get_skin_count_ext(model, &count) == CNA_RESULT_SUCCESS && count == 0U);
+
+    REQUIRE(cna_model_destroy(model) == CNA_RESULT_SUCCESS &&
+            cna_model_get_camera_count_ext(model, &count) == CNA_RESULT_INVALID_HANDLE &&
+            cna_model_clear_skins_ext(model) == CNA_RESULT_INVALID_HANDLE);
+    return 1;
+}
+
 static int validate_aggregate(const CNA_Handle device)
 {
     CNA_ModelBoneHandle root = CNA_INVALID_HANDLE;
@@ -477,6 +633,7 @@ int main(void)
     CNA_Handle game = CNA_INVALID_HANDLE;
 
     if (!validate_default() || release_count != 2 || !validate_gltf_import_report() ||
+        !validate_model_scene_extensions() ||
         cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || state.stage != 2 ||
         cna_game_destroy(game) != CNA_RESULT_SUCCESS) {

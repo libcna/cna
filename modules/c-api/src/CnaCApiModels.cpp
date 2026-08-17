@@ -56,6 +56,8 @@ using Microsoft::Xna::Framework::Graphics::ModelBoneCollection;
 using Microsoft::Xna::Framework::Graphics::ModelEffectCollection;
 using Microsoft::Xna::Framework::Graphics::ModelMesh;
 using Microsoft::Xna::Framework::Graphics::ModelMeshPart;
+using Microsoft::Xna::Framework::Graphics::ModelCameraEXT;
+using Microsoft::Xna::Framework::Graphics::ModelSkinEXT;
 using Microsoft::Xna::Framework::Graphics::ClipTargetSpaceEXT;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 using Microsoft::Xna::Framework::Graphics::SamplerState;
@@ -196,8 +198,13 @@ struct EffectCollectionResource final {
     std::shared_ptr<MeshResource> mesh;
 };
 
+struct SkinningDataResource;
+
 struct ModelResource final {
     std::shared_ptr<Model> value;
+    // ModelSkinEXT borrows its SkinningData, so the model holds a strong reference beside each
+    // skin: without one, destroying the caller's handle would leave that pointer dangling.
+    std::vector<std::shared_ptr<SkinningDataResource>> skinSkeletons;
     std::vector<std::shared_ptr<BoneNode>> bones;
     std::vector<std::shared_ptr<MeshResource>> meshes;
     std::shared_ptr<BoneNode> root;
@@ -6106,6 +6113,575 @@ CNA_Result cna_morph_target_data_ext_set_tangent_deltas(
         for (uint64_t index = 0U; index < deltaCount; ++index) {
             target.push_back(ToNativeVector3(deltas[index]));
         }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+[[nodiscard]] CNA_ModelCameraEXT ToC(const ModelCameraEXT& value) noexcept
+{
+    return CNA_ModelCameraEXT{
+        .struct_size = sizeof(CNA_ModelCameraEXT),
+        .struct_version = ReportStructureVersion,
+        .scene_node_index = value.SceneNodeIndex,
+        .is_perspective = value.IsPerspective ? CNA_TRUE : CNA_FALSE,
+        .has_infinite_far_plane = value.HasInfiniteFarPlane ? CNA_TRUE : CNA_FALSE,
+        .has_authored_aspect_ratio = value.HasAuthoredAspectRatio ? CNA_TRUE : CNA_FALSE,
+        .projection = ToC(value.Projection),
+        .world_transform = ToC(value.WorldTransform),
+        .aspect_ratio = value.AspectRatio,
+        .field_of_view = value.FieldOfView,
+        .near_plane_distance = value.NearPlaneDistance,
+        .far_plane_distance = value.FarPlaneDistance};
+}
+
+[[nodiscard]] bool IsModelCamera(const CNA_ModelCameraEXT* const value) noexcept
+{
+    return value != nullptr && value->struct_size >= sizeof(CNA_ModelCameraEXT) &&
+        value->struct_version == ReportStructureVersion;
+}
+
+[[nodiscard]] CNA_Result GetModelCamera(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    std::shared_ptr<ModelResource>* const outModel,
+    const ModelCameraEXT** const outCamera)
+{
+    if (const CNA_Result result = GetModel(modelHandle, outModel);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<ModelCameraEXT>& cameras = (*outModel)->value->getCamerasEXTProperty();
+    if (index >= cameras.size()) {
+        return InvalidArgument("The Model camera index is outside the valid range.");
+    }
+    *outCamera = &cameras[static_cast<std::size_t>(index)];
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result GetModelSkin(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    std::shared_ptr<ModelResource>* const outModel,
+    const ModelSkinEXT** const outSkin)
+{
+    if (const CNA_Result result = GetModel(modelHandle, outModel);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<ModelSkinEXT>& skins = (*outModel)->value->getSkinsEXTProperty();
+    if (index >= skins.size()) {
+        return InvalidArgument("The Model skin index is outside the valid range.");
+    }
+    *outSkin = &skins[static_cast<std::size_t>(index)];
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result CopyModelString(
+    const std::string& value,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount,
+    const char* const invalidMessage,
+    const char* const smallMessage)
+{
+    if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
+        return InvalidArgument(invalidMessage);
+    }
+    *outByteCount = static_cast<uint64_t>(value.size());
+    if (capacity < value.size()) {
+        return Fail(CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE, smallMessage);
+    }
+    if (!value.empty()) {
+        std::memcpy(destination, value.data(), value.size());
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_model_get_camera_count_ext(
+    const CNA_ModelHandle modelHandle,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidArgument("The Model camera-count output is null.");
+        }
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<uint64_t>(model->value->getCamerasEXTProperty().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_get_camera_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    CNA_ModelCameraEXT* const outCamera)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsModelCamera(outCamera)) {
+            return InvalidArgument("The Model camera output is null or malformed.");
+        }
+        std::shared_ptr<ModelResource> model;
+        const ModelCameraEXT* camera = nullptr;
+        if (const CNA_Result result = GetModelCamera(modelHandle, index, &model, &camera);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCamera = ToC(*camera);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_get_camera_name_byte_count_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteCount == nullptr) {
+            return InvalidArgument("The Model camera-name byte-count output is null.");
+        }
+        std::shared_ptr<ModelResource> model;
+        const ModelCameraEXT* camera = nullptr;
+        if (const CNA_Result result = GetModelCamera(modelHandle, index, &model, &camera);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outByteCount = static_cast<uint64_t>(camera->Name.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_copy_camera_name_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> model;
+        const ModelCameraEXT* camera = nullptr;
+        if (const CNA_Result result = GetModelCamera(modelHandle, index, &model, &camera);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyModelString(
+            camera->Name, destination, capacity, outByteCount,
+            "The Model camera-name output is invalid.",
+            "The destination cannot hold the complete Model camera name.");
+    });
+}
+
+CNA_Result cna_model_clear_cameras_ext(const CNA_ModelHandle modelHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        model->value->setCamerasEXTProperty({});
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_add_camera_ext(
+    const CNA_ModelHandle modelHandle,
+    const CNA_ModelCameraDescriptorEXT* const descriptor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (descriptor == nullptr || !IsModelCamera(&descriptor->camera)) {
+            return InvalidArgument("The Model camera descriptor is null or malformed.");
+        }
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        ModelCameraEXT camera;
+        if (const CNA_Result result = CopyStringView(descriptor->name, true, &camera.Name);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The Model camera name is not valid UTF-8 text.");
+        }
+        camera.SceneNodeIndex = descriptor->camera.scene_node_index;
+        camera.Projection = ToNative(descriptor->camera.projection);
+        camera.WorldTransform = ToNative(descriptor->camera.world_transform);
+        camera.IsPerspective = descriptor->camera.is_perspective == CNA_TRUE;
+        camera.HasInfiniteFarPlane = descriptor->camera.has_infinite_far_plane == CNA_TRUE;
+        camera.AspectRatio = descriptor->camera.aspect_ratio;
+        camera.HasAuthoredAspectRatio = descriptor->camera.has_authored_aspect_ratio == CNA_TRUE;
+        camera.FieldOfView = descriptor->camera.field_of_view;
+        camera.NearPlaneDistance = descriptor->camera.near_plane_distance;
+        camera.FarPlaneDistance = descriptor->camera.far_plane_distance;
+
+        std::vector<ModelCameraEXT> cameras = model->value->getCamerasEXTProperty();
+        cameras.push_back(std::move(camera));
+        model->value->setCamerasEXTProperty(std::move(cameras));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_get_skin_count_ext(
+    const CNA_ModelHandle modelHandle,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidArgument("The Model skin-count output is null.");
+        }
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<uint64_t>(model->value->getSkinsEXTProperty().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_get_skin_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    CNA_Bool* const outHasData,
+    uint64_t* const outMeshCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHasData == nullptr || outMeshCount == nullptr) {
+            return InvalidArgument("The Model skin outputs are null.");
+        }
+        std::shared_ptr<ModelResource> model;
+        const ModelSkinEXT* skin = nullptr;
+        if (const CNA_Result result = GetModelSkin(modelHandle, index, &model, &skin);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outHasData = skin->Data != nullptr ? CNA_TRUE : CNA_FALSE;
+        *outMeshCount = static_cast<uint64_t>(skin->Meshes.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_create_skin_skeleton_handle_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    CNA_SkinningDataHandle* const outData)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outData == nullptr) {
+            return InvalidArgument("The Model skin skeleton output handle is null.");
+        }
+        *outData = CNA_INVALID_HANDLE;
+        std::shared_ptr<ModelResource> model;
+        const ModelSkinEXT* skin = nullptr;
+        if (const CNA_Result result = GetModelSkin(modelHandle, index, &model, &skin);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (skin->Data == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The Model skin names no skeleton.");
+        }
+        const std::size_t skinIndex = static_cast<std::size_t>(index);
+        if (skinIndex >= model->skinSkeletons.size() ||
+            model->skinSkeletons[skinIndex] == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The Model skin's skeleton was not created through the C API.");
+        }
+        return CreateSkinningDataHandle(model->skinSkeletons[skinIndex], outData);
+    });
+}
+
+CNA_Result cna_model_get_skin_name_byte_count_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteCount == nullptr) {
+            return InvalidArgument("The Model skin-name byte-count output is null.");
+        }
+        std::shared_ptr<ModelResource> model;
+        const ModelSkinEXT* skin = nullptr;
+        if (const CNA_Result result = GetModelSkin(modelHandle, index, &model, &skin);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outByteCount = static_cast<uint64_t>(skin->Name.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_copy_skin_name_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> model;
+        const ModelSkinEXT* skin = nullptr;
+        if (const CNA_Result result = GetModelSkin(modelHandle, index, &model, &skin);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyModelString(
+            skin->Name, destination, capacity, outByteCount,
+            "The Model skin-name output is invalid.",
+            "The destination cannot hold the complete Model skin name.");
+    });
+}
+
+CNA_Result cna_model_get_skin_mesh_index_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    const uint64_t meshIndex,
+    uint64_t* const outModelMeshIndex)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outModelMeshIndex == nullptr) {
+            return InvalidArgument("The Model skin mesh-index output is null.");
+        }
+        std::shared_ptr<ModelResource> model;
+        const ModelSkinEXT* skin = nullptr;
+        if (const CNA_Result result = GetModelSkin(modelHandle, index, &model, &skin);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (meshIndex >= skin->Meshes.size()) {
+            return InvalidArgument("The Model skin mesh index is outside the valid range.");
+        }
+        const ModelMesh* const mesh = skin->Meshes[static_cast<std::size_t>(meshIndex)];
+        for (std::size_t candidate = 0U; candidate < model->meshes.size(); ++candidate) {
+            if (model->meshes[candidate]->value.get() == mesh) {
+                *outModelMeshIndex = static_cast<uint64_t>(candidate);
+                return CNA_RESULT_SUCCESS;
+            }
+        }
+        return Fail(
+            CNA_RESULT_INVALID_STATE,
+            CNA_ERROR_CATEGORY_STATE,
+            "The Model skin names a mesh this Model does not own.");
+    });
+}
+
+CNA_Result cna_model_clear_skins_ext(const CNA_ModelHandle modelHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        model->value->setSkinsEXTProperty({});
+        model->skinSkeletons.clear();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_add_skin_ext(
+    const CNA_ModelHandle modelHandle,
+    const CNA_StringView name,
+    const CNA_SkinningDataHandle dataHandle,
+    const uint64_t* const meshIndices,
+    const uint64_t meshIndexCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (meshIndices == nullptr && meshIndexCount != 0U) {
+            return InvalidArgument("The Model skin mesh-index array is null.");
+        }
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<SkinningDataResource> data;
+        if (dataHandle != CNA_INVALID_HANDLE) {
+            if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+        }
+        ModelSkinEXT skin;
+        if (const CNA_Result result = CopyStringView(name, true, &skin.Name);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The Model skin name is not valid UTF-8 text.");
+        }
+        skin.Meshes.reserve(static_cast<std::size_t>(meshIndexCount));
+        for (uint64_t entry = 0U; entry < meshIndexCount; ++entry) {
+            if (meshIndices[entry] >= model->meshes.size()) {
+                return InvalidArgument("A Model skin mesh index is outside the valid range.");
+            }
+            skin.Meshes.push_back(
+                model->meshes[static_cast<std::size_t>(meshIndices[entry])]->value.get());
+        }
+        // The skeleton is borrowed by the canonical type, so the model holds a strong reference
+        // beside it: without one, destroying the caller's handle would leave ModelSkinEXT::Data
+        // pointing at freed memory the next reader would follow.
+        skin.Data = data != nullptr ? data->value.get() : nullptr;
+
+        std::vector<ModelSkinEXT> skins = model->value->getSkinsEXTProperty();
+        skins.push_back(std::move(skin));
+        model->value->setSkinsEXTProperty(std::move(skins));
+        model->skinSkeletons.push_back(std::move(data));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_get_bounding_sphere_ext(
+    const CNA_ModelHandle modelHandle,
+    CNA_Bool* const outHasValue,
+    CNA_BoundingSphere* const outSphere)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHasValue == nullptr || outSphere == nullptr) {
+            return InvalidArgument("The Model bounding-sphere outputs are null.");
+        }
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::optional<BoundingSphere> sphere =
+            model->value->getBoundingSphereEXTProperty();
+        *outHasValue = sphere.has_value() ? CNA_TRUE : CNA_FALSE;
+        *outSphere = sphere.has_value() ? ToC(*sphere) : CNA_BoundingSphere{};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_get_material_variant_count_ext(
+    const CNA_ModelHandle modelHandle,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidArgument("The Model material-variant count output is null.");
+        }
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount =
+            static_cast<uint64_t>(model->value->getMaterialVariantNamesEXTProperty().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_get_material_variant_name_byte_count_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteCount == nullptr) {
+            return InvalidArgument("The Model material-variant byte-count output is null.");
+        }
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<std::string>& names =
+            model->value->getMaterialVariantNamesEXTProperty();
+        if (index >= names.size()) {
+            return InvalidArgument("The Model material-variant index is outside the valid range.");
+        }
+        *outByteCount = static_cast<uint64_t>(names[static_cast<std::size_t>(index)].size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_copy_material_variant_name_ext(
+    const CNA_ModelHandle modelHandle,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<std::string>& names =
+            model->value->getMaterialVariantNamesEXTProperty();
+        if (index >= names.size()) {
+            return InvalidArgument("The Model material-variant index is outside the valid range.");
+        }
+        return CopyModelString(
+            names[static_cast<std::size_t>(index)], destination, capacity, outByteCount,
+            "The Model material-variant name output is invalid.",
+            "The destination cannot hold the complete Model material-variant name.");
+    });
+}
+
+CNA_Result cna_model_get_material_variant_ext(
+    const CNA_ModelHandle modelHandle,
+    int32_t* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The Model material-variant output is null.");
+        }
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = static_cast<int32_t>(model->value->getMaterialVariantEXTProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_set_material_variant_ext(
+    const CNA_ModelHandle modelHandle,
+    const int32_t value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        model->value->setMaterialVariantEXTProperty(static_cast<int>(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_matrix_create_infinite_perspective_field_of_view_ext(
+    const float fieldOfView,
+    const float aspectRatio,
+    const float nearPlaneDistance,
+    CNA_Matrix* const outMatrix)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outMatrix == nullptr) {
+            return InvalidArgument("The infinite-perspective matrix output is null.");
+        }
+        *outMatrix = ToC(Microsoft::Xna::Framework::Graphics::
+                                   CreateInfinitePerspectiveFieldOfViewEXT(
+                                       fieldOfView, aspectRatio, nearPlaneDistance));
         return CNA_RESULT_SUCCESS;
     });
 }

@@ -2293,6 +2293,7 @@
   "cna_matrix_create_from_axis_angle",
   "cna_matrix_create_from_quaternion",
   "cna_matrix_create_from_yaw_pitch_roll",
+  "cna_matrix_create_infinite_perspective_field_of_view_ext",
   "cna_matrix_create_look_at",
   "cna_matrix_create_orthographic",
   "cna_matrix_create_orthographic_off_center",
@@ -2434,7 +2435,9 @@
   "cna_microphone_start_at",
   "cna_microphone_stop_at",
   "cna_microphone_subscribe_buffer_ready_at",
+  "cna_model_add_camera_ext",
   "cna_model_add_gltf_import_diagnostic_ext",
+  "cna_model_add_skin_ext",
   "cna_model_bone_add_child",
   "cna_model_bone_collection_contains",
   "cna_model_bone_collection_create",
@@ -2452,14 +2455,20 @@
   "cna_model_bone_get_parent",
   "cna_model_bone_get_transform",
   "cna_model_bone_set_transform",
+  "cna_model_clear_cameras_ext",
+  "cna_model_clear_skins_ext",
   "cna_model_copy_absolute_bone_transforms",
   "cna_model_copy_bone_transforms",
+  "cna_model_copy_camera_name_ext",
   "cna_model_copy_gltf_import_diagnostic_code_ext",
   "cna_model_copy_gltf_import_diagnostic_detail_ext",
   "cna_model_copy_gltf_import_diagnostic_message_ext",
   "cna_model_copy_gltf_import_diagnostic_subject_ext",
+  "cna_model_copy_material_variant_name_ext",
+  "cna_model_copy_skin_name_ext",
   "cna_model_create",
   "cna_model_create_default",
+  "cna_model_create_skin_skeleton_handle_ext",
   "cna_model_create_with_parents",
   "cna_model_destroy",
   "cna_model_draw",
@@ -2471,14 +2480,25 @@
   "cna_model_effect_collection_remove",
   "cna_model_get_bone_transform_count",
   "cna_model_get_bones",
+  "cna_model_get_bounding_sphere_ext",
+  "cna_model_get_camera_count_ext",
+  "cna_model_get_camera_ext",
+  "cna_model_get_camera_name_byte_count_ext",
   "cna_model_get_gltf_import_diagnostic_code_byte_count_ext",
   "cna_model_get_gltf_import_diagnostic_detail_byte_count_ext",
   "cna_model_get_gltf_import_diagnostic_ext",
   "cna_model_get_gltf_import_diagnostic_message_byte_count_ext",
   "cna_model_get_gltf_import_diagnostic_subject_byte_count_ext",
   "cna_model_get_gltf_import_report_ext",
+  "cna_model_get_material_variant_count_ext",
+  "cna_model_get_material_variant_ext",
+  "cna_model_get_material_variant_name_byte_count_ext",
   "cna_model_get_meshes",
   "cna_model_get_root",
+  "cna_model_get_skin_count_ext",
+  "cna_model_get_skin_ext",
+  "cna_model_get_skin_mesh_index_ext",
+  "cna_model_get_skin_name_byte_count_ext",
   "cna_model_get_tag",
   "cna_model_mesh_collection_contains",
   "cna_model_mesh_collection_create",
@@ -2532,6 +2552,7 @@
   "cna_model_mesh_set_tag",
   "cna_model_set_bone_transforms",
   "cna_model_set_gltf_import_report_ext",
+  "cna_model_set_material_variant_ext",
   "cna_model_set_owned_resources",
   "cna_model_set_tag",
   "cna_morph_target_data_ext_blend",
@@ -8961,6 +8982,74 @@
     ]
    },
    "size": 24
+  },
+  "CNA_ModelCameraDescriptorEXT": {
+   "align": 8,
+   "fields": {
+    "camera": [
+     16,
+     160
+    ],
+    "name": [
+     0,
+     16
+    ]
+   },
+   "size": 176
+  },
+  "CNA_ModelCameraEXT": {
+   "align": 4,
+   "fields": {
+    "aspect_ratio": [
+     144,
+     4
+    ],
+    "far_plane_distance": [
+     156,
+     4
+    ],
+    "field_of_view": [
+     148,
+     4
+    ],
+    "has_authored_aspect_ratio": [
+     14,
+     1
+    ],
+    "has_infinite_far_plane": [
+     13,
+     1
+    ],
+    "is_perspective": [
+     12,
+     1
+    ],
+    "near_plane_distance": [
+     152,
+     4
+    ],
+    "projection": [
+     16,
+     64
+    ],
+    "scene_node_index": [
+     8,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "world_transform": [
+     80,
+     64
+    ]
+   },
+   "size": 160
   },
   "CNA_MorphTargetDataEXTDescriptor": {
    "align": 8,

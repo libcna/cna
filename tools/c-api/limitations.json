@@ -156,6 +156,14 @@
         "finding rather than a decision"
       ],
       "note": "A small number of canonical operations are unsafe or meaningless when reached through a C handle. Binding them would hand a caller a way to corrupt memory or to observe an event that can never fire; each is recorded individually in COVERAGE.md."
+    },
+    {
+      "id": "internal-entry-points-in-public-headers",
+      "title": "`CNA::Internal` entry points declared in a public header",
+      "match": [
+        "a `CNA::Internal` entry point"
+      ],
+      "note": "The inventory excludes `CNA::Internal` and `Detail` by path, because those namespaces are how CNA's own modules talk to each other rather than surface an application uses. A few such entry points are declared in a public header for the compiler's convenience and reach the inventory that way. `ConfigureModelMaterialVariantsEXT` is the example: it is how the glTF importer installs a model's variant bindings, not an operation an application performs. What an application does with variants -- read the declared names, select one -- is bound on `CNA_ModelHandle` (CBIND-051D)."
     }
   ],
   "environment": [

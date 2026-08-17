@@ -15,9 +15,9 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 6,252 | A C route exists and is tested. |
+| Fully mapped | 6,279 | A C route exists and is tested. |
 | **Partially mapped** | 12 | A route exists but covers a stated subset. Read the next section before relying on one. |
-| **No C form** | 385 | Nothing callable was omitted; see the reasons below. |
+| **No C form** | 386 | Nothing callable was omitted; see the reasons below. |
 
 ## Partially mapped: a route exists, and it does less than the C++ does
 
@@ -107,6 +107,10 @@ The canonical asynchronous pair completes before its Begin returns, so the C rou
 ### Canonical routes this ABI declines to bind — 5 symbols
 
 A small number of canonical operations are unsafe or meaningless when reached through a C handle. Binding them would hand a caller a way to corrupt memory or to observe an event that can never fire; each is recorded individually in COVERAGE.md.
+
+### `CNA::Internal` entry points declared in a public header — 1 symbols
+
+The inventory excludes `CNA::Internal` and `Detail` by path, because those namespaces are how CNA's own modules talk to each other rather than surface an application uses. A few such entry points are declared in a public header for the compiler's convenience and reach the inventory that way. `ConfigureModelMaterialVariantsEXT` is the example: it is how the glTF importer installs a model's variant bindings, not an operation an application performs. What an application does with variants -- read the declared names, select one -- is bound on `CNA_ModelHandle` (CBIND-051D).
 
 ## Limitations that are not about symbols
 
