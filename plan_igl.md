@@ -29,7 +29,7 @@ custom `ShaderEffect`).
 | C | Resources (textures, buffers, targets) | 🔶 `Texture2D`/`RenderTarget2D`/depth/`RenderTarget2D.GetData` (`Igl_RenderTarget`), 2-slot MRT (`Igl_Mrt`), `TextureCube`/`RenderTargetCube` (`Igl_EnvironmentMapEffect`/`Igl_RenderTargetCube`) and `Texture3D` (`Igl_ShaderEffectTexture3D`) verified; back-buffer readback beyond the smoke test's own use, and MRT beyond 2 of up to 4 slots, remain untested |
 | D | 2D pipeline (`SpriteBatch`) | ✅ verified (`Igl_2D`) |
 | E | 3D pipeline and stock effects | 🔶 every stock effect (`BasicEffect` through `PbrEffect`, plus fog, stencil, MSAA and instancing) now has at least one verified test (`Igl_3D`, `Igl_AlphaTestEffect`, `Igl_DualTextureEffect`, `Igl_Fog`, `Igl_Stencil`, `Igl_Msaa`, `Igl_EnvironmentMapEffect`, `Igl_SkinnedEffect`, `Igl_PbrEffect`, `Igl_Instancing`); each is a single scenario, not a combinatorial battery (see IGL-55) |
-| F | Custom `ShaderEffect` | 🔶 core compile/uniform/texture path verified (OpenGL/GLX, `Igl_ShaderEffectTexture3D`) after fixing a real texture-binding bug; `SpriteBatch.Begin(effect)` and 2D/cube custom textures share the fix but have no dedicated test yet |
+| F | Custom `ShaderEffect` | 🔶 core compile/uniform/texture path verified (OpenGL/GLX, `Igl_ShaderEffectTexture3D`) after fixing a real texture-binding bug; `SpriteBatch.Begin(effect)` now also verified end-to-end (`Igl_SpriteBatchShaderEffect`); 2D/cube custom textures beyond the 3D volume-texture case share the fix but have no dedicated test yet |
 | G | Tests, docs and gates | 🔶 the four example tests pass; platform boundary gates ran clean for this work |
 | H | Verification and hardening | 🔶 IGL-56/57/58/59 done; IGL-60-64 open |
 
@@ -157,7 +157,7 @@ Legend: ✅ done and verified · ✍️ code written, not yet compiled · 🔶 p
 | IGL-42 | `ShaderEffect` compilation | 🔶 | `ShaderStagesCreator::fromModuleStringInput`, version-directive adaptation, real compile errors. Verified by `igl_shadereffect_texture3d_test.cpp` (`Igl_ShaderEffectTexture3D`) on OpenGL/GLX; still ✍️ on Vulkan (no test attempts a custom effect there, and Phase H's Vulkan bug is unresolved regardless) |
 | IGL-43 | Effect parameters | 🔶 | `bindUniform` on OpenGL; explicit refusal on Vulkan (design decision 8). The `Int`/`Float3` uniforms `Igl_ShaderEffectTexture3D` sets (`VolumeSampler`, `coord`) are verified reaching the shader; float/vec2/vec4/mat4/array variants remain ✍️ |
 | IGL-44 | Effect textures | 🔶 | `SetTexture` for 2D, cube and volume textures. Found and fixed a real, previously-undiscovered architectural bug this session (see below) that left every custom-effect texture unit unbindable; `Texture3D`'s path is now verified end-to-end via `Igl_ShaderEffectTexture3D`. 2D/cube custom-effect textures share the same fixed code path so the fix covers them too, but neither has its own dedicated custom-effect test yet |
-| IGL-45 | `SpriteBatch.Begin(effect)` | ✍️ | custom effect drives the sprite pipeline. The pipeline-creation half of the fix below (`AcquirePipeline`'s new `customEffect` parameter) also applies to the `SpriteBatch` custom-effect draw path in `IglDraw.cpp` (both call sites were fixed together, and `ctest -R Igl` was re-run clean after), but no `SpriteBatch.Begin(effect)`-specific pixel test exists yet to prove it end-to-end |
+| IGL-45 | `SpriteBatch.Begin(effect)` | 🔶 | custom effect drives the sprite pipeline. Now verified end-to-end (`igl_spritebatch_shadereffect_test.cpp`, `Igl_SpriteBatchShaderEffect`): a custom `ShaderEffect` bound via `SpriteBatch.Begin(sortMode, blend, sampler, depthStencil, rasterizer, effect)` tints a white sprite green through its own `tint` uniform (not XNA's per-sprite colour parameter, left white so a pass proves the CUSTOM shader ran, not the ordinary vertex-colour path every other 2D test covers) -- both checks pass. This is a genuinely different call site from the 3D path `igl_shadereffect_texture3d_test.cpp` exercises (`IglRenderer::DrawSpriteBatchEXT`'s own `PipelineKey`/`AcquirePipeline`/`ApplyCustomEffectUniforms` calls), and confirms the IGL-42..45 sampler-map fix reaches it too: the sprite's own texture is bound by the *shared* `BindEffectResources()` path (not the custom effect's `SetTexture()` -- SpriteBatch owns which texture a sprite draws with), so the effect still had to declare `SetUniformInt("SpriteTexture", 0)` for that unit-0 bind to resolve under the custom pipeline's now-effect-scoped sampler map, exactly like the 3D path's own convention |
 
 **IGL-42/43/44 bug, found and fixed this session:** the first test to exercise a custom `ShaderEffect`
 with its own texture sampler (`igl_shadereffect_texture3d_test.cpp`, written to also be the only way
@@ -280,7 +280,8 @@ modules/renderers/igl/
         igl_mrt_test.cpp,igl_msaa_test.cpp,igl_environmentmapeffect_test.cpp,igl_skinnedeffect_test.cpp,
         igl_pbreffect_test.cpp,igl_rendertargetcube_test.cpp,igl_shadereffect_texture3d_test.cpp,
         igl_instancing_test.cpp,igl_skinnedeffect_translation_bone_test.cpp,
-        igl_environmentmapeffect_fresnel_test.cpp,igl_pbreffect_maps_test.cpp}
+        igl_environmentmapeffect_fresnel_test.cpp,igl_pbreffect_maps_test.cpp,
+        igl_spritebatch_shadereffect_test.cpp}
     tests/CNA/Internal/Renderers/Igl/IglRendererSelectionTests.cpp
 docs/igl-renderer.md
 plan_igl.md

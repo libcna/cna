@@ -150,4 +150,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
     cna_register_renderer_test(NAME Igl_PbrEffectMaps COMMAND cna_test_igl_pbreffect_maps
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # IGL-45/IGL-55: SpriteBatch.Begin(effect) -- a custom ShaderEffect driving the 2D pipeline.
+    cna_igl_test(cna_test_igl_spritebatch_shadereffect igl_spritebatch_shadereffect_test.cpp)
+    cna_register_renderer_test(NAME Igl_SpriteBatchShaderEffect
+        COMMAND cna_test_igl_spritebatch_shadereffect
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
