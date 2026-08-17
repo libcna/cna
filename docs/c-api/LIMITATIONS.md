@@ -124,7 +124,7 @@ promise rather than of any declaration.
 | **One active CNA runtime per process** | A second `cna_game_create` while a game is alive returns `CNA_RESULT_INVALID_STATE`. This makes the interaction with CNA's process-level graphics and input state explicit; simultaneous runtimes are an ABI-semantic change requiring a reviewed design. | by design (HANDLES.md) |
 | **Handles are thread-affine and never leave their process** | A handle used from a thread other than its creator's answers `CNA_RESULT_THREAD`. Handles are not pointers, not serializable and not stable across processes. | by design (HANDLES.md) |
 | **The ABI is 0.x and experimental** | An incompatible change requires only a minor-version increment, release notes and a regenerated baseline. The additive-only guarantee begins at 1.0, which is a separate, later decision. | by design (ABI_VERSIONING.md) |
-| **Four of the 46 renderers are built and run here** | The other 42 share the same C surface and the same capability queries. What a given backend supports is answered by `cna_graphics_device_supports_capability`, never by its renderer identity. | by design (RENDERERS_AND_CAPABILITIES.md) |
+| **Four of the 49 renderers are built and run here** | The other 45 share the same C surface and the same capability queries. What a given backend supports is answered by `cna_graphics_device_supports_capability`, never by its renderer identity. | by design (RENDERERS_AND_CAPABILITIES.md) |
 
 ## Not covered by any test here
 
@@ -133,7 +133,7 @@ Taken from `tools/c-api/compatibility_matrix.json`, so the two cannot disagree:
 - **Running a Windows binary.** The cross-compiler proves the headers parse for a Windows target; nothing here links or executes one, so no Windows behaviour is claimed.
 - **macOS, iOS, Android and the web targets.** No toolchain for any of them is present, so no cell exists for them at all rather than an untested claim.
 - **C89.** The headers use `//` comments and mixed declarations, so C99 is the floor by design rather than by accident.
-- **Renderers other than the four configured.** CNA has 46 renderer identities; four are built and run here. The other 42 share the same C surface, and the capability queries are what a caller uses to find out what any of them supports.
+- **Renderers other than the four configured.** CNA has 49 renderer identities; four are built and run here. The other 45 share the same C surface, and the capability queries are what a caller uses to find out what any of them supports.
 
 Regenerate with:
 

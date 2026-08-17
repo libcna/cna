@@ -198,8 +198,8 @@
       "owner": "ABI_VERSIONING.md"
     },
     {
-      "subject": "Four of the 46 renderers are built and run here",
-      "impact": "The other 42 share the same C surface and the same capability queries. What a given backend supports is answered by `cna_graphics_device_supports_capability`, never by its renderer identity.",
+      "subject": "Four of the 49 renderers are built and run here",
+      "impact": "The other 45 share the same C surface and the same capability queries. What a given backend supports is answered by `cna_graphics_device_supports_capability`, never by its renderer identity.",
       "status": "by design",
       "owner": "RENDERERS_AND_CAPABILITIES.md"
     }

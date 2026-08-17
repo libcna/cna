@@ -90,8 +90,34 @@ static int validate_base_effect(const CNA_Handle device)
 
     REQUIRE(cna_effect_create_empty(device, &effect) == CNA_RESULT_SUCCESS &&
             effect != CNA_INVALID_HANDLE);
+    /* CBIND-052A: compiled Effect Framework bytecode is a real format now, so creating one is
+       refused for a reason rather than refused wholesale. The three refusals below are decided
+       before any renderer is consulted, which is why they hold in every build: an empty buffer
+       and bytes without a structurally valid Direct3D 9 effect header are bad arguments, while
+       MonoGame's distinct MGFX container is a recognized format this constructor does not
+       accept. Whether *valid* bytecode is then accepted is the renderer's answer, and the point
+       of asserting the capability here is that it does not change any of the three: an argument
+       is judged before a renderer is asked, so these hold identically wherever the suite runs.
+       Valid bytecode itself is a fixture this suite does not carry. */
     REQUIRE(cna_effect_create_compiled(device, 0, 0U, &compiled) ==
-                CNA_RESULT_NOT_SUPPORTED && compiled == CNA_INVALID_HANDLE);
+                CNA_RESULT_INVALID_ARGUMENT && compiled == CNA_INVALID_HANDLE);
+    {
+        static const uint8_t mgfx[4] = {(uint8_t)'M', (uint8_t)'G', (uint8_t)'F', (uint8_t)'X'};
+        static const uint8_t garbage[4] = {1U, 2U, 3U, 4U};
+        CNA_EffectHandle refused = UINT64_MAX;
+        CNA_Bool compiled_effects = UINT8_C(9);
+        REQUIRE(cna_graphics_device_supports_capability(
+                    device, CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS, &compiled_effects) ==
+                    CNA_RESULT_SUCCESS &&
+                (compiled_effects == CNA_FALSE || compiled_effects == CNA_TRUE));
+        REQUIRE(cna_effect_create_compiled(device, mgfx, (uint64_t)sizeof(mgfx), &refused) ==
+                    CNA_RESULT_NOT_SUPPORTED && refused == CNA_INVALID_HANDLE);
+        refused = UINT64_MAX;
+        REQUIRE(cna_effect_create_compiled(device, garbage, (uint64_t)sizeof(garbage), &refused) ==
+                    CNA_RESULT_INVALID_ARGUMENT && refused == CNA_INVALID_HANDLE);
+        REQUIRE(cna_effect_create_compiled(device, garbage, (uint64_t)sizeof(garbage), 0) ==
+                    CNA_RESULT_INVALID_ARGUMENT);
+    }
     REQUIRE(cna_effect_get_graphics_device(effect, &owner) == CNA_RESULT_SUCCESS &&
             owner == device);
     REQUIRE(expect_effect_string(

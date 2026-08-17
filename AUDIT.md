@@ -142,6 +142,16 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > owner **approved those twelve on 2026-08-16**, which closes `CBIND-044` and with it the whole
 > CBIND campaign: 6,415 public C++ declarations, 6,083 implemented, 12 approved partial, 0 planned,
 > 320 not applicable, and an experimental release gate that reads ready.
+>
+> **Update (2026-08-17):** merging `next` reopened the matrix a third time — the compiled Effect
+> Framework campaign and the IGL renderer, 12 planned rows. `CBIND-052A` bound the `IGL` and
+> `PIXIJS` renderer identities and the `CompiledEffects` capability, published a `_MAXIMUM` for
+> both identity ranges, and turned on the strict warnings the adapter **library** had never had —
+> which is how `TINYGL` was found recorded as implemented with no C constant existing for it at
+> all. The inventory is now 420 headers, 6,693 declarations, **6,286 implemented, 12 approved
+> partial, 9 planned, 386 not applicable**, and the release gate reads **not ready** until
+> `CBIND-052B` binds the remaining `Effect` object-graph rows. Do not read the paragraph above as
+> the current state: a closed matrix is a snapshot between merges, not a finished one.
 
 ---
 

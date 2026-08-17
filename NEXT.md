@@ -1,5 +1,48 @@
 # NEXT.md
 
+## The compiled-effect and IGL merge, and the renderer nobody could reach (2026-08-17)
+
+> The branch caught up with `next` again, 128 commits of it: the compiled Effect Framework campaign
+> (`plan_fx.md`) and the IGL renderer. The reopening was the smallest of the three so far — 12
+> planned rows — but it is the one that showed the coverage matrix can be wrong in a direction the
+> matrix itself cannot report.
+>
+> **`CNA::GraphicsRendererType::TinyGL` was recorded `implemented`, with test evidence, and no
+> `CNA_GRAPHICS_RENDERER_TINYGL` constant existed anywhere in the ABI.** It had arrived in an
+> earlier merge. `CBIND-050` seeded its rule approvals from the **pre-merge** tree, which is what
+> stopped that merge's 121 unreviewed rows being blessed and is still the right decision — and it
+> also froze whatever the pre-merge tree already believed, which included this. Seeding cannot tell
+> a reviewed claim from an inherited one. The practical rule that follows: when a slice touches an
+> identity family, `grep` for the C constant instead of trusting the row.
+>
+> **Nothing caught it because `cna_c_api` was the one target in its own module compiled without the
+> strict warnings.** `cna_c_api_enable_strict_warnings` is called on all 59 test executables and
+> never on the library, so GCC had been reporting `enumeration value 'TinyGL' not handled in
+> switch` onto a stream nobody read. The library now builds with `-Wall -Wextra -Werror`, minus two
+> named exclusions: `-Wpedantic`, which fires only inside Sharp Runtime's `Decimal.hpp` on a
+> sibling project's `__int128` extension, and `-Wmissing-field-initializers`, which contradicts
+> this ABI's own `{sizeof(T), version}` idiom. It cost three fixes, all small and all real.
+>
+> `CBIND-052A` bound `IGL`, `PIXIJS` and the `CompiledEffects` capability, and gave both identity
+> ranges the `_MAXIMUM` that 21 other identity families in this ABI already had. That absence is
+> the actual root cause: nothing could enumerate either range, so no test could notice it had
+> stopped matching CNA. Three gates now hold them together — a `consteval` count of the renderers
+> `getGraphicsRendererName` really names, held against the C table's size; the maximum tied to that
+> table; and exhaustive no-`default` switches in both directions so `-Werror=switch` catches an
+> appended renderer *or* capability — and each was shown to fail by deleting `PixiJs` from one
+> side. **The implemented delta was +3, not +4**, and that missing one is exactly the row that had
+> been counted all along.
+>
+> **A second lesson, about the verification trees.** Three of the four had been built *before* the
+> merge commit existed and passed 81/81 on the old library; only the rebuilt tree showed the two
+> failures HEAD had really introduced (`cna_effect_create_compiled` no longer refusing wholesale,
+> and the `EffectReader` placeholder replaced by a reader that actually decodes). A green suite in
+> a tree you did not rebuild is not evidence. Compare `libcna_c_api.so`'s mtime with
+> `git log -1 --format=%ci` first.
+>
+> `CBIND-052B` owns the 9 remaining rows — the `Effect`/`EffectParameter`/`EffectPass`/
+> `EffectTechnique` object graph — and `RELEASE_GATE.md` reads **not ready** until it lands.
+
 ## The 2026-08-17 merge of `next`, and what it exposed
 
 > `next` was merged again on 2026-08-17 (`ba0dbbf3e`, 331 commits, merge base `fbc599ab8`). The

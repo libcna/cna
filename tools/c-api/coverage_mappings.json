@@ -31,6 +31,7 @@
         "CPP-52730D48F6E3",
         "CPP-58717488D79E",
         "CPP-58A46ADAC8BB",
+        "CPP-5E9BE4A54A9B",
         "CPP-6259C11BA14C",
         "CPP-67D9FA47F57B",
         "CPP-67DD9BFDF374",
@@ -52,6 +53,7 @@
         "CPP-B8EFDACAA1B6",
         "CPP-B97AEDE2175F",
         "CPP-C19CC80C0A8E",
+        "CPP-CB7016A27F1A",
         "CPP-CDCB05E3B1BF",
         "CPP-CDF21537AAFF",
         "CPP-D21D9778CCEF",
@@ -75,6 +77,7 @@
       "status": "implemented",
       "task": "CBIND-022",
       "approved_symbols": [
+        "CPP-0AD811006F89",
         "CPP-16E44B3EE81D",
         "CPP-2686F48A400C",
         "CPP-326C6CE542D3",
