@@ -1,5 +1,30 @@
 # NEXT.md
 
+## The 2026-08-17 merge of `next`, and what it exposed
+
+> `next` was merged again on 2026-08-17 (`ba0dbbf3e`, 331 commits, merge base `fbc599ab8`). The
+> textual merge was uneventful — three files touched by both sides, all auto-merged — and the four
+> verification trees stayed green at 81/81 after a reconfigure with **`-DCNA_ENABLE_DRACO=OFF`**,
+> which `next` now requires unless the pinned Draco submodule is present.
+>
+> **The merge's real finding is that the coverage gate had been overstating itself, and this is the
+> thing to remember from it.** The merge added 176 public C++ declarations. The inventory honestly
+> flagged 55 as unmapped and silently counted the other **121 as implemented and tested, when no C
+> route existed for any of them** — 84 on `PbrEffect`/`SkinnedPbrEffect` alone. The cause was that
+> 73 of the 497 mapping rules matched an entire header with `.*`: an accurate statement when it was
+> written, and an open-ended promise ever after. `CBIND-050` pins every rule to the stable IDs it
+> was reviewed against, so a declaration added later falls through to `planned` instead of
+> inheriting a claim. Seeding those approvals from the **pre-merge** tree is what makes the fix
+> honest rather than cosmetic, and it reproduced the pre-merge `implemented` figure of 6,111 to the
+> symbol.
+>
+> So `coverage-closed` is recorded **not met** and the release gate reads **not ready** again. Both
+> are true, and neither is a regression introduced by the merge — they are what was already the case
+> and had not been visible. `CBIND-051` binds the 176.
+>
+> The lesson generalises past this gate: a rule that says "everything here is covered" needs to name
+> what "here" was when someone checked, or a later merge inherits an approval nobody gave.
+
 ## Reading order after the 2026-08-16 merge of `next`
 
 > Two campaigns meet in this file. The **platform separation** block immediately below is a

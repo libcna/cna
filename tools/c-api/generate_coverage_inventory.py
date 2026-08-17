@@ -45,6 +45,7 @@ EXCLUDED_PATH_SEGMENTS = ("Internal", "Detail")
 # exclusion list -- which is why it names its owner, its date and its reason here and is reported
 # by name in COVERAGE.md.
 EXCLUDED_MODULES = ("platform",)
+STABLE_ID_PATTERN = re.compile(r"CPP-[0-9A-F]{12}")
 COMPOUND_KINDS = {"class", "struct", "union"}
 MEMBER_COMPOUND_KINDS = COMPOUND_KINDS | {"namespace", "file"}
 PUBLIC_ACCESS = {"public", "protected", None}
@@ -92,14 +93,29 @@ class Rule:
     tests: str
     status: str
     task: str
+    approved_symbols: frozenset[str]
 
-    def matches(self, symbol: Symbol) -> bool:
+    def matches_pattern(self, symbol: Symbol) -> bool:
         return (
             (not self.kinds or symbol.kind in self.kinds)
             and self.qualified_name.fullmatch(symbol.qualified_name) is not None
             and (self.signature is None or self.signature.fullmatch(symbol.signature) is not None)
             and (self.header is None or self.header.fullmatch(symbol.header) is not None)
         )
+
+    def matches(self, symbol: Symbol, *, ignore_approval: bool = False) -> bool:
+        """Whether this rule speaks for the symbol.
+
+        A rule's patterns say which symbols it *may* cover; ``approved_symbols`` says which ones
+        an owner actually reviewed.  Both are required, because many rules are deliberately broad
+        -- ``.*`` over one header, asserting that the header's whole contract is bound -- and a
+        symbol added to that header afterwards was reviewed by nobody.  Without the second half a
+        merge can silently inherit "implemented and tested" for routes that do not exist; that is
+        not hypothetical, it is what merging `next` did to 121 symbols (CBIND-050).
+        """
+        if not self.matches_pattern(symbol):
+            return False
+        return ignore_approval or symbol.stable_id in self.approved_symbols
 
 
 def repository_root() -> Path:
@@ -428,6 +444,19 @@ def load_rules(path: Path) -> list[Rule]:
         # exposes no callable public behavior at all, such as a friendship declaration.
         if status not in {"implemented", "partial", "not-applicable"}:
             raise RuntimeError(f"Explicit rule {rule_id} has invalid status {status!r}.")
+        approved = raw.get("approved_symbols")
+        if not isinstance(approved, list) or not approved:
+            raise RuntimeError(
+                f"Explicit rule {rule_id} has no approved_symbols. Every rule names the stable IDs "
+                "it was reviewed against; run --approve-rule-symbols to record them deliberately."
+            )
+        for stable_id in approved:
+            if not isinstance(stable_id, str) or not STABLE_ID_PATTERN.fullmatch(stable_id):
+                raise RuntimeError(
+                    f"Explicit rule {rule_id} has invalid approved symbol {stable_id!r}."
+                )
+        if len(set(approved)) != len(approved):
+            raise RuntimeError(f"Explicit rule {rule_id} lists a duplicate approved symbol.")
         rules.append(
             Rule(
                 rule_id=rule_id,
@@ -439,9 +468,39 @@ def load_rules(path: Path) -> list[Rule]:
                 tests=raw["tests"],
                 status=status,
                 task=raw["task"],
+                approved_symbols=frozenset(approved),
             )
         )
     return rules
+
+
+def approve_rule_symbols(path: Path, usage: dict[str, list[str]]) -> int:
+    """Record the symbols each explicit rule is reviewed against.
+
+    Deliberately separate from ``--write``: the routine command a developer runs to refresh the
+    inventory must not be able to extend a rule's authority, because a broad rule asserts that a
+    *reviewed* set of declarations is bound and tested.  Running this says the newly matched
+    symbols have been looked at and the rule's mapping and test evidence genuinely cover them.
+    """
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    changed: list[str] = []
+    for raw in payload.get("rules", []):
+        rule_id = raw["id"]
+        measured = sorted(usage.get(rule_id, ()))
+        previous = raw.get("approved_symbols") or []
+        if sorted(previous) != measured:
+            added = len(set(measured) - set(previous))
+            removed = len(set(previous) - set(measured))
+            changed.append(f"{rule_id}: {len(previous)} -> {len(measured)} (+{added}/-{removed})")
+            raw["approved_symbols"] = measured
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    if not changed:
+        print(f"Approved coverage rule symbols already current in {path.name}")
+        return 0
+    print(f"Re-approved {len(changed)} coverage rules in {path.name}:")
+    for line in changed:
+        print(f"  {line}")
+    return 0
 
 
 def owner_task(symbol: Symbol) -> str:
@@ -499,9 +558,16 @@ def planned_mapping(symbol: Symbol, task: str) -> str:
     return f"Planned {representation} ({task})"
 
 
-def map_symbols(symbols: list[Symbol], rules: list[Rule]) -> dict[str, Mapping]:
+def map_symbols(
+    symbols: list[Symbol],
+    rules: list[Rule],
+    *,
+    ignore_approval: bool = False,
+    usage_out: dict[str, list[str]] | None = None,
+) -> dict[str, Mapping]:
     result: dict[str, Mapping] = {}
     usage: Counter[str] = Counter()
+    matched: defaultdict[str, list[str]] = defaultdict(list)
     for symbol in symbols:
         if symbol.signature.endswith("=delete"):
             result[symbol.identity] = Mapping(
@@ -512,7 +578,9 @@ def map_symbols(symbols: list[Symbol], rules: list[Rule]) -> dict[str, Mapping]:
                 rule_id=None,
             )
             continue
-        matches = [rule for rule in rules if rule.matches(symbol)]
+        matches = [
+            rule for rule in rules if rule.matches(symbol, ignore_approval=ignore_approval)
+        ]
         if len(matches) > 1:
             raise RuntimeError(
                 f"Ambiguous explicit mappings for {symbol.identity}: "
@@ -521,6 +589,7 @@ def map_symbols(symbols: list[Symbol], rules: list[Rule]) -> dict[str, Mapping]:
         if matches:
             rule = matches[0]
             usage[rule.rule_id] += 1
+            matched[rule.rule_id].append(symbol.stable_id)
             result[symbol.identity] = Mapping(
                 mapping=rule.mapping,
                 tests=rule.tests,
@@ -538,6 +607,12 @@ def map_symbols(symbols: list[Symbol], rules: list[Rule]) -> dict[str, Mapping]:
             rule_id=None,
         )
 
+    if usage_out is not None:
+        usage_out.clear()
+        usage_out.update({rule.rule_id: matched[rule.rule_id] for rule in rules})
+
+    # A rule that speaks for nothing is dead weight, and after approval pinning it also means the
+    # declarations it was reviewed against are gone -- so the C routes it names are now orphaned.
     unused = [rule.rule_id for rule in rules if usage[rule.rule_id] == 0]
     if unused:
         raise RuntimeError("Explicit coverage rules matched no symbols: " + ", ".join(unused))
@@ -703,6 +778,14 @@ def parse_arguments() -> argparse.Namespace:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--write", action="store_true", help="regenerate docs/c-api/COVERAGE.md")
     mode.add_argument("--check", action="store_true", help="fail if the checked-in inventory is stale")
+    mode.add_argument(
+        "--approve-rule-symbols",
+        action="store_true",
+        help=(
+            "record the symbols each explicit rule is reviewed against, after the newly matched "
+            "ones have actually been bound or dispositioned"
+        ),
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -724,7 +807,15 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="cna-c-api-coverage-") as temporary:
         xml_directory = run_doxygen(root, headers, Path(temporary))
         symbols = parse_symbols(root, xml_directory, headers)
-    mappings = map_symbols(symbols, rules)
+    usage: dict[str, list[str]] = {}
+    mappings = map_symbols(
+        symbols,
+        rules,
+        ignore_approval=arguments.approve_rule_symbols,
+        usage_out=usage,
+    )
+    if arguments.approve_rule_symbols:
+        return approve_rule_symbols(rules_path, usage)
     validate_inventory(headers, excluded, symbols, mappings)
     rendered = render_markdown(headers, excluded, symbols, mappings)
 

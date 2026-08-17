@@ -93,6 +93,20 @@ deleted C++ operations are retained as `not applicable` so the source inventory 
 without inventing a C operation. `--check` is a mandatory gate (CBIND-043): the CTest test
 `CApiCoverageMatrix` and the `c-api-coverage-gate` workflow both fail on an unmapped public symbol.
 
+Each rule also carries `approved_symbols`, the stable IDs it was reviewed against, and covers a
+symbol only when its patterns **and** its approved set match. Many rules are deliberately broad —
+`.*` over one header, asserting that the header's whole contract is bound — and without the second
+half a later merge inherits "implemented and tested" for routes that do not exist. So a newly added
+declaration always surfaces as `planned`, whatever rule its name happens to fall under. After the
+new symbols have actually been bound or dispositioned, re-record the approvals deliberately:
+
+```bash
+python3 tools/c-api/generate_coverage_inventory.py --approve-rule-symbols
+```
+
+This is a separate mode on purpose. The routine `--write` a developer runs to refresh the inventory
+must not be able to widen a rule's authority (CBIND-050).
+
 ## Public naming and language baseline
 
 - Public types use the `CNA_` prefix; public functions use lowercase `cna_`.
