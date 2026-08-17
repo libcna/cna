@@ -536,7 +536,7 @@ values everywhere except inside a structure.
 | FX-061 | Implement and gate SDL_GPU through the MojoShader SDL adapter | FX-030, FX-060 | **Done -- `SupportsCompiledEffects()` reports true.** `cna_configure_mojoshader()` separates the dependency from FNA3D, the renderer-neutral translation moved to `modules/renderers/common/mojoshader` and is shared with FNA3D, and `SdlGpuCompiledEffect` creates, clones, reflects, selects techniques and passes, translates render and sampler states, and validates parameter and texture assignment against MojoShader's own SDL_GPU adapter. Two existence gates plus dedicated tests cover it, and one of those tests caught a real crash: several MojoShader parse failures are static sentinels rather than allocations, and deleting one walks static storage -- now guarded in the shared module for every backend. `FX-071` closed the remaining gaps: a real draw route, a golden-pixel test, and the FX-060 shared suite passing through the public `Effect`/`GraphicsDevice` API. Still refused explicitly rather than silently mishandled: vertex-stage sampling, 3D/cube textures, and multi-stream declarations |
 | FX-062 | Implement and gate EasyGL/OpenGL-family support through MojoShader GL | FX-030, FX-060 | **Done -- `SupportsCompiledEffects()` reports true.** `EasyGLCompiledEffect` (`modules/renderers/easygl/{include,src}/.../EasyGLCompiledEffect.{hpp,cpp}`) creates, clones, reflects, selects techniques and passes, and translates render/sampler states against MojoShader's own OpenGL adapter, reusing the shared `CNA::Internal::Renderers::MojoShaderEffect` translation module FX-061 already built and the existence gate's calling-convention trampolines. Simpler than the SDL_GPU runtime in two ways the existence gate predicted: no separate link step (`MOJOSHADER_glBindShaders` links and binds in one call) and no uniform-snapshot capture (EasyGL draws immediately, no `Present()`-deferred queue). New `CNA_EASYGL_COMPILED_EFFECTS` CMake option, off by default. `EasyGLRenderer::BindCompiledEffectForDrawEXT` closed the remaining gap (`FX-062`'s own equivalent of `FX-071`): it matches the caller's `VertexDeclaration` against the applied pass's reflected vertex attributes (`MOJOSHADER_glSetVertexAttribute` per match), binds each reflected pixel-stage sampler's texture, and calls `MOJOSHADER_glProgramReady()` then `MOJOSHADER_glProgramViewportInfo()` before a new compiled-effect branch in `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` dispatches the draw -- ahead of the stock declaration guard, mirroring the SDL_GPU draw route. Verified by 13 tests, including a golden-pixel render-target test (byte-identical expected RGBA to SDL_GPU's, cross-validating the shared MojoShader preshader fix a third time) and the FX-060 shared suite, plus a full 6910-test `CnaTests` regression run on `cmake-build-easygl` (OPENGLES3) with zero new regressions (5 failures, all pre-existing/environmental). Also fixed a latent bug in `GraphicsDeviceCapabilityTests.cpp`'s `kExpectCompiledEffects`: it checked renderer selection alone, which would have wrongly expected `true` for a plain SDL_GPU/EasyGL build lacking their off-by-default `CNA_SDL_GPU_COMPILED_EFFECTS`/`CNA_EASYGL_COMPILED_EFFECTS` opt-in. Still refused explicitly rather than silently mishandled: vertex-stage sampling, 3D/cube textures, sampler-state translation (a bound texture's own GL creation-time filter/wrap applies instead of the effect's declared `sampler_state` block), and instanced/multi-stream declarations |
 | FX-063 | Implement and gate DirectX 11 through the MojoShader D3D11 adapter | FX-030, FX-060 | Full shared suite passes on the supported Windows CI matrix |
-| FX-064 | Prototype direct MojoShader SPIR-V generation/linking for Vulkan | FX-030, FX-060 | Reflection, uniform binding, vertex linkage, and one multi-pass fixture work without glslang |
+| FX-064 | Prototype direct MojoShader SPIR-V generation/linking for Vulkan | FX-030, FX-060 | **Done -- existence gate proven, real Vulkan device, no glslang.** `tools/graphics/mojoshader_vulkan_probe.cpp` implements the nine-function `MOJOSHADER_effectShaderContext` backend directly against `MOJOSHADER_parse(MOJOSHADER_PROFILE_SPIRV, ...)`, since MojoShader ships no Vulkan adapter (there is no `mojoshader_vulkan.c`, unlike GL/SDL_GPU/D3D11), then builds descriptor set layouts, a pipeline layout, shader modules and a graphics pipeline from raw Vulkan calls -- the probe IS the prototype adapter this task exists to produce. Renders offscreen through `VK_KHR_dynamic_rendering`, no swapchain, no SDL, no CNA. All three technique/pass combinations of `CnaConformanceEffect.fx` render correctly on the first attempt against a real Intel iGPU with the Khronos validation layer enabled throughout (zero warnings/errors): `MainPixelShader` lands on `(3,6,10,13)` and `FlatPixelShader` on `(20,41,61,82)` -- byte-identical to the SDL_GPU and OpenGL backends' own established golden pixels, a third independent cross-confirmation of the shared preshader register-count fix (FX-051/FX-071 lineage), never re-triggered here. See the existence-gate findings below the task table for the real findings this surfaced (the "spirv"/"glspirv" profile-string split, why no shader-side viewport flip is needed for Vulkan, and the public API's only route to the trailing SpirvPatchTable's size) |
 | FX-065 | Complete and gate Vulkan after the prototype | FX-064 | Full shared suite and Vulkan validation layers pass |
 | FX-066 | Prototype and gate Metal support if the pinned profile meets CNA requirements | FX-030, FX-060 | Decision record plus full suite before enabling capability |
 | FX-067 | Assess DirectX 9, D3D12, LLGL, Diligent, Magnum, Sokol, Wicked, and other programmable renderers individually | FX-060 | **Done.** Section 10.3 classifies every one of the 46 renderer identities as planned, assessed-feasible or unsupported-by-design, from two measured facts: which profiles the pinned MojoShader actually compiles (GLSL in four dialects and SPIR-V portably; HLSL Windows-gated, Metal Apple-gated; ARB1/BYTECODE/D3D disabled) and which APIs it ships binding glue for (OpenGL, SDL_GPU, D3D11 -- and nothing else). The finding worth acting on is DirectX 9: a compiled XNA effect *is* D3D9 bytecode, and CNA's D3D9 renderer already feeds raw DWORD token blobs to `CreateVertexShader`/`CreatePixelShader`, so it needs the container parsed and no shader translated at all -- filed as `FX-070` |
@@ -675,6 +675,87 @@ queue/upload/replay split and no uniform-snapshot-capture-before-overwrite conce
 touches MojoShader's shared register files between `ApplyPass()` and the draw call in the same
 synchronous call chain.
 
+#### FX-064 existence-gate findings (2026-08-17)
+
+`tools/graphics/mojoshader_vulkan_probe.cpp` sets out to answer a different question than the
+FX-061/FX-062 probes did. Those two proved an *existing* MojoShader adapter (`mojoshader_sdlgpu.c`,
+`mojoshader_opengl.c`) links a committed effect against a real device. MojoShader ships no Vulkan
+adapter at all -- `mojoshader_opengl.c`, `mojoshader_sdlgpu.c` and `mojoshader_d3d11.c` exist;
+there is no `mojoshader_vulkan.c` -- so this probe had to write one from scratch, against the
+public `MOJOSHADER_effectShaderContext` nine-function contract, exactly the shape a real CNA
+Vulkan renderer will need. In that sense the probe source itself is FX-064's actual deliverable,
+not just evidence supporting a separate implementation.
+
+Three real findings, discovered by reading the pinned MojoShader's SPIR-V emitter
+(`profiles/mojoshader_profile_spirv.c`, `mojoshader_common.c`) before writing any Vulkan code, not
+by trial and error against a running device:
+
+1. **Two SPIR-V flavours share one profile-string pair, undocumented in `mojoshader.h`.**
+   `MOJOSHADER_PROFILE_SPIRV` ("spirv") and `MOJOSHADER_PROFILE_GLSPIRV` ("glspirv") both compile
+   through the same `emit_SPIRV_*` functions, but `emit_SPIRV_start()` sets an internal
+   `ctx->spirv.mode` from *which string was passed* -- `SPIRV_MODE_VK` for "spirv",
+   `SPIRV_MODE_GL` for "glspirv". Only VK mode emits genuine `SpvStorageClassUniform` blocks with
+   real `SpvDecorationDescriptorSet`/`SpvDecorationBinding` decorations, at a **fixed** four-set
+   layout `mojoshader_profile_spirv.h` names explicitly:
+   `MOJOSHADER_SPIRV_VS_SAMPLER_SET`/`_VS_UNIFORM_SET`/`_PS_SAMPLER_SET`/`_PS_UNIFORM_SET` = 0/1/2/3
+   (binding = each reflected sampler's index for the two sampler sets, binding 0 for each uniform
+   set's single struct). GL mode instead decorates scalar `UniformConstant` variables with only a
+   `Location` -- legal for the `GL_ARB_gl_spirv` extension `mojoshader_opengl.c`'s own SPIR-V path
+   targets, illegal for real Vulkan outside opaque resource types. Getting the profile string
+   backwards is the natural first mistake (SDL_GPU's own profile happens to be `"spirv"` too, so
+   copying that pattern gets it right by accident; nothing else in the public API flags "glspirv"
+   as GL-only).
+2. **No shader-side viewport flip exists for genuine Vulkan output, and none is needed.**
+   `emit_SPIRV_vs_main_end()` -- the function that multiplies `gl_Position.y` by a `vpFlip` uniform
+   and remaps `gl_Position.z`'s depth range, which FX-062's GLSL text route needed
+   (`MOJOSHADER_glProgramViewportInfo`) -- checks `ctx->profile_supports_glspirv` and returns
+   immediately for a real `"spirv"` shader. This is not a gap; Vulkan's clip-space convention
+   already matches Direct3D 9's (Y-down, depth range `[0, 1]`), unlike OpenGL's (Y-up, depth range
+   `[-1, 1]`), so neither correction applies. The probe's pipeline uses a plain, non-negative-height
+   `VkViewport` and renders correctly, confirming the theory against a real device rather than
+   trusting the source reading alone.
+3. **The public API's only route to the trailing `SpirvPatchTable`'s byte size is a return value,
+   not a struct.** A `"spirv"`-profile `MOJOSHADER_parseData::output` carries a private
+   `SpirvPatchTable` (declared in `mojoshader_internal.h`, which this probe deliberately never
+   includes) appended after the real SPIR-V words. `MOJOSHADER_linkSPIRVShaders()` already computes
+   that struct's size internally and returns it (`return sizeof(SpirvPatchTable);` in
+   `mojoshader.c`) -- exactly the number a caller needs to trim `output_len` down to real SPIR-V
+   word count before `vkCreateShaderModule`, with no private header required.
+
+One thing the public linking API leaves genuinely unanswered: `MOJOSHADER_spirv_link_attributes()`
+(called inside `MOJOSHADER_linkSPIRVShaders()`) assigns the vertex-output/pixel-input interface's
+Location decorations, but nothing in the public path patches the vertex shader's *own* input
+attribute locations -- the ones a `VkVertexInputAttributeDescription` must match -- which come out
+of `MOJOSHADER_parse()` already final. Rather than reverse-engineer the exact rule from four
+thousand lines of unfamiliar emitter code, the probe carries a ~40-line SPIR-V decoration scanner
+(walking the standard word-stream instruction format with `spirv/spirv.h`'s own enums, the same
+header the emitter includes) that reads `OpName`/`OpDecorate Location` pairs out of the finished
+module directly. That confirmed vertex input locations come out in vertex-attribute declaration
+order for this fixture (`POSITION0` -> location 0, `TEXCOORD0` -> location 1) -- but a real Vulkan
+renderer should keep the scanner (or an equivalent), not hardcode that specific pair, since nothing
+in the public API contracts the ordering.
+
+All three technique/pass combinations of `CnaConformanceEffect.fx` rendered correctly on the first
+attempt against this machine's real Intel iGPU (`Iris(R) Xe Graphics`), with the Khronos validation
+layer enabled throughout and zero warnings or errors at any step: `MainPixelShader` (technique 0
+pass 0, texture sampling, a struct-driven preshader) landed on `(3,6,10,13)`, and `FlatPixelShader`
+(technique 0 pass 1 and technique 1 pass 0, no sampling, an array-driven preshader) landed on
+`(20,41,61,82)` both times -- byte-identical to the SDL_GPU and OpenGL backends' own independently
+established golden pixels for the same shaders, a third confirmation that the shared preshader
+register-count fix (FX-051/FX-071 lineage) generalizes across every MojoShader output path this
+project uses. Neither of those two already-fixed bugs, nor any new one, surfaced on this path.
+
+Not started: a real CNA Vulkan renderer (`FX-065`). The prototype resolves the two open questions
+that would have sized that task unpredictably -- the fixed four-descriptor-set layout scheme, and
+confirmation that no shader-side flip machinery is needed -- so `FX-065` should be closer in shape
+to `EasyGLCompiledEffect`/`SdlGpuCompiledEffect` than to a from-scratch design exercise. What it
+still needs beyond this prototype: reflection-driven pipeline layout caching (this probe rebuilds
+descriptor set layouts, a pipeline layout and a graphics pipeline from scratch per pass, which a
+real renderer should cache the way `SdlGpuCompiledEffect`'s `GetOrCreatePipelineCompiledEffect`
+does), a real draw route wired into whatever `modules/renderers/vulkan/` renderer exists by then,
+vertex-stage sampling and 3D/cube texture support (both already refused explicitly by the other two
+completed backends, so likely staying refused here too), and multi-stream vertex declarations.
+
 ### Phase H - Optional future formats and tooling
 
 | ID | Task | Depends on | Acceptance criteria |
@@ -805,7 +886,7 @@ than guessed: it is the floor for every row below.
 | SDL_GPU | Done. SPIR-V profile plus the `mojoshader_sdlgpu.c` adapter; ordinary 3D draws and SpriteBatch both have a working route, a golden-pixel test and the FX-060 shared suite passing, `SupportsCompiledEffects()` true | `FX-061`, `FX-071` |
 | EasyGL and the OpenGL/OpenGL ES family | Done. GLSL/GLSLES/GLSLES3 profiles plus `mojoshader_opengl.c`. One implementation serves `OPENGLES2`, `OPENGLES3`, `OPENGL33`, `OPENGL4`, `WEBGL1` and `WEBGL2`, since EasyGL is their shared implementation; a working draw route, a golden-pixel test and the FX-060 shared suite passing, `SupportsCompiledEffects()` true | `FX-062` |
 | DirectX 11 | HLSL profile plus `mojoshader_d3d11.c`, Windows-only by the pin's own gating | `FX-063` |
-| Vulkan | SPIR-V profile, **no adapter** -- descriptor layout, uniform buffers and vertex linkage are CNA's to write, which is why it is split into a prototype and a completion task | `FX-064`, `FX-065` |
+| Vulkan | SPIR-V profile, **no adapter** -- descriptor layout, uniform buffers and vertex linkage are CNA's to write, which is why it is split into a prototype and a completion task. Prototype done: a hand-rolled backend renders real golden pixels against a real device, validation-clean | `FX-064`, `FX-065` |
 | Metal | Metal profile emits MSL source and CNA's Metal renderer already builds pipelines from MSL through `newLibraryWithSource`, but there is no adapter and the profile only exists on Apple | `FX-066` |
 | bgfx | Held false until a reproducible bgfx-native shader packaging route is proven; bgfx consumes its own `shaderc` container rather than any MojoShader output | `FX-068` |
 
