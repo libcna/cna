@@ -2047,10 +2047,10 @@
         "constant",
         "alias"
       ],
-      "mapping": "owned stable `CNA_ModelMeshPartHandle` objects with exact signed scalar state, optional retained same-device Effect/VertexBuffer/IndexBuffer associations and a C-owned opaque 64-bit tag; owned `CNA_ModelMeshPartCollectionHandle` snapshots retain shared part objects and replace raw pointers and iterators with count/index access. Indexed handles alias the same mutable part, and the representation also supports future ModelMesh-owned live views",
-      "tests": "both constructors, signed scalar boundaries and mutation, optional effect/buffer getters and clearing, opaque tag round-trip, empty/two-part snapshots, shared mutation and lifetime after source-handle release, collection bounds/array overflow, resource retention blocking typed destroy and generic dispose, unsupported renderer behavior, and invalid/stale/wrong-kind/wrong-thread paths in strict-C `ModelMeshPartSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze both handles and the tag",
+      "mapping": "owned stable `CNA_ModelMeshPartHandle` objects with exact signed scalar state, optional retained same-device Effect/VertexBuffer/IndexBuffer associations and a C-owned opaque 64-bit tag; owned `CNA_ModelMeshPartCollectionHandle` snapshots retain shared part objects and replace raw pointers and iterators with count/index access. Indexed handles alias the same mutable part, and the representation also supports future ModelMesh-owned live views; the part's own topology as a validated `CNA_PrimitiveType`, and one sampler state per `CNA_PBR_TEXTURE_*` slot spanning both canonical arrays -- the five material maps and the two `KHR_materials_specular` maps -- so a caller has one vocabulary for a texture and its sampler",
+      "tests": "both constructors, signed scalar boundaries and mutation, optional effect/buffer getters and clearing, opaque tag round-trip, empty/two-part snapshots, shared mutation and lifetime after source-handle release, collection bounds/array overflow, resource retention blocking typed destroy and generic dispose, unsupported renderer behavior, and invalid/stale/wrong-kind/wrong-thread paths in strict-C `ModelMeshPartSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze both handles and the tag; the triangle-list default, every topology identity round-tripping, a sampler round trip over all seven slots, and undefined-topology, undefined-slot, null and malformed sampler-state refusals",
       "status": "implemented",
-      "task": "CBIND-035E2",
+      "task": "CBIND-051C",
       "approved_symbols": [
         "CPP-096986DB9EDB",
         "CPP-0FCADBA96055",
@@ -2061,22 +2061,28 @@
         "CPP-22129F424EAE",
         "CPP-29C773D70843",
         "CPP-30C1027A87FC",
+        "CPP-4A8EEBA887D2",
         "CPP-529E3F42978D",
         "CPP-54CA57BCB12E",
         "CPP-561567FE0048",
         "CPP-56F37DD1B495",
+        "CPP-5C8D86E025AB",
         "CPP-5CD7E323B981",
         "CPP-5D565600C4EA",
         "CPP-5E159B991022",
         "CPP-6696FBBC61F7",
         "CPP-6EB7F7DB346A",
+        "CPP-8401B7826E44",
         "CPP-8BA6E1543455",
         "CPP-9A605F13A46E",
         "CPP-9A96C7411AEB",
+        "CPP-9C4862305CC9",
+        "CPP-C47627BEC019",
         "CPP-C7139BD05E21",
         "CPP-CA18A20FEF77",
         "CPP-D766BD08021E",
         "CPP-D990995C1C72",
+        "CPP-E53AF9ECD220",
         "CPP-E72018130829",
         "CPP-F50DB957FAF9",
         "CPP-FDC25ECC6C7B"
@@ -2192,10 +2198,10 @@
         "alias",
         "function"
       ],
-      "mapping": "deep-copied fixed `CNA_MorphWeightKeyframeEXTDescriptor`, `CNA_MorphWeightTrackEXTDescriptor`, `CNA_MorphTargetDeltaEXTDescriptor` values plus an owned validated `CNA_MorphTargetDataEXTHandle`; count/copy access replaces nested vectors, standalone track evaluation and data blending use atomic caller buffers, and retained ModelMeshPart attachment exposes native SetMorphWeightsEXT without leaking System::Object pointers",
-      "tests": "descriptor ABI, complete field copies, type identity, mutable weights/track, LINEAR/STEP/CUBICSPLINE evaluation and clamp, additive position blend, normalized normals, untouched vertex attributes, capacity atomicity, malformed shape/flag/time/count rejection, retained part attachment, upload success or native capability refusal, and stale/wrong-kind/wrong-thread paths in strict-C `MorphTargetSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan",
+      "mapping": "deep-copied fixed `CNA_MorphWeightKeyframeEXTDescriptor`, `CNA_MorphWeightTrackEXTDescriptor`, `CNA_MorphTargetDeltaEXTDescriptor` values plus an owned validated `CNA_MorphTargetDataEXTHandle`; count/copy access replaces nested vectors, standalone track evaluation and data blending use atomic caller buffers, and retained ModelMeshPart attachment exposes native SetMorphWeightsEXT without leaking System::Object pointers; three-component tangent deltas copied and replaced through their own routes, since glTF morphs the tangent direction only and the creation descriptor is unversioned",
+      "tests": "descriptor ABI, complete field copies, type identity, mutable weights/track, LINEAR/STEP/CUBICSPLINE evaluation and clamp, additive position blend, normalized normals, untouched vertex attributes, capacity atomicity, malformed shape/flag/time/count rejection, retained part attachment, upload success or native capability refusal, and stale/wrong-kind/wrong-thread paths in strict-C `MorphTargetSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; tangent deltas absent by default, set and copied back, cleared to empty, and refused for an out-of-range target, a null array with a non-zero count and a count that is neither zero nor the target's vertex count",
       "status": "implemented",
-      "task": "CBIND-035E5",
+      "task": "CBIND-051C",
       "approved_symbols": [
         "CPP-1337C4D6249D",
         "CPP-1FDD57493AC2",
@@ -2204,6 +2210,7 @@
         "CPP-46FEECD8D61F",
         "CPP-554CD5604FAE",
         "CPP-55899A713C40",
+        "CPP-5EDBA78E7282",
         "CPP-5F1ABA3ACD16",
         "CPP-628DDDD93036",
         "CPP-774A0F09C9A6",
@@ -2224,20 +2231,22 @@
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/SkinnedModelEXT\\.hpp$",
       "kinds": [
+        "alias",
         "class",
-        "struct",
+        "constant",
         "constructor",
         "destructor",
+        "enum",
+        "enum-value",
+        "field",
         "method",
         "operator",
-        "field",
-        "constant",
-        "alias"
+        "struct"
       ],
-      "mapping": "owned stable `CNA_SkinnedModelEXTHandle` with deep-copied fixed skeleton, keyframe, bone-track and named-clip descriptors; atomic count/copy access replaces vectors, maps and TimeSpan values, and native transform sampling accepts seconds plus a canonical C boolean. A lifetime sidecar safely retains same-device VertexBuffer, IndexBuffer, ModelMeshPart and optional Texture2D handles while exposing ordered part views, replace-by-name attach/remove and native owned-resource counts",
-      "tests": "descriptor ABI and deep copy, skeleton arrays, sorted clip enumeration, clip mutation and complete track copies, interpolation/clamp/constant-time loop transform math, capacity atomicity, parent/time/bool/name validation, native move construction/assignment, attach mismatch and replace-by-name transfer, retained GPU-resource destroy/dispose protection and release, optional texture and owned counts, plus stale/wrong-kind/wrong-thread paths in strict-C `SkinnedModelSmoke.c` under HEADLESS and SDL_RENDERER with virtual dummy video plus ASan+UBSan; C/C++ assertions freeze all six public layouts",
+      "mapping": "owned stable `CNA_SkinnedModelEXTHandle` with deep-copied fixed skeleton, keyframe, bone-track and named-clip descriptors; atomic count/copy access replaces vectors, maps and TimeSpan values, and native transform sampling accepts seconds plus a canonical C boolean. A lifetime sidecar safely retains same-device VertexBuffer, IndexBuffer, ModelMeshPart and optional Texture2D handles while exposing ordered part views, replace-by-name attach/remove and native owned-resource counts; fixed-width `CNA_CLIP_TARGET_SPACE_*_EXT` identities and per-clip target-space access on the owning `CNA_SkinningDataHandle`, kept off the published creation descriptor because that descriptor carries no size or version header and growing it would move every field after it",
+      "tests": "descriptor ABI and deep copy, skeleton arrays, sorted clip enumeration, clip mutation and complete track copies, interpolation/clamp/constant-time loop transform math, capacity atomicity, parent/time/bool/name validation, native move construction/assignment, attach mismatch and replace-by-name transfer, retained GPU-resource destroy/dispose protection and release, optional texture and owned counts, plus stale/wrong-kind/wrong-thread paths in strict-C `SkinnedModelSmoke.c` under HEADLESS and SDL_RENDERER with virtual dummy video plus ASan+UBSan; C/C++ assertions freeze all six public layouts; the joint-palette default every pre-existing clip had, a round trip through both target spaces, and out-of-range clip index, undefined identity and null-output refusals",
       "status": "implemented",
-      "task": "CBIND-035E6",
+      "task": "CBIND-051C",
       "approved_symbols": [
         "CPP-1D1B2E55D5A1",
         "CPP-220690518BA4",
@@ -2251,9 +2260,12 @@
         "CPP-394D7FE09CC0",
         "CPP-5032AD91B2F1",
         "CPP-5343265EB700",
+        "CPP-5357A607C6FB",
+        "CPP-659CE4A6F61F",
         "CPP-753944C52811",
         "CPP-76F52EA7BB72",
         "CPP-79B6B74E09F6",
+        "CPP-85B9C644905F",
         "CPP-89F28C64FE91",
         "CPP-8CAFC0664619",
         "CPP-8DCF99755483",
@@ -2272,6 +2284,7 @@
         "CPP-ED300B240A0C",
         "CPP-EED69C6BD8B2",
         "CPP-F279CABB3B31",
+        "CPP-FBE448BDD228",
         "CPP-FFA63FD8CB74"
       ]
     },
@@ -14020,6 +14033,52 @@
         "CPP-F969A2C521D2",
         "CPP-FBE3D824171D",
         "CPP-FC62D8D4C67F"
+      ]
+    },
+    {
+      "id": "alpha-mode-extension-identities",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/AlphaModeEXT\\.hpp$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_AlphaModeEXT` and the `CNA_ALPHA_MODE_*_EXT` constants at the canonical ordinals, with a published maximum",
+      "tests": "identity assertions, every value round-tripping through the PBR alpha-mode routes and the refusal past the maximum, in strict-C `PbrEffectSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-051C",
+      "approved_symbols": [
+        "CPP-256A75FD6717",
+        "CPP-3B0358272617",
+        "CPP-D1F9E08CC8EC",
+        "CPP-F130244D4BB1"
+      ]
+    },
+    {
+      "id": "texture-transform-extension-value",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/TextureTransformEXT\\.hpp$",
+      "kinds": [
+        "class",
+        "struct",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "field",
+        "constant",
+        "alias"
+      ],
+      "mapping": "versioned `CNA_TextureTransformEXT` POD with `cna_texture_transform_ext_init` for the documented identity defaults and `cna_texture_transform_ext_equals` for the defaulted comparison",
+      "tests": "layout and alignment assertions, the identity default, field mutation, equality in both directions and malformed-operand refusals, in strict-C `PbrEffectSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-051C",
+      "approved_symbols": [
+        "CPP-3843F6A0F91E",
+        "CPP-3ED9CA6CF03C",
+        "CPP-4D0A035DD296",
+        "CPP-9577AA47F845",
+        "CPP-CC79234ED8A7"
       ]
     }
   ]

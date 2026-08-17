@@ -185,6 +185,41 @@ static int validate_data(const CNA_MorphTargetDataEXTHandle data)
             nearly_equal(normal[0], 0.70710678F) && normal[1] == 0.0F &&
             nearly_equal(normal[2], 0.70710678F) &&
             memcmp(base + 24U, blended + 24U, 8U) == 0);
+
+    /* CBIND-051C: tangent deltas are three-component, because glTF morphs the tangent direction
+       only -- handedness describes UV winding and cannot be interpolated. A separate route rather
+       than a field on the creation descriptor, which carries no size or version header. */
+    {
+        const CNA_Vector3 tangents[1] = {{0.5F, 0.0F, -0.5F}};
+        CNA_Vector3 readback[1] = {{0.0F, 0.0F, 0.0F}};
+        uint64_t tangent_count = UINT64_MAX;
+
+        REQUIRE(cna_morph_target_data_ext_copy_tangent_deltas(
+                    data, 0U, 0, 0U, &tangent_count) == CNA_RESULT_INVALID_ARGUMENT);
+        REQUIRE(cna_morph_target_data_ext_set_tangent_deltas(data, 0U, tangents, 1U) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_morph_target_data_ext_copy_tangent_deltas(
+                    data, 0U, readback, 1U, &tangent_count) == CNA_RESULT_SUCCESS &&
+                tangent_count == 1U && readback[0].x == 0.5F && readback[0].z == -0.5F &&
+                cna_morph_target_data_ext_copy_tangent_deltas(
+                    data, 1U, 0, 0U, &tangent_count) == CNA_RESULT_SUCCESS &&
+                tangent_count == 0U);
+        readback[0].x = 0.0F;
+        REQUIRE(cna_morph_target_data_ext_copy_tangent_deltas(
+                    data, 0U, readback, 0U, &tangent_count) == CNA_RESULT_BUFFER_TOO_SMALL &&
+                tangent_count == 1U && readback[0].x == 0.0F);
+        REQUIRE(cna_morph_target_data_ext_set_tangent_deltas(data, 0U, 0, 0U) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_morph_target_data_ext_copy_tangent_deltas(
+                    data, 0U, readback, 1U, &tangent_count) == CNA_RESULT_SUCCESS &&
+                tangent_count == 0U);
+        REQUIRE(cna_morph_target_data_ext_set_tangent_deltas(data, 2U, tangents, 1U) ==
+                    CNA_RESULT_INVALID_ARGUMENT &&
+                cna_morph_target_data_ext_set_tangent_deltas(data, 0U, 0, 1U) ==
+                    CNA_RESULT_INVALID_ARGUMENT &&
+                cna_morph_target_data_ext_set_tangent_deltas(data, 0U, tangents, 2U) ==
+                    CNA_RESULT_INVALID_ARGUMENT);
+    }
     return 1;
 }
 

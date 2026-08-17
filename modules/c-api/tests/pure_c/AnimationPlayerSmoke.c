@@ -157,6 +157,31 @@ static int validate_all(void)
                 copied_keys, 2U, &count) == CNA_RESULT_SUCCESS &&
             bone_index == 0 && count == 2U && copied_keys[1].translation.x == 2.0F);
 
+    /* CBIND-051C: which index space a clip's bone indices are in. Every clip built before rigid
+       node animation existed was a joint-palette clip, which is why that is the default; the two
+       spaces must never be silently interchanged. */
+    {
+        CNA_ClipTargetSpaceEXT space = UINT32_MAX;
+        REQUIRE(cna_skinning_data_get_clip_target_space_ext(data, 0U, &space) ==
+                    CNA_RESULT_SUCCESS && space == CNA_CLIP_TARGET_SPACE_JOINT_PALETTE_EXT &&
+                cna_skinning_data_set_clip_target_space_ext(
+                    data, 0U, CNA_CLIP_TARGET_SPACE_SCENE_NODE_EXT) == CNA_RESULT_SUCCESS &&
+                cna_skinning_data_get_clip_target_space_ext(data, 0U, &space) ==
+                    CNA_RESULT_SUCCESS && space == CNA_CLIP_TARGET_SPACE_SCENE_NODE_EXT &&
+                cna_skinning_data_set_clip_target_space_ext(
+                    data, 0U, CNA_CLIP_TARGET_SPACE_JOINT_PALETTE_EXT) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_skinning_data_get_clip_target_space_ext(data, 1U, &space) ==
+                    CNA_RESULT_INVALID_ARGUMENT &&
+                cna_skinning_data_set_clip_target_space_ext(
+                    data, 1U, CNA_CLIP_TARGET_SPACE_SCENE_NODE_EXT) ==
+                    CNA_RESULT_INVALID_ARGUMENT &&
+                cna_skinning_data_set_clip_target_space_ext(
+                    data, 0U, CNA_CLIP_TARGET_SPACE_MAXIMUM_EXT + 1U) ==
+                    CNA_RESULT_INVALID_ARGUMENT &&
+                cna_skinning_data_get_clip_target_space_ext(data, 0U, 0) ==
+                    CNA_RESULT_INVALID_ARGUMENT);
+    }
+
     REQUIRE(cna_animation_player_create(data, &player) == CNA_RESULT_SUCCESS &&
             cna_animation_player_get_current_position(player, &position) ==
                 CNA_RESULT_SUCCESS && position == 0.0 &&

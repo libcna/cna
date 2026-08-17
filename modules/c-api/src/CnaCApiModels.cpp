@@ -3,6 +3,7 @@
 #include "CNA/C/models.h"
 #include "CNA/GraphicsCapability.hpp"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiGraphicsStateDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
@@ -15,6 +16,8 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelEffectCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
@@ -53,6 +56,9 @@ using Microsoft::Xna::Framework::Graphics::ModelBoneCollection;
 using Microsoft::Xna::Framework::Graphics::ModelEffectCollection;
 using Microsoft::Xna::Framework::Graphics::ModelMesh;
 using Microsoft::Xna::Framework::Graphics::ModelMeshPart;
+using Microsoft::Xna::Framework::Graphics::ClipTargetSpaceEXT;
+using Microsoft::Xna::Framework::Graphics::PrimitiveType;
+using Microsoft::Xna::Framework::Graphics::SamplerState;
 using Microsoft::Xna::Framework::Graphics::GltfImportDiagnosticKindEXT;
 using Microsoft::Xna::Framework::Graphics::GltfImportDiagnosticSeverityEXT;
 using Microsoft::Xna::Framework::Graphics::GltfImportDiagnosticEXT;
@@ -5898,3 +5904,209 @@ CNA_Result cna_animation_player_copy_skin_transforms(
             "The destination cannot hold all AnimationPlayer skin transforms.");
     });
 }
+
+CNA_Result cna_model_mesh_part_get_primitive_type_ext(
+    const CNA_ModelMeshPartHandle partHandle,
+    CNA_PrimitiveType* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The ModelMeshPart primitive-type output is null.");
+        }
+        std::shared_ptr<PartResource> part;
+        if (const CNA_Result result = GetPart(partHandle, &part);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = static_cast<CNA_PrimitiveType>(part->value->getPrimitiveTypeEXTProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_part_set_primitive_type_ext(
+    const CNA_ModelMeshPartHandle partHandle,
+    const CNA_PrimitiveType value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (value > CNA_PRIMITIVE_POINT_LIST_EXT) {
+            return InvalidArgument("The primitive type is not a defined identity.");
+        }
+        std::shared_ptr<PartResource> part;
+        if (const CNA_Result result = GetPart(partHandle, &part);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        part->value->setPrimitiveTypeEXTProperty(static_cast<PrimitiveType>(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_part_get_sampler_state_ext(
+    const CNA_ModelMeshPartHandle partHandle,
+    const CNA_PbrTextureSlot slot,
+    CNA_SamplerState* const outState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outState == nullptr) {
+            return InvalidArgument("The ModelMeshPart sampler-state output is null.");
+        }
+        if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
+            return InvalidArgument("The PBR texture slot is outside the valid range.");
+        }
+        std::shared_ptr<PartResource> part;
+        if (const CNA_Result result = GetPart(partHandle, &part);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const SamplerState& state = slot < CNA_PBR_TEXTURE_SPECULAR_EXT
+            ? part->value->getSamplerStatesEXTProperty()[slot]
+            : part->value->getSpecularSamplerStatesEXTProperty()
+                  [slot - CNA_PBR_TEXTURE_SPECULAR_EXT];
+        CNA::C::Detail::ToCSamplerState(state, outState);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_part_set_sampler_state_ext(
+    const CNA_ModelMeshPartHandle partHandle,
+    const CNA_PbrTextureSlot slot,
+    const CNA_SamplerState* const state)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
+            return InvalidArgument("The PBR texture slot is outside the valid range.");
+        }
+        std::shared_ptr<PartResource> part;
+        if (const CNA_Result result = GetPart(partHandle, &part);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        SamplerState native;
+        if (const CNA_Result result = CNA::C::Detail::ToNativeSamplerState(state, &native);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (slot < CNA_PBR_TEXTURE_SPECULAR_EXT) {
+            part->value->setSamplerStateEXTProperty(static_cast<int>(slot), native);
+        } else {
+            part->value->setSpecularSamplerStateEXTProperty(
+                static_cast<int>(slot - CNA_PBR_TEXTURE_SPECULAR_EXT), native);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinning_data_get_clip_target_space_ext(
+    const CNA_SkinningDataHandle dataHandle,
+    const uint64_t clipIndex,
+    CNA_ClipTargetSpaceEXT* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The SkinningData clip target-space output is null.");
+        }
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<std::string> names = SortedClipNames(*data->value);
+        if (clipIndex >= names.size()) {
+            return InvalidArgument("The SkinningData clip index is outside the valid range.");
+        }
+        *outValue = static_cast<CNA_ClipTargetSpaceEXT>(
+            data->value->AnimationClips.at(names[static_cast<std::size_t>(clipIndex)])
+                .TargetSpace);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinning_data_set_clip_target_space_ext(
+    const CNA_SkinningDataHandle dataHandle,
+    const uint64_t clipIndex,
+    const CNA_ClipTargetSpaceEXT value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (value > CNA_CLIP_TARGET_SPACE_MAXIMUM_EXT) {
+            return InvalidArgument("The clip target space is not a defined identity.");
+        }
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<std::string> names = SortedClipNames(*data->value);
+        if (clipIndex >= names.size()) {
+            return InvalidArgument("The SkinningData clip index is outside the valid range.");
+        }
+        data->value->AnimationClips.at(names[static_cast<std::size_t>(clipIndex)]).TargetSpace =
+            static_cast<ClipTargetSpaceEXT>(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_copy_tangent_deltas(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    const uint64_t targetIndex,
+    CNA_Vector3* const destination,
+    const uint64_t capacity,
+    uint64_t* const outDeltaCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (targetIndex >= data->value->TangentDeltas.size()) {
+            return InvalidArgument(
+                "The MorphTargetDataEXT target index is outside the valid range.");
+        }
+        return CopyOutputValues(
+            data->value->TangentDeltas[static_cast<std::size_t>(targetIndex)],
+            destination, capacity, outDeltaCount, ToCVector3,
+            "The MorphTargetDataEXT tangent-delta output is invalid.",
+            "The destination cannot hold all morph tangent deltas.");
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_set_tangent_deltas(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    const uint64_t targetIndex,
+    const CNA_Vector3* const deltas,
+    const uint64_t deltaCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (deltas == nullptr && deltaCount != 0U) {
+            return InvalidArgument("The morph tangent-delta array is null.");
+        }
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // TangentDeltas is sized per target like the position and normal arrays, and a target
+        // without a TANGENT delta keeps an empty inner vector rather than being absent, so the
+        // outer array is grown to match the targets the data already has.
+        if (targetIndex >= data->value->PositionDeltas.size()) {
+            return InvalidArgument(
+                "The MorphTargetDataEXT target index is outside the valid range.");
+        }
+        const std::size_t vertexCount =
+            data->value->PositionDeltas[static_cast<std::size_t>(targetIndex)].size();
+        if (deltaCount != 0U && static_cast<std::size_t>(deltaCount) != vertexCount) {
+            return InvalidArgument(
+                "The morph tangent-delta count must be zero or the target's vertex count.");
+        }
+        data->value->TangentDeltas.resize(data->value->PositionDeltas.size());
+        std::vector<Microsoft::Xna::Framework::Vector3>& target =
+            data->value->TangentDeltas[static_cast<std::size_t>(targetIndex)];
+        target.clear();
+        target.reserve(static_cast<std::size_t>(deltaCount));
+        for (uint64_t index = 0U; index < deltaCount; ++index) {
+            target.push_back(ToNativeVector3(deltas[index]));
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+

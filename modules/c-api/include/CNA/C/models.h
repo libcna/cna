@@ -91,7 +91,25 @@ typedef struct CNA_MorphTargetDeltaEXTDescriptor {
     uint64_t normal_delta_count;
 } CNA_MorphTargetDeltaEXTDescriptor;
 
-/** @brief Complete copied construction state for morph-target data. */
+/**
+ * @brief Fixed-width identity for which index space a clip's bone indices are in.
+ *
+ * CNA extension. The two spaces are deliberately distinct and must never be interchanged: a
+ * joint's palette slot has nothing to do with its position in the scene, and a rigid scene node
+ * has no palette slot at all. The values match
+ * `Microsoft::Xna::Framework::Graphics::ClipTargetSpaceEXT`.
+ */
+typedef uint32_t CNA_ClipTargetSpaceEXT;
+/** @brief Track bone indices are skinning-palette slots. */
+#define CNA_CLIP_TARGET_SPACE_JOINT_PALETTE_EXT UINT32_C(0)
+/** @brief Track bone indices are scene-node indices. */
+#define CNA_CLIP_TARGET_SPACE_SCENE_NODE_EXT UINT32_C(1)
+/** @brief Highest defined clip-target-space identity. */
+#define CNA_CLIP_TARGET_SPACE_MAXIMUM_EXT CNA_CLIP_TARGET_SPACE_SCENE_NODE_EXT
+
+/**
+ * @brief Complete copied construction state for morph-target data.
+ */
 typedef struct CNA_MorphTargetDataEXTDescriptor {
     /** @brief Base-pose vertex bytes borrowed for the call. */
     const uint8_t* base_vertex_bytes;
@@ -2006,6 +2024,127 @@ CNA_C_API CNA_Result cna_animation_player_copy_skin_transforms(
     CNA_Matrix* destination,
     uint64_t capacity,
     uint64_t* out_count);
+
+/**
+ * @brief Gets the topology this part's index buffer describes.
+ *
+ * CNA extension: real XNA carries the topology as a draw argument rather than part state.
+ *
+ * @param part Model-mesh-part handle.
+ * @param out_value Receives one `CNA_PRIMITIVE_*` identity.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_part_get_primitive_type_ext(
+    CNA_ModelMeshPartHandle part,
+    CNA_PrimitiveType* out_value);
+
+/**
+ * @brief Sets the topology this part's index buffer describes.
+ *
+ * Setting this does not reinterpret the index data; it states what that data already means.
+ *
+ * @param part Model-mesh-part handle.
+ * @param value One `CNA_PRIMITIVE_*` identity.
+ * @return `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ */
+CNA_C_API CNA_Result cna_model_mesh_part_set_primitive_type_ext(
+    CNA_ModelMeshPartHandle part,
+    CNA_PrimitiveType value);
+
+/**
+ * @brief Gets one texture slot's sampler state for this part.
+ *
+ * The seven slots are the `CNA_PBR_TEXTURE_*` identities: the five material maps followed by the
+ * two `KHR_materials_specular` maps. The canonical API keeps these as two separate arrays; the
+ * slot identity spans both so a caller has one vocabulary for a texture and its sampler.
+ *
+ * @param part Model-mesh-part handle.
+ * @param slot One of the `CNA_PBR_TEXTURE_*` identities.
+ * @param out_state Receives the sampler state; its size and version headers must be set.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_part_get_sampler_state_ext(
+    CNA_ModelMeshPartHandle part,
+    CNA_PbrTextureSlot slot,
+    CNA_SamplerState* out_state);
+
+/**
+ * @brief Sets one texture slot's sampler state for this part.
+ * @param part Model-mesh-part handle.
+ * @param slot One of the `CNA_PBR_TEXTURE_*` identities.
+ * @param state The sampler state to apply when this part's texture is bound to that slot.
+ * @return `CNA_RESULT_INVALID_ARGUMENT` for an undefined slot or a malformed state.
+ */
+CNA_C_API CNA_Result cna_model_mesh_part_set_sampler_state_ext(
+    CNA_ModelMeshPartHandle part,
+    CNA_PbrTextureSlot slot,
+    const CNA_SamplerState* state);
+
+/**
+ * @brief Gets which index space one clip's bone indices are in.
+ * @param data SkinningData handle.
+ * @param clip_index Clip index in the order reported by `cna_skinning_data_copy_clip_name_at`.
+ * @param out_value Receives one `CNA_CLIP_TARGET_SPACE_*_EXT` identity.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinning_data_get_clip_target_space_ext(
+    CNA_SkinningDataHandle data,
+    uint64_t clip_index,
+    CNA_ClipTargetSpaceEXT* out_value);
+
+/**
+ * @brief States which index space one clip's bone indices are in.
+ *
+ * A separate route rather than a field on the creation descriptor, because that descriptor is
+ * published without a size or version header and growing it would move every field after it.
+ *
+ * @param data SkinningData handle.
+ * @param clip_index Clip index in the order reported by `cna_skinning_data_copy_clip_name_at`.
+ * @param value One `CNA_CLIP_TARGET_SPACE_*_EXT` identity.
+ * @return `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity or an out-of-range index.
+ */
+CNA_C_API CNA_Result cna_skinning_data_set_clip_target_space_ext(
+    CNA_SkinningDataHandle data,
+    uint64_t clip_index,
+    CNA_ClipTargetSpaceEXT value);
+
+/**
+ * @brief Copies one target's optional tangent deltas atomically.
+ *
+ * glTF morphs the tangent direction only, so these are three-component vectors: the handedness
+ * describes the UV winding and cannot be interpolated, so it stays on the base vertex.
+ *
+ * @param data Morph-target-data handle.
+ * @param target_index Zero-based target index.
+ * @param destination Destination values, or null only for zero capacity.
+ * @param capacity Destination capacity in vectors.
+ * @param out_delta_count Receives the required vector count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_morph_target_data_ext_copy_tangent_deltas(
+    CNA_MorphTargetDataEXTHandle data,
+    uint64_t target_index,
+    CNA_Vector3* destination,
+    uint64_t capacity,
+    uint64_t* out_delta_count);
+
+/**
+ * @brief Replaces one target's tangent deltas from a copied array.
+ *
+ * A separate route rather than a field on the creation descriptor, for the same reason as the
+ * clip target space: that descriptor carries no size or version header.
+ *
+ * @param data Morph-target-data handle.
+ * @param target_index Zero-based target index.
+ * @param deltas Caller-owned values, or null only for a zero count.
+ * @param delta_count Number of vectors, either zero or the target's vertex count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_morph_target_data_ext_set_tangent_deltas(
+    CNA_MorphTargetDataEXTHandle data,
+    uint64_t target_index,
+    const CNA_Vector3* deltas,
+    uint64_t delta_count);
 
 #ifdef __cplusplus
 }

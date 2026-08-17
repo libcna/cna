@@ -164,6 +164,63 @@ static CNA_Result create_index_buffer(
     return cna_index_buffer_create(device, &info, outBuffer);
 }
 
+
+/* CBIND-051C: the topology this part's indices already describe, and the seven sampler slots the
+   PBR texture identities span -- five material maps plus the two KHR_materials_specular maps,
+   which the canonical API keeps as two separate arrays. */
+static int validate_topology_and_samplers(void)
+{
+    CNA_ModelMeshPartHandle part = CNA_INVALID_HANDLE;
+    CNA_SamplerState state = {sizeof(CNA_SamplerState), UINT32_C(1),
+                              0, 0, 0, 0, 0, 0, 0.0F, 0U};
+    CNA_SamplerState readback = {sizeof(CNA_SamplerState), UINT32_C(1),
+                                 0, 0, 0, 0, 0, 0, 0.0F, 0U};
+    CNA_SamplerState malformed = {0, 0, 0, 0, 0, 0, 0, 0, 0.0F, 0U};
+    CNA_PrimitiveType topology = UINT32_MAX;
+
+    REQUIRE(cna_model_mesh_part_create_default(&part) == CNA_RESULT_SUCCESS &&
+            cna_model_mesh_part_get_primitive_type_ext(part, &topology) == CNA_RESULT_SUCCESS &&
+            topology == CNA_PRIMITIVE_TRIANGLE_LIST);
+    for (uint32_t value = 0U; value <= CNA_PRIMITIVE_POINT_LIST_EXT; ++value) {
+        REQUIRE(cna_model_mesh_part_set_primitive_type_ext(part, value) == CNA_RESULT_SUCCESS &&
+                cna_model_mesh_part_get_primitive_type_ext(part, &topology) ==
+                    CNA_RESULT_SUCCESS && topology == value);
+    }
+    REQUIRE(cna_model_mesh_part_set_primitive_type_ext(
+                part, CNA_PRIMITIVE_POINT_LIST_EXT + 1U) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_mesh_part_get_primitive_type_ext(part, 0) == CNA_RESULT_INVALID_ARGUMENT);
+
+    REQUIRE(cna_sampler_state_init(CNA_SAMPLER_STATE_PRESET_POINT_CLAMP, &state) == CNA_RESULT_SUCCESS);
+    for (uint32_t slot = 0U; slot <= CNA_PBR_TEXTURE_MAXIMUM; ++slot) {
+        REQUIRE(cna_model_mesh_part_get_sampler_state_ext(part, slot, &readback) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_model_mesh_part_set_sampler_state_ext(part, slot, &state) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_model_mesh_part_get_sampler_state_ext(part, slot, &readback) ==
+                    CNA_RESULT_SUCCESS &&
+                readback.filter == state.filter &&
+                readback.address_u == state.address_u &&
+                readback.address_v == state.address_v);
+    }
+    REQUIRE(cna_model_mesh_part_get_sampler_state_ext(
+                part, CNA_PBR_TEXTURE_MAXIMUM + 1U, &readback) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_mesh_part_set_sampler_state_ext(
+                part, CNA_PBR_TEXTURE_MAXIMUM + 1U, &state) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_mesh_part_get_sampler_state_ext(
+                part, CNA_PBR_TEXTURE_BASE_COLOR, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_mesh_part_set_sampler_state_ext(
+                part, CNA_PBR_TEXTURE_BASE_COLOR, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_model_mesh_part_set_sampler_state_ext(
+                part, CNA_PBR_TEXTURE_BASE_COLOR, &malformed) == CNA_RESULT_INVALID_ARGUMENT);
+
+    REQUIRE(cna_model_mesh_part_destroy(part) == CNA_RESULT_SUCCESS &&
+            cna_model_mesh_part_get_primitive_type_ext(part, &topology) ==
+                CNA_RESULT_INVALID_HANDLE &&
+            cna_model_mesh_part_set_sampler_state_ext(
+                part, CNA_PBR_TEXTURE_BASE_COLOR, &state) == CNA_RESULT_INVALID_HANDLE);
+    return 1;
+}
+
 static int validate_resources(const CNA_Handle device)
 {
     CNA_ModelMeshPartHandle part = CNA_INVALID_HANDLE;
@@ -259,7 +316,7 @@ int main(void)
         {Title, sizeof(Title) - 1U}, &callbacks};
     CNA_Handle game = CNA_INVALID_HANDLE;
 
-    if (!validate_scalar_state() ||
+    if (!validate_scalar_state() || !validate_topology_and_samplers() ||
         cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || state.stage != 2 ||
         cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
