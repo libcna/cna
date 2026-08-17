@@ -94,8 +94,18 @@ protected:
 
         if (frame_ == 1)
         {
-            check(renderer.GetWindowInternal() != nullptr, "GraphicsDevice has a real SDL_Window under the PixiJS renderer");
-            check(renderer.GetRendererInternal() == nullptr, "GetRendererInternal() is null -- no SDL_Renderer exists on this renderer");
+            // plan_platform.md PLAT-58/PLAT-61: the renderer is driven by the platform-neutral
+            // surface snapshot GraphicsDevice hands it, so what this proves is that the snapshot
+            // arrived intact -- not that some windowing-library handle is reachable through it.
+            float logX = -1.0f, logY = -1.0f;
+            const bool mapped = renderer.TransformWindowToLogical(0.0f, 0.0f, logX, logY);
+            check(mapped && logX == 0.0f && logY == 0.0f,
+                  "TransformWindowToLogical() maps the surface origin -- the platform surface reached the renderer");
+
+            float backX = -1.0f, backY = -1.0f;
+            check(renderer.TransformLogicalToWindow(64.0f, 32.0f, backX, backY) &&
+                      backX > 0.0f && backY > 0.0f,
+                  "TransformLogicalToWindow() inverts the same scale");
 
             int w = 0, h = 0;
             renderer.GetViewportSize(w, h);

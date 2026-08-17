@@ -95,4 +95,81 @@ TEST(Sdl2PlatformTests, NativeQueueEventsBecomePlatformEvents)
     EXPECT_EQ(translatedClose->window, 41u);
 }
 
+// PLAT-SDL2-3 regression. The keycode translation used one `SDLK_F1 .. SDLK_F24` range to map the
+// function keys, but SDL2 leaves a gap between F12 (scancode 69) and F13 (scancode 104) and fills
+// it with the navigation, editing and keypad keys. Every one of them therefore matched the F-key
+// arm and came out as a function key -- SDLK_LEFT translated to 134, i.e. F23 -- and the mapping
+// never reached the switch that handles them. The original suite could not see it: it injected one
+// letter key and a mouse event.
+//
+// Driven through the public keyboard service rather than the internal helper, so it pins the
+// contract a game observes and not an implementation detail. Every case below has a scancode
+// numerically inside the old bad range, which is exactly what made them wrong.
+TEST(Sdl2PlatformTests, KeysBetweenF12AndF13AreNotTranslatedAsFunctionKeys)
+{
+    std::unique_ptr<IPlatform> platform = MakeSdl2();
+    ASSERT_NE(platform, nullptr);
+    IPlatformKeyboard* keyboard = platform->GetKeyboard();
+    ASSERT_NE(keyboard, nullptr);
+
+    const struct { Scancode scancode; KeyCode expected; const char* what; } cases[] = {
+        {Scancode::Left,       KeyCode::Left,      "Left"},
+        {Scancode::Right,      KeyCode::Right,     "Right"},
+        {Scancode::Up,         KeyCode::Up,        "Up"},
+        {Scancode::Down,       KeyCode::Down,      "Down"},
+        {Scancode::Home,       KeyCode::Home,      "Home"},
+        {Scancode::End,        KeyCode::End,       "End"},
+        {Scancode::PageUp,     KeyCode::PageUp,    "PageUp"},
+        {Scancode::PageDown,   KeyCode::PageDown,  "PageDown"},
+        {Scancode::Insert,     KeyCode::Insert,    "Insert"},
+        {Scancode::Delete,     KeyCode::Delete,    "Delete"},
+        {Scancode::CapsLock,   KeyCode::CapsLock,  "CapsLock"},
+        {Scancode::Keypad1,    KeyCode::NumPad1,   "Keypad1"},
+        {Scancode::KeypadPlus, KeyCode::Add,       "KeypadPlus"},
+    };
+
+    for (const auto& item : cases)
+    {
+        EXPECT_EQ(keyboard->GetKeyFromScancode(item.scancode), item.expected)
+            << item.what << " must not translate as a function key";
+    }
+}
+
+// The other half of the same defect: the two function-key ranges are contiguous in SDL2's scancodes
+// but NOT in Windows virtual-key codes, which restart at 0x7C for F13. Arithmetic from F1 gave F13
+// the value 0x9E instead of 0x7C.
+TEST(Sdl2PlatformTests, BothFunctionKeyRangesTranslateToTheirVirtualKeyCodes)
+{
+    std::unique_ptr<IPlatform> platform = MakeSdl2();
+    ASSERT_NE(platform, nullptr);
+    IPlatformKeyboard* keyboard = platform->GetKeyboard();
+    ASSERT_NE(keyboard, nullptr);
+
+    EXPECT_EQ(keyboard->GetKeyFromScancode(Scancode::F1), KeyCode::F1);
+    EXPECT_EQ(keyboard->GetKeyFromScancode(Scancode::F12), KeyCode::F12);
+    EXPECT_EQ(keyboard->GetKeyFromScancode(Scancode::F13), KeyCode::F13);
+    EXPECT_EQ(keyboard->GetKeyFromScancode(Scancode::F24), KeyCode::F24);
+
+    // Values, not just enum identity: F13 is 0x7C and must not be 0x9E, the answer the F1-relative
+    // arithmetic produced.
+    EXPECT_EQ(static_cast<std::uint16_t>(KeyCode::F13), 0x7Cu);
+    EXPECT_EQ(static_cast<std::uint16_t>(keyboard->GetKeyFromScancode(Scancode::F13)), 0x7Cu);
+}
+
+// Letters and digits use SDL2's ASCII keycodes, which really are contiguous -- the ranges the fix
+// deliberately left alone. Pinned so a later attempt to "simplify" the mapping cannot quietly break
+// the cases that were always correct.
+TEST(Sdl2PlatformTests, AsciiLetterAndDigitRangesStillTranslate)
+{
+    std::unique_ptr<IPlatform> platform = MakeSdl2();
+    ASSERT_NE(platform, nullptr);
+    IPlatformKeyboard* keyboard = platform->GetKeyboard();
+    ASSERT_NE(keyboard, nullptr);
+
+    EXPECT_EQ(keyboard->GetKeyFromScancode(Scancode::A), KeyCode::A);
+    EXPECT_EQ(keyboard->GetKeyFromScancode(Scancode::Z), KeyCode::Z);
+    EXPECT_EQ(keyboard->GetKeyFromScancode(Scancode::D0), KeyCode::D0);
+    EXPECT_EQ(keyboard->GetKeyFromScancode(Scancode::D9), KeyCode::D9);
+}
+
 } // namespace

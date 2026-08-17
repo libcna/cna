@@ -21,6 +21,20 @@
 
 #include <fstream>
 #include <gtest/gtest.h>
+
+// plan_platform.md PLAT-SDL2-8: fourteen cases below are wrapped in `#ifdef SOUND_ENABLED`.
+//
+// They assert on what the reader DECODED -- a positive duration, exact consumed byte counts, loop
+// points expressed in decoded frames, and the two diagnostics that only fire once a decode has
+// produced a second duration to disagree with. The decoder is CNA's SDL3_mixer engine, which is
+// deliberately absent from the archive for every other CNA_AUDIO_PLATFORM value, so under
+// CNA_AUDIO_PLATFORM=SDL2 or =NULL those assertions are unobservable rather than merely untested.
+// Compiled out with the reason stated, not softened: `SoundEffect::getDurationProperty()` returns
+// zero there, so a relaxed assertion would pass while proving nothing.
+//
+// The twelve cases that stay are the ones that never needed the engine -- registration, rejected
+// formats, malformed headers, desync and allocation guards -- and they keep running in every
+// audio profile, which is where most of this suite's value against hostile input lives.
 #include <sstream>
 
 #include "CNA/Internal/Xnb/SoundEffectContentTypeReader.hpp"
@@ -89,20 +103,28 @@ TEST_F(SoundEffectContentTypeReaderTest, IsRegisteredUnderRealFnaCanonicalName)
     EXPECT_TRUE(ContentTypeReaderManager::IsRegistered("Microsoft.Xna.Framework.Content.SoundEffectReader"));
 }
 
+#ifdef SOUND_ENABLED
+// Needs the decoder: see this file's SOUND_ENABLED note above.
 TEST_F(SoundEffectContentTypeReaderTest, Pcm16BitMonoLoadsSuccessfully)
 {
     auto effect = LoadFixture(std::string(kAudioDir) + "tone_mono_44khz_16bit.xnb");
     EXPECT_EQ(effect.getNameProperty(), "test");
     EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
 }
+#endif  // SOUND_ENABLED
 
+#ifdef SOUND_ENABLED
+// Needs the decoder: see this file's SOUND_ENABLED note above.
 TEST_F(SoundEffectContentTypeReaderTest, Pcm16BitStereoLoadsSuccessfully)
 {
     auto effect = LoadFixture(std::string(kAudioDir) + "tone_stereo_44khz_16bit.xnb");
     EXPECT_EQ(effect.getNameProperty(), "test");
     EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
 }
+#endif  // SOUND_ENABLED
 
+#ifdef SOUND_ENABLED
+// Needs the decoder: see this file's SOUND_ENABLED note above.
 // AUD-06-004 (2026-07-17 deep audit): widened from "rejected" to real support, WAV-wrapped
 // through SoundEffect::FromStream -> SDL3's own native 8-bit PCM decoder.
 TEST_F(SoundEffectContentTypeReaderTest, Pcm8BitLoadsSuccessfully)
@@ -111,7 +133,10 @@ TEST_F(SoundEffectContentTypeReaderTest, Pcm8BitLoadsSuccessfully)
     EXPECT_EQ(effect.getNameProperty(), "test");
     EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
 }
+#endif  // SOUND_ENABLED
 
+#ifdef SOUND_ENABLED
+// Needs the decoder: see this file's SOUND_ENABLED note above.
 // AUD-06-008: widened from "rejected" to real support, WAV-wrapped through SDL3's native
 // IEEE-float decoder.
 TEST_F(SoundEffectContentTypeReaderTest, IeeeFloatLoadsSuccessfully)
@@ -120,7 +145,10 @@ TEST_F(SoundEffectContentTypeReaderTest, IeeeFloatLoadsSuccessfully)
     EXPECT_EQ(effect.getNameProperty(), "test");
     EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
 }
+#endif  // SOUND_ENABLED
 
+#ifdef SOUND_ENABLED
+// Needs the decoder: see this file's SOUND_ENABLED note above.
 // AUD-06-006: widened from "rejected" to real support -- also the first real end-to-end proof
 // (independent of WaveBank.cpp's own AUDIO-ADPCM-001 fix) that the shared WavWrapper's MS-ADPCM
 // coefficient table lets SDL3 decode a *real*, externally-produced MS-ADPCM XNB fixture, not just
@@ -131,7 +159,10 @@ TEST_F(SoundEffectContentTypeReaderTest, MsAdpcmLoadsSuccessfully)
     EXPECT_EQ(effect.getNameProperty(), "test");
     EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
 }
+#endif  // SOUND_ENABLED
 
+#ifdef SOUND_ENABLED
+// Needs the decoder: see this file's SOUND_ENABLED note above.
 // AUD-06-007: widened from "rejected" to real support, WAV-wrapped through SDL3's native
 // IMA-ADPCM decoder.
 TEST_F(SoundEffectContentTypeReaderTest, ImaAdpcmLoadsSuccessfully)
@@ -140,6 +171,7 @@ TEST_F(SoundEffectContentTypeReaderTest, ImaAdpcmLoadsSuccessfully)
     EXPECT_EQ(effect.getNameProperty(), "test");
     EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
 }
+#endif  // SOUND_ENABLED
 
 // XMA2 has no decode path anywhere in this stack (SDL3 doesn't decode XMA2 either) -- still
 // correctly rejected. No real XMA2 .xnb fixture is vendored (MonoGame's own test corpus doesn't
@@ -249,6 +281,8 @@ TEST_F(SoundEffectContentTypeReaderTest, Pcm8WithZeroSampleRateFailsCleanlyRathe
     }
 }
 
+#ifdef SOUND_ENABLED
+// Needs the decoder: see this file's SOUND_ENABLED note above.
 // AUD-06-015: Swap16/Swap32 (SoundEffectContentTypeReader.cpp) exist and are already wired to
 // `input.getPlatformProperty() == 'x'`, but no fixture -- real or hand-built -- has ever actually
 // exercised them; every other test in this file uses platform='w'. This builds a WAVEFORMATEX
@@ -305,6 +339,7 @@ TEST_F(SoundEffectContentTypeReaderTest, XboxPlatformByteSwapsWaveFormatFieldsCo
 
     EXPECT_NEAR(effect.getDurationProperty().getTotalSecondsProperty(), 1024.0 / 44100.0, 1e-6);
 }
+#endif  // SOUND_ENABLED
 
 // ---------------------------------------------------------------------------
 // AUD-06-012: SoundEffectReader::Read() passes its declared audio-data length straight to
@@ -524,6 +559,8 @@ TEST_F(SoundEffectContentTypeReaderTest, UnknownFormatTagDiagnosticIncludesAllRe
     }
 }
 
+#ifdef SOUND_ENABLED
+// Needs the decoder: see this file's SOUND_ENABLED note above.
 // AUD-06-013: PCM8 stereo with a wildly wrong nBlockAlign (declared 100, the coherent value for
 // nChannels=2/wBitsPerSample=8 is 2). Empirically confirmed SDL3's own WAV loader does NOT trust
 // the file's declared nBlockAlign for PCM -- it recomputes the correct block size from
@@ -568,6 +605,7 @@ TEST_F(SoundEffectContentTypeReaderTest, IncoherentBlockAlignForPcm8IsIgnoredNot
 
     EXPECT_NEAR(effect.getDurationProperty().getTotalSecondsProperty(), 10.0 / 44100.0, 1e-6);
 }
+#endif  // SOUND_ENABLED
 
 // ---------------------------------------------------------------------------
 // AUD-06-010: the .xnb's own stored duration field (previously read-and-discarded) is now used as
@@ -578,6 +616,8 @@ TEST_F(SoundEffectContentTypeReaderTest, IncoherentBlockAlignForPcm8IsIgnoredNot
 // content).
 // ---------------------------------------------------------------------------
 
+#ifdef SOUND_ENABLED
+// Needs the decoder: see this file's SOUND_ENABLED note above.
 TEST_F(SoundEffectContentTypeReaderTest, DrasticDurationOracleDisagreementThrowsWithBothValues)
 {
     std::vector<uint8_t> bytes;
@@ -625,6 +665,7 @@ TEST_F(SoundEffectContentTypeReaderTest, DrasticDurationOracleDisagreementThrows
         EXPECT_NE(what.find("50"), std::string::npos) << what; // the decoded ~50ms value
     }
 }
+#endif  // SOUND_ENABLED
 
 TEST_F(SoundEffectContentTypeReaderTest, SmallDurationOracleDisagreementDoesNotThrow)
 {
@@ -682,6 +723,8 @@ TEST_F(SoundEffectContentTypeReaderTest, SmallDurationOracleDisagreementDoesNotT
 // constructor -- so this test checks unit-correctness (frames, not bytes), not rejection.
 // ---------------------------------------------------------------------------
 
+#ifdef SOUND_ENABLED
+// Needs the decoder: see this file's SOUND_ENABLED note above.
 TEST_F(SoundEffectContentTypeReaderTest, ImaAdpcmLoopPointsSurviveAsDecodedFramesNotCompressedBytes)
 {
     std::vector<uint8_t> bytes;
@@ -740,6 +783,7 @@ TEST_F(SoundEffectContentTypeReaderTest, ImaAdpcmLoopPointsSurviveAsDecodedFrame
     EXPECT_EQ(Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess::LoopStart(instance), 1500u);
     EXPECT_EQ(Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess::LoopLength(instance), 400u);
 }
+#endif  // SOUND_ENABLED
 
 // ---------------------------------------------------------------------------
 // AUD-06-016: the three format-chunk size classes the reader distinguishes (`formatLength <= 16`:
@@ -754,6 +798,8 @@ TEST_F(SoundEffectContentTypeReaderTest, ImaAdpcmLoopPointsSurviveAsDecodedFrame
 // payload (producing a decoded frame count that doesn't match).
 // ---------------------------------------------------------------------------
 
+#ifdef SOUND_ENABLED
+// Needs the decoder: see this file's SOUND_ENABLED note above.
 TEST_F(SoundEffectContentTypeReaderTest, FormatLength16BareWaveFormatConsumesExactlyDeclaredBytes)
 {
     std::vector<uint8_t> bytes;
@@ -792,7 +838,10 @@ TEST_F(SoundEffectContentTypeReaderTest, FormatLength16BareWaveFormatConsumesExa
     const double decodedFrames = effect.getDurationProperty().getTotalSecondsProperty() * 44100.0;
     EXPECT_NEAR(decodedFrames, kFrames, 1.0);
 }
+#endif  // SOUND_ENABLED
 
+#ifdef SOUND_ENABLED
+// Needs the decoder: see this file's SOUND_ENABLED note above.
 TEST_F(SoundEffectContentTypeReaderTest, FormatLength18WithZeroCbSizeConsumesExactlyDeclaredBytes)
 {
     std::vector<uint8_t> bytes;
@@ -838,7 +887,10 @@ TEST_F(SoundEffectContentTypeReaderTest, FormatLength18WithZeroCbSizeConsumesExa
     const double decodedFrames = effect.getDurationProperty().getTotalSecondsProperty() * 44100.0;
     EXPECT_NEAR(decodedFrames, kDecodedFrames, 1.0);
 }
+#endif  // SOUND_ENABLED
 
+#ifdef SOUND_ENABLED
+// Needs the decoder: see this file's SOUND_ENABLED note above.
 TEST_F(SoundEffectContentTypeReaderTest, ExtendedFormatLengthWithRealCoefficientTableConsumesExactlyDeclaredBytes)
 {
     std::vector<uint8_t> bytes;
@@ -896,6 +948,7 @@ TEST_F(SoundEffectContentTypeReaderTest, ExtendedFormatLengthWithRealCoefficient
     const double decodedFrames = effect.getDurationProperty().getTotalSecondsProperty() * 44100.0;
     EXPECT_NEAR(decodedFrames, kDecodedFrames, 1.0);
 }
+#endif  // SOUND_ENABLED
 
 // ---------------------------------------------------------------------------
 // AUD-06-018: real XNA 4.0's own `AudioChannels` enum (Mono=1, Stereo=2 -- no other values exist
@@ -1060,6 +1113,8 @@ TEST_F(SoundEffectContentTypeReaderTest, LooplessXnbEffectHasNoLoopRegionOnInsta
 // existing try/catch pattern exactly.
 // ---------------------------------------------------------------------------
 
+#ifdef SOUND_ENABLED
+// Needs the decoder: see this file's SOUND_ENABLED note above.
 TEST_F(SoundEffectContentTypeReaderTest, Pcm16WithZeroSampleRateFailsWithAssetContextNotRawException)
 {
     std::vector<uint8_t> bytes;
@@ -1103,3 +1158,4 @@ TEST_F(SoundEffectContentTypeReaderTest, Pcm16WithZeroSampleRateFailsWithAssetCo
         EXPECT_NE(what.find("--->"), std::string::npos) << what; // inner-exception marker
     }
 }
+#endif  // SOUND_ENABLED

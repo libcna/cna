@@ -5,6 +5,7 @@
 
 #include "../Common/StandardFileSystem.hpp"
 #include "../Common/StandardSystemInfo.hpp"
+#include "Sdl2SystemServices.hpp"
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
 
 #include <map>
@@ -95,6 +96,7 @@ namespace CNA::Platform::Sdl2 {
         Common::StandardSystemInfo systemInfo_;
         Keyboard keyboard_;
         GlContext glContext_;
+        Sdl2Displays displays_;
     };
 
 } // namespace CNA::Platform::Sdl2

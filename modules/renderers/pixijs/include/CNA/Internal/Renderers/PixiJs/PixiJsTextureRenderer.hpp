@@ -24,7 +24,6 @@ namespace CNA::Internal::Renderers::PixiJs
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         /// plan_pixijs.md PIXIJS-31: investigated and decided, 2026-08-17 (not merely undecided) --
         /// `PIXI.BufferResource` (this renderer's own upload path) exposes only `upload()`/

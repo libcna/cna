@@ -1124,6 +1124,12 @@ namespace Microsoft::Xna::Framework::Graphics
         /// down and rebuilt for a fallback candidate needing a different window kind, so the device
         /// still has to know which windows it is allowed to replace.
         bool ownsWindow_ = false;
+        /// Whether this device currently holds ONE reference on the platform's video subsystem.
+        ///
+        /// The count it stands for is 0 or 1 and nothing else: every acquisition and release goes
+        /// through setVideoSubsystemAcquired(), which is what makes that a structural property
+        /// rather than a rule the call sites have to remember. See that method's own comment for
+        /// why a plain bool beside two independent AcquireSubsystem() calls could not be right.
         bool videoSubsystemAcquired_;
         // Declared before renderer_: reverse destruction keeps presentation alive through the
         // raster renderer's final destructor calls.
@@ -1275,6 +1281,19 @@ namespace Microsoft::Xna::Framework::Graphics
 
         void createOrAttachWindow();
         void createRenderer();
+
+        /**
+         * @brief Brings this device's platform video-subsystem reference to @p acquired.
+         *
+         * The single owner of that reference. Idempotent in both directions, so this device holds
+         * either zero or one reference no matter how many times, or from how many places, the
+         * question is asked -- which is the whole point: `AcquireSubsystem()` is reference
+         * counted, so a second acquisition that is never matched by a second release leaves the
+         * video subsystem up for the rest of the process.
+         *
+         * @param acquired True to hold a reference, false to give it up.
+         */
+        void setVideoSubsystemAcquired(bool acquired);
 
         /**
          * @brief Resolves which renderer this device uses, honouring any configured fallback chain.

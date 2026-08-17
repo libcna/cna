@@ -4,8 +4,7 @@
 #include "CNA/Internal/Renderers/PixiJs/PixiJsSpriteBatchRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/NoOp3DResources.hpp"
 
-#include <SDL3/SDL.h>
-
+#include <cmath>
 #include <stdexcept>
 
 #if defined(__EMSCRIPTEN__)
@@ -185,20 +184,22 @@ EM_JS(void, CNA_PixiJs_UnbindRenderTarget, (), {
 
 namespace CNA::Internal::Renderers::PixiJs
 {
-    PixiJsRenderer::PixiJsRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                   CnaPresentationMode mode)
-        : window_(window)
-        , virtualWidth_(virtualWidth)
-        , virtualHeight_(virtualHeight)
-        , presentationMode_(mode)
+    PixiJsRenderer::PixiJsRenderer(const GraphicsRendererCreateArgs& args)
+        : surface_(args.surface)
+        , virtualWidth_(args.virtualWidth)
+        , virtualHeight_(args.virtualHeight)
+        , presentationMode_(args.presentationMode)
     {
-        if (!window_) throw std::runtime_error("PixiJsRenderer initialized with null window.");
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        if (surface_.windowId == 0)
+            throw std::runtime_error("PixiJsRenderer initialized without a platform window.");
+        if (!(surface_.displayScale > 0.0f) || !std::isfinite(surface_.displayScale))
+            surface_.displayScale = 1.0f;
+        IGraphicsRenderer::RegisterForWindow(surface_.windowId, this);
     }
 
     PixiJsRenderer::~PixiJsRenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(surface_.windowId);
     }
 
     void PixiJsRenderer::Clear(float r, float g, float b, float a)
@@ -217,15 +218,21 @@ namespace CNA::Internal::Renderers::PixiJs
 #endif
     }
 
+    void PixiJsRenderer::getWindowSize(int& width, int& height) const
+    {
+        width = static_cast<int>(std::lround(surface_.drawableSize.width / surface_.displayScale));
+        height = static_cast<int>(std::lround(surface_.drawableSize.height / surface_.displayScale));
+    }
+
     void PixiJsRenderer::getLogicalSize(int& width, int& height) const
     {
         if (virtualHeight_ <= 0)
         {
-            SDL_GetWindowSize(window_, &width, &height);
+            getWindowSize(width, height);
             return;
         }
         int physW, physH;
-        SDL_GetWindowSize(window_, &physW, &physH);
+        getWindowSize(physW, physH);
         height = virtualHeight_;
         if (presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth && physH > 0)
             width = static_cast<int>(static_cast<double>(physW) * virtualHeight_ / physH + 0.5);
@@ -249,12 +256,21 @@ namespace CNA::Internal::Renderers::PixiJs
         presentationMode_ = static_cast<CnaPresentationMode>(mode);
     }
 
+    void PixiJsRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        if (surface.windowId != surface_.windowId)
+            throw std::runtime_error("PixiJsRenderer surface window id changed.");
+        surface_ = surface;
+        if (!(surface_.displayScale > 0.0f) || !std::isfinite(surface_.displayScale))
+            surface_.displayScale = 1.0f;
+    }
+
     bool PixiJsRenderer::TransformWindowToLogical(float windowX, float windowY,
                                                   float& logX, float& logY) const
     {
         if (virtualHeight_ <= 0) return false;
         int physW, physH;
-        SDL_GetWindowSize(window_, &physW, &physH);
+        getWindowSize(physW, physH);
         if (physH <= 0) return false;
         const float scale = static_cast<float>(virtualHeight_) / static_cast<float>(physH);
         logX = windowX * scale;
@@ -267,7 +283,7 @@ namespace CNA::Internal::Renderers::PixiJs
     {
         if (virtualHeight_ <= 0) return false;
         int physW, physH;
-        SDL_GetWindowSize(window_, &physW, &physH);
+        getWindowSize(physW, physH);
         if (physH <= 0) return false;
         const float invScale = static_cast<float>(physH) / static_cast<float>(virtualHeight_);
         windowX = logX * invScale;
@@ -497,13 +513,11 @@ namespace CNA::Internal::Renderers::PixiJs
     void PixiJsRenderer::DrawIndexedColoredPrimitives(const IVertexBufferRenderer&, const IIndexBufferRenderer&,
                                                        const Matrix&, const Matrix&, const Matrix&,
                                                        PrimitiveType, int) { HandleUnsupported3DCall("PixiJS", "DrawIndexedColoredPrimitives"); }
-}
 
-namespace CNA::Internal::Renderers
-{
+    // plan_runtimerenderer.md design decision 4: the factory is family-scoped, so several renderer
+    // archives can link into one binary. PixiJsRendererDescriptor.cpp takes its address.
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<PixiJs::PixiJsRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode);
+        return std::make_unique<PixiJsRenderer>(args);
     }
 }

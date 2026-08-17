@@ -23,8 +23,9 @@ target_include_directories(cna_graphics_core PRIVATE ${CNA_SOURCE_DIR}/third_par
 # TouchPanel display metrics and Mouse/TextInputEXT window binding, while Input::MouseCursor
 # builds on Graphics::Texture2D. Declared on both targets so CMake repeats the archives.
 target_link_libraries(cna_graphics_core PRIVATE cna_input)
-# GraphicsDevice.cpp constructs the selected renderer through
-# CNA::Internal::Renderers::CreateGraphicsRenderer(), whose definition lives in the renderer
+# GraphicsDevice.cpp constructs the selected renderer through that family's own
+# CNA::Internal::Renderers::<Family>::CreateGraphicsRenderer(), reached as
+# GraphicsRendererDescriptor::create, whose definition lives in the renderer
 # archive. The umbrella's INTERFACE membership is not a link-order constraint, so the forward
 # edge must be declared on the graphics core itself; together with the reverse edges declared
 # by the renderer modules this closes the graphics-core <-> renderer cycle for the renderers

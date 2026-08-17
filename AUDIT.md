@@ -33,7 +33,7 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > view and the two CNAEXT queue routes, leaving the whole `net` module mapped. `CBIND-037A` then
 > opens `CBIND-037` by closing CNA's own `core` module: the logger, the process-wide minimum level,
 > the compile-time platform, desktop operating system, renderer identity and renderer name, and
-> both backend classifications for any of the 46 public renderer identities, and `CBIND-037B1`
+> both backend classifications for any public renderer identity, and `CBIND-037B1`
 > adds the gamepad controller type and the complete gamepad-capabilities value, and `CBIND-037B2`
 > adds the five gamepad value types — button set, directional pad, thumbsticks, triggers and the
 > snapshot itself — with every constructor, comparison, hash and string operation, and
@@ -274,7 +274,7 @@ whole surface is a CNA extension (`plan_runtimerenderer.md`).
 | `CNA::GraphicsRendererSelection::GetFallbackHistory()` | ✅ | empty on first-attempt success, ordered otherwise, reason + message |
 | `CNA::GraphicsRendererSelection::ResetForTestingEXT()` | ✅ | test-only; documented as not part of the supported API |
 | `GraphicsDevice::GetGraphicsRendererType()` / `GetGraphicsRendererName()` | ✅ | report the device's real renderer (no longer `constexpr` — see below) |
-| `CNA::getGraphicsRendererName(GraphicsRendererType)` | ✅ | all 46 identities, distinct, non-placeholder |
+| `CNA::getGraphicsRendererName(GraphicsRendererType)` | ✅ | every public identity (49 today), distinct, non-placeholder. The test derives the identity list from the enum rather than restating it — the restated list it replaced had been frozen at 46 while `TINYGL`, `IGL` and `PIXIJS` were added, so it silently stopped covering the three newest names |
 | `CNA::tryParseGraphicsRendererName()` | ✅ | round-trips every identity, case-insensitive |
 
 **Intentional deviation.** `GraphicsDevice::GetGraphicsRendererType()` and

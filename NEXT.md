@@ -146,22 +146,38 @@
 
 > **Active campaign — CNA platform separation (`feature/platform`):** `plan_platform.md` is the
 > authoritative task/evidence log, `docs/platform-abstraction.md` is the durable implementer's
-> guide, and `NEXT_platform.md` carries detailed continuity notes.
+> guide, `docs/platform-sdl2.md` is the SDL2 backend's own boundary, and `NEXT_platform.md`
+> carries detailed continuity notes.
 >
 > Platform, graphics and audio are independent build choices:
-> `CNA_PLATFORM={SDL3,HEADLESS,TERMINAL}`, `CNA_GRAPHICS_RENDERER=<renderer>`, and
-> `CNA_AUDIO_PLATFORM={SDL3,NULL}`. `CNA_PLATFORM` selects window/events/input/host services; it
-> does not imply a renderer or audio backend.
+> `CNA_PLATFORM={SDL3,SDL2,HEADLESS,TERMINAL}`, `CNA_GRAPHICS_RENDERER=<renderer>`, and
+> `CNA_AUDIO_PLATFORM={SDL3,SDL2,NULL}`. `CNA_PLATFORM` selects window/events/input/host services;
+> it does not imply a renderer or audio backend. Only `CNA_AUDIO_PLATFORM=SDL3` defines
+> `SOUND_ENABLED` — the high-level XNA decoder/mixer is an SDL3_mixer engine, so the other two
+> selections have a real playback transport and no decoder above it.
 >
-> **New production code must not include SDL or call `SDL_*`/`MIX_*` outside the platform SDL3
-> implementation, the isolated SDL3/audio mixer implementation, and the four audited renderer
+> **New production code must not include SDL or call `SDL_*`/`MIX_*` outside the platform SDL3/SDL2
+> implementations, the isolated audio mixer implementation, and the four audited renderer
 > exceptions (`sdl-renderer`, `sdl-gpu`, `fna3d`, `freedirect`).** Use `IPlatform` services,
-> explicit capabilities/refusals, batched events and cached input snapshots. Run the inventory,
-> classification, renderer-audit, ratchet and hot-path gates from `tools/platform/`.
+> explicit capabilities/refusals, batched events and cached input snapshots. Run all **seven**
+> gates from `tools/platform/` — inventory, classification, renderer audit, `sdl_ratchet.py
+> --check --strict`, hot-path lint, non-production manifest and `check_contract.py`. The ratchet's
+> `--strict` is not optional: without it the script warns and exits 0 where PLAT-121 requires a
+> hard failure, which is how the 0/0 floor was silently raised once already.
 >
-> Existing reusable builds are `cmake-build-debug` (SDL3 default), `cmake-build-headless`, and
-> `cmake-build-terminal`; do not create another full tree without a distinct configuration need.
+> **A completed plan is not a finished one.** The 2026-08-17 post-merge re-audit in
+> `plan_platform.md` found that later work had reintroduced a renderer holding a raw window
+> pointer, raised the "irreversible" ratchet floor to accommodate it, and left an entire audio
+> selection unable to compile — none of it visible, because no configuration that would expose it
+> had been built and run. If you add a backend or a renderer, run the configuration end to end
+> rather than trusting the gates that ran on a different one.
+>
+> Existing reusable builds are `cmake-build-debug` (SDL3 default), `cmake-build-headless`,
+> `cmake-build-terminal` and `cmake-build-sdl2` (SDL2 platform + SDL2 audio + OPENGLES3); do not
+> create another full tree without a distinct configuration need.
 > `CNA_DEVICES` defaults to OFF, so a devices change must be compiled with it explicitly enabled.
+> Run test suites against an Xvfb display, not the dummy video driver: the dummy driver silently
+> *skips* window-dependent cases, and on SDL2 it cannot provide an OpenGL window at all.
 
 ## C BINDING / C ABI — CBIND-035 CLOSED (2026-08-15)
 

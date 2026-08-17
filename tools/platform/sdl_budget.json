@@ -1,8 +1,11 @@
 {
   "_comment": "PLAT-8 ratchet budget. Maximum SDL-referencing production files (and total references) allowed outside the PLAT-3 allowlist. This may go DOWN and never UP: each migration task lowers it. Regenerate with 'python3 tools/platform/sdl_ratchet.py --update'. See plan_platform.md.",
-  "max_files": 4,
-  "max_references": 14,
-  "by_module_at_last_update": {
-    "renderers/pixijs": 4
+  "max_files": 0,
+  "max_references": 0,
+  "by_module_at_last_update": {},
+  "floor": {
+    "_comment": "PLAT-121's irreversible floor: the lowest budget this repository has ever reached. --update refuses to write a budget above it, with or without --allow-increase, and --check fails when the checked-in budget exceeds it. New SDL coupling outside the PLAT-3 allowlist is fixed at the call site, never absorbed here.",
+    "max_files": 0,
+    "max_references": 0
   }
 }

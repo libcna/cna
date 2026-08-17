@@ -30,7 +30,12 @@ set(CNA_RENDERER_SHARED_EASYGL OPENGLES2 OPENGLES3 OPENGL33 WEBGL1 WEBGL2)
 set(CNA_RENDERER_WINDOWS_ONLY
     DIRECTX1 DIRECTX2 DIRECTX3 DIRECTX5 DIRECTX6 DIRECTX7 DIRECTX8 DIRECTX9 DIRECTX10
     DIRECTX11 DIRECTX12 DIRECT2D GLIDE GDI)
-set(CNA_RENDERER_EMSCRIPTEN_ONLY WEBGL1 WEBGL2 CANVAS HTML_DOM SVG_DOM)
+# PIXIJS belongs here for the same reason as CANVAS/HTML_DOM/SVG_DOM: PixiJS is a browser
+# JavaScript library reached through EM_JS, and RendererSelection.cmake refuses it outside
+# Emscripten per identity. Listing it here is what makes the PAIRWISE rule state the reason --
+# a PIXIJS + DIRECTX11 request should be refused as "two platforms, one toolchain", not left to
+# whichever per-identity gate happens to fire first.
+set(CNA_RENDERER_EMSCRIPTEN_ONLY WEBGL1 WEBGL2 CANVAS HTML_DOM SVG_DOM PIXIJS)
 set(CNA_RENDERER_MACOS_ONLY METAL)
 
 # Rejects an unbuildable combination with a specific, actionable reason.

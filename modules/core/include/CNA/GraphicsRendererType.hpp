@@ -288,7 +288,7 @@ namespace CNA
      * (e.g. "OPENGLES3", "SDL_RENDERER", "DIRECTX9") and points at static storage (a string
      * literal), so it stays valid for the lifetime of the program.
      *
-     * plan_runtimerenderer.md RTR-P7-5: this is the single place the 46 names exist. It takes the
+     * plan_runtimerenderer.md RTR-P7-5: this is the single place the identity names exist. It takes the
      * identity as a parameter rather than reading the compile-time one, so it serves both the
      * compile-time selection (through getCurrentGraphicsRendererName() below) and any runtime
      * selection, without the table being written twice.

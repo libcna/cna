@@ -30,6 +30,11 @@ namespace
     };
 }
 
+// plan_platform.md PLAT-SDL2-8: needs the decoder/mixer engine, which is the SDL3_mixer
+// implementation and is absent from the archive for every other CNA_AUDIO_PLATFORM value.
+// Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
+// so this case is unobservable there rather than merely untested.
+#ifdef SOUND_ENABLED
 TEST_F(ContentManagerSoundEffectXnbTest, LoadRealMonoGameFixtureEndToEnd)
 {
     // Real, externally-produced fixture (MonoGame's own Tests/Assets/Audio/tone_mono_44khz_16bit.xnb),
@@ -41,3 +46,4 @@ TEST_F(ContentManagerSoundEffectXnbTest, LoadRealMonoGameFixtureEndToEnd)
     EXPECT_EQ(effect.getNameProperty(), "tone_mono_44khz_16bit");
     EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
 }
+#endif  // SOUND_ENABLED

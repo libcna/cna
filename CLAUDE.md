@@ -482,19 +482,23 @@ individual task. Do not push unless the user explicitly asks to push.
 
 Platform, renderer and audio selection are three independent CMake axes:
 
-- `CNA_PLATFORM` selects windowing, events, input and host services (`SDL3`, `HEADLESS`, or
-  `TERMINAL`; SDL2/SDL12 are reserved but not implemented).
+- `CNA_PLATFORM` selects windowing, events, input and host services (`SDL3`, `SDL2`, `HEADLESS`, or
+  `TERMINAL`; SDL12/WIN32/EMSCRIPTEN are reserved identifiers and fail configuration). `SDL2` is an
+  independent backend with its own deliberately narrow capability profile -- never `sdl2-compat`
+  over SDL3 -- see `docs/platform-sdl2.md`.
 - `CNA_GRAPHICS_RENDERER` selects the renderer.
-- `CNA_AUDIO_PLATFORM` selects playback/capture (`SDL3` or `NULL`).
+- `CNA_AUDIO_PLATFORM` selects playback/capture (`SDL3`, `SDL2` or `NULL`). Only `SDL3` defines
+  `SOUND_ENABLED`, because the high-level XNA decoder/mixer is an SDL3_mixer engine.
 
 New production code must use `CNA::Platform::IPlatform` and its narrow services. Do **not** include
 SDL or call an `SDL_*`/`MIX_*` function outside these intentional native edges:
 
-- `modules/platform/src/Sdl3/`;
-- `modules/audio/src/Platform/Sdl3/` and the mixer implementation isolated inside audio;
+- `modules/platform/src/Sdl3/` and `modules/platform/src/Sdl2/`;
+- `modules/audio/src/Platform/Sdl3/`, `modules/audio/src/Platform/Sdl2/`, and the mixer
+  implementation isolated inside audio;
 - renderer families `sdl-renderer`, `sdl-gpu`, `fna3d`, and `freedirect`.
 
-A genuinely SDL3-specific test belongs with the SDL3 platform implementation. Consumer tests use
+A genuinely backend-specific test belongs with the platform implementation it exercises. Consumer tests use
 canned platform services or the parameterized conformance suite, not native event injection.
 Capabilities are promises: unsupported behavior refuses explicitly, and a service is non-null
 exactly when its presence capability is true. Poll events and update input once per frame; never
