@@ -89,10 +89,10 @@ namespace CNA::Internal::Renderers::Igl
     {
         igl::VertexInputStateDesc desc;
         desc.numAttributes = attributes.size();
-        for (std::size_t i = 0; i < attributes.size() && i < IGL_VERTEX_ATTRIBUTES_MAX; ++i)
+        for (std::size_t i = 0; i < attributes.size() && i < igl::IGL_VERTEX_ATTRIBUTES_MAX; ++i)
             desc.attributes[i] = attributes[i];
         desc.numInputBindings = bindings.size();
-        for (std::size_t i = 0; i < bindings.size() && i < IGL_BUFFER_BINDINGS_MAX; ++i)
+        for (std::size_t i = 0; i < bindings.size() && i < igl::IGL_BUFFER_BINDINGS_MAX; ++i)
             desc.inputBindings[i] = bindings[i];
 
         // The descriptor's own name strings are part of its identity on the OpenGL backend (that is

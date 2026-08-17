@@ -85,7 +85,8 @@ protected:
         device.SetRenderTarget(nullptr);
 
         // ---- Read the target back --------------------------------------------------------------
-        std::vector<Color> pixels(static_cast<std::size_t>(kTargetSize * kTargetSize));
+        std::vector<Color> pixels(static_cast<std::size_t>(kTargetSize * kTargetSize),
+                                  Color(0, 0, 0, 0));
         target->GetData(pixels.data(), 0, static_cast<int>(pixels.size()));
 
         const Color topRow = pixels[static_cast<std::size_t>(2) * kTargetSize + 2];

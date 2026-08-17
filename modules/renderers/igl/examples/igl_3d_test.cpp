@@ -56,7 +56,7 @@ class Igl3DTest : public CNA::Examples::PixelTestGame
         std::vector<VertexPositionColor> vertices = Quad(z, colour);
         const std::uint16_t indices[6] = {0, 1, 2, 0, 2, 3};
 
-        VertexBuffer vertexBuffer(device, VertexPositionColor::VertexDeclaration,
+        VertexBuffer vertexBuffer(device, VertexPositionColor::getVertexDeclarationStatic(),
                                   static_cast<int>(vertices.size()), BufferUsage::WriteOnly);
         vertexBuffer.SetData(vertices.data(), 0, static_cast<int>(vertices.size()));
 
@@ -66,7 +66,7 @@ class Igl3DTest : public CNA::Examples::PixelTestGame
         device.SetVertexBuffer(&vertexBuffer);
         device.setIndicesProperty(&indexBuffer);
 
-        for (EffectPass& pass : effect.getCurrentTechniqueProperty().getPassesProperty())
+        for (EffectPass& pass : effect.getCurrentTechniqueProperty()->getPassesProperty())
         {
             pass.Apply();
             device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
@@ -84,7 +84,7 @@ protected:
         device.setRasterizerStateProperty(RasterizerState::CullNone);
 
         BasicEffect effect(device);
-        effect.setVertexColorEnabledProperty(true);
+        effect.VertexColorEnabled = true;
         effect.setLightingEnabledProperty(false);
         effect.setTextureEnabledProperty(false);
         effect.setWorldProperty(Matrix::getIdentityProperty());

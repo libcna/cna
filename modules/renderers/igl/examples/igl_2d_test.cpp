@@ -4,7 +4,11 @@
 // the rendered pixels back.
 //
 // Scene: a red-cleared 64x64 back buffer, one opaque green 16x16 sprite at (8,8), and one
-// half-alpha blue 16x16 sprite at (40,40) drawn with AlphaBlend so the destination shows through.
+// half-alpha blue 16x16 sprite at (40,40) drawn with NonPremultiplied so the destination shows
+// through. AlphaBlend would be wrong here: it is XNA's PREmultiplied preset (One /
+// InverseSourceAlpha), under which this non-premultiplied half-alpha tint would legitimately come
+// out as fully opaque blue instead of mixing with the background (see llgl_2d_test.cpp for the
+// same distinction).
 //
 // Exit code 0 = all PASS, 1 = any FAIL, 77 = SKIP (no GPU/display).
 
@@ -61,7 +65,7 @@ protected:
                          static_cast<bytecs>(0), static_cast<bytecs>(255)));
         batch.End();
 
-        batch.Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend);
+        batch.Begin(SpriteSortMode::Deferred, BlendState::NonPremultiplied);
         batch.Draw(*white, Rectangle(40, 40, kSpriteSize, kSpriteSize),
                    Color(static_cast<bytecs>(0), static_cast<bytecs>(0),
                          static_cast<bytecs>(255), static_cast<bytecs>(128)));

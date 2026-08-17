@@ -127,7 +127,7 @@ namespace CNA::Internal::Renderers::Igl
 
     void IglEffectRenderer::BindTexture(const int unit, ITextureRenderer* texture)
     {
-        if (unit < 0 || unit >= static_cast<int>(IGL_TEXTURE_SAMPLERS_MAX))
+        if (unit < 0 || unit >= static_cast<int>(igl::IGL_TEXTURE_SAMPLERS_MAX))
             return;
 
         if (texture == nullptr)
@@ -156,7 +156,7 @@ namespace CNA::Internal::Renderers::Igl
 
     void IglEffectRenderer::BindTextureCube(const int unit, ITextureCubeRenderer* texture)
     {
-        if (unit < 0 || unit >= static_cast<int>(IGL_TEXTURE_SAMPLERS_MAX))
+        if (unit < 0 || unit >= static_cast<int>(igl::IGL_TEXTURE_SAMPLERS_MAX))
             return;
 
         if (texture == nullptr)
@@ -181,7 +181,7 @@ namespace CNA::Internal::Renderers::Igl
 
     void IglEffectRenderer::BindTexture3D(const int unit, ITexture3DRenderer* texture)
     {
-        if (unit < 0 || unit >= static_cast<int>(IGL_TEXTURE_SAMPLERS_MAX))
+        if (unit < 0 || unit >= static_cast<int>(igl::IGL_TEXTURE_SAMPLERS_MAX))
             return;
 
         if (texture == nullptr)

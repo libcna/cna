@@ -12,20 +12,26 @@ Upstream: <https://github.com/facebook/igl>, pinned at **`v1.1.1`** (MIT). Local
 
 ## 1. Status
 
-**Branch:** `feature/igl`. **Nothing has been compiled yet** — the project owner deferred every
-build until the machine is free (see §7). Every task below marked ✍️ is *written but unverified*;
-no task moves to ✅ until it has actually been built and its test has actually run.
+**Branch:** `feature/igl`. **The first build has now happened** (2026-08-16, a fresh machine):
+configure, compile, first frame and the four example/conformance tests all pass on the OpenGL/GLX
+backend against Mesa llvmpipe. Phases A-G are verified on that one backend. The Vulkan backend was
+also attempted against Mesa lavapipe: device bring-up and the smoke test are real and pass, but the
+three pixel-conformance tests found a genuine, unresolved rendering-correctness bug (see IGL-60) --
+**the Vulkan backend is not yet considered working**, only "boots and clears." The rest of Phase H
+is still open. Tasks below still marked ✍️ are code paths that exist but have not yet been
+individually exercised (e.g. MRT, the stock 3D effects beyond `BasicEffect`'s colour-only path,
+custom `ShaderEffect`).
 
 | Phase | What it covers | State |
 |-------|----------------|-------|
-| A | Identity registration and build integration | ✍️ written |
-| B | Device bring-up and presentation | ✍️ written |
-| C | Resources (textures, buffers, targets) | ✍️ written |
-| D | 2D pipeline (`SpriteBatch`) | ✍️ written |
-| E | 3D pipeline and stock effects | ✍️ written |
-| F | Custom `ShaderEffect` | ✍️ written |
-| G | Tests, docs and gates | ✍️ partial |
-| H | Verification and hardening | ⬜ not started (blocked on the first build) |
+| A | Identity registration and build integration | ✅ verified (OpenGL/GLX) |
+| B | Device bring-up and presentation | ✅ verified (OpenGL/GLX) |
+| C | Resources (textures, buffers, targets) | 🔶 `Texture2D`/`RenderTarget2D`/depth verified; cube/3D/MRT/readback untested |
+| D | 2D pipeline (`SpriteBatch`) | ✅ verified (`Igl_2D`) |
+| E | 3D pipeline and stock effects | 🔶 `BasicEffect` colour-only + depth test verified (`Igl_3D`); the rest ✍️ |
+| F | Custom `ShaderEffect` | ✍️ written, unverified |
+| G | Tests, docs and gates | 🔶 the four example tests pass; platform boundary gates ran clean for this work |
+| H | Verification and hardening | 🔶 IGL-56/57/58/59 done; IGL-60-64 open |
 
 Legend: ✅ done and verified · ✍️ code written, not yet compiled · 🔶 partial · ⬜ not started.
 
@@ -172,11 +178,11 @@ Legend: ✅ done and verified · ✍️ code written, not yet compiled · 🔶 p
 
 | ID | Task | State | Notes |
 |----|------|-------|-------|
-| IGL-56 | First configure | ⬜ | `cmake -S . -B cmake-build-igl -DCNA_GRAPHICS_RENDERER=IGL -DCNA_IGL_ROOT=~/deps/igl` with ccache, `-j3` |
-| IGL-57 | First compile of the renderer target | ⬜ | expect real diagnostics: this is ~4 500 lines written against IGL's headers without a single compile |
-| IGL-58 | First frame | ⬜ | `Igl_Smoke` under `CNA_TEST_DISPLAY` |
-| IGL-59 | Pixel conformance | ⬜ | `Igl_2D`, `Igl_3D`, `Igl_RenderTarget` |
-| IGL-60 | Vulkan backend run | ⬜ | the same four tests with `CNA_IGL_BACKEND=vulkan` |
+| IGL-56 | First configure | ✅ | `cmake -S . -B cmake-build-igl -DCNA_GRAPHICS_RENDERER=IGL -DCNA_IGL_ROOT=~/deps/igl` with ccache. Found and fixed a real cmake bug: `IGL_WITH_SAMPLES=ON` (used to steer IGL's `IGL_PLATFORM_LINUX_USE_EGL` define to the GLX path) also unconditionally pulled in `add_subdirectory(samples/desktop)` and the glfw/bc7enc/meshoptimizer/tinyobjloader/ktx-software third-party subdirectories CNA deliberately never fetches (design decision 7), so configure failed outright. Fixed by leaving `IGL_WITH_SAMPLES` OFF and instead filtering the stale `IGL_PLATFORM_LINUX_USE_EGL=1` out of `IGLLibrary`'s `COMPILE_DEFINITIONS`/`INTERFACE_COMPILE_DEFINITIONS` properties directly and appending the corrected `=0` (a naive second `target_compile_definitions` append was tried first and silently lost — CMake did not emit it last on the generated command line, so the compiler kept IGL's own `=1`; verified with a standalone repro before settling on the property-filter fix) |
+| IGL-57 | First compile of the renderer target | ✅ | `cna_renderer_igl` and all four example binaries build clean. Real bugs found and fixed: (1) `IGL_TEXTURE_SAMPLERS_MAX`/`IGL_VERTEX_ATTRIBUTES_MAX`/`IGL_BUFFER_BINDINGS_MAX`/`IGL_COLOR_ATTACHMENTS_MAX` used unqualified where IGL declares them in `namespace igl` (not as macros) — qualified with `igl::` in `IglRenderer.hpp`/`.cpp`, `IglEffectRenderer.cpp`, `IglDraw.cpp`, `IglPipelineCache.cpp`; (2) `IglSpriteBatchRenderer.cpp` used unqualified `bytecs` inside `CNA::Internal::Renderers::Igl`, which only sees it via `Microsoft::Xna::Framework`'s own `using SharpRuntime::bytecs;` — replaced the four-byte `Color(...)` construction with `Color::White`; (3) the renderer never defined the `CNA::Internal::Renderers::CreateGraphicsRenderer` factory function every other family provides (link error) — added it to `IglRenderer.cpp` under `#ifdef CNA_RENDERER_IGL`, matching `LlglRenderer.cpp`'s shape; (4) `igl_3d_test.cpp` called `VertexPositionColor::VertexDeclaration` (should be `getVertexDeclarationStatic()`), `effect.getCurrentTechniqueProperty().getPassesProperty()` (return is a pointer, needs `->`), and `effect.setVertexColorEnabledProperty(true)` (the real member is the public field `VertexColorEnabled`, matching `llgl_3d_test.cpp`'s usage); (5) `igl_rendertarget_test.cpp` default-constructed a `std::vector<Color>` but `Color` has no default constructor — gave it an explicit fill colour, matching the `std::vector<Color> pixels(N, Color(...))` pattern used elsewhere |
+| IGL-58 | First frame | ✅ | `Igl_Smoke` passes 8/8 checks under Xvfb + Mesa llvmpipe (`SDL_VIDEODRIVER=x11`, `CNA_TEST_DISPLAY=:0`). Found and fixed a real bug on the way: `GraphicsDevice::createRenderer()` only populated `args.glContext` for a `#if defined(...)` list of context-backed renderers that omitted `CNA_RENDERER_IGL`, so `IglPlatformSurface.cpp`'s `RequirePlatformGlContext(args.glContext, "IGL")` always saw a null service and threw `PlatformNotSupportedException` before a window ever rendered a frame, regardless of backend selection logic being otherwise correct. Added `CNA_RENDERER_IGL` to that list (harmless for the Vulkan backend, which never reads the field) |
+| IGL-59 | Pixel conformance | ✅ | `Igl_2D`, `Igl_3D`, `Igl_RenderTarget` all pass (verified both standalone and via `ctest -R Igl`). `Igl_3D`/`Igl_RenderTarget` passed unmodified; `igl_2d_test.cpp` had a genuine test bug (not a renderer bug) — it drew a non-premultiplied half-alpha tint with `BlendState::AlphaBlend`, which is XNA's *premultiplied* preset (`One`/`InverseSourceAlpha`), so a non-premultiplied source legitimately blends to a different result than the test expected (the IGL renderer's `(127,0,255,255)` was the mathematically correct answer for that blend state). Switched the draw to `BlendState::NonPremultiplied`, matching the same distinction already documented in `llgl_2d_test.cpp` |
+| IGL-60 | Vulkan backend run | 🔶 | attempted this session against Mesa lavapipe. Found and fixed a real crash: `IglDynamicBufferPool` sized every chunk (vertex, index, *and* uniform) to a shared 256 KiB `kDynamicChunkBytes`, but Vulkan only guarantees `maxUniformBufferRange >= 65536` and IGL's Vulkan backend asserts a uniform buffer never exceeds the device's actual limit (lavapipe reports exactly the guaranteed minimum) -- `IglResources.cpp` now gives uniform-typed chunks their own 64 KiB `kDynamicUniformChunkBytes` cap. After that fix `Igl_Smoke` passes 8/8 on Vulkan (device bring-up, buffers, texture creation, 60 frames of Clear+Present all real). `Igl_2D`, `Igl_3D` and `Igl_RenderTarget` do not: every pixel readback across all three returns the *last* colour drawn/cleared that frame, uniformly across the whole surface, as if only the final operation's effect reached the image IGL reads back from (independent of which pixel or which test) -- a real rendering-correctness bug, not a test bug this time, and not yet root-caused. It sits in `copyBytesColorAttachment` and/or CNA's render-pass load/store handling being exercised the same way on both backends (the offending code is backend-agnostic in `IglRenderer::BeginPass`/`EndPass`), so the divergence is somewhere in the Vulkan-specific execution/synchronization path this plan has not yet traced through (`IglPlatformSurface.cpp`'s Vulkan device/queue bring-up, or upstream IGL's `VulkanStagingDevice`). Left unresolved rather than guessed at; the OpenGL/GLX backend (IGL-56-59) is the one this plan currently calls verified |
 | IGL-61 | Occlusion queries | ⬜ | IGL exposes none at `v1.1.1`; `SupportsCapability(OcclusionQuery)` reports false. Revisit if upstream adds one |
 | IGL-62 | Sampler LOD bias | ⬜ | `igl::SamplerStateDesc` has no LOD-bias field; recorded but not applied. Upstream gap, documented |
 | IGL-63 | Cube-target MSAA | ⬜ | IGL's `FramebufferDesc` cannot express a multisampled cube attachment with a per-face resolve; reported as 1 |
@@ -251,9 +257,30 @@ succeeds. Select the backend at run time with `CNA_IGL_BACKEND=opengl|vulkan|aut
 
 ---
 
-## 7. Why nothing is compiled yet
+## 7. First build (2026-08-16)
 
 The project owner asked (2026-08-15) for the renderer to be written first and built later, because
-the machine was busy compiling other work at the time. Every ✍️ row above is therefore *written but
-unverified*, and the first build (IGL-56/IGL-57) should be expected to produce real compiler
-diagnostics rather than a clean pass. Nothing in this plan claims otherwise.
+the machine was busy compiling other work at the time. On a fresh machine the next day, the first
+build ran to completion: configure, compile, `Igl_Smoke`'s first real frame, and all three pixel
+conformance tests (`Igl_2D`, `Igl_3D`, `Igl_RenderTarget`) passed on the OpenGL/GLX backend against
+Mesa llvmpipe software rendering (no hardware GPU in this environment). Five real bugs turned up on
+the way from "written" to "verified" -- see the IGL-56 through IGL-59 rows in §3 for exactly what
+they were and how each was fixed; none of them were cosmetic, and all five were things no amount of
+re-reading the source against IGL's headers would have caught without an actual compile and an
+actual frame. `~/deps/igl` (a fresh clone of `v1.1.1`) and the machine's system OpenGL/Vulkan/X11
+dev packages were the only environment setup this required; see §6 for the exact commands.
+
+`IglRendererSelectionTests.cpp` (IGL-46, the host-portable unit suite) needed its own fix once the
+full `CnaTests` binary was built for the first time: it wrote `using CNA::...::VertexAttributeSlot;`
+(and the same for `TextureUnit`/`UniformBufferBinding`), but all three are namespaces of constants in
+`IglShaderLibrary.hpp`, not enums -- a using-*declaration* cannot name a namespace. Replaced with
+namespace aliases (`namespace VertexAttributeSlot = CNA::...::VertexAttributeSlot;`) so the existing
+`VertexAttributeSlot::Position`-style call sites keep working. All 15 `*Igl*` tests in `CnaTests`
+pass now.
+
+The Vulkan backend (IGL-60) was also attempted this session -- see that row in §3 for the crash it
+found and fixed (a uniform buffer chunk sized past Vulkan's guaranteed `maxUniformBufferRange`) and
+the separate, still-open rendering-correctness bug it did not resolve. Phase C/E's remaining
+untested surface (cube/3D textures, MRT, the stock effects beyond `BasicEffect`'s colour-only path,
+custom `ShaderEffect`) remains ✍️ written-but-unverified exactly as before -- only the paths the four
+example tests actually exercise, on the OpenGL/GLX backend, are now ✅.

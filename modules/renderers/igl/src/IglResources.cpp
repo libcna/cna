@@ -19,6 +19,12 @@ namespace CNA::Internal::Renderers::Igl
         /// separate GPU allocation per flush.
         constexpr std::size_t kDynamicChunkBytes = 256 * 1024;
 
+        /// Vulkan only guarantees VkPhysicalDeviceLimits::maxUniformBufferRange >= 65536, and IGL's
+        /// Vulkan backend asserts a uniform-typed buffer never exceeds it (real hardware and Mesa's
+        /// software rasterizer both report exactly the guaranteed minimum). A uniform chunk therefore
+        /// cannot share the larger vertex/index chunk size above.
+        constexpr std::size_t kDynamicUniformChunkBytes = 64 * 1024;
+
         [[nodiscard]] std::size_t AlignUp(const std::size_t value, const std::size_t alignment)
         {
             if (alignment <= 1)
@@ -84,12 +90,15 @@ namespace CNA::Internal::Renderers::Igl
             return Allocation{chunk.buffer.get(), offset};
         }
 
+        const bool isUniform = (bufferType_ & igl::BufferDesc::BufferTypeBits::Uniform) != 0;
+        const std::size_t baseChunkBytes = isUniform ? kDynamicUniformChunkBytes : kDynamicChunkBytes;
+
         Chunk chunk;
-        chunk.capacity = std::max(kDynamicChunkBytes, AlignUp(sizeInBytes, alignment) + alignment);
+        chunk.capacity = std::max(baseChunkBytes, AlignUp(sizeInBytes, alignment) + alignment);
 
         igl::BufferDesc desc(bufferType_, nullptr, chunk.capacity, igl::ResourceStorage::Shared);
         desc.debugName = debugName_;
-        if ((bufferType_ & igl::BufferDesc::BufferTypeBits::Uniform) != 0)
+        if (isUniform)
             desc.hint = igl::BufferDesc::BufferAPIHintBits::UniformBlock;
 
         igl::Result result;

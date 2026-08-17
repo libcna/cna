@@ -83,7 +83,7 @@ namespace CNA::Internal::Renderers::Igl
                                     static_cast<int>(std::lround(y)),
                                     texture.GetWidth(), texture.GetHeight());
         const Rectangle source(0, 0, texture.GetWidth(), texture.GetHeight());
-        Draw(texture, destination, source, Color(static_cast<bytecs>(255), static_cast<bytecs>(255), static_cast<bytecs>(255), static_cast<bytecs>(255)), 0.0f, Vector2(0.0f, 0.0f),
+        Draw(texture, destination, source, Color::White, 0.0f, Vector2(0.0f, 0.0f),
              SpriteEffects::None, 0.0f);
     }
 

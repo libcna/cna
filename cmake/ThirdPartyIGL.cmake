@@ -147,20 +147,42 @@ function(cna_configure_igl)
         set(IGL_WITH_METAL OFF CACHE BOOL "" FORCE)
     endif()
 
-    # IGL's own top-level CMakeLists sets IGL_PLATFORM_LINUX_USE_EGL to 0 only when samples or the
-    # shell are enabled, and to 1 otherwise. CNA builds neither yet drives the GLX path (its
-    # glx::Context is the only IGL Linux context that can adopt an existing on-screen context --
-    # see docs/igl-renderer.md), so the value has to be pinned here rather than inherited.
-    if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
-        set(IGL_WITH_SAMPLES ON)   # directory scope only: selects the GLX (non-EGL) Linux path
-    endif()
-
+    # IGL's own top-level CMakeLists sets IGL_PLATFORM_LINUX_USE_EGL to 0 only when
+    # IGL_WITH_SAMPLES or IGL_WITH_SHELL is ON, and to 1 otherwise -- but turning IGL_WITH_SAMPLES
+    # ON is not the directory-scoped, EGL-define-only knob it looks like: IGL's CMakeLists guards
+    # `add_subdirectory(samples/desktop)` (and the glfw/bc7enc/meshoptimizer/tinyobjloader/
+    # ktx-software third-party subdirectories that target needs) behind that exact same variable,
+    # unconditionally, so setting it ON to steer the EGL define also demands the ~1 GB of sample
+    # dependencies design decision 7 exists specifically to avoid -- and CNA never fetches them, so
+    # add_subdirectory fails outright. Leave IGL_WITH_SAMPLES OFF and correct the define afterwards
+    # instead: relying on "the compiler keeps the last -D" is not safe here, because CMake does not
+    # emit a consumed target's INTERFACE_COMPILE_DEFINITIONS in call order -- an append placed after
+    # add_subdirectory() below was observed landing BEFORE IGL's own entry on the generated command
+    # line, so the stale IGL_PLATFORM_LINUX_USE_EGL=1 silently won. Filter the stale entry out of
+    # both the definitions IGLLibrary compiles itself with and the ones it hands to consumers, then
+    # append the corrected value, so exactly one definition of this macro ever reaches the compiler.
     add_subdirectory("${_igl_source_dir}" igl EXCLUDE_FROM_ALL)
 
     if(NOT TARGET IGLLibrary)
         message(FATAL_ERROR
             "CNA: IGL was configured but published no IGLLibrary target -- the IGL version in use "
             "does not match this integration.")
+    endif()
+
+    if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
+        # CNA's glx::Context is the only IGL Linux context that can adopt an existing on-screen
+        # context (see docs/igl-renderer.md), so the GLX (non-EGL) path is required here.
+        foreach(_prop COMPILE_DEFINITIONS INTERFACE_COMPILE_DEFINITIONS)
+            get_target_property(_igl_defs IGLLibrary ${_prop})
+            if(_igl_defs)
+                list(FILTER _igl_defs EXCLUDE REGEX "^IGL_PLATFORM_LINUX_USE_EGL=")
+            else()
+                set(_igl_defs "")
+            endif()
+            list(APPEND _igl_defs "IGL_PLATFORM_LINUX_USE_EGL=0")
+            set_target_properties(IGLLibrary PROPERTIES ${_prop} "${_igl_defs}")
+        endforeach()
+        unset(_igl_defs)
     endif()
 
     set(CNA_IGL_LIBRARIES IGLLibrary PARENT_SCOPE)

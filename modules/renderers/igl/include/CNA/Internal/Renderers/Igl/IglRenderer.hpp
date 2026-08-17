@@ -933,7 +933,7 @@ namespace CNA::Internal::Renderers::Igl
         [[nodiscard]] std::uint64_t GetProgramId() const { return programId_; }
 
         /** @brief Returns the textures this effect wants bound, by unit. */
-        [[nodiscard]] const std::array<igl::ITexture*, IGL_TEXTURE_SAMPLERS_MAX>& GetBoundTextures() const
+        [[nodiscard]] const std::array<igl::ITexture*, igl::IGL_TEXTURE_SAMPLERS_MAX>& GetBoundTextures() const
         {
             return boundTextures_;
         }
@@ -953,7 +953,7 @@ namespace CNA::Internal::Renderers::Igl
         std::string compileError_;
         std::uint64_t programId_ = 0;
         std::unordered_map<std::string, UniformValue> uniforms_;
-        std::array<igl::ITexture*, IGL_TEXTURE_SAMPLERS_MAX> boundTextures_{};
+        std::array<igl::ITexture*, igl::IGL_TEXTURE_SAMPLERS_MAX> boundTextures_{};
     };
 
     /** @brief A GPU occlusion query. CNAEXT. */

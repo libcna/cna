@@ -18,10 +18,10 @@ namespace
     using CNA::Internal::Renderers::Igl::GetSamplerUniformName;
     using CNA::Internal::Renderers::Igl::GetUniformBlockName;
     using CNA::Internal::Renderers::Igl::IglShaderSources;
-    using CNA::Internal::Renderers::Igl::TextureUnit;
-    using CNA::Internal::Renderers::Igl::UniformBufferBinding;
+    namespace TextureUnit = CNA::Internal::Renderers::Igl::TextureUnit;
+    namespace UniformBufferBinding = CNA::Internal::Renderers::Igl::UniformBufferBinding;
     using CNA::Internal::Renderers::Igl::VertexAttributeBit;
-    using CNA::Internal::Renderers::Igl::VertexAttributeSlot;
+    namespace VertexAttributeSlot = CNA::Internal::Renderers::Igl::VertexAttributeSlot;
 
     [[nodiscard]] bool Contains(const std::string& haystack, const char* needle)
     {

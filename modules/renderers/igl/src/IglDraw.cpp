@@ -612,7 +612,7 @@ namespace CNA::Internal::Renderers::Igl
             encoder.bindUniform(desc, value.data.data());
         }
 
-        const std::array<igl::ITexture*, IGL_TEXTURE_SAMPLERS_MAX>& textures =
+        const std::array<igl::ITexture*, igl::IGL_TEXTURE_SAMPLERS_MAX>& textures =
             effect.GetBoundTextures();
         for (std::size_t unit = 0; unit < textures.size(); ++unit)
         {

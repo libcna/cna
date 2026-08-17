@@ -997,13 +997,13 @@ namespace CNA::Internal::Renderers::Igl
         igl::FramebufferDesc desc;
         desc.debugName = "CNA MRT";
 
-        const int slots = std::min(count, static_cast<int>(IGL_COLOR_ATTACHMENTS_MAX));
+        const int slots = std::min(count, static_cast<int>(igl::IGL_COLOR_ATTACHMENTS_MAX));
         if (slots < count)
         {
             throw std::runtime_error(
                 "IGL renderer: " + std::to_string(count) +
                 " simultaneous render targets were bound, but IGL supports at most " +
-                std::to_string(IGL_COLOR_ATTACHMENTS_MAX) +
+                std::to_string(igl::IGL_COLOR_ATTACHMENTS_MAX) +
                 ". The binding set is never silently truncated.");
         }
 
@@ -1318,3 +1318,13 @@ namespace CNA::Internal::Renderers::Igl
         commandBuffer_->popDebugGroupLabel();
     }
 }
+
+#ifdef CNA_RENDERER_IGL
+namespace CNA::Internal::Renderers
+{
+    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    {
+        return std::make_unique<CNA::Internal::Renderers::Igl::IglRenderer>(args);
+    }
+}
+#endif
