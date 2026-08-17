@@ -958,9 +958,18 @@ namespace CNA::Internal::Renderers::SdlRenderer
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_SDL_RENDERER
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace SdlRenderer { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> SdlRenderer::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<SdlRenderer::SdlRenderer>(
+        // Fully qualified from the global namespace on purpose: this family's namespace and its
+        // class are both called SdlRenderer, so inside the qualified definition above the name
+        // SdlRenderer resolves to the NAMESPACE and SdlRenderer::SdlRenderer no longer names the
+        // class. The only family where the P2 rename collides with its own naming.
+        return std::make_unique<::CNA::Internal::Renderers::SdlRenderer::SdlRenderer>(
             CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
             args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval);
     }

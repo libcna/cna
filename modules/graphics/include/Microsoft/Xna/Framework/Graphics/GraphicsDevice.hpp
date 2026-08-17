@@ -36,6 +36,7 @@
 #include "System/Object.hpp"
 #include "CNA/CNAHelper.hpp"
 #include "CNA/GraphicsRendererType.hpp"
+#include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 
@@ -989,25 +990,32 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Returns a reference to the active graphics renderer. */
         CNAEXT [[nodiscard]] CNA::Internal::Renderers::IGraphicsRenderer& GetRenderer() const;
 
-        /** @brief Returns which graphics renderer was compiled into this build (see CNA_GRAPHICS_RENDERER). */
-        CNAEXT [[nodiscard]] inline constexpr CNA::GraphicsRendererType GetGraphicsRendererType() const
-        {
-            return CNA::getCurrentGraphicsRendererType();
-        }
+        /**
+         * @brief Returns which graphics renderer THIS DEVICE is using.
+         *
+         * plan_runtimerenderer.md RTR-P7-3. This used to be `constexpr`, returning
+         * CNA::getCurrentGraphicsRendererType() and ignoring `this` entirely -- correct while a
+         * build could contain only one renderer, and wrong the moment it can contain several: it
+         * would report the build's default even on a device that resolved to something else.
+         *
+         * The `constexpr` had to go with it. That is a deliberate, documented deviation: a
+         * compile-time answer cannot describe a runtime choice. A caller that genuinely wants the
+         * build's compile-time identity still has CNA::getCurrentGraphicsRendererType(), which
+         * remains a constant expression.
+         *
+         * @return The renderer identity backing this device.
+         */
+        CNAEXT [[nodiscard]] CNA::GraphicsRendererType GetGraphicsRendererType() const;
 
         /**
-         * @brief Returns the human-readable name of the graphics renderer compiled into this build.
+         * @brief Returns the human-readable name of the renderer THIS DEVICE is using.
          *
-         * Matches the CNA_GRAPHICS_RENDERER CMake option value exactly (e.g. "EASYGL", "D3D9").
-         * Doesn't depend on `this` -- delegates to CNA::getCurrentGraphicsRendererName(), a pure
-         * compile-time constant -- so, like GetGraphicsRendererType(), this is `constexpr`.
+         * Matches the CNA_GRAPHICS_RENDERER spelling exactly (e.g. "OPENGLES3", "DIRECTX9"). See
+         * GetGraphicsRendererType() for why this is no longer `constexpr`.
          *
          * @return The active renderer's name.
          */
-        CNAEXT [[nodiscard]] inline constexpr std::string_view GetGraphicsRendererName() const
-        {
-            return CNA::getCurrentGraphicsRendererName();
-        }
+        CNAEXT [[nodiscard]] std::string_view GetGraphicsRendererName() const;
 
         /**
          * @brief Returns whether the active renderer (and, for device-dependent entries, the
@@ -1110,11 +1118,26 @@ namespace Microsoft::Xna::Framework::Graphics
         // GraphicsDevice). The platform outlives both the window and this device.
         CNA::Platform::IPlatform* platform_;
         std::unique_ptr<CNA::Platform::IPlatformWindow> platformWindow_;
+        /// MERGE (plan_runtimerenderer.md RTR-P5-12 x plan_platform.md PLAT-8): the platform wrapper
+        /// already records whether destroying it destroys the underlying window, so this is no longer
+        /// a lifetime flag. It survives as a policy flag: a caller-supplied window must not be torn
+        /// down and rebuilt for a fallback candidate needing a different window kind, so the device
+        /// still has to know which windows it is allowed to replace.
+        bool ownsWindow_ = false;
         bool videoSubsystemAcquired_;
         // Declared before renderer_: reverse destruction keeps presentation alive through the
         // raster renderer's final destructor calls.
         std::unique_ptr<CNA::Platform::IPlatformSurfacePresenter> surfacePresenter_;
         std::unique_ptr<CNA::Internal::Renderers::IGraphicsRenderer> renderer_;
+        /// plan_runtimerenderer.md RTR-P5: the descriptor this device actually resolved to, which
+        /// may differ from the selected one when a fallback chain substituted another renderer.
+        /// Pinned at construction so a later reconstruction (Reset, multisample change) rebuilds
+        /// the SAME renderer rather than re-running resolution against a changed environment.
+        const CNA::Internal::Renderers::GraphicsRendererDescriptor* activeDescriptor_ = nullptr;
+        /// The window kind window_ was created for, so a fallback candidate needing a different one
+        /// can be detected before it is handed an incompatible window (design decision 8).
+        CNA::Internal::Renderers::RendererWindowKind activeWindowKind_ =
+            CNA::Internal::Renderers::RendererWindowKind::None;
         bool rendererStartupNameLogged_ = false;
         Viewport viewport_;
         const VertexBuffer* currentVertexBuffer_;
@@ -1252,6 +1275,26 @@ namespace Microsoft::Xna::Framework::Graphics
 
         void createOrAttachWindow();
         void createRenderer();
+
+        /**
+         * @brief Resolves which renderer this device uses, honouring any configured fallback chain.
+         *
+         * plan_runtimerenderer.md design decisions 6 and 7. Creates the window and the renderer
+         * together, because the window's flags depend on which renderer is being attempted: a
+         * candidate that needs a different window kind cannot reuse the previous candidate's
+         * window. Runs once, from the constructor. Reconstruction paths use createRenderer()
+         * directly and never re-resolve.
+         *
+         * @throws System::InvalidOperationException when no candidate could be created.
+         */
+        void resolveRenderer();
+
+        /**
+         * @brief Destroys this device's SDL window when it owns one, leaving window_ null.
+         *
+         * Used between fallback attempts that need different window kinds.
+         */
+        void discardOwnedWindow();
         void destroyNativeResources();
         void UpdateViewportFromWindow();
         void SetVirtualResolution(int width, int height);

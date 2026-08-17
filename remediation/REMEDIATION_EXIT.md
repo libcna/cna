@@ -139,7 +139,7 @@ caller got silently wrong geometry). Only the second was ever a blocker.
 | Ticket | Class | Blocker | Reason |
 |---|---|---|---|
 | `REMED-GFX-121` | bgfx non-GLSL renderers transpose the per-instance world matrix | **NO for this checkpoint's declared scope** | The same *shape* as `WEBGPU-115` and its closest neighbour in the backlog. It does not block **this** checkpoint because the affected route — bgfx's SPIR-V/HLSL/Metal/WGSL renderers — is **not** the declared bgfx baseline; CNA's bgfx principal suite runs the GLSL/OpenGL renderer, where output is correct. Pinned by `BgfxPerInstanceWorldMatrixIsAppliedOnGlslRenderersOnly`; `InstanceCountIsIndependentOfTheGeometryRange` **skips with a named reason** on the affected renderer. **It becomes a blocker the moment bgfx's Vulkan renderer enters declared checkpoint scope** |
-| `REMED-GFX-114` / `-111` | `PointListEXT` routed through the triangle-list default on Vulkan, D3D9, D3D11, D3D12 (`-114`); bgfx (`-111`, DONE) | **NO** | Silently wrong, but on a **`NOXNA` extension** topology, not XNA 4.0 public API. Measured and pinned at 0/13 — a declared, printed red, not a hidden one |
+| `REMED-GFX-114` / `-111` | Historical `PointListEXT` triangle-list defaults on Vulkan/Direct3D and bgfx | **NO — both DONE** | Closed by native point mappings everywhere the current pipeline can represent them; D3D12's triangle-typed PSO cache instead has a named early refusal. The shared framebuffer/source gates prevent a silent default from returning |
 | **`REMED-GFX-137`** | **EasyGL stores a RENDERED cube face and an UPLOADED one in opposite row orders** | **NO** | **Classified here for the first time** — see §4.3.1 |
 | **`REMED-GFX-139`** | **D3D9 `RenderTargetCube` reports a mip chain it never allocates** | **NO** | **Classified here for the first time** — a *reporting* defect of the same class as `REMED-GFX-126`. `Recreate()` passes `Levels=1` whatever `mipMap` asked for, while `LevelCount` computes the full chain from `mipMap`. `REMED-GFX-134` made `GetData` **refuse** the levels that were never allocated instead of answering them from level 0, so the **data path is honest** and no wrong pixels are returned; only the count is wrong. LOW, D3D9 (Wine/DXVK scope) |
 | `REMED-GFX-115` / `-120` | bgfx-Vulkan and SDL_GPU point pipelines emit `VUID-…-topology-08773` | **NO** | Validation-layer diagnostic; pixels correct on the tested driver. Residual in §6 |
@@ -168,8 +168,9 @@ It does not block because **the divergence is declared and printed, not silent**
 `examples/rendertargetcube_getdata_contract_test.cpp` asserts it against a per-backend contract flag
 (`kContract.rtCubeUploadMirrored`) and prints its measurement on every run —
 `[sameOrder=…/… mirrored=…/… refused=…]`. There is no capability query making a contrary claim, both
-write paths succeed, and both readbacks are honest. This is the same disposition as `REMED-GFX-114`:
-a declared, printed red rather than a hidden one.
+write paths succeed, and both readbacks are honest. This is the same disposition
+`REMED-GFX-114` had at this checkpoint: a declared, printed red rather than a hidden one. That
+point-topology ticket was subsequently fixed by `GLTF-393`/`394`; this cube convention remains.
 
 The ticket also records **why the obvious fix is wrong**: flipping the upload would only move the
 divergence onto the cube **sampling** path, where the real convention difference lives. Correcting it

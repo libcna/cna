@@ -7,6 +7,9 @@ layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec4 aTangent;
 layout(location = 3) in vec2 aUV;
+#ifdef CNA_PBR_DUAL_UV
+layout(location = 4) in vec2 aUV1;
+#endif
 
 layout(location = 0) out vec3  vNormal;
 layout(location = 1) out vec3  vTangent;
@@ -14,6 +17,9 @@ layout(location = 2) out float vBitangentSign;
 layout(location = 3) out vec2  vUV;
 layout(location = 4) out float vFogFactor;
 layout(location = 5) out vec3  vWorldPos;
+#ifdef CNA_PBR_DUAL_UV
+layout(location = 6) out vec2  vUV1;
+#endif
 
 // 128-byte push constant block (shared with every other 3D variant — see FillExtPushConst).
 // diffuseColor -> PBR base color factor; ambientColor -> PBR ambient; light0Dir/light0Diffuse ->
@@ -44,7 +50,20 @@ layout(set = 0, binding = 5) uniform PbrParams {
     vec4 emissive_roughness;    // xyz = EmissiveFactor, w = RoughnessFactor
     vec4 fogColorEnabled;       // xyz = FogColor, w = WeightsPerVertex (REMED-GFX-010; skinned only)
     vec4 fogVector;             // REMED-GFX-010: FNA fog vector (xyz + w)
+    vec4 alphaTest;             // reference, tolerance, pass weight, fail weight
+    vec4 pbrMapScales;          // x = normal scale, y = occlusion strength
+    vec4 srgbFlags;             // x=decode base, y=decode emissive, z=encode output, w=decode spec colour
+    vec4 specularFresnelInputs; // xyz = unclamped dielectric F0, w = specular factor
+    vec4 textureTransformRows[10];
+    vec4 specularTextureTransformRows[4];
+#ifdef CNA_PBR_DUAL_UV
+    vec4 textureCoordinateSets; // x = seven-bit per-map TEXCOORD_1 selector mask
+#endif
 } pbr;
+
+float cnaDirectionHandedness(mat3 m) {
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
 
 void main() {
     gl_Position = pc.mvp * vec4(aPos, 1.0);
@@ -53,6 +72,7 @@ void main() {
     // not a per-family choice -- omitting it renders PbrEffect vertically mirrored relative to
     // every other effect in the same frame.
     gl_Position.y = -gl_Position.y;
+    gl_PointSize = 1.0;
     // World's inverse-transpose upper-left 3x3 (mirrors lit_textured3d.vert.glsl's Task 898 fix
     // and EnvironmentMapEffect's own already-correct env_map3d.vert.glsl pattern).
     mat3 normalMatrix = transpose(inverse(mat3(pbr.world)));
@@ -61,8 +81,11 @@ void main() {
     // transpose) — correct for uniform-scale World transforms, matching
     // EasyGLRenderer::EnsurePbrProgram()'s own documented simplification.
     vTangent = mat3(pbr.world) * aTangent.xyz;
-    vBitangentSign = aTangent.w;
+    vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(pbr.world));
     vUV = aUV;
+#ifdef CNA_PBR_DUAL_UV
+    vUV1 = aUV1;
+#endif
     vWorldPos = (pbr.world * vec4(aPos, 1.0)).xyz;
     vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), pbr.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
 }

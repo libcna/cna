@@ -141,14 +141,17 @@ protected:
         // only one of the 3 lights with positive NdotL here -- the fill and back lights both
         // clamp to zero -- and AmbientLightColor (0.053,0.099,0.182) is itself blue-dominant, so
         // a blue-leaning (not flat grey) result is the physically correct outcome, not a bug.
+        // GLTF-212 encodes the final linear RGB exactly once before the 8-bit framebuffer. For
+        // example the old linear-space byte oracle 64 becomes round(255*OETF(64/255)) = 137;
+        // all four expectations and their PNGs use that independently checkable transform.
         ExpectPixel("quadA-flat-normal-lit", Rectangle(sampleAx, sampleY, 1, 1),
-                    Color(64, 74, 87, 255), /*tolerance=*/20);
+                    Color(137, 146, 158, 255), /*tolerance=*/20);
         // Quad B's tilted tangent-space normal (1,0,0) still has a real (if smaller) dot product
         // with the key light's direction at this specific tilt, so it renders only modestly
         // darker than quad A rather than near-black -- still proves the normal map is sampled
-        // and genuinely changes the lit result (56<64, 65<74, 80<87 -- darker in every channel).
+        // and genuinely changes the lit result (129<137, 139<146, 152<158 -- darker throughout).
         ExpectPixel("quadB-tilted-normal-darker", Rectangle(sampleBx, sampleY, 1, 1),
-                    Color(56, 65, 80, 255), /*tolerance=*/20);
+                    Color(129, 139, 152, 255), /*tolerance=*/20);
         // Quad C (metallic, red) vs Quad D (dielectric, red): metallic's diffuseColor is exactly
         // zero (albedo*(1-metallic)), so only a red-tinted (F0=albedo) specular lobe plus a
         // red-only ambient term remain -- this test's own degenerate "eye inside the geometry
@@ -157,9 +160,9 @@ protected:
         // is genuinely amplified, a known property of the raw Cook-Torrance formula at low NdotV,
         // not a logic bug (G/B stay pinned near 1, from ambient's own zero G/B contribution).
         ExpectPixel("quadC-metallic-red", Rectangle(sampleCx, sampleY, 1, 1),
-                    Color(45, 1, 1, 255), /*tolerance=*/20);
+                    Color(117, 13, 11, 255), /*tolerance=*/20);
         ExpectPixel("quadD-dielectric-red", Rectangle(sampleDx, sampleY, 1, 1),
-                    Color(63, 2, 2, 255), /*tolerance=*/25);
+                    Color(137, 23, 21, 255), /*tolerance=*/25);
 
         CompareGoldenImage("pbreffect-quadA", Rectangle(sampleAx - 4, sampleY - 4, 8, 8),
                             "examples/golden/easygl_pbreffect_golden_test_a.png", /*tolerance=*/35);

@@ -2554,7 +2554,7 @@ existing task.
 | REMED-GFX-111 | Bgfx maps `PointListEXT` through its triangle-list default rather than point topology or an explicit rejection. | LOW-MEDIUM | P2 | REMED-GFX-106 topology matrix | **DONE 2026-07-26 — THE ONE SHARED MAPPER NOW NAMES ALL FIVE TOPOLOGIES AND RETURNS `BGFX_STATE_PT_POINTS`; INDEXED, NON-INDEXED, DRAWUSER, 16-/32-BIT, A→B→A, TARGET, DEPTH, CULL, VIEWPORT/SCISSOR/BLEND AND CARDINALITY COVERAGE PASSES ON BOTH RENDERER ROUTES.** |
 | REMED-GFX-112 | Vulkan's indexed strip control emits an unaligned 32-bit index-buffer binding-offset validation message while pixels pass. | MEDIUM | P2 | REMED-GFX-106 semantic controls | **DONE — DEFERRED NATIVE INDEX-ARENA OFFSETS ALIGNED PER FORMAT (2026-07-26).** |
 | REMED-GFX-113 | Bgfx non-indexed draws bind the whole bound vertex buffer, ignoring the public `vertexStart` and `primitiveCount` for every topology. | MEDIUM | P2 | REMED-GFX-111 count verification | **DONE 2026-07-27 — `DrawPrimitivesEx` NOW BINDS THE EXACT `[vertexStart, vertexStart + PrimitiveVerts)` ELEMENT RANGE; `GraphicsDevice::DrawPrimitives` GAINED THE MATCHING 64-BIT PUBLIC GUARD; ALL FIVE TOPOLOGIES, STATIC/DYNAMIC, A→B→A, TARGETS, CARDINALITY, BOTH RENDERER ROUTES, SANITIZERS AND EIGHT CROSS-BACKEND CONTROLS PASS.** |
-| REMED-GFX-114 | Vulkan, D3D9, D3D11 and D3D12 route `PointListEXT` through their triangle-list default and count zero vertices for it. | MEDIUM | P2 | REMED-GFX-111 cross-backend controls | **OPEN — SAME DEFECT CLASS AS REMED-GFX-111 IN FOUR OTHER BACKENDS; 0/13 MEASURED ON VULKAN, D3D11 AND D3D9.** |
+| REMED-GFX-114 | Vulkan, D3D9, D3D11 and D3D12 route `PointListEXT` through their triangle-list default and count zero vertices for it. | MEDIUM | P2 | REMED-GFX-111 cross-backend controls | **DONE 2026-08-14 (`GLTF-393`/`394`) — VULKAN/D3D9/D3D10/D3D11 MAP NATIVE POINT LISTS WITH EXACT COUNTS; D3D12 REJECTS BY NAME AT ALL FOUR DRAW ENTRIES UNTIL ITS TRIANGLE-TYPED PSO CACHE IS WIDENED; SOURCE POLICY AND SHARED FRAMEBUFFER GATES ARE PERMANENT.** |
 | REMED-GFX-115 | Bgfx Vulkan point pipelines emit `VUID-VkGraphicsPipelineCreateInfo-topology-08773` because the SPIR-V vertex shaders write no `PointSize`. | MEDIUM | P2 | REMED-GFX-111 validation inspection | **OPEN — SHADER-DECLARATION GAP IN 15 BGFX 3D VERTEX SHADERS; PIXELS CORRECT ON THE TESTED DRIVER, SIZE FORMALLY UNDEFINED.** |
 | REMED-GFX-116 | WebGPU's deferred draws resolved `GraphicsDevice.Viewport` live at flush time instead of capturing it per queued draw. | MEDIUM | P2 | REMED-GFX-111 viewport control | **DONE 2026-07-28** — all ten 3D command structs plus the SpriteBatch full-target case now carry the complete Viewport by value; see the REMED-GFX-116 section. |
 | REMED-GFX-117 | SDL_GPU passes literal `0` for `first_index`/`vertex_offset` at all eight native indexed draw sites, dropping public `startIndex`/`baseVertex`. | MEDIUM | P2 | REMED-GFX-111 SDL_GPU control | **DONE 2026-07-27 — ALL EIGHT SITES NOW RESOLVE `first_index = startIndex` (INDEX ELEMENTS) AND `vertex_offset = baseVertex` (APPLIED ONCE) THROUGH ONE SHARED `ResolveIndexedRange`, CARRIED BY VALUE ON EACH DEFERRED DRAW COMMAND; 16-/32-BIT, STATIC/DYNAMIC, ALL FIVE TOPOLOGIES, ALL EIGHT PIPELINE FAMILIES, DRAWUSER, A→B→A, TARGETS, STATE, INVALID-RANGE REJECTION, SANITIZERS, CLEAN VALIDATION AND EIGHT CROSS-BACKEND CONTROLS PASS.** |
@@ -10234,8 +10234,11 @@ identity never enters topology identity, and a topology change allocates nothing
 | D3D9 (Wine + DXVK9) | **0/13** — `ToD3D9Topology` has no `PointListEXT` case; REMED-GFX-114 |
 | D3D12 | inspection only (`ToD3D12Topology`, same shape); runtime remains blocked by REMED-BUILD-012 |
 
-Only Bgfx production changed. The Vulkan/D3D controls were run by temporarily widening the test
-guard, observing the failure, and reverting the guard; no red test was committed.
+These are the historical pre-fix measurements taken during REMED-GFX-111. Only Bgfx production
+changed in that session; the later `GLTF-393`/`394` work closed REMED-GFX-114 for Vulkan and the
+Direct3D family, as recorded in the live index/table above. The Vulkan/D3D controls here were run
+by temporarily widening the test guard, observing the failure, and reverting the guard; the D3D9
+and D3D11 guards are now permanent.
 
 ### Regression gates
 

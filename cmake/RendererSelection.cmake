@@ -346,6 +346,57 @@ if(_cna_explicit_renderer_selection)
     list(GET _cna_enabled_renderers 0 CNA_GRAPHICS_RENDERER)
 endif()
 
+# --- Multi-renderer selection (plan_runtimerenderer.md design decision 1, phase P6) ---
+#
+# CNA_GRAPHICS_RENDERER stays the primary, single-valued option: it names this build's DEFAULT
+# renderer, and a build that sets nothing else behaves exactly as it always has.
+#
+# CNA_GRAPHICS_RENDERERS is the opt-in second mode -- a list of identities to compile in, from which
+# one is chosen at runtime (CNA::GraphicsRendererSelection). When it is not set it is simply the
+# single default, so every code path below runs identically for existing builds.
+set(CNA_GRAPHICS_RENDERERS "" CACHE STRING
+    "Semicolon-separated list of graphics renderers to compile in (opt-in multi-renderer mode). \
+Empty means single-renderer mode using CNA_GRAPHICS_RENDERER.")
+
+if(CNA_GRAPHICS_RENDERERS STREQUAL "")
+    set(_cna_renderer_identities "${CNA_GRAPHICS_RENDERER}")
+else()
+    set(_cna_renderer_identities ${CNA_GRAPHICS_RENDERERS})
+    # CNA_GRAPHICS_RENDERER names the default within the list, so it must be a member of it.
+    if(NOT CNA_GRAPHICS_RENDERER IN_LIST _cna_renderer_identities)
+        list(GET _cna_renderer_identities 0 CNA_GRAPHICS_RENDERER)
+        message(STATUS
+            "CNA: CNA_GRAPHICS_RENDERER was not a member of CNA_GRAPHICS_RENDERERS; "
+            "defaulting to the list's first entry (${CNA_GRAPHICS_RENDERER}).")
+    endif()
+    # The default must be attempted first, so the generated registry lists it first.
+    list(REMOVE_ITEM _cna_renderer_identities "${CNA_GRAPHICS_RENDERER}")
+    list(INSERT _cna_renderer_identities 0 "${CNA_GRAPHICS_RENDERER}")
+endif()
+
+list(REMOVE_DUPLICATES _cna_renderer_identities)
+set(_cna_default_renderer_identity "${CNA_GRAPHICS_RENDERER}")
+# Visible to modules/renderers/CMakeLists.txt, which has to re-establish the per-family identity
+# before entering each family's own subdirectory.
+set(CNA_RENDERER_IDENTITIES "${_cna_renderer_identities}")
+
+# Design decision 11: reject an unbuildable combination here, with a reason, rather than letting it
+# surface as a duplicate-symbol link error.
+include(cmake/RendererCombinations.cmake)
+cna_validate_renderer_combination(${_cna_renderer_identities})
+
+list(LENGTH _cna_renderer_identities _cna_renderer_identity_count)
+if(_cna_renderer_identity_count GREATER 1)
+    message(STATUS "CNA: multi-renderer build -- ${_cna_renderer_identities} (default: ${CNA_GRAPHICS_RENDERER})")
+    # Consumed by GraphicsRendererType.hpp and the identity-reporting accessors (phase P7).
+    add_compile_definitions(CNA_MULTI_RENDERER)
+endif()
+
+# The per-identity configuration below is a MACRO, not a function, on purpose: macros do not create
+# a scope, so every set()/add_compile_definitions()/add_subdirectory() inside behaves exactly as it
+# did when this was straight-line code. For a single-identity list the execution is identical.
+macro(cna_configure_renderer_identity)
+    set(_cna_identity_defines)
 # PLAT-140: a terminal consumes finished CPU frames through IPlatformSurfacePresenter; it has no
 # graphical native window that a GPU API could bind. This check deliberately precedes every
 # renderer dependency probe below, so an incompatible pair always fails with this explanation
@@ -384,11 +435,26 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "GLIDE" AND NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
         "Windows toolchain, for example cmake/toolchains/mingw-w64-i686.cmake.")
 endif()
 
+# plan_apple.md APPLE-4: an iOS configure is rejected here unless CNA actually wires the selected
+# renderer up for iOS. This runs before the individual per-renderer gates below so the failure
+# names the platform rather than a dependency that was never configured for an iOS sysroot.
+# No-op on macOS and on every non-Apple target.
+cna_apple_validate_renderer("${CNA_GRAPHICS_RENDERER}")
+
 # Native Metal is currently available only when targeting macOS. SDL is used only for
 # window/CAMetalLayer integration; all rendering is performed directly through Metal.
+# iOS is Metal's other natural home and the Apple allow-list above already refuses it by default;
+# CNA_APPLE_ALLOW_UNVALIDATED_RENDERER=ON is the single documented escape hatch for experimenting
+# with it there (plan_apple.md APPLE-11), and changes nothing about what is supported.
 if(CNA_GRAPHICS_RENDERER STREQUAL "METAL" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    message(FATAL_ERROR
-        "CNA: METAL renderer is currently supported only on macOS; iOS and tvOS remain unvalidated.")
+    if(CNA_APPLE_IOS AND CNA_APPLE_ALLOW_UNVALIDATED_RENDERER)
+        message(WARNING
+            "CNA: configuring METAL for iOS. The renderer's supported contract covers macOS only "
+            "(docs/metal-renderer.md); its iOS build has no compile, runtime or pixel evidence.")
+    else()
+        message(FATAL_ERROR
+            "CNA: METAL renderer is currently supported only on macOS; iOS and tvOS remain unvalidated.")
+    endif()
 endif()
 
 # plan_canvas.md design decision 1: HTML Canvas 2D is a browser DOM API and cannot exist outside
@@ -473,7 +539,9 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL 
     # easy-gl is a SIBLING repository checkout, not a git submodule of this
     # repo (Task DEV-BUILD-001) -- see sharp-runtime's identical check above
     # for the full rationale.
-    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../easy-gl/CMakeLists.txt")
+    # plan_runtimerenderer.md P11: several GL identities can now be selected at once, and they all
+    # share this one easy-gl subdirectory -- add it only for the first of them.
+    if(NOT TARGET easy-gl AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../easy-gl/CMakeLists.txt")
         message(FATAL_ERROR
             "CNA: Missing sibling repository 'easy-gl' at "
             "${CMAKE_CURRENT_SOURCE_DIR}/../easy-gl -- this is a separate git "
@@ -482,7 +550,10 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL 
             "not fetch it). easy-gl itself expects its own sibling '../meta-gl' "
             "checkout (branch 'develop' of meta-gl).")
     endif()
-    add_subdirectory(../easy-gl easy-gl)
+    if(NOT _cna_easygl_subdir_added)
+        add_subdirectory(../easy-gl easy-gl)
+        set(_cna_easygl_subdir_added TRUE)
+    endif()
 endif()
 
 # plan_freedirect.md design decision 10 / Task DX3-2: free-direct is a SIBLING repository checkout, not a
@@ -558,13 +629,13 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
     message(STATUS "CNA: Using SDL_RENDERER graphics renderer")
     set(RENDERER_DIR "modules/renderers/sdl-renderer")
     set(RENDERER_TARGET "cna_renderer_sdl_renderer")
-    add_compile_definitions(CNA_RENDERER_SDL_RENDERER)
+    list(APPEND _cna_identity_defines CNA_RENDERER_SDL_RENDERER)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_SDL_RENDERER")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "OPENGL1")
     message(STATUS "CNA: Using OPENGL1 native fixed-function graphics renderer")
     set(RENDERER_DIR "modules/renderers/opengl1")
     set(RENDERER_TARGET "cna_renderer_opengl1")
-    add_compile_definitions(CNA_RENDERER_OPENGL1)
+    list(APPEND _cna_identity_defines CNA_RENDERER_OPENGL1)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_OPENGL1")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
         OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
@@ -575,17 +646,19 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQ
     # CNA_RENDERER_EASYGL is the internal implementation identity -- existing #ifdef
     # CNA_RENDERER_EASYGL guards elsewhere in the codebase keep working unmodified regardless of
     # which of the 5 public GL profiles below was selected (plan_glbackends.md GLB-3).
-    add_compile_definitions(CNA_RENDERER_EASYGL)
+    list(APPEND _cna_identity_defines CNA_RENDERER_EASYGL)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_EASYGL")
     # CNA_GL_PROFILE_* selects the GL context/shader profile within the shared EasyGL
     # implementation -- see plan_glbackends.md Phase B/GLB-8 for how EasyGLRenderer.cpp
     # uses this to choose context-creation attributes and shader headers.
-    add_compile_definitions("CNA_GL_PROFILE_${CNA_GRAPHICS_RENDERER}")
+    list(APPEND _cna_identity_defines "CNA_GL_PROFILE_${CNA_GRAPHICS_RENDERER}")
     # plan_fx.md FX-062: compiled XNA effects on this renderer go through MojoShader's own OpenGL
     # adapter, which emits GLSL/GLSLES/GLSLES3 source text for whichever profile it is asked for --
     # entirely in parallel to EasyGL's own GLSL ES 3.00-authored-and-string-rewritten stock shaders.
     # Off by default because it pulls a fetched dependency into a renderer that does not otherwise
-    # need one; the capability stays false until the FX-060 shared suite passes here.
+    # need one. Uses add_compile_definitions directly rather than _cna_identity_defines, matching
+    # the sibling CNA_SDL_GPU_COMPILED_EFFECTS option below: an opt-in flag, not a per-identity
+    # define every build of this renderer needs.
     option(CNA_EASYGL_COMPILED_EFFECTS
            "Build EasyGL support for compiled XNA Effect bytecode (plan_fx.md FX-062)" OFF)
     if(CNA_EASYGL_COMPILED_EFFECTS)
@@ -597,7 +670,7 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "BGFX")
     message(STATUS "CNA: Using BGFX graphics renderer")
     set(RENDERER_DIR "modules/renderers/bgfx")
     set(RENDERER_TARGET "cna_renderer_bgfx")
-    add_compile_definitions(CNA_RENDERER_BGFX)
+    list(APPEND _cna_identity_defines CNA_RENDERER_BGFX)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_BGFX")
 
     include(FetchContent)
@@ -620,8 +693,9 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "BGFX")
         GIT_SHALLOW FALSE
         GIT_PROGRESS TRUE
         GIT_SUBMODULES_RECURSE TRUE
-        PATCH_COMMAND git -C bgfx apply --unidiff-zero --whitespace=nowarn
-            ${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/bgfx-max-render-target-msaa.patch
+        PATCH_COMMAND "${CMAKE_COMMAND}"
+            "-DCNA_BGFX_PATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/bgfx-max-render-target-msaa.patch"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/apply-bgfx-max-render-target-msaa-patch.cmake"
     )
     FetchContent_MakeAvailable(bgfx_cmake)
 
@@ -630,14 +704,14 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "VULKAN")
     message(STATUS "CNA: Using VULKAN graphics renderer")
     set(RENDERER_DIR "modules/renderers/vulkan")
     set(RENDERER_TARGET "cna_renderer_vulkan")
-    add_compile_definitions(CNA_RENDERER_VULKAN)
+    list(APPEND _cna_identity_defines CNA_RENDERER_VULKAN)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_VULKAN")
     find_package(Vulkan REQUIRED)
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU")
     message(STATUS "CNA: Using WEBGPU graphics renderer")
     set(RENDERER_DIR "modules/renderers/webgpu")
     set(RENDERER_TARGET "cna_renderer_webgpu")
-    add_compile_definitions(CNA_RENDERER_WEBGPU)
+    list(APPEND _cna_identity_defines CNA_RENDERER_WEBGPU)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_WEBGPU")
     include(cmake/ThirdPartyWebGPU.cmake)
     cna_configure_webgpu()
@@ -645,7 +719,7 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM")
     message(STATUS "CNA: Using MAGNUM graphics renderer")
     set(RENDERER_DIR "modules/renderers/magnum")
     set(RENDERER_TARGET "cna_renderer_magnum")
-    add_compile_definitions(CNA_RENDERER_MAGNUM)
+    list(APPEND _cna_identity_defines CNA_RENDERER_MAGNUM)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_MAGNUM")
     include(cmake/ThirdPartyMagnum.cmake)
     cna_configure_magnum()
@@ -653,49 +727,49 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS")
     message(STATUS "CNA: Using HEADLESS (no GPU/window) graphics renderer")
     set(RENDERER_DIR "modules/renderers/headless")
     set(RENDERER_TARGET "cna_renderer_headless")
-    add_compile_definitions(CNA_RENDERER_HEADLESS)
+    list(APPEND _cna_identity_defines CNA_RENDERER_HEADLESS)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_HEADLESS")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     message(STATUS "CNA: Using SOFTWARE (CPU rasterizer) graphics renderer")
     set(RENDERER_DIR "modules/renderers/software")
     set(RENDERER_TARGET "cna_renderer_software")
-    add_compile_definitions(CNA_RENDERER_SOFTWARE)
+    list(APPEND _cna_identity_defines CNA_RENDERER_SOFTWARE)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_SOFTWARE")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "STUB")
     message(STATUS "CNA: Using STUB (no-op) graphics renderer")
     set(RENDERER_DIR "modules/renderers/stub")
     set(RENDERER_TARGET "cna_renderer_stub")
-    add_compile_definitions(CNA_RENDERER_STUB)
+    list(APPEND _cna_identity_defines CNA_RENDERER_STUB)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_STUB")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
     message(STATUS "CNA: Using DIRECTX11 graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx11")
     set(RENDERER_TARGET "cna_renderer_directx11")
-    add_compile_definitions(CNA_RENDERER_DIRECTX11)
+    list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX11)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX11")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     message(STATUS "CNA: Using DIRECTX12 graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx12")
     set(RENDERER_TARGET "cna_renderer_directx12")
-    add_compile_definitions(CNA_RENDERER_DIRECTX12)
+    list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX12)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX12")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D")
     message(STATUS "CNA: Using DIRECT2D graphics renderer (Windows-only, 2D-only)")
     set(RENDERER_DIR "modules/renderers/direct2d")
     set(RENDERER_TARGET "cna_renderer_direct2d")
-    add_compile_definitions(CNA_RENDERER_DIRECT2D)
+    list(APPEND _cna_identity_defines CNA_RENDERER_DIRECT2D)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECT2D")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "CANVAS")
     message(STATUS "CNA: Using CANVAS (HTML Canvas 2D) graphics renderer")
     set(RENDERER_DIR "modules/renderers/canvas")
     set(RENDERER_TARGET "cna_renderer_canvas")
-    add_compile_definitions(CNA_RENDERER_CANVAS)
+    list(APPEND _cna_identity_defines CNA_RENDERER_CANVAS)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_CANVAS")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "HTML_DOM")
     message(STATUS "CNA: Using HTML_DOM (CSS-composited DOM elements) graphics renderer")
     set(RENDERER_DIR "modules/renderers/html-dom")
     set(RENDERER_TARGET "cna_renderer_html_dom")
-    add_compile_definitions(CNA_RENDERER_HTML_DOM)
+    list(APPEND _cna_identity_defines CNA_RENDERER_HTML_DOM)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_HTML_DOM")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "SKIA")
     # SKIA-160: CNA_SKIA_MODE is a sub-selector of CNA_GRAPHICS_RENDERER=SKIA, not a separate
@@ -710,7 +784,7 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "SKIA")
 
     set(RENDERER_DIR "modules/renderers/skia")
     set(RENDERER_TARGET "cna_renderer_skia")
-    add_compile_definitions(CNA_RENDERER_SKIA)
+    list(APPEND _cna_identity_defines CNA_RENDERER_SKIA)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_SKIA")
 
     if(CNA_SKIA_MODE STREQUAL "GANESH")
@@ -729,7 +803,7 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "BLEND2D")
     message(STATUS "CNA: Using BLEND2D (Blend2D CPU 2D vector rasterizer) graphics renderer")
     set(RENDERER_DIR "modules/renderers/blend2d")
     set(RENDERER_TARGET "cna_renderer_blend2d")
-    add_compile_definitions(CNA_RENDERER_BLEND2D)
+    list(APPEND _cna_identity_defines CNA_RENDERER_BLEND2D)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_BLEND2D")
     include(cmake/ThirdPartyBlend2D.cmake)
     cna_configure_blend2d()
@@ -737,67 +811,67 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "FREEDIRECT")
     message(STATUS "CNA: Using FreeDirect (DirectDraw via free-direct; formerly DIRECTX3) graphics renderer")
     set(RENDERER_DIR "modules/renderers/freedirect")
     set(RENDERER_TARGET "cna_renderer_freedirect")
-    add_compile_definitions(CNA_RENDERER_FREEDIRECT)
+    list(APPEND _cna_identity_defines CNA_RENDERER_FREEDIRECT)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_FREEDIRECT")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     message(STATUS "CNA: Using DIRECTX9 graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx9")
     set(RENDERER_TARGET "cna_renderer_directx9")
-    add_compile_definitions(CNA_RENDERER_DIRECTX9)
+    list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX9)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX9")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX1")
     message(STATUS "CNA: Using DIRECTX1 (real DirectDraw v1) graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx1")
     set(RENDERER_TARGET "cna_renderer_directx1")
-    add_compile_definitions(CNA_RENDERER_DIRECTX1)
+    list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX1)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX1")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX2")
     message(STATUS "CNA: Using DIRECTX2 (real DirectDraw v1 + Direct3D v2 DrawPrimitive) graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx2")
     set(RENDERER_TARGET "cna_renderer_directx2")
-    add_compile_definitions(CNA_RENDERER_DIRECTX2)
+    list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX2)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX2")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX3")
     message(STATUS "CNA: Using DIRECTX3 (real DirectX 3 -- DirectDraw v2 + Direct3D v2 DrawPrimitive) graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx3")
     set(RENDERER_TARGET "cna_renderer_directx3")
-    add_compile_definitions(CNA_RENDERER_DIRECTX3)
+    list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX3)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX3")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX5")
     message(STATUS "CNA: Using DIRECTX5 (real DirectDraw v4 + Direct3D v3 FVF DrawPrimitive) graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx5")
     set(RENDERER_TARGET "cna_renderer_directx5")
-    add_compile_definitions(CNA_RENDERER_DIRECTX5)
+    list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX5)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX5")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX6")
     message(STATUS "CNA: Using DIRECTX6 (real DirectDraw v4 + Direct3D v3, real stencil) graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx6")
     set(RENDERER_TARGET "cna_renderer_directx6")
-    add_compile_definitions(CNA_RENDERER_DIRECTX6)
+    list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX6)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX6")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX7")
     message(STATUS "CNA: Using DIRECTX7 (real DirectDraw v7 + Direct3D v7, flattened device model) graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx7")
     set(RENDERER_TARGET "cna_renderer_directx7")
-    add_compile_definitions(CNA_RENDERER_DIRECTX7)
+    list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX7)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX7")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX8")
     message(STATUS "CNA: Using DIRECTX8 (real Direct3D 8, DXVK-delivered, fixed-function) graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx8")
     set(RENDERER_TARGET "cna_renderer_directx8")
-    add_compile_definitions(CNA_RENDERER_DIRECTX8)
+    list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX8)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX8")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX10")
     message(STATUS "CNA: Using DIRECTX10 (real Direct3D 10, DXVK-delivered via d3d10core, real HLSL shaders) graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx10")
     set(RENDERER_TARGET "cna_renderer_directx10")
-    add_compile_definitions(CNA_RENDERER_DIRECTX10)
+    list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX10)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX10")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DILIGENT")
     message(STATUS "CNA: Using DILIGENT (Diligent Engine) graphics renderer")
     set(RENDERER_DIR "modules/renderers/diligent")
     set(RENDERER_TARGET "cna_renderer_diligent")
-    add_compile_definitions(CNA_RENDERER_DILIGENT)
+    list(APPEND _cna_identity_defines CNA_RENDERER_DILIGENT)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DILIGENT")
     include(cmake/ThirdPartyDiligent.cmake)
     cna_configure_diligent()
@@ -806,13 +880,13 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     message(STATUS "CNA: Using native METAL graphics renderer")
     set(RENDERER_DIR "modules/renderers/metal")
     set(RENDERER_TARGET "cna_renderer_metal")
-    add_compile_definitions(CNA_RENDERER_METAL)
+    list(APPEND _cna_identity_defines CNA_RENDERER_METAL)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_METAL")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     message(STATUS "CNA: Using SDL_GPU graphics renderer")
     set(RENDERER_DIR "modules/renderers/sdl-gpu")
     set(RENDERER_TARGET "cna_renderer_sdl_gpu")
-    add_compile_definitions(CNA_RENDERER_SDL_GPU)
+    list(APPEND _cna_identity_defines CNA_RENDERER_SDL_GPU)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_SDL_GPU")
     # plan_fx.md FX-061: compiled XNA effects on this renderer go through MojoShader's own SDL_GPU
     # adapter, which emits SPIR-V -- the format this renderer already builds its pipelines from.
@@ -829,26 +903,26 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES1")
     message(STATUS "CNA: Using OPENGLES1 (fixed-function OpenGL ES 1.1) graphics renderer")
     set(RENDERER_DIR "modules/renderers/opengles1")
     set(RENDERER_TARGET "cna_renderer_opengles1")
-    add_compile_definitions(CNA_RENDERER_OPENGLES1)
+    list(APPEND _cna_identity_defines CNA_RENDERER_OPENGLES1)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_OPENGLES1")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "OPENGL4")
     message(STATUS "CNA: Using OPENGL4 (real desktop OpenGL 4.x core profile) graphics renderer")
     set(RENDERER_DIR "modules/renderers/opengl4")
     set(RENDERER_TARGET "cna_renderer_opengl4")
-    add_compile_definitions(CNA_RENDERER_OPENGL4)
+    list(APPEND _cna_identity_defines CNA_RENDERER_OPENGL4)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_OPENGL4")
     find_package(OpenGL REQUIRED)
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "OPENGL2")
     message(STATUS "CNA: Using native OPENGL2 graphics renderer (no EasyGL)")
     set(RENDERER_DIR "modules/renderers/opengl2")
     set(RENDERER_TARGET "cna_renderer_opengl2")
-    add_compile_definitions(CNA_RENDERER_OPENGL2)
+    list(APPEND _cna_identity_defines CNA_RENDERER_OPENGL2)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_OPENGL2")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "WICKED")
     message(STATUS "CNA: Using WICKED (Wicked Engine) graphics renderer")
     set(RENDERER_DIR "modules/renderers/wicked")
     set(RENDERER_TARGET "cna_renderer_wicked")
-    add_compile_definitions(CNA_RENDERER_WICKED)
+    list(APPEND _cna_identity_defines CNA_RENDERER_WICKED)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_WICKED")
     include(cmake/ThirdPartyWicked.cmake)
     cna_configure_wicked()
@@ -856,7 +930,7 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "SOKOL")
     message(STATUS "CNA: Using SOKOL graphics renderer (sokol_gfx on ${CNA_SOKOL_API})")
     set(RENDERER_DIR "modules/renderers/sokol")
     set(RENDERER_TARGET "cna_renderer_sokol")
-    add_compile_definitions(CNA_RENDERER_SOKOL)
+    list(APPEND _cna_identity_defines CNA_RENDERER_SOKOL)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_SOKOL")
     include(cmake/ThirdPartySokol.cmake)
     cna_configure_sokol()
@@ -864,19 +938,19 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "GLIDE")
     message(STATUS "CNA: Using GLIDE 3.x graphics renderer (runtime glide3x.dll required)")
     set(RENDERER_DIR "modules/renderers/glide")
     set(RENDERER_TARGET "cna_renderer_glide")
-    add_compile_definitions(CNA_RENDERER_GLIDE)
+    list(APPEND _cna_identity_defines CNA_RENDERER_GLIDE)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_GLIDE")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "GDI")
     message(STATUS "CNA: Using classic Win32 GDI 2D graphics renderer")
     set(RENDERER_DIR "modules/renderers/gdi")
     set(RENDERER_TARGET "cna_renderer_gdi")
-    add_compile_definitions(CNA_RENDERER_GDI)
+    list(APPEND _cna_identity_defines CNA_RENDERER_GDI)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_GDI")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "LLGL")
     message(STATUS "CNA: Using LLGL graphics renderer")
     set(RENDERER_DIR "modules/renderers/llgl")
     set(RENDERER_TARGET "cna_renderer_llgl")
-    add_compile_definitions(CNA_RENDERER_LLGL)
+    list(APPEND _cna_identity_defines CNA_RENDERER_LLGL)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_LLGL")
     include(cmake/ThirdPartyLLGL.cmake)
     cna_configure_llgl()
@@ -884,7 +958,7 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     message(STATUS "CNA: Using FNA3D graphics renderer (FNA-XNA/FNA3D + MojoShader)")
     set(RENDERER_DIR "modules/renderers/fna3d")
     set(RENDERER_TARGET "cna_renderer_fna3d")
-    add_compile_definitions(CNA_RENDERER_FNA3D)
+    list(APPEND _cna_identity_defines CNA_RENDERER_FNA3D)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_FNA3D")
     include(cmake/ThirdPartyFNA3D.cmake)
     cna_configure_fna3d()
@@ -892,13 +966,13 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "SVG_DOM")
     message(STATUS "CNA: Using SVG_DOM (real SVG DOM elements) graphics renderer")
     set(RENDERER_DIR "modules/renderers/svg-dom")
     set(RENDERER_TARGET "cna_renderer_svg_dom")
-    add_compile_definitions(CNA_RENDERER_SVG_DOM)
+    list(APPEND _cna_identity_defines CNA_RENDERER_SVG_DOM)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_SVG_DOM")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "OPENVG")
     message(STATUS "CNA: Using OPENVG (ShivaVG) 2D vector graphics renderer")
     set(RENDERER_DIR "modules/renderers/openvg")
     set(RENDERER_TARGET "cna_renderer_openvg")
-    add_compile_definitions(CNA_RENDERER_OPENVG)
+    list(APPEND _cna_identity_defines CNA_RENDERER_OPENVG)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_OPENVG")
     include(cmake/ThirdPartyOpenVG.cmake)
     cna_configure_openvg()
@@ -906,7 +980,7 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "PORTABLEGL")
     message(STATUS "CNA: Using PORTABLEGL (rswinkle/PortableGL, CPU software OpenGL 3.x) graphics renderer")
     set(RENDERER_DIR "modules/renderers/portablegl")
     set(RENDERER_TARGET "cna_renderer_portablegl")
-    add_compile_definitions(CNA_RENDERER_PORTABLEGL)
+    list(APPEND _cna_identity_defines CNA_RENDERER_PORTABLEGL)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_PORTABLEGL")
     include(cmake/ThirdPartyPortableGL.cmake)
     cna_configure_portablegl()
@@ -922,3 +996,39 @@ else()
 
     message(FATAL_ERROR "CNA: Unknown graphics renderer: ${CNA_GRAPHICS_RENDERER}")
 endif()
+endmacro()
+
+foreach(_cna_identity IN LISTS _cna_renderer_identities)
+    set(CNA_GRAPHICS_RENDERER "${_cna_identity}")
+    cna_configure_renderer_identity()
+    list(APPEND CNA_RENDERER_TARGETS "${RENDERER_TARGET}")
+    list(APPEND CNA_RENDERER_DIRS "${RENDERER_DIR}")
+
+    # Each family's own sources guard on its identity macro, so every family gets its define on its
+    # own target (applied in cna_renderer_common_setup once the target exists).
+    string(REPLACE ";" "," _cna_joined_defines "${_cna_identity_defines}")
+    list(APPEND CNA_RENDERER_TARGET_DEFINES "${_cna_joined_defines}")
+    list(APPEND CNA_RENDERER_DEFINES "${CNA_RENDERER_DEFINE}")
+
+    # Only the DEFAULT identity's macros are defined project-wide. That keeps a single-renderer
+    # build exactly as it was, and keeps the compile-time accessors and the existing 892 test and
+    # example #ifdef sites meaningful in a multi-renderer build: they describe the default. Making
+    # the corpus itself renderer-agnostic is plan_runtimerenderer.md phase P9.
+    if(_cna_identity STREQUAL _cna_default_renderer_identity)
+        foreach(_cna_define IN LISTS _cna_identity_defines)
+            add_compile_definitions(${_cna_define})
+        endforeach()
+    endif()
+endforeach()
+
+# Restore the default identity, and leave RENDERER_TARGET/RENDERER_DIR pointing at it. Those two
+# scalars are still read in ~128 places; in single-renderer mode they mean exactly what they always
+# did, and in multi-renderer mode they mean "the default renderer".
+set(CNA_GRAPHICS_RENDERER "${_cna_default_renderer_identity}")
+list(GET CNA_RENDERER_TARGETS 0 RENDERER_TARGET)
+list(GET CNA_RENDERER_DIRS 0 RENDERER_DIR)
+# CNA_RENDERER_DEFINE rides cna_build_flags INTERFACE, so it reaches EVERY module and every
+# consumer. After the loop it would otherwise hold the LAST identity's macro rather than the
+# default's -- which in a HEADLESS;SOFTWARE;STUB build meant the whole project compiled as though
+# STUB were selected. It names the default renderer, like the two scalars above.
+list(GET CNA_RENDERER_DEFINES 0 CNA_RENDERER_DEFINE)

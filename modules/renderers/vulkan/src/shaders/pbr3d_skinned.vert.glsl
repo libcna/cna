@@ -12,6 +12,9 @@ layout(location = 2) in vec4  aTangent;
 layout(location = 3) in vec2  aUV;
 layout(location = 4) in vec4  aBoneWeights;
 layout(location = 5) in uvec4 aBoneIndices;
+#ifdef CNA_PBR_DUAL_UV
+layout(location = 6) in vec2  aUV1;
+#endif
 
 layout(location = 0) out vec3  vNormal;
 layout(location = 1) out vec3  vTangent;
@@ -19,6 +22,9 @@ layout(location = 2) out float vBitangentSign;
 layout(location = 3) out vec2  vUV;
 layout(location = 4) out float vFogFactor;
 layout(location = 5) out vec3  vWorldPos;
+#ifdef CNA_PBR_DUAL_UV
+layout(location = 6) out vec2  vUV1;
+#endif
 
 layout(push_constant) uniform PC {
     mat4  mvp;
@@ -47,7 +53,28 @@ layout(set = 0, binding = 6) uniform PbrParams {
     vec4 emissive_roughness;     // xyz = EmissiveFactor, w = RoughnessFactor
     vec4 fogColorEnabled;        // xyz = FogColor, w = WeightsPerVertex (REMED-GFX-010)
     vec4 fogVector;              // REMED-GFX-010: FNA fog vector (xyz + w)
+    vec4 alphaTest;              // reference, tolerance, pass weight, fail weight
+    vec4 pbrMapScales;           // x = normal scale, y = occlusion strength
+    vec4 srgbFlags;              // x=decode base, y=decode emissive, z=encode output, w=decode spec colour
+    vec4 specularFresnelInputs;  // xyz = unclamped dielectric F0, w = specular factor
+    vec4 textureTransformRows[10];
+    vec4 specularTextureTransformRows[4];
+#ifdef CNA_PBR_DUAL_UV
+    vec4 textureCoordinateSets;  // x = seven-bit per-map TEXCOORD_1 selector mask
+#endif
 } pbr;
+
+vec3 cnaSkinNormal(mat3 m, vec3 n) {
+    vec3 c0 = m[0], c1 = m[1], c2 = m[2];
+    vec3 co0 = cross(c1, c2), co1 = cross(c2, c0), co2 = cross(c0, c1);
+    float det = dot(c0, co0);
+    vec3 transformed = mat3(co0, co1, co2) * n;
+    return abs(det) > 1e-6 ? transformed * sign(det) : m * n;
+}
+
+float cnaDirectionHandedness(mat3 m) {
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
 
 void main() {
     float weightsPerVertex = pbr.fogColorEnabled.w; // REMED-GFX-010: alongside the fog vector
@@ -60,6 +87,7 @@ void main() {
     // REMED-GFX-011: matches skinned3d.vert.glsl, which does flip (the comment previously here
     // claimed it never does). Renderer-wide convention -- see pbr3d.vert.glsl.
     gl_Position.y = -gl_Position.y;
+    gl_PointSize = 1.0;
     mat3 skinNormalMat = mat3(skinMat);
     // REMED-GFX-006 (Variant B): the normal takes the inverse-transpose of World, not raw World.
     // The previous comment justified raw mat3(pbr.world) as deliberate fidelity to
@@ -68,12 +96,16 @@ void main() {
     // mul(normal, WorldInverseTranspose) under non-uniform scale. It also contradicted this
     // renderer's own unskinned pbr3d.vert.glsl, which already uses the inverse transpose.
     mat3 worldNormalMat = transpose(inverse(mat3(pbr.world)));
-    vNormal = normalize(worldNormalMat * (skinNormalMat * aNormal));
+    vNormal = normalize(worldNormalMat * cnaSkinNormal(skinNormalMat, aNormal));
     // Tangent stays on raw World: tangents transform as directions, not as normals (glTF
     // convention, and unchanged from the previous behaviour).
     vTangent = mat3(pbr.world) * (skinNormalMat * aTangent.xyz);
-    vBitangentSign = aTangent.w;
+    vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(pbr.world))
+                                * cnaDirectionHandedness(skinNormalMat);
     vUV = aUV;
+#ifdef CNA_PBR_DUAL_UV
+    vUV1 = aUV1;
+#endif
     vWorldPos = (pbr.world * skinnedPos).xyz;
     vFogFactor = 1.0 - clamp(dot(vec4(skinnedPos.xyz, 1.0), pbr.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
 }

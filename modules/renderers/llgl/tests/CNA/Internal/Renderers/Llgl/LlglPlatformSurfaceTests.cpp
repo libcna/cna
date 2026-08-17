@@ -2,7 +2,11 @@
 
 #include <gtest/gtest.h>
 
-#if defined(CNA_RENDERER_LLGL)
+// plan_runtimerenderer.md RTR-P9-9, re-applied after the merge: `next` replaced
+// LlglSdlSurfaceTests.cpp with this file and the widened guard went with it. This suite is
+// device-free policy coverage for its own renderer, so it compiles whenever LLGL is COMPILED IN,
+// not only when it is the selected renderer.
+#if defined(CNA_RENDERER_LLGL) || defined(CNA_RENDERER_PRESENT_LLGL)
 #include "CNA/Internal/Renderers/Llgl/LlglPlatformSurface.hpp"
 
 #include <stdexcept>

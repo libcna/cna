@@ -1,5 +1,12 @@
 # OPENGLES2 Renderer Profile Implementation Plan
 
+
+> **Renderer selection.** This document describes the renderer as a compile-time choice
+> (`-DCNA_GRAPHICS_RENDERER=...`), which remains the default and recommended mode. Since
+> `plan_runtimerenderer.md`, CNA can also be built with several renderers and choose between
+> them at runtime — see `docs/runtime-renderer-selection.md`. Nothing below changes in
+> single-renderer mode.
+
 > The OPENGLES2 renderer profile was authorized as the first entry of the FUTURE.md Phase-2
 > renderer expansion and implemented on **2026-08-10**, on the dedicated branch
 > `feature/renderer-opengles2` rooted at the pre-expansion normalization endpoint (`4c93f185c`).

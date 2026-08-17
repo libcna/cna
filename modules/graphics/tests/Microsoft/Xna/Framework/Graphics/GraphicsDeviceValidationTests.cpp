@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+
+#include "CNA/RendererTestGate.hpp"
+
+// Lets CNA_RENDERER_IS name identities bare (Stub, OpenVg, ...), matching how the compile-time
+// guards these replaced read.
+using namespace CNA::Testing::Renderers;
 #include <memory>
 #include <stdexcept>
 #include <vector>
@@ -196,8 +202,10 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
         targets.push_back(std::make_unique<RenderTarget2D>(gd, 4, 4));
         bindings.emplace_back(targets.back().get());
     }
-#if defined(CNA_RENDERER_SDL_RENDERER) || defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_DIRECTX1) || defined(CNA_RENDERER_DIRECTX2) || defined(CNA_RENDERER_DIRECTX3) || defined(CNA_RENDERER_DIRECTX5) || defined(CNA_RENDERER_DIRECTX6) || defined(CNA_RENDERER_DIRECTX7) || defined(CNA_RENDERER_DIRECTX8) || defined(CNA_RENDERER_GDI)
-    // Task 709 (native 2D renderer) / DX3-27 (DirectDraw, plan_freedirect.md) / DX1-27 (real DirectDraw v1,
+    if (CNA_RENDERER_IS(SdlRenderer, FreeDirect, DirectX1, DirectX2, DirectX3, DirectX5,
+                        DirectX6, DirectX7, DirectX8, Gdi, Software))
+    {
+    // Task 709 (the SDL_RENDERER family) / DX3-27 (DirectDraw, plan_freedirect.md) / DX1-27 (real DirectDraw v1,
     // plan_dx1.md) / DX2-84 (same DirectDraw v1 2D layer, plan_dx2.md) / plan_dx3.md (same 2D
     // layer, now DirectDraw v2) / plan_dx5.md (same 2D layer, now DirectDraw v4): each supports
     // exactly one active render target at a time -- unlike the other, real-MRT-capable renderers,
@@ -205,13 +213,19 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // the first. 4 is still within the MAX_RENDERTARGET_BINDINGS cap
     // this test's name/history (Task 881) refers to, so the throw here comes entirely from the
     // renderer's own single-target limitation, not the cap check.
+    // SOFTWARE belongs here for the same reason as the rest: SoftwareRenderer::SetRenderTargets()
+    // throws for count > 1 because the renderer has one active colour buffer. It was absent, so
+    // this test demanded a clean bind from a renderer that cannot do one; its SupportsCapability()
+    // now reports MultipleRenderTargets as false to match.
     // Sokol left this list at plan_sokol.md SOKOL-26: it is now real-MRT-capable too (a genuine
     // multi-attachment sg_pass, 2-4 RenderTarget2D targets), so 4 real targets bind cleanly here
     // exactly like EasyGL/Vulkan/D3D11/etc. do below.
     // Diligent left this list at plan_diligent.md DILIGENT-24: it is now real-MRT-capable
     // too (up to four attachments), so 4 real targets bind cleanly here as well.
     EXPECT_THROW(gd.SetRenderTargets(bindings), std::runtime_error);
-#elif defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_OPENVG)
+    }
+    else if (CNA_RENDERER_IS(Stub, OpenVg))
+    {
     // plan_stub.md: Stub supports no render targets AT ALL -- it keeps IGraphicsRenderer's nullptr
     // CreateRenderTarget2D()/CreateRenderTargetCube() defaults -- so this is a different case from
     // the single-target renderers above, which support one. GraphicsDevice rejects the bind before
@@ -223,20 +237,26 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // VGImage-surface/FBO equivalent to bind as a render target (docs/openvg-renderer.md), so
     // OpenVgRenderer also keeps the nullptr CreateRenderTarget2D() default.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
-#elif defined(CNA_RENDERER_PORTABLEGL)
+    }
+    else if (CNA_RENDERER_IS(PortableGL))
+    {
     // PortableGL owns exactly one framebuffer per context and creates no render targets at all --
     // the same shape as Stub above: GraphicsDevice rejects the bind before reaching the renderer
     // because RenderTarget2D::GetRenderTargetRenderer() is null, and PortableGLRenderer::
     // SetRenderTargets() refuses a non-empty set as well, so neither layer can accept one silently.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
-#elif defined(CNA_RENDERER_TINYGL)
-    // TinyGL has the same shape for its own reason: it keeps IGraphicsRenderer's nullptr
-    // CreateRenderTarget2D()/CreateRenderTargetCube() defaults -- TinyGL renders into exactly one
-    // ZBuffer and has no off-screen framebuffer concept -- so GraphicsDevice rejects the bind
-    // before reaching the renderer, and TinyGLRenderer::SetRenderTargets() refuses a non-empty set
-    // as well (modules/renderers/tinygl/examples/tinygl_rejection_test.cpp).
-    EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
-#elif defined(CNA_RENDERER_OPENGLES1)
+    }
+    else if (CNA_RENDERER_IS(TinyGL))
+    {
+        // From `next`: TinyGL keeps IGraphicsRenderer's nullptr CreateRenderTarget2D()/
+        // CreateRenderTargetCube() defaults -- it renders into exactly one ZBuffer and has no
+        // off-screen framebuffer concept -- so GraphicsDevice rejects the bind before reaching the
+        // renderer, and TinyGLRenderer::SetRenderTargets() refuses a non-empty set as well
+        // (modules/renderers/tinygl/examples/tinygl_rejection_test.cpp).
+        EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
+    }
+    else if (CNA_RENDERER_IS(OpenGLES1))
+    {
     // plan_opengles1.md: OpenGL ES 1.1 has no MRT mechanism, and no extension in the CM registry
     // adds one -- a third distinct case from the single-target renderers above (which support one)
     // and from Stub (which supports none). A single RenderTarget2D binds normally via
@@ -244,14 +264,18 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // silently dropping the rest, which is also why SupportsCapability(MultipleRenderTargets)
     // reports false.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
-#elif defined(CNA_RENDERER_OPENGL1)
+    }
+    else if (CNA_RENDERER_IS(OpenGL1))
+    {
     // plan_opengl1.md: the same single-colour-attachment refusal shape as OPENGLES1 above, for the
     // desktop fixed-function pipeline -- a single RenderTarget2D binds normally via the
     // ARB_framebuffer_object/core FBO path; more than one is refused rather than binding the
     // first and silently dropping the rest, which is also why
     // SupportsCapability(MultipleRenderTargets) reports false.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
-#elif defined(CNA_RENDERER_EASYGL) && defined(CNA_GL_PROFILE_OPENGLES2)
+    }
+    else if (CNA_RENDERER_IS(OpenGLES2))
+    {
     // docs/opengles2-renderer.md: single-colour-attachment refusal, like OPENGLES1/OPENGL1 above
     // -- core OpenGL ES 2.0 has no glDrawBuffers, a single RenderTarget2D binds normally through
     // the family's FBO path, and SupportsCapability(MultipleRenderTargets) reports false. The
@@ -260,9 +284,11 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // lifecycle/diagnostic tests already catch as the recorded MRT boundary -- not
     // OPENGLES1/OPENGL1's System::NotSupportedException.
     EXPECT_THROW(gd.SetRenderTargets(bindings), std::runtime_error);
-#else
-    EXPECT_NO_THROW(gd.SetRenderTargets(bindings));
-#endif
+    }
+    else
+    {
+        EXPECT_NO_THROW(gd.SetRenderTargets(bindings));
+    }
 }
 
 TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
@@ -270,14 +296,17 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
     GraphicsDevice gd;
     RenderTarget2D rt(gd, 4, 4);
     std::vector<RenderTargetBinding> bindings{ RenderTargetBinding(&rt) };
-#if defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_OPENVG) || defined(CNA_RENDERER_TINYGL)
+    if (CNA_RENDERER_IS(Stub, OpenVg, TinyGL))
+    {
     // Same Stub/OpenVG contract as the four-target case above: no render-target support of any
     // kind, so even a single binding is refused deterministically rather than silently accepted.
     // TinyGL joins them -- it renders into exactly one ZBuffer and creates no render target at all.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
-#else
+    }
+    else
+    {
     EXPECT_NO_THROW(gd.SetRenderTargets(bindings));
-#endif
+    }
 }
 
 TEST(GraphicsDeviceValidationTest, SetRenderTarget_SingleOverload_MatchesArrayOverloadRejection)
@@ -295,18 +324,21 @@ TEST(GraphicsDeviceValidationTest, SetRenderTarget_SingleOverload_MatchesArrayOv
     // this pins for both public entry points.
     GraphicsDevice gd;
     RenderTarget2D target(gd, 4, 4);
-#if defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL) || defined(CNA_RENDERER_TINYGL)
+    if (CNA_RENDERER_IS(Stub, PortableGL, TinyGL))
+    {
     EXPECT_THROW(gd.SetRenderTarget(&target), System::NotSupportedException);
     // No partial state: GraphicsDevice must not report the rejected target as bound...
     EXPECT_TRUE(gd.GetRenderTargets().empty());
     // ...and the renderer must be left exactly as before the rejected call -- an ordinary backbuffer
     // draw still works immediately afterward.
     EXPECT_NO_THROW(gd.Clear(Color(0, 0, 0, 255)));
-#else
+    }
+    else
+    {
     EXPECT_NO_THROW(gd.SetRenderTarget(&target));
     EXPECT_EQ(gd.GetRenderTargets().size(), 1u);
     gd.SetRenderTarget(nullptr);
-#endif
+    }
 }
 
 TEST(GraphicsDeviceValidationTest, SetRenderTargets_Empty_DoesNotThrow)

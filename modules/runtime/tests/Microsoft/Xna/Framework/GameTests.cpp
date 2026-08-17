@@ -10,16 +10,67 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IGraphicsDeviceService.hpp"
 #include "System/EventArgs.hpp"
+#include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/PlatformEvent.hpp"
+#include "CNA/Platform/PlatformFactory.hpp"
+#include "CNA/Platform/PlatformTestDecorator.hpp"
 #include "RuntimePlatformTestSupport.hpp"
+
+#include <memory>
+#include <utility>
+#include <vector>
 
 using namespace Microsoft::Xna::Framework;
 
+namespace CNA::Internal
+{
+    class GameTestPeer
+    {
+    public:
+        static bool IsSuspended(const Microsoft::Xna::Framework::Game& game) { return game.isSuspended_; }
+        static void PollEvents(Microsoft::Xna::Framework::Game& game) { game.PollEvents(); }
+    };
+}
+
 namespace
 {
+    // A real platform with only its event source scripted, so a test can state a lifecycle
+    // transition in CNA's own vocabulary instead of injecting a backend event.
+    class ScriptedEventPlatform final : public CNA::Platform::Testing::PlatformTestDecorator
+    {
+    public:
+        explicit ScriptedEventPlatform(std::unique_ptr<CNA::Platform::IPlatform> inner)
+            : PlatformTestDecorator(std::move(inner))
+        {
+        }
+
+        void Queue(const std::vector<CNA::Platform::PlatformEvent>& events)
+        {
+            queued_.insert(queued_.end(), events.begin(), events.end());
+        }
+
+        void PollEvents(std::vector<CNA::Platform::PlatformEvent>& destination) override
+        {
+            destination.clear();
+            destination.insert(destination.end(), queued_.begin(), queued_.end());
+            queued_.clear();
+        }
+
+    private:
+        std::vector<CNA::Platform::PlatformEvent> queued_;
+    };
+
     // Records lifecycle call order/counts and exits after the first Draw().
     class LifecycleTestGame : public Game
     {
     public:
+        LifecycleTestGame() = default;
+
+        explicit LifecycleTestGame(std::unique_ptr<CNA::Platform::IPlatform> platform)
+            : Game(std::move(platform))
+        {
+        }
+
         int initializeCalls = 0;
         int loadContentCalls = 0;
         int updateCalls = 0;
@@ -93,6 +144,47 @@ TEST(GameTest, RunExecutesLifecycleInDocumentedOrder)
     EXPECT_EQ(game.loadContentCalls, 1);
     EXPECT_GE(game.updateCalls, 1);
     EXPECT_GE(game.drawCalls, 1);
+}
+
+TEST(GameTest, MobileLifecycleEventsSuspendResumeAndTerminateTheLoop)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
+    {
+        GTEST_SKIP() << "The selected platform cannot create a window in this environment.";
+    }
+
+    // plan_apple.md APPLE-7. The lifecycle transitions are scripted as CNA platform events rather
+    // than injected into a backend queue: what is under test is the loop's reaction, and stating
+    // it this way keeps the case true for every platform implementation instead of only the one
+    // whose native constants it happened to name.
+    auto scripted = std::make_unique<ScriptedEventPlatform>(
+        CNA::Platform::PlatformFactory::Create());
+    ScriptedEventPlatform& events = *scripted;
+    LifecycleTestGame game(std::move(scripted));
+    ASSERT_FALSE(CNA::Internal::GameTestPeer::IsSuspended(game));
+
+    events.Queue({CNA::Platform::AppLifecycleEvent{
+        CNA::Platform::AppLifecycleKind::WillEnterBackground}});
+    CNA::Internal::GameTestPeer::PollEvents(game);
+    EXPECT_TRUE(CNA::Internal::GameTestPeer::IsSuspended(game));
+    EXPECT_FALSE(game.getIsActiveProperty());
+
+    events.Queue({CNA::Platform::AppLifecycleEvent{
+        CNA::Platform::AppLifecycleKind::DidEnterForeground}});
+    CNA::Internal::GameTestPeer::PollEvents(game);
+    EXPECT_FALSE(CNA::Internal::GameTestPeer::IsSuspended(game));
+    EXPECT_TRUE(game.getIsActiveProperty());
+
+    // Termination is already decided by the operating system, so it must both end the loop and
+    // leave it able to reach OnExiting -- a process that stays parked in the suspended wait would
+    // be killed before shutting down.
+    events.Queue({CNA::Platform::AppLifecycleEvent{
+                      CNA::Platform::AppLifecycleKind::WillEnterBackground},
+                  CNA::Platform::AppLifecycleEvent{
+                      CNA::Platform::AppLifecycleKind::Terminating}});
+    CNA::Internal::GameTestPeer::PollEvents(game);
+    EXPECT_FALSE(CNA::Internal::GameTestPeer::IsSuspended(game));
+    EXPECT_FALSE(game.RunApplication);
 }
 
 // REMED-CORE-006 (fixed): Game::Initialize() now subscribes graphicsDeviceService.DeviceDisposing

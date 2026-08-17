@@ -15,13 +15,14 @@
 // what separates real point topology from a triangle-list approximation covering thousands of
 // pixels.
 //
-// Renderer scope. Bgfx, EasyGL and WebGPU render points and support backbuffer readback, so they
-// carry the permanent pixel coverage here. SDL_GPU maps PointListEXT natively but implements no
-// backbuffer readback, so it is covered by a separate practical control. Software explicitly
-// rejects every non-TriangleList topology (its documented v1 boundary) and is asserted as a
-// rejection, never as approximate geometry. Vulkan, D3D9, D3D11 and D3D12 still route PointListEXT
-// through their triangle-list default -- an independent defect recorded as REMED-GFX-114 -- so they
-// are deliberately not yet in the pixel guard below.
+// Renderer scope. Bgfx, D3D9, D3D10, D3D11, EasyGL, Vulkan and WebGPU render points and support
+// backbuffer readback, so they carry the permanent pixel coverage here. SDL_GPU maps PointListEXT
+// natively but implements no backbuffer readback, so it is covered by a separate practical
+// control. Software explicitly rejects every non-TriangleList topology (its documented v1
+// boundary) and is asserted as a rejection, never as approximate geometry. D3D12 is also an
+// explicit rejection while its PSO cache is fixed to triangle topology; its named source contract
+// is locked by GltfRendererPointTopologyPolicy. Vulkan joined this matrix with plan_gltf.md
+// GLTF-393; the Direct3D disposition closes GLTF-394 / REMED-GFX-114.
 
 #include <algorithm>
 #include <array>
@@ -31,12 +32,18 @@
 #include <vector>
 #include <gtest/gtest.h>
 
+#include "CNA/RendererTestGate.hpp"
+
+// Lets CNA_RENDERER_IS name identities bare, matching the guards it replaced.
+using namespace CNA::Testing::Renderers;
+
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
@@ -50,6 +57,7 @@
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
@@ -62,11 +70,24 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTangentTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
-#ifdef CNA_RENDERER_BGFX
+// plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
+// BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
+// condition widens from the DEFAULT renderer's macro to "compiled into this build", so a
+// multi-renderer build holding bgfx without selecting it still compiles them; each test inside then
+// checks at runtime that bgfx is the ACTIVE renderer.
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_PRESENT_BGFX)
+#define CNA_TEST_BGFX_AVAILABLE 1
+#endif
+
+#ifdef CNA_TEST_BGFX_AVAILABLE
 #include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
+#endif
+#ifdef CNA_RENDERER_VULKAN
+#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 #endif
 
 using CNA::GraphicsCapability;
@@ -75,6 +96,7 @@ using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Vector4;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::BlendState;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
@@ -88,6 +110,7 @@ using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
+using Microsoft::Xna::Framework::Graphics::PbrEffect;
 using Microsoft::Xna::Framework::Graphics::RasterizerState;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
@@ -100,6 +123,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElement;
 using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
+using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTangentTexture;
 using Microsoft::Xna::Framework::Graphics::VertexPositionTexture;
 using Microsoft::Xna::Framework::Graphics::Viewport;
 
@@ -340,6 +364,20 @@ namespace
                 GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
         }
 
+        void TearDown() override
+        {
+#ifdef CNA_RENDERER_VULKAN
+            auto* renderer =
+                dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
+                    &device.GetRenderer());
+            ASSERT_NE(nullptr, renderer);
+            const auto& messages = renderer->GetValidationMessagesEXT();
+            EXPECT_TRUE(messages.empty())
+                << "Vulkan point topology emitted a validation warning/error: "
+                << (messages.empty() ? std::string{} : messages.front());
+#endif
+        }
+
         void RequirePointRendering()
         {
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
@@ -371,8 +409,10 @@ namespace
     };
 }
 
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_WEBGPU)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_DIRECTX9) || \
+    defined(CNA_RENDERER_DIRECTX10) || defined(CNA_RENDERER_DIRECTX11) || \
+    defined(CNA_RENDERER_EASYGL) || \
+    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_WEBGPU)
 
 // The canonical depthless non-indexed case: four points at distinct pixel centres, four distinct
 // colours, one framebuffer snapshot. A triangle-list approximation of this draw fills the whole
@@ -411,6 +451,50 @@ TEST_F(PointListPrimitiveTest, NonIndexedPointListRendersEveryRequestedPoint)
     ExpectPointRendered(pixels, plan[3], "non-indexed point 3");
     ExpectPointCoverageBudget(pixels, Color::Black, 4, "non-indexed point list");
 }
+
+#ifdef CNA_RENDERER_VULKAN
+// glTF's generated POINTS witness uses the stride-48 PBR layout. The generic point tests above
+// exercise BasicEffect; this companion makes Vulkan create the actual PBR point pipeline too, so
+// the validation-message assertion in TearDown guards pbr3d.vert.glsl's required PointSize write.
+TEST_F(PointListPrimitiveTest, VulkanPbrPointUsesTheNativePointPipeline)
+{
+    RequirePointRendering();
+
+    const int width = BackbufferWidth();
+    const int height = BackbufferHeight();
+    const PointSpec point{width / 2, height / 2, Color::Red, 0.5f};
+    const VertexPositionColor positioned = MakePoint(width, height, point);
+    const VertexPositionNormalTangentTexture vertex(
+        positioned.Position,
+        Vector3(0.0f, 0.0f, 1.0f),
+        Vector4(1.0f, 0.0f, 0.0f, 1.0f),
+        Vector2::Zero);
+
+    VertexBuffer vertexBuffer(
+        device,
+        VertexPositionNormalTangentTexture::getVertexDeclarationStatic(),
+        1,
+        BufferUsage::None);
+    vertexBuffer.SetData(&vertex, 1);
+
+    PbrEffect effect(device);
+    effect.setDiffuseColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+    effect.setAmbientLightColorProperty(Vector3::One);
+    effect.setEncodeOutputToSrgbEXTProperty(false);
+    effect.getDirectionalLight0Property().setEnabledProperty(false);
+    effect.getDirectionalLight1Property().setEnabledProperty(false);
+    effect.getDirectionalLight2Property().setEnabledProperty(false);
+
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&vertexBuffer);
+    effect.Apply();
+    device.DrawPrimitives(PrimitiveType::PointListEXT, 0, 1);
+
+    const FrameSnapshot pixels = CaptureBackbuffer(device);
+    ExpectPointRendered(pixels, point, "Vulkan PBR point");
+    ExpectPointCoverageBudget(pixels, Color::Black, 1, "Vulkan PBR point");
+}
+#endif
 
 // The exact case REMED-GFX-106 discovered: one indexed point must produce one point.
 TEST_F(PointListPrimitiveTest, IndexedPointListRendersEveryRequestedPoint)
@@ -562,7 +646,7 @@ TEST_F(PointListPrimitiveTest, IndexedPointListHonorsThirtyTwoBitIndexElements)
     vertexBuffer.SetData(vertices.data(), 8);
     indexBuffer.SetData(indices.data(), 8);
 
-#ifdef CNA_RENDERER_BGFX
+#ifdef CNA_TEST_BGFX_AVAILABLE
     auto* nativeIndex =
         dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxIndexBufferRenderer*>(
             &indexBuffer.GetRenderer());
@@ -1172,8 +1256,6 @@ TEST_F(PointListPrimitiveTest, PointListRespectsViewportScissorAndBlendState)
 }
 #endif
 
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_WEBGPU)
 // Non-indexed point addressing: vertexStart selects the first consumed vertex and primitiveCount
 // limits the consumed range to exactly that many points.
 //
@@ -1184,6 +1266,9 @@ TEST_F(PointListPrimitiveTest, PointListRespectsViewportScissorAndBlendState)
 // REMED-GFX-111's topology contract.
 TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU);
     RequirePointRendering();
 
     const int width = BackbufferWidth();
@@ -1222,13 +1307,15 @@ TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount
     ExpectPointCoverageBudget(
         pixels, Color::Black, 3, "non-indexed point range with vertexStart");
 }
-#endif
 
-#ifdef CNA_RENDERER_BGFX
+#ifdef CNA_TEST_BGFX_AVAILABLE
 // Bgfx expresses topology as per-submission state (BGFX_STATE_PT_*), not as a cached graphics
 // pipeline object, so switching to and from point topology must not allocate any native resource.
 TEST_F(PointListPrimitiveTest, BgfxPointDrawsAllocateNoPerDrawNativeResources)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequirePointRendering();
 
     device.Present();
@@ -1303,6 +1390,9 @@ TEST_F(PointListPrimitiveTest, BgfxPointDrawsAllocateNoPerDrawNativeResources)
 // asserted here: three point-sized marks, never area geometry.
 TEST_F(PointListPrimitiveTest, BgfxNonIndexedPointRangeCoversExactlyTheRequestedVertices)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequirePointRendering();
 
     const int width = BackbufferWidth();
@@ -1352,7 +1442,6 @@ TEST_F(PointListPrimitiveTest, BgfxNonIndexedPointRangeCoversExactlyTheRequested
 }
 #endif
 
-#ifdef CNA_RENDERER_SDL_GPU
 // The SDL GPU renderer maps PointListEXT to its native point-list topology and consumes exactly
 // primitiveCount vertices/indices, but implements no backbuffer readback. Its practical exact-pixel
 // control therefore runs through RenderTarget2D::GetData, which this renderer does support.
@@ -1365,6 +1454,9 @@ TEST_F(PointListPrimitiveTest, BgfxNonIndexedPointRangeCoversExactlyTheRequested
 // vertexStart, which this renderer honours.
 TEST_F(PointListPrimitiveTest, SdlGpuPointListRendersExactRenderTargetPixels)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(SdlGpu);
     RequirePointRendering();
 
     constexpr int kSize = 128;
@@ -1434,13 +1526,14 @@ TEST_F(PointListPrimitiveTest, SdlGpuPointListRendersExactRenderTargetPixels)
     ExpectPointCoverageBudget(
         direct, Color::Black, 3, "SDL_GPU non-indexed render-target point coverage");
 }
-#endif
 
-#ifdef CNA_RENDERER_SOFTWARE
 // Software's documented v1 raster boundary is TriangleList only. It must keep rejecting
 // PointListEXT explicitly on every public entry point rather than approximating it.
 TEST_F(PointListPrimitiveTest, SoftwareExplicitlyRejectsPointListTopology)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software);
     RequirePointRendering();
 
     const std::array<VertexPositionColor, 3> vertices{
@@ -1476,4 +1569,3 @@ TEST_F(PointListPrimitiveTest, SoftwareExplicitlyRejectsPointListTopology)
             PrimitiveType::PointListEXT, vertices.data(), 0, 3, indices.data(), 0, 3),
         std::runtime_error);
 }
-#endif

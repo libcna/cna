@@ -195,6 +195,42 @@ class VertexFormatsTest : public Game
         check(isRed(readCenter(dev)), "stride=32 (Vector3+Vector3+Vector2)", readCenter(dev));
     }
 
+    // plan_gltf.md GLTF-337: EasyGL reuses its lit stride-32 program for BasicEffect's unlit
+    // variant. Keep a vertex exactly at the shader's default eye position. Before the explicit
+    // uLightingEnabled branch, the supposedly-disabled specular calculation evaluated
+    // normalize(0), and NaN*zero contaminated the whole primitive into black. XNA's separate
+    // unlit shader never evaluates that lighting math.
+    void testStride32UnlitVertexAtEye(GraphicsDevice& dev)
+    {
+        const Vector3 centre(0.0f, 0.0f, 0.0f);
+        const Vector3 normal(0.0f, 0.0f, 1.0f);
+        const Vector2 uv(0.0f, 0.0f);
+        const VertexPositionNormalTexture verts[12] = {
+            { centre, normal, uv }, { kTL, normal, uv }, { kBL, normal, uv },
+            { centre, normal, uv }, { kBL, normal, uv }, { kBR, normal, uv },
+            { centre, normal, uv }, { kBR, normal, uv }, { kTR, normal, uv },
+            { centre, normal, uv }, { kTR, normal, uv }, { kTL, normal, uv },
+        };
+        VertexBuffer vb(dev, 12);
+        vb.SetData(verts, 12);
+
+        dev.Clear(kGreen);
+        dev.SetDepthTestEnabled(false);
+        dev.setBlendStateProperty(BlendState::Opaque);
+        dev.SetVertexBuffer(&vb);
+
+        BasicEffect fx(dev);
+        fx.setLightingEnabledProperty(false);
+        fx.setDiffuseColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+        fx.Apply();
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
+        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 4);
+        dev.SetVertexBuffer(nullptr);
+
+        check(isRed(readCenter(dev)), "stride=32 unlit vertex at eye stays finite",
+              readCenter(dev));
+    }
+
 protected:
     void Initialize() override { Game::Initialize(); }
 
@@ -208,6 +244,7 @@ protected:
         testStride20(dev);
         testStride24(dev);
         testStride32(dev);
+        testStride32UnlitVertexAtEye(dev);
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         Exit();

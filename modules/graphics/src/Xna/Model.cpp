@@ -1,16 +1,344 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <stdexcept>
+
+#include "CNA/Internal/Graphics/ModelMaterialVariantsEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelEffectCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 
-#include <stdexcept>
+namespace CNA::Internal::Graphics
+{
+    void ConfigureModelMaterialVariantsEXT(
+        Microsoft::Xna::Framework::Graphics::Model& model,
+        std::vector<std::string> names,
+        std::vector<ModelMaterialVariantBindingEXT> bindings)
+    {
+        if (names.empty())
+        {
+            model.materialVariants_.reset();
+            return;
+        }
+
+        for (ModelMaterialVariantBindingEXT& binding : bindings)
+        {
+            if (binding.part == nullptr)
+            {
+                throw std::invalid_argument(
+                    "ConfigureModelMaterialVariantsEXT: a binding has no ModelMeshPart");
+            }
+            binding.variants.resize(names.size());
+        }
+
+        auto state = std::make_shared<ModelMaterialVariantsEXT>();
+        state->names = std::move(names);
+        state->bindings = std::move(bindings);
+        model.materialVariants_ = std::move(state);
+    }
+}
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    std::vector<Matrix> Model::sharedDrawBoneMatrices_;
+    namespace
+    {
+        BoundingSphere TransformModelBoundsSphereEXT(const BoundingSphere& sphere,
+                                                      const Matrix& matrix)
+        {
+            BoundingSphere result;
+            result.Center = Vector3::Transform(sphere.Center, matrix);
+
+            // BoundingSphere::Transform follows XNA and uses the longest transformed basis
+            // vector. That is exact for one TRS, whose basis is orthogonal, but a hierarchy can
+            // compose a rotated child below a non-uniformly scaled parent and thereby create
+            // shear. Under shear the longest basis vector can be shorter than the matrix's true
+            // maximum stretch, so a nominal "bound" can exclude vertices.
+            //
+            // The squared maximum stretch is the largest eigenvalue of A*A^T. The maximum
+            // absolute row sum of that symmetric matrix is a conservative upper bound on the
+            // eigenvalue (and remains exact for an orthogonal scaled basis). This keeps the
+            // ordinary XNA result for rotation/scale while making composed glTF placements safe.
+            const double b11 = static_cast<double>(matrix.M11) * matrix.M11 +
+                               static_cast<double>(matrix.M12) * matrix.M12 +
+                               static_cast<double>(matrix.M13) * matrix.M13;
+            const double b22 = static_cast<double>(matrix.M21) * matrix.M21 +
+                               static_cast<double>(matrix.M22) * matrix.M22 +
+                               static_cast<double>(matrix.M23) * matrix.M23;
+            const double b33 = static_cast<double>(matrix.M31) * matrix.M31 +
+                               static_cast<double>(matrix.M32) * matrix.M32 +
+                               static_cast<double>(matrix.M33) * matrix.M33;
+            const double b12 = static_cast<double>(matrix.M11) * matrix.M21 +
+                               static_cast<double>(matrix.M12) * matrix.M22 +
+                               static_cast<double>(matrix.M13) * matrix.M23;
+            const double b13 = static_cast<double>(matrix.M11) * matrix.M31 +
+                               static_cast<double>(matrix.M12) * matrix.M32 +
+                               static_cast<double>(matrix.M13) * matrix.M33;
+            const double b23 = static_cast<double>(matrix.M21) * matrix.M31 +
+                               static_cast<double>(matrix.M22) * matrix.M32 +
+                               static_cast<double>(matrix.M23) * matrix.M33;
+            const double stretchSquared = std::max(
+                b11 + std::abs(b12) + std::abs(b13),
+                std::max(b22 + std::abs(b12) + std::abs(b23),
+                         b33 + std::abs(b13) + std::abs(b23)));
+            result.Radius = sphere.Radius *
+                static_cast<float>(std::sqrt(std::max(0.0, stretchSquared)));
+            return result;
+        }
+    }
+
+    Matrix CreateInfinitePerspectiveFieldOfViewEXT(float fieldOfView, float aspectRatio,
+                                                    float nearPlaneDistance)
+    {
+        // XNA's own argument contract, repeated rather than delegated: this builder does not call
+        // CreatePerspectiveFieldOfView (it cannot -- there is no zfar to pass), so it has to
+        // enforce the same preconditions itself or it would accept arguments the finite overload
+        // rejects.
+        // std::invalid_argument rather than an XNA exception type, to match Matrix's own finite
+        // CreatePerspectiveFieldOfView exactly: this builder is that one's limit case and a caller
+        // switching between them must not have to catch two different things.
+        if (fieldOfView <= 0.0f || fieldOfView >= 3.141593f)
+        {
+            throw std::invalid_argument("fieldOfView <= 0 or >= PI");
+        }
+        if (nearPlaneDistance <= 0.0f)
+        {
+            throw std::invalid_argument("nearPlaneDistance <= 0");
+        }
+
+        // CreatePerspectiveFieldOfView with the zfar terms at their limits: -zfar/(zfar-znear) -> -1
+        // and (znear*zfar)/(znear-zfar) -> -znear. Written as the limits rather than as a large
+        // finite zfar, because a large zfar perturbs EVERY depth value rather than only the far
+        // ones -- an exact depth comparison would silently become an approximate one.
+        const float yScale = 1.0f / std::tan(fieldOfView * 0.5f);
+        const float xScale = yScale / aspectRatio;
+
+        Matrix result = Matrix::getIdentityProperty();
+        result.M11 = xScale;
+        result.M12 = result.M13 = result.M14 = 0.0f;
+        result.M22 = yScale;
+        result.M21 = result.M23 = result.M24 = 0.0f;
+        result.M31 = result.M32 = 0.0f;
+        result.M33 = -1.0f;
+        result.M34 = -1.0f;
+        result.M41 = result.M42 = result.M44 = 0.0f;
+        result.M43 = -nearPlaneDistance;
+        return result;
+    }
+
+    std::size_t GltfImportReportEXT::getWarningCountProperty() const
+    {
+        return static_cast<std::size_t>(std::count_if(
+            Diagnostics.begin(), Diagnostics.end(), [](const GltfImportDiagnosticEXT& diagnostic)
+            {
+                return diagnostic.Severity == GltfImportDiagnosticSeverityEXT::Warning;
+            }));
+    }
+
+    std::size_t GltfImportReportEXT::getDroppedFeatureCountProperty() const
+    {
+        std::size_t count = 0;
+        for (const GltfImportDiagnosticEXT& diagnostic : Diagnostics)
+        {
+            if (diagnostic.Kind == GltfImportDiagnosticKindEXT::DroppedData ||
+                diagnostic.Kind == GltfImportDiagnosticKindEXT::UnsupportedFeature)
+            {
+                count += diagnostic.Count;
+            }
+        }
+        return count;
+    }
+
+    std::size_t GltfImportReportEXT::getApproximationCountProperty() const
+    {
+        std::size_t count = 0;
+        for (const GltfImportDiagnosticEXT& diagnostic : Diagnostics)
+        {
+            if (diagnostic.Kind == GltfImportDiagnosticKindEXT::Approximation)
+            {
+                count += diagnostic.Count;
+            }
+        }
+        return count;
+    }
+
+    bool GltfImportReportEXT::AnythingLost() const
+    {
+        return getWarningCountProperty() != 0;
+    }
+
+    const std::vector<ModelCameraEXT>& Model::getCamerasEXTProperty() const { return cameras_; }
+
+    void Model::setCamerasEXTProperty(std::vector<ModelCameraEXT> value)
+    {
+        cameras_ = std::move(value);
+    }
+
+    const std::vector<ModelSkinEXT>& Model::getSkinsEXTProperty() const { return skins_; }
+
+    void Model::setSkinsEXTProperty(std::vector<ModelSkinEXT> value)
+    {
+        skins_ = std::move(value);
+    }
+
+    const GltfImportReportEXT& Model::getGltfImportReportEXTProperty() const
+    {
+        return gltfImportReport_;
+    }
+
+    void Model::setGltfImportReportEXTProperty(GltfImportReportEXT value)
+    {
+        gltfImportReport_ = std::move(value);
+    }
+
+    std::optional<BoundingSphere> Model::getBoundingSphereEXTProperty() const
+    {
+        const int meshCount = meshes_.getCountProperty();
+        if (meshCount == 0) { return std::nullopt; }
+
+        const int boneCount = bones_.getCountProperty();
+        std::vector<Matrix> absoluteBoneTransforms(static_cast<std::size_t>(boneCount));
+        if (boneCount > 0) { CopyAbsoluteBoneTransformsTo(absoluteBoneTransforms); }
+
+        std::optional<BoundingSphere> result;
+        for (int i = 0; i < meshCount; ++i)
+        {
+            const ModelMesh* mesh = meshes_[i];
+            Matrix placement = Matrix::getIdentityProperty();
+            if (boneCount > 0)
+            {
+                // Match Model::Draw exactly: a mesh with no explicit ParentBone uses bone zero.
+                const ModelBone* parent = mesh->getParentBoneProperty();
+                const int boneIndex = parent != nullptr ? parent->getIndexProperty() : 0;
+                placement = absoluteBoneTransforms.at(static_cast<std::size_t>(boneIndex));
+            }
+
+            // A glTF skin palette operates before Model::Draw's mesh placement. In particular,
+            // the palette carries inverse(meshNodeWorld), so a translated skinned mesh node can
+            // be cancelled back to its skeleton's actual bind-pose space. Applying only
+            // `placement` here framed that file around the node transform while the GPU drew its
+            // vertices somewhere else. The current effect palette is public, live state; union
+            // the local sphere under every joint transform and then the mesh placement.
+            //
+            // This is conservative for linear blend skinning: each vertex is a convex combination
+            // of its joint-transformed positions, and the merged sphere is convex and contains all
+            // of those positions. It can overbound a mesh that uses only a subset of the palette,
+            // but it cannot exclude a posed vertex solely because the mesh-node cancellation or a
+            // later AnimationPlayer update moved it.
+            bool usedSkinPalette = false;
+            for (const ModelSkinEXT& skin : skins_)
+            {
+                if (skin.Data == nullptr || skin.Data->BoneCount <= 0 ||
+                    skin.Data->BoneCount > SkinnedEffect::MaxBones ||
+                    std::find(skin.Meshes.begin(), skin.Meshes.end(), mesh) == skin.Meshes.end())
+                {
+                    continue;
+                }
+
+                for (ModelMeshPart* part : mesh->getMeshPartsProperty())
+                {
+                    const Effect* effect = part != nullptr ? part->getEffectProperty() : nullptr;
+                    std::vector<Matrix> palette;
+                    if (const auto* skinned = dynamic_cast<const SkinnedEffect*>(effect))
+                    {
+                        palette = skinned->GetBoneTransforms(skin.Data->BoneCount);
+                    }
+                    else if (const auto* skinnedPbr =
+                                 dynamic_cast<const SkinnedPbrEffect*>(effect))
+                    {
+                        palette = skinnedPbr->GetBoneTransforms(skin.Data->BoneCount);
+                    }
+                    else
+                    {
+                        continue;
+                    }
+
+                    for (const Matrix& joint : palette)
+                    {
+                        const BoundingSphere posed = TransformModelBoundsSphereEXT(
+                            mesh->getBoundingSphereProperty(), joint * placement);
+                        result = result.has_value()
+                            ? BoundingSphere::CreateMerged(*result, posed)
+                            : posed;
+                    }
+                    usedSkinPalette = true;
+                }
+            }
+            if (usedSkinPalette) { continue; }
+
+            const BoundingSphere placed =
+                TransformModelBoundsSphereEXT(mesh->getBoundingSphereProperty(), placement);
+            result = result.has_value()
+                ? BoundingSphere::CreateMerged(*result, placed)
+                : placed;
+        }
+        return result;
+    }
+
+    const std::vector<std::string>& Model::getMaterialVariantNamesEXTProperty() const
+    {
+        static const std::vector<std::string> empty;
+        return materialVariants_ != nullptr ? materialVariants_->names : empty;
+    }
+
+    int Model::getMaterialVariantEXTProperty() const
+    {
+        return materialVariants_ != nullptr ? materialVariants_->activeVariant : -1;
+    }
+
+    void Model::setMaterialVariantEXTProperty(int value)
+    {
+        const int variantCount = materialVariants_ != nullptr
+            ? static_cast<int>(materialVariants_->names.size()) : 0;
+        if (value < -1 || value >= variantCount)
+        {
+            throw std::out_of_range("materialVariantEXT");
+        }
+        if (materialVariants_ == nullptr)
+        {
+            // `-1` on a model with no variants is the already-active default.
+            return;
+        }
+
+        for (const CNA::Internal::Graphics::ModelMaterialVariantBindingEXT& binding :
+             materialVariants_->bindings)
+        {
+            const CNA::Internal::Graphics::ModelMaterialVariantPartStateEXT* selected =
+                &binding.defaultState;
+            if (value >= 0)
+            {
+                const auto& overrideState =
+                    binding.variants[static_cast<std::size_t>(value)];
+                if (overrideState.has_value()) { selected = &*overrideState; }
+            }
+
+            binding.part->SetVertexBuffer(selected->vertexBuffer);
+            binding.part->SetNumVertices(selected->numVertices);
+            binding.part->setTagProperty(selected->tag);
+            for (std::size_t slot = 0; slot < selected->samplerStates.size(); ++slot)
+            {
+                binding.part->setSamplerStateEXTProperty(
+                    static_cast<int>(slot), selected->samplerStates[slot]);
+            }
+            for (std::size_t slot = 0; slot < selected->specularSamplerStatesEXT.size(); ++slot)
+            {
+                binding.part->setSpecularSamplerStateEXTProperty(
+                    static_cast<int>(slot), selected->specularSamplerStatesEXT[slot]);
+            }
+            // Last: this updates the owning ModelMesh::Effects collection. All other part state
+            // is complete before an observer can find the new effect through that collection.
+            binding.part->setEffectProperty(selected->effect);
+        }
+        materialVariants_->activeVariant = value;
+    }
+    thread_local std::vector<Matrix> Model::sharedDrawBoneMatrices_;
 
     Model::Model(GraphicsDevice* /*graphicsDevice*/,
                  std::vector<ModelBone*> bones,

@@ -12,6 +12,37 @@ namespace Microsoft::Xna::Framework
         {
             return (static_cast<int>(value) & static_cast<int>(flag)) != 0;
         }
+
+        // plan_apple.md APPLE-15. On a desktop the supported-orientation set is the framework's
+        // own bookkeeping, but on iOS and Android the operating system decides whether the device
+        // may rotate at all, and it only learns the answer if the platform layer is told. Without
+        // forwarding it, XNA's SupportedOrientations would silently mean nothing on the one
+        // platform family it was designed for.
+        //
+        // DisplayOrientation::Default means "the game does not care", which maps to the platform's
+        // own no-preference value rather than to an empty set.
+        CNA::Platform::ScreenOrientation toPlatformOrientations(DisplayOrientation orientations)
+        {
+            if (orientations == DisplayOrientation::Default)
+            {
+                return CNA::Platform::ScreenOrientation::None;
+            }
+
+            CNA::Platform::ScreenOrientation accepted = CNA::Platform::ScreenOrientation::None;
+            if (hasFlag(orientations, DisplayOrientation::LandscapeLeft))
+            {
+                accepted = accepted | CNA::Platform::ScreenOrientation::LandscapeLeft;
+            }
+            if (hasFlag(orientations, DisplayOrientation::LandscapeRight))
+            {
+                accepted = accepted | CNA::Platform::ScreenOrientation::LandscapeRight;
+            }
+            if (hasFlag(orientations, DisplayOrientation::Portrait))
+            {
+                accepted = accepted | CNA::Platform::ScreenOrientation::Portrait;
+            }
+            return accepted;
+        }
     }
 
     GameWindow::GameWindow()
@@ -231,6 +262,10 @@ namespace Microsoft::Xna::Framework
     void GameWindow::SetSupportedOrientations(DisplayOrientation orientations)
     {
         supportedOrientations_ = orientations;
+        if (window_ != nullptr)
+        {
+            window_->SetSupportedOrientations(toPlatformOrientations(orientations));
+        }
 
         if (!orientationIsSupported(currentOrientation_))
         {

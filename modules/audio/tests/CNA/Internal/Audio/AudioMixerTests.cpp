@@ -18,6 +18,7 @@
 #include <chrono>
 #include <cstring>
 #include <poll.h>
+#include <signal.h>
 #include <spawn.h>
 #include <string>
 #include <sys/wait.h>

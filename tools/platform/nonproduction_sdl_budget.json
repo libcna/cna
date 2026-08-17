@@ -81,6 +81,14 @@
       "category": "audio-native-integration",
       "max_references": 1
     },
+    "modules/content/tests/CNA/Internal/GltfImport/GltfFixtureCorpusTests.cpp": {
+      "category": "text-evidence-assertion",
+      "max_references": 4
+    },
+    "modules/content/tests/CNA/Internal/GltfImport/GltfRendererPbrFallbackPolicyTests.cpp": {
+      "category": "text-evidence-assertion",
+      "max_references": 2
+    },
     "modules/content/tests/Microsoft/Xna/Framework/Content/CnjCapabilityMatrixTests.cpp": {
       "category": "audio-native-fixture",
       "max_references": 1

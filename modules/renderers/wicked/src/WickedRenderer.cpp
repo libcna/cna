@@ -3260,6 +3260,18 @@ namespace CNA::Internal::Renderers::Wicked
                                    constants.worldInverseTranspose);
                 constants.pbrFactors[0] = params->pbrMetallicFactor;
                 constants.pbrFactors[1] = params->pbrRoughnessFactor;
+                constants.pbrFactors[2] = params->pbrNormalScale;
+                constants.pbrFactors[3] = params->pbrOcclusionStrength;
+                constants.pbrSrgb[0] = params->pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f;
+                constants.pbrSrgb[1] = params->pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f;
+                constants.pbrSrgb[2] = params->pbrEncodeOutputToSrgb ? 1.0f : 0.0f;
+                constants.pbrDielectricFresnel[0] = params->pbrDielectricF0[0];
+                constants.pbrDielectricFresnel[1] = params->pbrDielectricF0[1];
+                constants.pbrDielectricFresnel[2] = params->pbrDielectricF0[2];
+                constants.pbrDielectricFresnel[3] = params->pbrDielectricF90;
+                std::memcpy(constants.pbrTextureTransformRows,
+                            params->pbrTextureTransformRows,
+                            sizeof(params->pbrTextureTransformRows));
             }
         }
         else
@@ -3639,7 +3651,12 @@ namespace CNA::Internal::Renderers::Wicked
 #ifdef CNA_RENDERER_WICKED
 namespace CNA::Internal::Renderers
 {
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace Wicked { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> Wicked::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return CNA::Internal::Renderers::Wicked::CreateGraphicsRendererImpl(args);
     }

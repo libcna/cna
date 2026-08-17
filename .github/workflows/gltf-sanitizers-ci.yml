@@ -1,0 +1,142 @@
+# plan_gltf.md GLTF-036: the glTF import path, under AddressSanitizer + UndefinedBehaviorSanitizer.
+#
+# This exists because the audit's REMED-NA-016 recorded a UBSan-confirmed misaligned `float` load
+# inside cgltf and nothing in CI would ever have found it again. It turned out to be neither a cgltf
+# bug nor a CNA decode bug but a MALFORMED FIXTURE that CNA accepted -- a sparse values bufferView
+# at byte offset 62, two off a float boundary -- which is exactly the class of finding a sanitizer
+# job catches and a green functional suite does not. `ValidateGltfEXT` now refuses such a file
+# (§3.6.2.4), and this job is what keeps the next one from going unnoticed.
+#
+# Deliberately narrow and therefore fast: the STUB renderer, no display, no sibling GL repos. The
+# glTF importer touches no renderer at all, so nothing is lost by not having one, and the job stays
+# free of the Xvfb/driver flakiness the general suite has to manage.
+#
+# There is no known-failure allowlist here on purpose. The glTF selection is fully green today, both
+# functionally and under both sanitizers, and the moment that stops being true this job should fail.
+# That is also why the job is glTF-scoped rather than unfiltered: a full run of the same binary
+# reports 58 UBSan findings and 7 leaks elsewhere in the project (signed-integer overflow in the math
+# module's GetHashCode implementations, invalid `this` in gamer-services and net, a leaked
+# NetworkSession in the gamer-services dispatcher harness). None of them is on the glTF path, they
+# belong to those subsystems, and widening this job to cover them would mean adding exactly the
+# allowlist that makes a sanitizer job stop meaning anything.
+# `halt_on_error=0` makes UBSan report every finding in one run rather than stopping at the first,
+# and `exitcode=1` is what turns a report into a build failure -- without it UBSan prints and the
+# process still exits 0.
+
+name: glTF sanitizers (ASan + UBSan)
+
+on:
+  push:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [develop, master]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+concurrency:
+  group: gltf-sanitizers-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gltf-sanitizers:
+    name: glTF import under ASan+UBSan (STUB, Draco ${{ matrix.draco }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        draco: [ON, OFF]
+    env:
+      CC: gcc-14
+      CXX: g++-14
+    steps:
+      - name: Checkout cna (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Clone sharp-runtime (sibling checkout, public)
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/.."
+          git clone --depth 1 --branch develop \
+            "https://github.com/openeggbert/sharp-runtime.git" sharp-runtime
+
+      - name: Install system dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-14 cmake ninja-build pkg-config \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+            libasound2-dev libpulse-dev libudev-dev libdbus-1-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev \
+            libwayland-dev wayland-protocols libxkbcommon-dev
+
+      - name: Configure (STUB renderer, ASan + UBSan)
+        run: |
+          cmake -S . -B build-sanitize -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCNA_GRAPHICS_RENDERER=STUB \
+            -DCNA_BUILD_TESTS=ON \
+            -DCNA_BUILD_EXAMPLES=OFF \
+            -DCNA_ENABLE_DRACO=${{ matrix.draco }} \
+            -DCNA_SANITIZE=address,undefined
+
+      - name: Build CnaTests and the offline glTF tool
+        run: cmake --build build-sanitize --target CnaTests cna_tool_gltf_to_cnj
+
+      # GLTF-015: fetch only the immutable native release named by validator-pin.json. The Python
+      # command verifies the archive SHA-256 before extracting its single executable; no validator
+      # code or binary is committed to CNA and this is not a runtime dependency.
+      - name: Fetch the pinned Khronos glTF Validator
+        run: PYTHONPATH=tools python3 -m gltf_fixtures --fetch-validator build-tools/gltf-validator
+
+      - name: Test the fixture Validator gate
+        run: PYTHONPATH=tools python3 -m unittest gltf_fixtures.test_validator
+
+      # The corpus generator emits its assets and their manifests from one source, so a manifest
+      # that no longer matches its asset means one of the two was edited by hand. Cheap to check
+      # here, and it makes every assertion below trustworthy.
+      - name: Verify the fixture corpus regenerates byte-identically
+        env:
+          GLTF_VALIDATOR: build-tools/gltf-validator/gltf_validator
+        run: scripts/regenerate-gltf-goldens.sh --check
+
+      # GLTF-406: the licence policy is deliberately stricter than an allow-list -- every tracked
+      # glTF/GLB is CNA-generated corpus output. Third-party models stay in opt-in sparse checkouts.
+      - name: Prove no third-party glTF asset is committed
+        run: scripts/check-gltf-asset-provenance.sh
+
+      # GLTF-418: determinism is a property ACROSS runs, so it needs two processes with different
+      # hash seeds -- a set iterated in hash order is stable within one process and varies between
+      # them. Cheap (a second and a half) and it is the assumption every golden rests on.
+      - name: Verify the generator is deterministic across processes
+        run: scripts/regenerate-gltf-goldens.sh --determinism
+
+      # The tool tests spawn cna_tool_gltf_to_cnj as a subprocess; it is built with the same
+      # sanitizers, so the offline conversion path is covered too rather than only the in-process
+      # one. Leak detection is ON -- the importer allocates cgltf_data and decoded buffers on every
+      # fixture, which is precisely where a leak would hide.
+      - name: Run the glTF suite under ASan + UBSan
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=0:exitcode=1
+        # '*Gltf*' rather than 'Gltf*': RuntimeGltfModelTest is a glTF suite by any reading --
+        # it loads .gltf through ContentManager end to end -- and a prefix filter left it outside
+        # this job entirely. Four of its cases were failing on any renderer with a 3D pipeline
+        # while this job stayed green (plan_gltf.md GLTF-383).
+        run: ./build-sanitize/CnaTests --gtest_filter='*Gltf*'
+
+      # The same binary again through the conformance ladder's own label, so a rung that stops being
+      # registered fails here as well as in the ordinary build.
+      - name: Run the conformance ladder under ASan + UBSan
+        working-directory: build-sanitize
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=0:exitcode=1
+        run: ctest -L gltf-conformance --output-on-failure

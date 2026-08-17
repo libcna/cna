@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "renderer": "DIRECTX11/DXVK",
+  "tasks": [
+    "GLTF-386",
+    "GLTF-390",
+    "GLTF-391"
+  ],
+  "captureForm": "One canonical .gltf source per distinct manifest asset; GLB equivalence remains byte-locked at L0-L5.",
+  "goldenComparison": {
+    "rgbTolerance": 0,
+    "alphaTolerance": 0,
+    "justification": "The initial DirectX11/DXVK campaign requires two independent production-viewer processes to produce byte-identical PNG files before any renderer-owned golden is accepted. The renderer has its own golden set; no EasyGL, Vulkan or SOFTWARE image or tolerance is reused."
+  },
+  "resolvedDivergences": [
+    {
+      "id": "directx11-untextured-base-color",
+      "classification": "renderer-owned",
+      "ownerTask": "GLTF-386",
+      "asset": "gltf-external-bin",
+      "symptom": "An absent optional baseColorTexture sampled an unbound D3D11 SRV as transparent black, making factor-only PBR geometry invisible in transparent reference captures.",
+      "resolution": "The DirectX11 PBR binding now supplies the semantic opaque-white fallback for an absent base-colour map, guarded by both the cross-renderer source policy and a real DXVK pixel test.",
+      "fixedByCommit": "efc647f6b"
+    },
+    {
+      "id": "directx11-untextured-skinned-base-color",
+      "classification": "renderer-owned",
+      "ownerTask": "GLTF-386",
+      "asset": "skin-unlit",
+      "symptom": "SkinnedEffect intentionally samples its texture even when none is assigned, and an unbound D3D11 SRV returned transparent black, erasing an otherwise valid untextured KHR_materials_unlit skin.",
+      "resolution": "The DirectX11 plain-skinned binding now substitutes the semantic opaque-white texture used by Vulkan, EasyGL and OpenGL, guarded by a source-policy regression and a real DXVK production-viewer capture that matches EasyGL byte-for-byte.",
+      "fixedByCommit": "479ece7ee"
+    }
+  ],
+  "overrides": {
+    "gltf-required-extension-unsupported": {
+      "disposition": "reject",
+      "errorContains": "lists 'KHR_materials_clearcoat' in extensionsRequired",
+      "reason": "The asset explicitly requires an unsupported extension and must not be approximated."
+    },
+    "mode-triangle-strip-morph": {
+      "viewerArguments": [
+        "--no-cull"
+      ],
+      "reason": "The generic positive-octant camera sees the back of this deliberately non-planar morphed strip. Disabling culling makes its pixel path observable; dedicated culling fixtures retain culling coverage."
+    },
+    "xf-rot-x90": {
+      "viewerArguments": [
+        "--no-cull"
+      ],
+      "reason": "The generic positive-octant camera sees the back of the +X-rotated one-sided triangle. Disabling culling makes the transformed geometry observable without changing the fixture."
+    },
+    "skin-73-joints": {
+      "disposition": "reject",
+      "errorContains": "has 73 joints, but the GPU bone palette holds 72",
+      "reason": "CNA refuses a well-formed skin that exceeds its documented GPU palette instead of truncating it."
+    },
+    "skin-unnormalized": {
+      "allowEmptyForeground": true,
+      "reason": "The fixture deliberately leaves one zero-weight vertex unweighted. Its zero skin matrix collapses that corner onto another corner, so the single triangle is degenerate and the clear framebuffer is the expected pixel result."
+    },
+    "bad-accessor-out-of-bounds": {
+      "disposition": "reject",
+      "errorContains": "reads 36 bytes from a bufferView of 24 bytes",
+      "reason": "The loader's pre-validation checked arithmetic refuses an out-of-bounds accessor."
+    },
+    "bad-accessor-count-overflow": {
+      "disposition": "reject",
+      "errorContains": "declares a byte span that overflows",
+      "reason": "The loader refuses overflowing accessor span arithmetic before reading data."
+    },
+    "bad-index-out-of-range": {
+      "disposition": "reject",
+      "errorContains": "cgltf_validate code 1",
+      "reason": "The full production load rejects this malformed index document during structural validation; the lower-layer extractor diagnostic is tested separately."
+    },
+    "accessor-count-mismatch": {
+      "disposition": "reject",
+      "errorContains": "cgltf_validate code 4",
+      "reason": "The full production load rejects mismatched attribute counts during structural validation; the extractor's defence-in-depth is tested separately."
+    },
+    "skin-joint-index-out-of-range": {
+      "disposition": "reject",
+      "errorContains": "weighted 0.400000 to joint 5",
+      "reason": "A weighted joint index outside the skin is refused instead of silently rebound."
+    },
+    "bad-animation-input-order": {
+      "disposition": "reject",
+      "errorContains": "is not ascending",
+      "reason": "A decreasing animation time domain has no defensible playback interpretation."
+    }
+  }
+}

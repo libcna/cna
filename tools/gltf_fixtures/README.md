@@ -14,6 +14,8 @@ Run from the repository root:
 PYTHONPATH=tools python3 -m gltf_fixtures --out tests/assets/gltf     # regenerate in place
 PYTHONPATH=tools python3 -m gltf_fixtures --check tests/assets/gltf   # verify byte-identical
 PYTHONPATH=tools python3 -m gltf_fixtures --list                      # print the manifest, no writes
+PYTHONPATH=tools python3 -m gltf_fixtures --reference-pins            # validate/print external pins
+PYTHONPATH=tools python3 -m gltf_fixtures --validator-pin             # validate/print CI tool pin
 ```
 
 or from `tools/` without the `PYTHONPATH` prefix (`cd tools && python3 -m gltf_fixtures --list`).
@@ -21,21 +23,85 @@ or from `tools/` without the `PYTHONPATH` prefix (`cd tools && python3 -m gltf_f
 Python 3.11+, standard library only. No third-party dependency, and none may be added: the corpus
 must be regenerable in any environment that can run the build.
 
+## Khronos Validator gate
+
+`validator-pin.json` pins the official native Linux release `2.0.0-dev.3.10` and the SHA-256 of
+its archive. Downloading is a deliberate operation; the executable is not committed and CNA never
+loads it at runtime:
+
+```bash
+PYTHONPATH=tools python3 -m gltf_fixtures --fetch-validator /tmp/cna-gltf-validator
+PYTHONPATH=tools python3 -m gltf_fixtures --check tests/assets/gltf \
+  --validator /tmp/cna-gltf-validator/gltf_validator
+# Equivalent repository workflow:
+GLTF_VALIDATOR=/tmp/cna-gltf-validator/gltf_validator \
+  scripts/regenerate-gltf-goldens.sh --check
+```
+
+Both the `.gltf` and `.glb` form of all 141 assets are checked. Ordinary fixtures must produce no
+Validator errors. An intentionally invalid or compatibility fixture must declare the exact set of
+expected Validator error codes and a reason in its generated expectation; being named `bad-*` is
+not itself a bypass. An undeclared error, an expected code that disappears, or one extra code fails
+the gate. The pinned audit currently covers 262 valid and 20 expected-invalid containers; warnings
+are counted and reported but are not errors.
+
 ## Output
 
-Into `tests/assets/gltf/`, three files per fixture plus one corpus manifest:
+Into `tests/assets/gltf/`, three core files per fixture, any generated external-resource/L5
+sidecars, plus one corpus manifest:
 
 | File | Contents |
 |---|---|
-| `<id>.gltf` | the asset, JSON with a base64 `data:` URI buffer — text-first and diffable |
+| `<id>.gltf` | the text-first asset; buffers/images are base64 `data:` URIs by default, with generated external sidecars only for the named source-form fixtures |
 | `<id>.glb` | the same asset in the binary container, from the same source of truth |
 | `<id>.expected.json` | the inventory record and the spec-derived expectations for every layer |
+| `<id>.*.bin` / `<id>.*.png` | an external buffer/image or an L5 golden, generated from the fixture's authored bytes |
 | `manifest.json` | the corpus inventory: distinct-asset count, per-group counts, defect ledger, and a SHA-256 for every emitted file |
 
 The corpus is **committed**, not generated at test time. Fixtures are review artefacts, and
 `CnaTests` must not need a Python interpreter. `GltfFixtureCorpusTests.cpp` re-verifies every
 committed file against the digest recorded in `manifest.json`, so a hand-edit or a stale file fails
 the build rather than quietly changing what the suite means.
+
+## Optional Khronos references
+
+`reference-pins.json` is the machine-readable source of truth for `GLTF-013`, `GLTF-014`, and
+`GLTF-016`. These are fetch-on-demand development references, never generated-corpus inputs, CI
+dependencies, or CNA runtime dependencies. In particular, no Khronos model is committed here.
+
+`GLTF-405` executes that policy with a sparse, detached checkout of only explicitly named sample
+models. The destination must be new, and the script verifies the exact `GLTF-013` commit before
+checking anything out:
+
+```bash
+scripts/fetch-gltf-sample-assets.sh /tmp/cna-gltf-samples Box ChronographWatch
+scripts/fetch-gltf-sample-assets.sh --print-pin
+```
+
+This fetch is not a licence review. Before copying or redistributing a model, inspect its own
+`Models/<name>/README.md`, any `LICENSE.md`, and `asset.copyright`, then complete
+`THIRD_PARTY_NOTICES.md`'s `GLTF-018` procedure. The script is intentionally absent from CMake and
+CI.
+
+The one repeatable real-world acceptance is the historical `ChronographWatch` reproducer. After
+fetching it as above, set `CNA_GLTF_CHRONOGRAPH_WATCH` to its `glTF-Binary/ChronographWatch.glb` and
+run `CnaTests --gtest_filter='GltfRealWorldAcceptanceL4.*'`. The test locks its SHA-256 before
+checking transforms, materials, variants, transmission and animation; without the variable it
+skips rather than pretending the external asset ran.
+
+The pinned Asset Generator revision has root manifests with 28 groups and 219 permutations. An
+explicitly downloaded checkout can be projected onto CNA's canonical fixture identities with:
+
+```bash
+PYTHONPATH=tools python3 -m gltf_fixtures --asset-generator-map \
+  /path/to/glTF-Asset-Generator/Output/Positive/Manifest.json \
+  /path/to/glTF-Asset-Generator/Output/Negative/Manifest.json
+```
+
+The command reads every upstream `fileName`, rejects a missing/new group or changed group id, and
+emits all 219 records with their closest CNA fixtures. `relationship: "overlap"` means semantic
+overlap, not byte equivalence or a claim that CNA has run that third-party file. A `gap` is kept
+visible rather than mapped approximately. The command performs no network access.
 
 ## Rules
 
@@ -56,8 +122,10 @@ adding a fixture over widening one.
 
 **One canonical identity.** An asset is defined in exactly one `defs/` module, and that module's
 name is its owning group. Other groups may *reference* it (`referencingGroups`), which never
-re-counts it. The distinct-asset total is the sum of the owning-group counts, and `corpus.py`
-enforces both properties at generation time.
+re-counts it. The current distinct-asset total is the sum of the owning-group counts. The final
+GLTF-399 IDs live in `TARGET_ASSET_IDS_BY_GROUP`; `corpus.py` rejects an unplanned generated ID and
+emits every target ID not built yet under `missingAssets`, so current + missing equals the target
+per group and globally.
 
 ## Layout
 
@@ -67,6 +135,8 @@ tools/gltf_fixtures/
   __main__.py     the --out / --check / --list CLI
   builder.py      GltfBuilder: asset construction, GLB packing, and the L2 expectation records
   manifest.py     fixture/defect records, the L4 world-transform oracle, deterministic JSON
+  validator.py    pinned external Validator download, version check, and exact-error gate
+  validator-pin.json  immutable official Linux release metadata and archive digest
   corpus.py       the registry: which fixtures exist, in which owning group
   defs/           one module per owning group; a fixture lives in exactly one of them
 ```
@@ -80,6 +150,50 @@ tools/gltf_fixtures/
 3. Give it a canonical id from `plan_gltf.md` §24.2. Do not invent a name for an asset the plan
    already names.
 4. Regenerate and commit the generator change together with its output.
+
+For a named external-source fixture, attach a `GltfEmission` to the `Fixture`. External URI
+spellings are percent-decoded and checked one-for-one against its flat `sidecars` map; generation
+fails on a missing, unreferenced, nested or colliding sidecar instead of committing a broken asset.
+
+## Regenerating the L5 goldens
+
+`plan_gltf.md` **GLTF-149**/**GLTF-167**. The `<id>.vb.bin` / `<id>.ib.bin` sidecars are the
+byte-exact vertex and index buffers CNA must produce, packed by `l5.py` from the manifest's
+independent L3 values plus its explicit `importPolicy` transformations. For example, a strip's
+indices are expanded and a non-topological skin's authored `JOINTS_0` indices are replaced by the
+stated `paletteIndex` values; neither transformation is guessed from CNA. They are regenerated by
+the ordinary command — there is no separate golden step:
+
+```bash
+PYTHONPATH=tools python3 -m gltf_fixtures --out tests/assets/gltf
+```
+
+Two properties make that diff reviewable rather than a wall of binary:
+
+* **The generator never reads CNA.** `l5.py` packs from the manifest's own L3 streams and named
+  import-policy results, so a golden can disagree with the importer — which is the entire point of
+  having one. A golden regenerated because "the test failed" is a golden that proves nothing.
+* **A mismatch is reported by field, not by offset.** `GltfBufferOracleEXT`'s `BufferDifference`
+  maps the first differing byte through the canonical stride table and names the attribute
+  (`"Normal, vertex 7, component 1"`), so a one-byte change points at what moved.
+
+Which strides the corpus covers is itself checked: `select_stride` mirrors `ExtractMesh`'s own
+selection rule and **raises** rather than guessing when it meets a shape it does not model, so a
+new fixture that would need an unmodelled rule fails generation instead of emitting a golden nobody
+verified.
+
+All seven strides the glTF importer can emit have goldens: 20 (`tex-dual-texture-stride`), 24,
+32 (`mat-unlit`), 48, 52 (`skin-unlit`), 56 (`skin-vertex-color`) and 68.
+
+A stride-20 golden needed a *textured* fixture, and the corpus had no image support at all until
+`png.py` (`GLTF-190`) — a PNG encoder written against `zlib` and `struct`, because the generator
+may not take a dependency. Stride 20 is the only stride a texture combination decides: a non-PBR
+material carrying both a base-colour and an occlusion map selects `DualTextureEffect`'s layout,
+and every other map is sampled by whatever effect the material model already chose.
+
+When a golden legitimately changes — a fixed packing defect, a deliberate layout change — the diff
+to review is the `.expected.json` block, which states the stride, the field offsets and the vertex
+count in text. The `.bin` files follow from it.
 
 ## Recording a defect
 

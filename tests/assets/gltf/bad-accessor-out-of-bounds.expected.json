@@ -1,0 +1,131 @@
+{
+  "id": "bad-accessor-out-of-bounds",
+  "description": "A POSITION accessor whose declared element count reaches 12 bytes past the end of its bufferView. Decoding it would read outside the file's own buffer, so it must be rejected at validation rather than imported with whatever happened to be in adjacent memory.",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "accessors",
+    "data-alignment"
+  ],
+  "inventory": {
+    "id": "bad-accessor-out-of-bounds",
+    "owningGroup": "robustness",
+    "referencingGroups": [],
+    "validatedLayers": [
+      "L1"
+    ],
+    "features": [
+      "accessor beyond bufferView",
+      "structural validation",
+      "import rejection"
+    ],
+    "auditFixture": null,
+    "validatorExpectedErrorCodes": [
+      "ACCESSOR_TOO_LONG"
+    ],
+    "validatorExceptionReason": "The accessor-overruns-bufferView error is this bad-* fixture's subject."
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 1,
+    "meshCount": 1,
+    "materialCount": 0,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
+    "skinCount": 0,
+    "animationCount": 0,
+    "accessorCount": 2,
+    "bufferViewCount": 2,
+    "bufferCount": 1,
+    "bufferByteLength": 42,
+    "extensionsUsed": [],
+    "extensionsRequired": [],
+    "punctualLightCount": 0
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 0,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      {
+        "index": 1,
+        "usage": "indices",
+        "type": "SCALAR",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 3,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 36,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          2
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": []
+  },
+  "l4": {},
+  "l5": {
+    "supported": false,
+    "reason": "The asset is rejected at validation, so no buffers are produced.",
+    "blockedBy": [
+      "GLTF-021"
+    ],
+    "parts": []
+  },
+  "rejection": {
+    "stage": "validation",
+    "task": "GLTF-021",
+    "errorContains": [
+      "bad-accessor-out-of-bounds",
+      "reads 36 bytes",
+      "bufferView of 24 bytes"
+    ],
+    "note": "Refused by CNA's own span check rather than by cgltf_validate, and the difference is an ordering decision rather than a coincidence: GLTF-040's fuzz found that cgltf_validate itself walks an index accessor's BYTES, so the metadata-only checks (\u00a73.6.2.4 alignment, then the span arithmetic) were moved in front of it. cgltf catches this file too; CNA simply gets there first, and says how many bytes were asked for and how many exist -- which 'a range extends past the data backing it' does not."
+  },
+  "defects": []
+}

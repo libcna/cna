@@ -818,15 +818,31 @@ namespace CNA::Internal::Renderers::WebGPU
             for (int i = 25; i < 32; ++i) out[i] = 0.0f;
         }
 
-        // pbr3d.wgsl's third (small) uniform buffer: PbrEffect's MetallicFactor/RoughnessFactor,
+        // pbr3d.wgsl's third (small) uniform buffer: PBR factors/map scales plus glTF MASK coverage,
         // the only per-draw PBR-specific scalars not already covered by FillExtUniforms()'s
         // diffuseColor/ambientColor or FillLitLightUniforms()'s emissiveColor/world/eyePos.
-        void FillPbrFactors(std::array<float, 4>& out, const GpuDrawParams& p)
+        void FillPbrFactors(std::array<float, 56>& out, const GpuDrawParams& p)
         {
             out[0] = p.pbrMetallicFactor;
             out[1] = p.pbrRoughnessFactor;
-            out[2] = 0.0f;
-            out[3] = 0.0f;
+            out[2] = p.pbrNormalScale;
+            out[3] = p.pbrOcclusionStrength;
+            out[4] = p.alphaTest[0];
+            out[5] = p.alphaTest[1];
+            out[6] = p.alphaTest[2];
+            out[7] = p.alphaTest[3];
+            out[8] = p.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f;
+            out[9] = p.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f;
+            out[10] = p.pbrEncodeOutputToSrgb ? 1.0f : 0.0f;
+            out[11] = 0.0f;
+            out[12] = p.pbrDielectricF0[0];
+            out[13] = p.pbrDielectricF0[1];
+            out[14] = p.pbrDielectricF0[2];
+            out[15] = p.pbrDielectricF90;
+            for (int row = 0; row < 10; ++row)
+                for (int component = 0; component < 4; ++component)
+                    out[16 + row * 4 + component] =
+                        p.pbrTextureTransformRows[row][component];
         }
 
         // New bone-palette uniform buffer for the skinned shaders (skinned3d.wgsl/skinned_pbr3d.wgsl):
@@ -7302,14 +7318,15 @@ struct VSOut {
         RequireSupportedFillModeEXT(primitive, "ordinary-nonindexed");
         RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
-        // Matches VulkanRenderer's own dispatch precedence: alpha test wins over
-        // dual-texture/env-map/skinned/lit-textured; dual-texture wins over env-map/skinned/
+        // PBR owns its glTF MASK coverage; standalone AlphaTestEffect wins only for non-PBR
+        // draws. Dual-texture then wins over env-map/skinned/
         // lit-textured (an AlphaTestEffect or DualTextureEffect draw on a
         // VertexPositionNormalTexture buffer never reaches lit_textured3d -- the normal is simply
         // unread in both cases); env-map wins over lit-textured for the same stride-32 buffer
         // shape (EnvironmentMapEffect's own reflection shader takes over the normal/UV attributes
         // that lit_textured3d.wgsl would otherwise consume for Blinn-Phong lighting).
-        const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
+        const bool needsAlphaTest = !params.pbr &&
+                                    (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
         const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
         const bool needsUnsupportedEffect = !needsAlphaTest && !needsDualTexture && !needsEnvMap &&
@@ -7396,7 +7413,8 @@ struct VSOut {
         RequireSupportedFillModeEXT(primitive, "ordinary-indexed");
         RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
-        const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
+        const bool needsAlphaTest = !params.pbr &&
+                                    (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
         const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
         const bool needsUnsupportedEffect = !needsAlphaTest && !needsDualTexture && !needsEnvMap &&
@@ -8464,6 +8482,10 @@ struct LitLightParams {
 
 struct PbrFactors {
     metallicRoughness: vec4f,
+    alphaTest: vec4f,
+    srgbFlags: vec4f,
+    dielectricFresnel: vec4f,
+    textureTransformRows: array<vec4f, 10>,
 };
 @group(0) @binding(2) var<uniform> pf: PbrFactors;
 
@@ -8488,6 +8510,9 @@ struct VertexOutput {
     @location(3) bitangentSign: f32,
     @location(4) worldPos: vec3f,
 };
+fn directionHandedness(m: mat3x3f) -> f32 {
+    return select(1.0, -1.0, dot(m[0], cross(m[1], m[2])) < 0.0);
+}
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = u.mvp * vec4f(input.position, 1.0);
@@ -8498,12 +8523,24 @@ struct VertexOutput {
     // matching EnsurePbrProgram()'s own documented simplification.
     let worldMat3 = mat3x3f(lp.world[0].xyz, lp.world[1].xyz, lp.world[2].xyz);
     output.worldTangent = worldMat3 * input.tangent.xyz;
-    output.bitangentSign = input.tangent.w;
+    output.bitangentSign = input.tangent.w * directionHandedness(worldMat3);
     output.worldPos = (lp.world * vec4f(input.position, 1.0)).xyz;
     return output;
 }
 
-fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: vec3f, roughness: f32, metallic: f32) -> vec3f {
+fn srgbToLinear(c: vec3f) -> vec3f {
+    let lo = c / 12.92;
+    let hi = pow((c + vec3f(0.055)) / 1.055, vec3f(2.4));
+    return select(lo, hi, c >= vec3f(0.04045));
+}
+
+fn linearToSrgb(c: vec3f) -> vec3f {
+    let lo = c * 12.92;
+    let hi = 1.055 * pow(max(c, vec3f(0.0)), vec3f(1.0 / 2.4)) - vec3f(0.055);
+    return select(lo, hi, c >= vec3f(0.0031308));
+}
+
+fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: vec3f, f90: vec3f, roughness: f32, metallic: f32) -> vec3f {
     let h = normalize(v + l);
     let ndotl = max(dot(n, l), 0.0);
     let ndotv = max(dot(n, v), 1e-4);
@@ -8515,31 +8552,49 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     var k = roughness + 1.0;
     k = k * k / 8.0;
     let g = (ndotv / (ndotv * (1.0 - k) + k)) * (ndotl / (ndotl * (1.0 - k) + k));
-    let f = f0 + (vec3f(1.0) - f0) * pow(clamp(1.0 - vdoth, 0.0, 1.0), 5.0);
+    let f = f0 + (f90 - f0) * pow(clamp(1.0 - vdoth, 0.0, 1.0), 5.0);
     let specular = (d * g * f) / max(4.0 * ndotv * ndotl, 1e-4);
     let diffuseColor = albedo * (1.0 - metallic);
     let kd = vec3f(1.0) - f;
     return (kd * diffuseColor / 3.14159265 + specular) * lightColor * ndotl;
 }
 
+fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
+    let value = vec3f(uv, 1.0);
+    return vec2f(dot(value, pf.textureTransformRows[slot * 2u].xyz),
+                 dot(value, pf.textureTransformRows[slot * 2u + 1u].xyz));
+}
+
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    let baseColorSample = textureSample(baseColorTex, texSampler, input.uv);
-    let albedo = baseColorSample.rgb * u.diffuseColor.rgb;
+    let baseColorSample = textureSample(baseColorTex, texSampler, pbrTransformUv(input.uv, 0u));
+    let baseColor = select(baseColorSample.rgb, srgbToLinear(baseColorSample.rgb), pf.srgbFlags.x > 0.5);
+    let albedo = baseColor * u.diffuseColor.rgb;
     let alpha = baseColorSample.a * u.diffuseColor.a;
+    let useTolerance = pf.alphaTest.y > 0.0;
+    let lessTest = alpha < pf.alphaTest.x;
+    let toleranceTest = abs(alpha - pf.alphaTest.x) < pf.alphaTest.y;
+    let passesAlphaTest = select(lessTest, toleranceTest, useTolerance);
+    let alphaWeight = select(pf.alphaTest.w, pf.alphaTest.z, passesAlphaTest);
+    if (alphaWeight < 0.0) {
+        discard;
+    }
 
     let n0 = normalize(input.worldNormal);
     let t0 = normalize(input.worldTangent - n0 * dot(n0, input.worldTangent));
     let b0 = cross(n0, t0) * input.bitangentSign;
     let tbn = mat3x3f(t0, b0, n0);
-    let sampledNormal = textureSample(normalTex, texSampler, input.uv).rgb * 2.0 - 1.0;
+    var sampledNormal = textureSample(normalTex, texSampler, pbrTransformUv(input.uv, 1u)).rgb * 2.0 - 1.0;
+    sampledNormal.x *= pf.metallicRoughness.z;
+    sampledNormal.y *= pf.metallicRoughness.z;
     let finalNormal = normalize(tbn * sampledNormal);
 
-    let mr = textureSample(metallicRoughnessTex, texSampler, input.uv);
+    let mr = textureSample(metallicRoughnessTex, texSampler, pbrTransformUv(input.uv, 2u));
     let roughness = clamp(mr.g * pf.metallicRoughness.y, 0.045, 1.0);
     let metallic = clamp(mr.b * pf.metallicRoughness.x, 0.0, 1.0);
 
     let eye = normalize(lp.eyePos.xyz - input.worldPos);
-    let f0 = mix(vec3f(0.04), albedo, metallic);
+    let f0 = mix(pf.dielectricFresnel.xyz, albedo, metallic);
+    let f90 = mix(vec3f(pf.dielectricFresnel.w), vec3f(1.0), metallic);
 
     // Same disabled-light NaN guard as lit_textured3d.wgsl: a disabled DirectionalLight forwards
     // Direction=(0,0,0) (only DiffuseColor is zeroed), and normalize() on a true zero vector is
@@ -8552,15 +8607,20 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     let l2 = select(vec3f(0.0), normalize(-lp.light2Dir.xyz), dir2sq > 0.0);
 
     var lo = vec3f(0.0);
-    lo += pbrLight(finalNormal, eye, l0, u.light0DiffuseVertexColor.xyz, albedo, f0, roughness, metallic);
-    lo += pbrLight(finalNormal, eye, l1, lp.light1Diffuse.xyz, albedo, f0, roughness, metallic);
-    lo += pbrLight(finalNormal, eye, l2, lp.light2Diffuse.xyz, albedo, f0, roughness, metallic);
+    lo += pbrLight(finalNormal, eye, l0, u.light0DiffuseVertexColor.xyz, albedo, f0, f90, roughness, metallic);
+    lo += pbrLight(finalNormal, eye, l1, lp.light1Diffuse.xyz, albedo, f0, f90, roughness, metallic);
+    lo += pbrLight(finalNormal, eye, l2, lp.light2Diffuse.xyz, albedo, f0, f90, roughness, metallic);
 
-    let occlusion = textureSample(occlusionTex, texSampler, input.uv).r;
+    let occlusionSample = textureSample(occlusionTex, texSampler, pbrTransformUv(input.uv, 4u)).r;
+    let occlusion = 1.0 + pf.metallicRoughness.w * (occlusionSample - 1.0);
     let ambient = u.ambientLighting.xyz * albedo * occlusion;
-    let emissive = lp.emissiveColor.xyz * textureSample(emissiveTex, texSampler, input.uv).rgb;
+    let emissiveSample = textureSample(emissiveTex, texSampler, pbrTransformUv(input.uv, 3u)).rgb;
+    let emissiveLinear = select(emissiveSample, srgbToLinear(emissiveSample), pf.srgbFlags.y > 0.5);
+    let emissive = lp.emissiveColor.xyz * emissiveLinear;
 
-    return vec4f(ambient + lo + emissive, alpha);
+    let linearRgb = ambient + lo + emissive;
+    let outputRgb = select(linearRgb, linearToSrgb(linearRgb), pf.srgbFlags.z > 0.5);
+    return vec4f(outputRgb, alpha);
 }
 )WGSL";
 
@@ -8586,7 +8646,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         uboEntries[2].binding = 2;
         uboEntries[2].visibility = WGPUShaderStage_Fragment;
         uboEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
-        uboEntries[2].buffer.minBindingSize = 16;
+        // Four material vec4s followed by ten affine texture-transform rows.
+        uboEntries[2].buffer.minBindingSize = 56 * sizeof(float);
         WGPUBindGroupLayoutDescriptor uboLayoutDescriptor{};
         uboLayoutDescriptor.label = StringView("CNA WebGPU Pbr3D BindGroupLayout0");
         uboLayoutDescriptor.entryCount = uboEntries.size();
@@ -9062,6 +9123,21 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     return skinMat;
 }
 
+fn skinNormal(m: mat3x3f, n: vec3f) -> vec3f {
+    let c0 = m[0];
+    let c1 = m[1];
+    let c2 = m[2];
+    let co0 = cross(c1, c2);
+    let co1 = cross(c2, c0);
+    let co2 = cross(c0, c1);
+    let det = dot(c0, co0);
+    let transformed = mat3x3f(co0, co1, co2) * n;
+    if (abs(det) > 1e-6) {
+        return transformed * select(-1.0, 1.0, det >= 0.0);
+    }
+    return m * n;
+}
+
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     let skinMat = skinMatrix(input.blendWeight, input.blendIndices);
@@ -9075,7 +9151,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     // Variant A), so any rotated or non-uniformly-scaled skinned model was lit as if World were
     // identity. The fragment stage re-normalizes worldNormal.
     let normalMatrix = mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz);
-    output.worldNormal = normalize(normalMatrix * (skinMat3 * input.normal));
+    output.worldNormal = normalize(normalMatrix * skinNormal(skinMat3, input.normal));
     output.worldPos = (lp.world * skinnedPos).xyz;
     return output;
 }
@@ -9896,6 +9972,10 @@ struct LitLightParams {
 
 struct PbrFactors {
     metallicRoughness: vec4f,
+    alphaTest: vec4f,
+    srgbFlags: vec4f,
+    dielectricFresnel: vec4f,
+    textureTransformRows: array<vec4f, 10>,
 };
 @group(0) @binding(2) var<uniform> pf: PbrFactors;
 
@@ -9941,6 +10021,25 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     return skinMat;
 }
 
+fn pbrSkinNormal(m: mat3x3f, n: vec3f) -> vec3f {
+    let c0 = m[0];
+    let c1 = m[1];
+    let c2 = m[2];
+    let co0 = cross(c1, c2);
+    let co1 = cross(c2, c0);
+    let co2 = cross(c0, c1);
+    let det = dot(c0, co0);
+    let transformed = mat3x3f(co0, co1, co2) * n;
+    if (abs(det) > 1e-6) {
+        return transformed * select(-1.0, 1.0, det >= 0.0);
+    }
+    return m * n;
+}
+
+fn pbrDirectionHandedness(m: mat3x3f) -> f32 {
+    return select(1.0, -1.0, dot(m[0], cross(m[1], m[2])) < 0.0);
+}
+
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     let skinMat = skinMatrix(input.blendWeight, input.blendIndices);
@@ -9955,15 +10054,28 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     // transpose. The tangent stays on raw worldMat3: tangents transform as directions, not as
     // normals (glTF convention, unchanged).
     let normalMatrix = mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz);
-    output.worldNormal = normalize(normalMatrix * (skinMat3 * input.normal));
+    output.worldNormal = normalize(normalMatrix * pbrSkinNormal(skinMat3, input.normal));
     output.worldTangent = worldMat3 * (skinMat3 * input.tangent.xyz);
-    output.bitangentSign = input.tangent.w;
+    output.bitangentSign = input.tangent.w * pbrDirectionHandedness(worldMat3)
+                                           * pbrDirectionHandedness(skinMat3);
     output.worldPos = (lp.world * skinnedPos).xyz;
     output.uv = input.uv;
     return output;
 }
 
-fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: vec3f, roughness: f32, metallic: f32) -> vec3f {
+fn srgbToLinear(c: vec3f) -> vec3f {
+    let lo = c / 12.92;
+    let hi = pow((c + vec3f(0.055)) / 1.055, vec3f(2.4));
+    return select(lo, hi, c >= vec3f(0.04045));
+}
+
+fn linearToSrgb(c: vec3f) -> vec3f {
+    let lo = c * 12.92;
+    let hi = 1.055 * pow(max(c, vec3f(0.0)), vec3f(1.0 / 2.4)) - vec3f(0.055);
+    return select(lo, hi, c >= vec3f(0.0031308));
+}
+
+fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: vec3f, f90: vec3f, roughness: f32, metallic: f32) -> vec3f {
     let h = normalize(v + l);
     let ndotl = max(dot(n, l), 0.0);
     let ndotv = max(dot(n, v), 1e-4);
@@ -9975,31 +10087,49 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     var k = roughness + 1.0;
     k = k * k / 8.0;
     let g = (ndotv / (ndotv * (1.0 - k) + k)) * (ndotl / (ndotl * (1.0 - k) + k));
-    let f = f0 + (vec3f(1.0) - f0) * pow(clamp(1.0 - vdoth, 0.0, 1.0), 5.0);
+    let f = f0 + (f90 - f0) * pow(clamp(1.0 - vdoth, 0.0, 1.0), 5.0);
     let specular = (d * g * f) / max(4.0 * ndotv * ndotl, 1e-4);
     let diffuseColor = albedo * (1.0 - metallic);
     let kd = vec3f(1.0) - f;
     return (kd * diffuseColor / 3.14159265 + specular) * lightColor * ndotl;
 }
 
+fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
+    let value = vec3f(uv, 1.0);
+    return vec2f(dot(value, pf.textureTransformRows[slot * 2u].xyz),
+                 dot(value, pf.textureTransformRows[slot * 2u + 1u].xyz));
+}
+
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    let baseColorSample = textureSample(baseColorTex, texSampler, input.uv);
-    let albedo = baseColorSample.rgb * u.diffuseColor.rgb;
+    let baseColorSample = textureSample(baseColorTex, texSampler, pbrTransformUv(input.uv, 0u));
+    let baseColor = select(baseColorSample.rgb, srgbToLinear(baseColorSample.rgb), pf.srgbFlags.x > 0.5);
+    let albedo = baseColor * u.diffuseColor.rgb;
     let alpha = baseColorSample.a * u.diffuseColor.a;
+    let useTolerance = pf.alphaTest.y > 0.0;
+    let lessTest = alpha < pf.alphaTest.x;
+    let toleranceTest = abs(alpha - pf.alphaTest.x) < pf.alphaTest.y;
+    let passesAlphaTest = select(lessTest, toleranceTest, useTolerance);
+    let alphaWeight = select(pf.alphaTest.w, pf.alphaTest.z, passesAlphaTest);
+    if (alphaWeight < 0.0) {
+        discard;
+    }
 
     let n0 = normalize(input.worldNormal);
     let t0 = normalize(input.worldTangent - n0 * dot(n0, input.worldTangent));
     let b0 = cross(n0, t0) * input.bitangentSign;
     let tbn = mat3x3f(t0, b0, n0);
-    let sampledNormal = textureSample(normalTex, texSampler, input.uv).rgb * 2.0 - 1.0;
+    var sampledNormal = textureSample(normalTex, texSampler, pbrTransformUv(input.uv, 1u)).rgb * 2.0 - 1.0;
+    sampledNormal.x *= pf.metallicRoughness.z;
+    sampledNormal.y *= pf.metallicRoughness.z;
     let finalNormal = normalize(tbn * sampledNormal);
 
-    let mr = textureSample(metallicRoughnessTex, texSampler, input.uv);
+    let mr = textureSample(metallicRoughnessTex, texSampler, pbrTransformUv(input.uv, 2u));
     let roughness = clamp(mr.g * pf.metallicRoughness.y, 0.045, 1.0);
     let metallic = clamp(mr.b * pf.metallicRoughness.x, 0.0, 1.0);
 
     let eye = normalize(lp.eyePos.xyz - input.worldPos);
-    let f0 = mix(vec3f(0.04), albedo, metallic);
+    let f0 = mix(pf.dielectricFresnel.xyz, albedo, metallic);
+    let f90 = mix(vec3f(pf.dielectricFresnel.w), vec3f(1.0), metallic);
 
     let dir0sq = dot(u.light0DirTexture.xyz, u.light0DirTexture.xyz);
     let dir1sq = dot(lp.light1Dir.xyz, lp.light1Dir.xyz);
@@ -10009,15 +10139,20 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     let l2 = select(vec3f(0.0), normalize(-lp.light2Dir.xyz), dir2sq > 0.0);
 
     var lo = vec3f(0.0);
-    lo += pbrLight(finalNormal, eye, l0, u.light0DiffuseVertexColor.xyz, albedo, f0, roughness, metallic);
-    lo += pbrLight(finalNormal, eye, l1, lp.light1Diffuse.xyz, albedo, f0, roughness, metallic);
-    lo += pbrLight(finalNormal, eye, l2, lp.light2Diffuse.xyz, albedo, f0, roughness, metallic);
+    lo += pbrLight(finalNormal, eye, l0, u.light0DiffuseVertexColor.xyz, albedo, f0, f90, roughness, metallic);
+    lo += pbrLight(finalNormal, eye, l1, lp.light1Diffuse.xyz, albedo, f0, f90, roughness, metallic);
+    lo += pbrLight(finalNormal, eye, l2, lp.light2Diffuse.xyz, albedo, f0, f90, roughness, metallic);
 
-    let occlusion = textureSample(occlusionTex, texSampler, input.uv).r;
+    let occlusionSample = textureSample(occlusionTex, texSampler, pbrTransformUv(input.uv, 4u)).r;
+    let occlusion = 1.0 + pf.metallicRoughness.w * (occlusionSample - 1.0);
     let ambient = u.ambientLighting.xyz * albedo * occlusion;
-    let emissive = lp.emissiveColor.xyz * textureSample(emissiveTex, texSampler, input.uv).rgb;
+    let emissiveSample = textureSample(emissiveTex, texSampler, pbrTransformUv(input.uv, 3u)).rgb;
+    let emissiveLinear = select(emissiveSample, srgbToLinear(emissiveSample), pf.srgbFlags.y > 0.5);
+    let emissive = lp.emissiveColor.xyz * emissiveLinear;
 
-    return vec4f(ambient + lo + emissive, alpha);
+    let linearRgb = ambient + lo + emissive;
+    let outputRgb = select(linearRgb, linearToSrgb(linearRgb), pf.srgbFlags.z > 0.5);
+    return vec4f(outputRgb, alpha);
 }
 )WGSL";
 
@@ -10043,7 +10178,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         uboEntries[2].binding = 2;
         uboEntries[2].visibility = WGPUShaderStage_Fragment;
         uboEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
-        uboEntries[2].buffer.minBindingSize = 16;
+        // Four material vec4s followed by ten affine texture-transform rows.
+        uboEntries[2].buffer.minBindingSize = 56 * sizeof(float);
         uboEntries[3].binding = 3;
         uboEntries[3].visibility = WGPUShaderStage_Vertex;
         uboEntries[3].buffer.type = WGPUBufferBindingType_Uniform;
@@ -10385,7 +10521,12 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
 
 namespace CNA::Internal::Renderers
 {
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace WebGPU { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> WebGPU::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<WebGPU::WebGPURenderer>(args);
     }

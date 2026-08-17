@@ -1111,6 +1111,28 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_SkinnedPbrEffect_Golden COMMAND cna_test_vulkan_skinnedpbreffect_golden
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_gltf.md GLTF-344/373: all seven PBR texture bindings, with deliberately distinct
+        # base/MR/emissive/occlusion/normal/specular-strength/specular-colour texels and both rigid
+        # and skinned draw paths. The shared source uses only public renderer-agnostic XNA/CNA APIs.
+        cna_vulkan_test(cna_test_vulkan_pbr_texture_slots
+                        ${CMAKE_SOURCE_DIR}/modules/graphics/examples/pbr_texture_slot_mapping_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Pbr_TextureSlots COMMAND cna_test_vulkan_pbr_texture_slots
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # GLTF-343/344: shader-ready KHR_materials_ior/specular Fresnel endpoints on the rigid
+        # and identity-skinned Vulkan PBR pipelines, including a grazing F90-only discriminator.
+        cna_vulkan_test(cna_test_vulkan_pbr_fresnel_factors
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Pbr_FresnelFactors COMMAND cna_test_vulkan_pbr_fresnel_factors
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # GLTF-213: exact mid-grey sRGB decode, linear factors/base+emissive addition, and final
+        # output encode on both the rigid and identity-skinned Vulkan PBR pipelines.
+        cna_vulkan_test(cna_test_vulkan_pbr_srgb_transfer
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Pbr_SrgbTransfer COMMAND cna_test_vulkan_pbr_srgb_transfer
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_vulkan_test(cna_test_vulkan_skinnedeffect_vertexcolor_reused
                         ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_vertexcolor_test.cpp)
         cna_register_renderer_test(NAME Vulkan_SkinnedEffect_VertexColor_Reused COMMAND cna_test_vulkan_skinnedeffect_vertexcolor_reused

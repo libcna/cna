@@ -6,6 +6,23 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# The native C ABI is intentionally opt-in while it is experimental. Enabling it must happen
+# before sharp-runtime and the CNA static modules are created: the exported shared C API links
+# those archives, so they all need position-independent code.
+option(CNA_BUILD_C_API "Build the experimental native CNA C API shared library" OFF)
+if(CNA_BUILD_C_API)
+    enable_language(C)
+    set(CMAKE_C_STANDARD 17)
+    set(CMAKE_C_STANDARD_REQUIRED ON)
+    # Strict, extension-free C is a requirement of CNA's OWN C sources, not of the vendored C
+    # this build also compiles. Every target in modules/c-api sets C_EXTENSIONS OFF explicitly,
+    # so the public C API and its consumers stay on plain C17 either way. Forcing the directory
+    # default off instead reaches third-party POSIX C (enet's unix.c, sharp-runtime's miniz),
+    # whose getaddrinfo/getnameinfo/fseeko declarations require the GNU feature-test defaults.
+    set(CMAKE_C_EXTENSIONS ON)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
 # Reuse compiler output across build directories when ccache is available.
 # This is intentionally configured before sharp-runtime is added so the cache
 # also covers that comparatively large dependency. Disable with
@@ -75,6 +92,11 @@ set_property(CACHE CNA_DIRECT2D_TEST_RUNTIME PROPERTY STRINGS WINE PROTON)
 # suite against a virtual display (Xvfb) instead of the real desktop.
 set(CNA_TEST_DISPLAY ":0" CACHE STRING "DISPLAY value used by GPU/window-creating ctest tests")
 
+# Apple platform resolution (macOS/iOS, plan_apple.md). Must run before the vendored SDL builds
+# below: those are separate cmake invocations that inherit nothing from this cache, so the
+# sysroot/architecture/deployment target this file settles has to exist before they are launched.
+include(cmake/ApplePlatform.cmake)
+
 include(cmake/ThirdPartySDL.cmake)
 cna_configure_vendored_sdl()
 
@@ -97,6 +119,15 @@ if(CNA_SANITIZE)
 endif()
 
 set(SHARP_RUNTIME_BUILD_TESTS OFF CACHE BOOL "Build sharp-runtime tests" FORCE)
+# Load CNA's component closure before adding the sibling. Without an explicit selection the
+# modular sharp-runtime defaults to `All`, which instantiates unrelated optional components such
+# as System.Diagnostics.Process. Besides wasting build time, those host-process APIs are not
+# available in an iOS application sandbox and currently do not compile against Apple's SDK.
+include(cmake/SharpRuntimeConsumption.cmake)
+if(NOT DEFINED SHARP_RUNTIME_COMPONENTS OR SHARP_RUNTIME_COMPONENTS STREQUAL "")
+    set(SHARP_RUNTIME_COMPONENTS "${CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS}" CACHE STRING
+        "Sharp Runtime components required by CNA")
+endif()
 # sharp-runtime is a SIBLING repository checkout, not a git submodule of this
 # repo (Task DEV-BUILD-001) -- `git submodule update --init` cannot fetch it.
 # It must be cloned next to this repo's own directory, so that
@@ -119,13 +150,24 @@ add_subdirectory("${CNA_SHARP_RUNTIME_ROOT}" SHARP_RUNTIME)
 
 # Detect which sharp-runtime shape this build consumes (monolithic archive vs modular
 # components) and provide cna_link_sharp_runtime() for the CNA module targets.
-include(cmake/SharpRuntimeConsumption.cmake)
 cna_detect_sharp_runtime_shape()
+
+# A large set of historical examples/tests still names the old umbrella target explicitly.
+# Recreate it over CNA's narrow component closure when consuming modular sharp-runtime; this
+# preserves source compatibility without asking sharp-runtime to instantiate its optional `All`.
+if(CNA_SHARP_RUNTIME_IS_MODULAR AND NOT TARGET SHARP_RUNTIME)
+    add_library(SHARP_RUNTIME INTERFACE)
+    cna_link_sharp_runtime(SHARP_RUNTIME INTERFACE)
+endif()
 
 #find_package(SDL3_ttf REQUIRED)
 
 include(cmake/RendererSelection.cmake)
 
+# plan_runtimerenderer.md design decision 3: emit the explicit table of renderer families
+# linked into this build. Must run after RendererSelection.cmake has resolved the identity.
+include(cmake/RendererRegistry.cmake)
+cna_generate_renderer_registry(CNA_RENDERER_REGISTRY_SOURCE ${_cna_renderer_identities})
 # Platform implementation selection (plan_platform.md PLAT-11). A separate axis from
 # CNA_GRAPHICS_RENDERER: the renderer decides how pixels are produced, the platform decides
 # where the window, events and input come from.
@@ -184,5 +226,17 @@ include(cmake/ToolGltfToCnj.cmake)
 
 include(cmake/UnitTests.cmake)
 
+# A real UIKit/SDL_main/Game final-link product for the iOS device and simulator CI legs.
+# Unlike the module archives or the command-line content tool, this target proves the application
+# entry point, native framework closure, selected renderer and generated bundle all link together.
+include(cmake/AppleSmoke.cmake)
+
 # Minimal-link module probes + renderer-identity registry gate (MODULARIZATION_PLAN.md §4).
 include(cmake/Tests/ModuleProbes.cmake)
+
+# Apple bundle sweep (plan_apple.md, APPLE-3). Every executable target in the tree -- examples,
+# tools, tests -- is registered by now, so this is the one place that can hand each of them the
+# Info.plist/signing configuration an iOS product cannot launch without, and the only alternative
+# to editing ~200 module-local example registrations that know nothing about Apple. No-op on
+# every non-Apple target, and on macOS unless CNA_APPLE_BUNDLE_MACOS_EXECUTABLES is on.
+cna_apple_configure_all_bundles()

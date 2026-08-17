@@ -42,6 +42,9 @@
     "nodeCount": 1,
     "meshCount": 1,
     "materialCount": 0,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
     "skinCount": 0,
     "animationCount": 1,
     "accessorCount": 5,
@@ -49,7 +52,8 @@
     "bufferCount": 1,
     "bufferByteLength": 120,
     "extensionsUsed": [],
-    "extensionsRequired": []
+    "extensionsRequired": [],
+    "punctualLightCount": 0
   },
   "l2": {
     "accessors": [
@@ -215,6 +219,7 @@
             1.0
           ]
         ],
+        "tangents": [],
         "texcoords": [],
         "colors": [],
         "joints": [],
@@ -231,6 +236,18 @@
             2
           ]
         ],
+        "importPolicy": {
+          "imported": true,
+          "topologyMode": 4,
+          "topologyName": "TRIANGLES",
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "converted": false,
+          "primitiveCount": 1
+        },
         "material": null
       }
     ]
@@ -412,7 +429,7 @@
       {
         "mesh": 0,
         "primitive": 0,
-        "stride": 32,
+        "stride": 48,
         "vertexCount": 3,
         "fields": [
           {
@@ -426,54 +443,73 @@
             "size": 12
           },
           {
-            "name": "TextureCoordinate",
+            "name": "Tangent",
             "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
             "size": 8
           }
         ],
         "vertexBufferFile": "anim-rigid-node.vb.bin",
-        "vertexBufferBytes": 96,
-        "vertexBufferSha256": "0bf2d7345e853cc2a0d95efbd090e7d6da38cdc1e83660b3ce95842179ea5288",
+        "vertexBufferBytes": 144,
+        "vertexBufferSha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683",
         "indexElementSize": 2,
         "indexCount": 3,
         "indexBufferFile": "anim-rigid-node.ib.bin",
         "indexBufferBytes": 6,
         "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "sourceTopology": "TRIANGLES",
         "topology": "TRIANGLES",
         "primitiveCount": 1
       }
     ]
   },
+  "rejection": null,
   "defects": [
     {
       "id": "D6",
-      "summary": "Rigid (unskinned) node animation is silently dropped. ExtractClips resolves every channel target against the skin's joint set, so a channel targeting an ordinary mesh node is discarded with no warning and no clip is emitted.",
+      "summary": "Rigid (unskinned) node animation was silently dropped: ExtractClips resolves every channel target against the skin's joint set, so a channel targeting an ordinary mesh node matched nothing and was discarded with no warning, and the converter called ExtractClips only for a skinned group at all. GLTF-293 adds ExtractSceneNodeClips, which resolves channels against the scene graph and produces a clip whose tracks target the animated node's own ModelBone. GLTF-294 still owns carrying such a clip through the .cnj and playing it, so the animation is imported and reported but not yet serialised.",
       "firstDivergentLayer": "L4",
-      "divergentFields": [
-        "animation"
-      ],
-      "divergentFieldsByLayer": {
-        "L4": [
-          "animation"
-        ]
-      },
+      "divergentFields": [],
+      "divergentFieldsByLayer": {},
       "owner": "GLTF-ANIMATION",
       "owningTasks": [
         "GLTF-103",
         "GLTF-113",
         "GLTF-114",
-        "GLTF-284"
+        "GLTF-293",
+        "GLTF-294"
       ],
-      "closedTasks": [],
+      "closedTasks": [
+        "GLTF-103",
+        "GLTF-113",
+        "GLTF-114",
+        "GLTF-293",
+        "GLTF-294"
+      ],
       "remainingTasks": [],
-      "status": "known-failing",
+      "status": "fixed",
       "currentActual": {
+        "importedClipCount": 1,
+        "importedTrackCount": 1,
+        "clipTargetSpace": "SceneNode",
+        "warningEmitted": true,
+        "clipExtractionGatedOnSkin": false,
+        "serialisedToCnj": true,
+        "playable": true,
+        "note": "ExtractSceneNodeClips resolves the rotation channel against the scene graph and yields one clip, 'Spin', with one track on the SpinningMesh node's own bone -- identity at t=0 and a quarter turn about +Z at t=1, with the scale components filled from the node's bind pose rather than from zero. Both original mechanisms are gone: extraction is no longer gated on a skin, and a non-joint target resolves instead of being skipped. GLTF-294 then gave the clip a target space it declares in the .cnj, a ModelAnimationsEXT container on the unskinned model's Tag, and ApplyClipToBonesEXT to pose the bones from it -- which refuses a joint-palette clip outright, because applying palette indices to Model::Bones would pose the wrong bones with no symptom but wrong motion. One boundary is recorded rather than resolved: Model::Tag holds one object, so a file with BOTH a skin and rigid node animation has nowhere to put the rigid clips and the importer reports that by name (GLTF-295)."
+      },
+      "priorActual": {
         "importedClipCount": 0,
         "warningEmitted": false,
         "clipExtractionGatedOnSkin": true,
         "clipCountIfExtractClipsWereCalled": 1,
         "trackCountIfExtractClipsWereCalled": 0,
-        "note": "The converter calls ExtractClips only for a skinned group, so with no skin the .cnj has no 'animations' key at all. Even when called, ExtractClips resolves the channel target against the joint set and skips it, producing a clip with zero tracks. Fixing this needs a real node hierarchy to animate, which is why D6 depends on the Phase 5 architecture rather than on the animation layer alone."
+        "measuredOn": "fb3728267e8f2179d43b96357ff372ae712b7e7f",
+        "note": "What the forensic audit measured: the converter called ExtractClips only for a skinned group, so with no skin the .cnj had no 'animations' key at all. Even when called, ExtractClips resolved the channel target against the joint set and skipped it, producing a clip with zero tracks."
       }
     }
   ]

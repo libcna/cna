@@ -47,6 +47,7 @@ void main() {
     vec4 pos = pc.mvp * vec4(inPos, 1.0);
     pos.y = -pos.y;
     gl_Position = pos;
+    gl_PointSize = 1.0;
     fragUV     = inUV;
     // Task 898 fix: transform by World's inverse-transpose upper-left 3x3, not the full MVP
     // (mirrors EnvironmentMapEffect's own already-correct env_map3d.vert.glsl pattern) -- an

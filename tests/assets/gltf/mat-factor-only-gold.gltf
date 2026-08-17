@@ -3,6 +3,10 @@
     "version": "2.0",
     "generator": "CNA gltf_fixtures"
   },
+  "extensionsUsed": [
+    "KHR_materials_ior",
+    "KHR_materials_specular"
+  ],
   "scene": 0,
   "scenes": [
     {
@@ -53,7 +57,20 @@
         0.0
       ],
       "alphaMode": "BLEND",
-      "doubleSided": true
+      "doubleSided": true,
+      "extensions": {
+        "KHR_materials_ior": {
+          "ior": 2.0
+        },
+        "KHR_materials_specular": {
+          "specularFactor": 0.3,
+          "specularColorFactor": [
+            0.25,
+            1.0,
+            12.0
+          ]
+        }
+      }
     }
   ],
   "accessors": [

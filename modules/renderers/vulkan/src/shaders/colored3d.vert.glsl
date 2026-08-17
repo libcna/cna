@@ -33,6 +33,7 @@ void main() {
     pos.y = -pos.y;                      // Vulkan NDC Y is inverted vs OpenGL
     // Z already in [0,+w] from XNA DirectX-convention projection — no remap needed.
     gl_Position = pos;
+    gl_PointSize = 1.0;
     // Mix vertex color and diffuse based on vertexColorEnabled flag (matches
     // colored_textured3d.vert.glsl's convention for the same flag).
     fragColor = (pc.vertexColorEnabled > 0.5) ? inColor * pc.diffuseColor : pc.diffuseColor;

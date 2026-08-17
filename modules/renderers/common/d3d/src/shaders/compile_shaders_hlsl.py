@@ -31,7 +31,7 @@ REPO_ROOT = SCRIPT_DIR.parents[5]
 COMPILER_TOOL_SRC = SCRIPT_DIR / "hlsl_compiler_tool.cpp"
 RUN_WINE = REPO_ROOT / "scripts" / "run-wine-dxvk.sh"
 
-# (filename, entry_point, target_profile, C++ array name)
+# (filename, entry_point, target_profile, C++ array name[, preprocessor define])
 SHADERS = [
     ("colored3d.vert.hlsl",          "main", "vs_5_0", "kColored3dVertDxbc"),
     ("colored3d.frag.hlsl",          "main", "ps_5_0", "kColored3dFragDxbc"),
@@ -63,8 +63,12 @@ SHADERS = [
     # (stride 56) D3D11 shader variants.
     ("pbr3d.vert.hlsl",                       "main", "vs_5_0", "kPbr3dVertDxbc"),
     ("pbr3d.frag.hlsl",                       "main", "ps_5_0", "kPbr3dFragDxbc"),
+    ("pbr3d.vert.hlsl",                       "main", "vs_5_0", "kPbr3dDualUvVertDxbc", "CNA_PBR_DUAL_UV"),
+    ("pbr3d.frag.hlsl",                       "main", "ps_5_0", "kPbr3dDualUvFragDxbc", "CNA_PBR_DUAL_UV"),
     ("pbr_skinned3d.vert.hlsl",                "main", "vs_5_0", "kPbrSkinned3dVertDxbc"),
     ("pbr_skinned3d.frag.hlsl",                "main", "ps_5_0", "kPbrSkinned3dFragDxbc"),
+    ("pbr_skinned3d.vert.hlsl",                "main", "vs_5_0", "kPbrSkinned3dDualUvVertDxbc", "CNA_PBR_DUAL_UV"),
+    ("pbr_skinned3d.frag.hlsl",                "main", "ps_5_0", "kPbrSkinned3dDualUvFragDxbc", "CNA_PBR_DUAL_UV"),
     ("skinned_colored3d.vert.hlsl",            "main", "vs_5_0", "kSkinned3dColoredVertDxbc"),
     ("skinned_colored3d.frag.hlsl",            "main", "ps_5_0", "kSkinned3dColoredFragDxbc"),
     ("skinned_colored3d_vertexlit.vert.hlsl",  "main", "vs_5_0", "kSkinned3dVertexLitColoredVertDxbc"),
@@ -128,14 +132,20 @@ def main() -> None:
             "namespace CNA::Internal::Renderers::D3DCommon::Shaders {\n\n"
         ]
 
-        for filename, entry, profile, cname in SHADERS:
+        for shader in SHADERS:
+            filename, entry, profile, cname, *defines = shader
             hlsl_path = SCRIPT_DIR / filename
             if not hlsl_path.exists():
                 print(f"ERROR: {hlsl_path} not found", file=sys.stderr)
                 sys.exit(1)
-            out_dxbc = tmp_dir / (filename + ".dxbc")
+            compile_path = hlsl_path
+            if defines:
+                compile_path = tmp_dir / (cname + ".hlsl")
+                define_lines = "".join(f"#define {define} 1\n" for define in defines)
+                compile_path.write_text(define_lines + hlsl_path.read_text())
+            out_dxbc = tmp_dir / (cname + ".dxbc")
             print(f"Compiling {filename} [{entry}/{profile}] ...", end=" ", flush=True)
-            dxbc = compile_one(tool_exe, hlsl_path, entry, profile, out_dxbc)
+            dxbc = compile_one(tool_exe, compile_path, entry, profile, out_dxbc)
             print(f"OK ({len(dxbc)} bytes)")
             parts.append(dxbc_to_cpp_array(cname, dxbc) + "\n")
 

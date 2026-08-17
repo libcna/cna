@@ -23,8 +23,8 @@
 // Vertex declaration (stride 48, D3D9VertexDeclarations.hpp): POSITION0 (FLOAT3, 0), NORMAL0
 // (FLOAT3, 12), TANGENT0 (FLOAT4, 24 -- xyz=tangent, w=bitangent sign, glTF convention), TEXCOORD0
 // (FLOAT2, 40). Texture samplers: s0=base color (Texture), s1=NormalMap, s2=MetallicRoughnessMap
-// (glTF packing: G=roughness, B=metallic), s3=EmissiveMap, s4=OcclusionMap (R channel) -- matches
-// EnsurePbrProgram()'s own texture-unit assignment (0..4) and GpuDrawParams' own field order.
+// (glTF packing: G=roughness, B=metallic), s3=EmissiveMap, s4=OcclusionMap (R channel),
+// s5=specular strength and s6=specular colour.
 
 float4x4 WorldViewProj : register(c0); // c0-c3
 float4x4 World         : register(c4); // c4-c7
@@ -49,6 +49,11 @@ struct VSOutput
     float  FogFactor : TEXCOORD4;
 };
 
+float CnaDirectionHandedness(float3x3 m)
+{
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
+
 VSOutput VSPbr3D(VSInput vin)
 {
     VSOutput vout;
@@ -58,7 +63,9 @@ VSOutput VSPbr3D(VSInput vin)
     // Tangent transforms as a plain direction under (float3x3)World (not the inverse-transpose
     // NormalMatrix) -- correct for uniform-scale World transforms, matching
     // EnsurePbrProgram()'s own identical documented simplification.
-    vout.TangentWS = float4(mul(vin.Tangent.xyz, (float3x3)World), vin.Tangent.w);
+    float3x3 worldDirectionMat = (float3x3)World;
+    vout.TangentWS = float4(mul(vin.Tangent.xyz, worldDirectionMat),
+                            vin.Tangent.w * CnaDirectionHandedness(worldDirectionMat));
     vout.UV = vin.UV;
     vout.WorldPos = mul(float4(vin.Position, 1.0), World).xyz;
     // REMED-GFX-010: FNA view-space fog. FogParams now carries EffectHelpers.SetFogVector
@@ -74,11 +81,13 @@ sampler2D NormalMap            : register(s1);
 sampler2D MetallicRoughnessMap : register(s2);
 sampler2D EmissiveMap          : register(s3);
 sampler2D OcclusionMap         : register(s4);
+sampler2D SpecularMap          : register(s5);
+sampler2D SpecularColorMap     : register(s6);
 
 float4 DiffuseColor           : register(c0);
-float3 AmbientColor            : register(c1);
-float3 EmissiveColor           : register(c2);
-float4 MetallicRoughnessFactor : register(c3); // x=MetallicFactor, y=RoughnessFactor
+float4 AmbientColor            : register(c1); // xyz=color, w=decode base-color texture from sRGB
+float4 EmissiveColor           : register(c2); // xyz=color, w=decode emissive texture from sRGB
+float4 MetallicRoughnessFactor : register(c3); // x=metallic, y=roughness, z=normal scale, w=occlusion strength
 float3 Light0Dir               : register(c4);
 float3 Light0Diffuse           : register(c5);
 float3 Light1Dir               : register(c6);
@@ -87,7 +96,11 @@ float3 Light2Dir               : register(c8);
 float3 Light2Diffuse           : register(c9);
 float3 EyePosition             : register(c10);
 float4 AlphaTest               : register(c11);
-float3 FogColor                : register(c12);
+float4 FogColor                : register(c12); // xyz=color, w=encode PBR output to sRGB
+float4 TextureTransformRows[10] : register(c14); // two affine UV rows per PBR map
+float4 SpecularFresnelInputs    : register(c24); // xyz=unclamped F0, w=specular factor
+float4 SpecularMapFlags        : register(c25); // x=decode specular-colour sample from sRGB
+float4 SpecularTextureTransformRows[4] : register(c26); // two affine rows per specular map
 
 struct PSInput
 {
@@ -98,12 +111,41 @@ struct PSInput
     float  FogFactor : TEXCOORD4;
 };
 
+float3 CnaSrgbToLinear(float3 color)
+{
+    float3 low = color / 12.92;
+    float3 high = pow((color + 0.055) / 1.055, float3(2.4, 2.4, 2.4));
+    return lerp(low, high, step(float3(0.04045, 0.04045, 0.04045), color));
+}
+
+float3 CnaLinearToSrgb(float3 color)
+{
+    float3 low = color * 12.92;
+    float exponent = 1.0 / 2.4;
+    float3 high = 1.055 * pow(max(color, 0.0), float3(exponent, exponent, exponent)) - 0.055;
+    return lerp(low, high, step(float3(0.0031308, 0.0031308, 0.0031308), color));
+}
+
+float2 CnaPbrTransformUv(float2 uv, int slot)
+{
+    float3 value = float3(uv, 1.0);
+    return float2(dot(value, TextureTransformRows[slot * 2].xyz),
+                  dot(value, TextureTransformRows[slot * 2 + 1].xyz));
+}
+
+float2 CnaPbrSpecularTransformUv(float2 uv, int slot)
+{
+    float3 value = float3(uv, 1.0);
+    return float2(dot(value, SpecularTextureTransformRows[slot * 2].xyz),
+                  dot(value, SpecularTextureTransformRows[slot * 2 + 1].xyz));
+}
+
 // GGX/Trowbridge-Reitz normal distribution (D), Smith-Schlick-GGX geometry/visibility term
 // (direct-lighting k=(roughness+1)^2/8), and Schlick Fresnel (F) -- ported line-by-line from
 // EnsurePbrProgram()'s own PbrLight() (the glTF 2.0 spec's own reference BRDF, Appendix
 // B.3.3/B.3.4/B.3.2).
 float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0,
-                float roughness, float metallic)
+                float3 F90, float roughness, float metallic)
 {
     float3 H = normalize(V + L);
     float NdotL = max(dot(N, L), 0.0);
@@ -116,7 +158,7 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
     float k = (roughness + 1.0);
     k = k * k / 8.0;
     float G = (NdotV / (NdotV * (1.0 - k) + k)) * (NdotL / (NdotL * (1.0 - k) + k));
-    float3 F = F0 + (float3(1.0, 1.0, 1.0) - F0) * pow(saturate(1.0 - VdotH), 5.0);
+    float3 F = F0 + (F90 - F0) * pow(saturate(1.0 - VdotH), 5.0);
     float3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
     float3 diffuseColor = albedo * (1.0 - metallic);
     float3 kd = float3(1.0, 1.0, 1.0) - F;
@@ -125,8 +167,9 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
 
 float4 PSPbr3D(PSInput pin) : SV_Target0
 {
-    float4 baseColorTex = tex2D(Texture, pin.UV);
-    float3 albedo = baseColorTex.rgb * DiffuseColor.rgb;
+    float4 baseColorTex = tex2D(Texture, CnaPbrTransformUv(pin.UV, 0));
+    float3 baseColor = lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), AmbientColor.w);
+    float3 albedo = baseColor * DiffuseColor.rgb;
     float alpha = baseColorTex.a * DiffuseColor.a;
 
     float3 N = normalize(pin.Normal);
@@ -134,24 +177,38 @@ float4 PSPbr3D(PSInput pin) : SV_Target0
     float3 B = cross(N, T) * pin.TangentWS.w;
     float3x3 TBN = float3x3(T, B, N);
 
-    float3 sampledNormal = tex2D(NormalMap, pin.UV).rgb * 2.0 - 1.0;
+    float3 sampledNormal = tex2D(NormalMap, CnaPbrTransformUv(pin.UV, 1)).rgb * 2.0 - 1.0;
+    sampledNormal.xy *= MetallicRoughnessFactor.z;
     float3 finalNormal = normalize(mul(sampledNormal, TBN));
 
-    float4 mr = tex2D(MetallicRoughnessMap, pin.UV);
+    float4 mr = tex2D(MetallicRoughnessMap, CnaPbrTransformUv(pin.UV, 2));
     float roughness = clamp(mr.g * MetallicRoughnessFactor.y, 0.045, 1.0);
     float metallic = clamp(mr.b * MetallicRoughnessFactor.x, 0.0, 1.0);
 
     float3 V = normalize(EyePosition - pin.WorldPos);
-    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
+    float specularWeight = SpecularFresnelInputs.w
+        * tex2D(SpecularMap, CnaPbrSpecularTransformUv(pin.UV, 0)).a;
+    float3 specularColorTex = tex2D(
+        SpecularColorMap, CnaPbrSpecularTransformUv(pin.UV, 1)).rgb;
+    specularColorTex = lerp(
+        specularColorTex, CnaSrgbToLinear(specularColorTex), SpecularMapFlags.x);
+    float3 dielectricF0 = min(SpecularFresnelInputs.xyz * specularColorTex, 1.0)
+        * specularWeight;
+    float3 F0 = lerp(dielectricF0, albedo, metallic);
+    float3 F90 = lerp(float3(specularWeight, specularWeight, specularWeight),
+                      float3(1.0, 1.0, 1.0), metallic);
 
     float3 Lo = float3(0.0, 0.0, 0.0);
-    Lo += PbrLight(finalNormal, V, normalize(-Light0Dir), Light0Diffuse, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, normalize(-Light1Dir), Light1Diffuse, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, normalize(-Light2Dir), Light2Diffuse, albedo, F0, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-Light0Dir), Light0Diffuse, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-Light1Dir), Light1Diffuse, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-Light2Dir), Light2Diffuse, albedo, F0, F90, roughness, metallic);
 
-    float occlusion = tex2D(OcclusionMap, pin.UV).r;
-    float3 ambient = AmbientColor * albedo * occlusion;
-    float3 emissive = EmissiveColor * tex2D(EmissiveMap, pin.UV).rgb;
+    float occlusion = tex2D(OcclusionMap, CnaPbrTransformUv(pin.UV, 4)).r;
+    occlusion = 1.0 + MetallicRoughnessFactor.w * (occlusion - 1.0);
+    float3 ambient = AmbientColor.xyz * albedo * occlusion;
+    float3 emissiveSample = tex2D(EmissiveMap, CnaPbrTransformUv(pin.UV, 3)).rgb;
+    emissiveSample = lerp(emissiveSample, CnaSrgbToLinear(emissiveSample), EmissiveColor.w);
+    float3 emissive = EmissiveColor.xyz * emissiveSample;
 
     float4 outColor = float4(ambient + Lo + emissive, alpha);
 
@@ -160,6 +217,8 @@ float4 PSPbr3D(PSInput pin) : SV_Target0
         : ((outColor.a < AlphaTest.x) ? AlphaTest.z : AlphaTest.w);
     clip(alphaTestResult);
 
-    outColor.rgb = lerp(FogColor, outColor.rgb, pin.FogFactor);
+    float3 fogLinear = lerp(FogColor.xyz, CnaSrgbToLinear(FogColor.xyz), FogColor.w);
+    outColor.rgb = lerp(fogLinear, outColor.rgb, pin.FogFactor);
+    outColor.rgb = lerp(outColor.rgb, CnaLinearToSrgb(outColor.rgb), FogColor.w);
     return outColor;
 }

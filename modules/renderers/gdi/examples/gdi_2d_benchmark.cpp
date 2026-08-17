@@ -4,6 +4,7 @@
 
 #include "CNA/GraphicsRendererType.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -84,7 +85,7 @@ namespace
                 args.virtualWidth = benchmarkCase.width;
                 args.virtualHeight = benchmarkCase.height;
                 args.presentationMode = CnaPresentationMode::Stretch;
-                std::unique_ptr<IGraphicsRenderer> renderer = CreateGraphicsRenderer(args);
+                std::unique_ptr<IGraphicsRenderer> renderer = Gdi::CreateGraphicsRenderer(args);
                 if (renderer->ApplyMultiSampleCount(requestedMultiSampleCount) !=
                     requestedMultiSampleCount)
                     throw std::runtime_error("GDI benchmark could not apply its requested MSAA count.");

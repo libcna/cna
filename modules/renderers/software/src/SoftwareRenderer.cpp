@@ -329,6 +329,25 @@ namespace CNA::Internal::Renderers::Software
             return count;
         }
 
+        /// Clips a line segment against the same near-plane half-space as triangles.  A point is
+        /// accepted by checking its W against this boundary directly in the draw path.
+        bool ClipLineNearPlane(ClipVertex& a, ClipVertex& b)
+        {
+            constexpr float kNearEpsilon = 1e-5f;
+            const bool aIn = a.w > kNearEpsilon;
+            const bool bIn = b.w > kNearEpsilon;
+            if (!aIn && !bIn)
+                return false;
+            if (aIn && bIn)
+                return true;
+
+            const float t = (kNearEpsilon - a.w) / (b.w - a.w);
+            const ClipVertex intersection = LerpClipVertex(a, b, t);
+            if (!aIn) a = intersection;
+            else      b = intersection;
+            return true;
+        }
+
         /// REMED-GFX-079: the XNA/FNA viewport transform parameters used to map a post-perspective-
         /// divide NDC position into framebuffer pixel coordinates -- Viewport.X/Y (pixel origin of
         /// the viewport within the active target), Viewport.Width/Height (pixel extent the NDC
@@ -1565,8 +1584,12 @@ namespace CNA::Internal::Renderers::Software
         /// Transforms a vertex whose byte layout is inferred from `stride` (plan_software.md
         /// design decision 2: 16=VertexPositionColor, 20=VertexPositionTexture,
         /// 24=VertexPositionColorTexture, 32=VertexPositionNormalTexture (SOFTWARE-82,
-        /// EnvironmentMapEffect), 52=VertexPositionNormalTextureSkinned (SOFTWARE-82,
-        /// SkinnedEffect)) into clip space, for the DrawPrimitivesEx/DrawIndexedPrimitivesEx path.
+        /// EnvironmentMapEffect), 48/60=VertexPositionNormalTangentTexture with one/two UV sets,
+        /// 52=VertexPositionNormalTextureSkinned (SOFTWARE-82, SkinnedEffect),
+        /// 56=the same skinned layout plus Color, and
+        /// 68/76=VertexPositionNormalTangentTextureSkinned with one/two UV sets) into clip space,
+        /// for the
+        /// DrawPrimitivesEx/DrawIndexedPrimitivesEx path.
         /// `params.vertexColorEnabled` mirrors GpuDrawParams' own flag -- when false (or for a
         /// stride with no Color field at all), vertex color is treated as opaque white so it
         /// doesn't affect the eventual texture/diffuse modulation, matching a real Effect's own
@@ -1603,18 +1626,23 @@ namespace CNA::Internal::Renderers::Software
             Vector3 normal(0.0f, 0.0f, 1.0f);
             bool haveNormal = false;
 
-            if (stride == 52 && params.skinned)
+            const bool skinnedLayout =
+                stride == 52 || stride == 56 || stride == 68 || stride == 76;
+            if (skinnedLayout && params.skinned)
             {
-                // VertexPositionNormalTextureSkinned: Position@0, Normal@12, TextureCoordinate@24,
-                // BlendWeight@32 (4 floats), BlendIndices@48 (4 bytes). Blend up to
+                // The stride-52/56 layouts carry BlendWeight@32 and BlendIndices@48; the
+                // tangent-bearing stride-68/76 layouts carry them at 48/64. Blend up to
                 // weightsPerVertex bone matrices (column-major, GpuDrawParams::boneTransforms'
                 // own layout -- Task 895's "only sum the first N pairs" behavior) and apply the
                 // blended matrix to Position/Normal BEFORE the standard World*View*Projection
                 // transform below, mirroring FNA's own Skin(vin, boneCount) step.
+                const bool tangentSkinned = stride == 68 || stride == 76;
+                const int blendWeightOffset = tangentSkinned ? 48 : 32;
+                const int blendIndicesOffset = tangentSkinned ? 64 : 48;
                 Vector4 blendWeight;
-                std::memcpy(&blendWeight, raw.At(32), sizeof(Vector4));
+                std::memcpy(&blendWeight, raw.At(blendWeightOffset), sizeof(Vector4));
                 std::uint8_t blendIndices[4];
-                std::memcpy(blendIndices, raw.At(48), 4);
+                std::memcpy(blendIndices, raw.At(blendIndicesOffset), 4);
                 const float weights[4] = {blendWeight.X, blendWeight.Y, blendWeight.Z, blendWeight.W};
 
                 float blended[16] = {};
@@ -1661,10 +1689,51 @@ namespace CNA::Internal::Renderers::Software
                 std::memcpy(&out.u, raw.At(24), sizeof(float));
                 std::memcpy(&out.v, raw.At(28), sizeof(float));
             }
-            else if (stride == 52)
+            else if (stride == 48 || stride == 60)
+            {
+                // VertexPositionNormalTangentTexture, optionally followed by TextureCoordinate1.
+                // The Software PBR fallback samples the base-colour texture, so consume that map's
+                // selector (mask bit 0) without pretending to evaluate the other PBR maps here.
+                std::memcpy(&normal, raw.At(12), sizeof(Vector3));
+                haveNormal = true;
+                std::memcpy(&out.u, raw.At(40), sizeof(float));
+                std::memcpy(&out.v, raw.At(44), sizeof(float));
+                if (stride == 60 && (params.pbrTextureCoordinateSetMask & 1u) != 0u)
+                {
+                    std::memcpy(&out.u, raw.At(48), sizeof(float));
+                    std::memcpy(&out.v, raw.At(52), sizeof(float));
+                }
+            }
+            else if (stride == 52 || stride == 56)
             {
                 std::memcpy(&out.u, raw.At(24), sizeof(float));
                 std::memcpy(&out.v, raw.At(28), sizeof(float));
+                if (stride == 56)
+                    UnpackColorBytes(raw.At(52), out.r, out.g, out.b, out.a);
+            }
+            else if (stride == 68 || stride == 76)
+            {
+                std::memcpy(&out.u, raw.At(40), sizeof(float));
+                std::memcpy(&out.v, raw.At(44), sizeof(float));
+                if (stride == 76 && (params.pbrTextureCoordinateSetMask & 1u) != 0u)
+                {
+                    std::memcpy(&out.u, raw.At(68), sizeof(float));
+                    std::memcpy(&out.v, raw.At(72), sizeof(float));
+                }
+            }
+
+            if (stride == 48 || stride == 60 || stride == 68 || stride == 76)
+            {
+                // PbrEffect's base-colour transform is slot zero. Identity rows make this an exact
+                // no-op for old callers and materials without KHR_texture_transform.
+                const float u = out.u;
+                const float v = out.v;
+                out.u = u * params.pbrTextureTransformRows[0][0] +
+                        v * params.pbrTextureTransformRows[0][1] +
+                        params.pbrTextureTransformRows[0][2];
+                out.v = u * params.pbrTextureTransformRows[1][0] +
+                        v * params.pbrTextureTransformRows[1][1] +
+                        params.pbrTextureTransformRows[1][2];
             }
 
             if (haveNormal && params.envMapping)
@@ -2017,6 +2086,87 @@ namespace CNA::Internal::Renderers::Software
                 writeBlendedColor(fb.multiSampleColor.data() +
                                   (pixelIndex * 4u + static_cast<std::size_t>(sample)) * 4u);
             }
+        }
+
+        /// Builds the fragment state for line and point primitives.  Their one-dimensional or
+        /// zero-dimensional footprint has no triangle derivatives, so texture/cube LOD resolves
+        /// deterministically to level zero (the same fallback used by a degenerate triangle).
+        ShadedContext MakeLinearShadedContext(
+            const GpuDrawParams& params, const RasterDepthState& depthState,
+            const RasterStencilState& stencilState, const SoftwareBlendState& blendState,
+            const std::array<float, 4>& blendFactor, int colorWriteMask,
+            unsigned int multiSampleMask, const SoftwareSamplerState& sampler0,
+            const SoftwareSamplerState& sampler1)
+        {
+            const auto* texture0 = dynamic_cast<const SoftwareColorSurface*>(params.texture0);
+            const auto* texture1 = dynamic_cast<const SoftwareColorSurface*>(params.texture1);
+#ifndef CNA_SOFTWARE_2D_ONLY
+            const auto* envMap = dynamic_cast<const SoftwareTextureCubeRenderer*>(params.envMap);
+#else
+            const SoftwareTextureCubeRenderer* envMap = nullptr;
+#endif
+            const bool useDualTexture = params.dualTexture && texture0 != nullptr && texture1 != nullptr;
+#ifndef CNA_SOFTWARE_2D_ONLY
+            const bool useEnvMap = params.envMapping && envMap != nullptr;
+#else
+            constexpr bool useEnvMap = false;
+#endif
+            const bool needUV = useDualTexture || useEnvMap ||
+                                (params.textureEnabled && texture0 != nullptr);
+            return ShadedContext{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
+                                 needUV, blendState, blendFactor, depthState, stencilState,
+                                 colorWriteMask, multiSampleMask, sampler0, sampler1,
+                                 true, true, 0.0f, 0.0f, true, 0.0f};
+        }
+
+        /// Rasterizes one one-pixel-wide line through the same depth, texture, material and blend
+        /// fragment path as triangles.  CullMode and FillMode do not apply to line primitives.
+        void RasterizeLineShaded(
+            SoftwareFramebuffer& fb, const RasterDepthState& depthState,
+            const RasterStencilState& stencilState, const SoftwareBlendState& blendState,
+            const std::array<float, 4>& blendFactor, const GpuDrawParams& params,
+            const RasterClipRect& clip, const RasterVertex& a, const RasterVertex& b,
+            int colorWriteMask, unsigned int multiSampleMask,
+            const SoftwareSamplerState& sampler0, const SoftwareSamplerState& sampler1)
+        {
+            const ShadedContext ctx = MakeLinearShadedContext(
+                params, depthState, stencilState, blendState, blendFactor, colorWriteMask,
+                multiSampleMask, sampler0, sampler1);
+            WalkWireEdge(clip, a, b, [&](int x, int y, float t) {
+                const float invW = a.invW + t * (b.invW - a.invW);
+                WriteShadedFragment(
+                    fb, ctx, clip, x, y, a.depth + t * (b.depth - a.depth), invW,
+                    a.r + t * (b.r - a.r), a.g + t * (b.g - a.g),
+                    a.b + t * (b.b - a.b), a.a + t * (b.a - a.a),
+                    a.u + t * (b.u - a.u), a.v + t * (b.v - a.v),
+                    a.wpx + t * (b.wpx - a.wpx), a.wpy + t * (b.wpy - a.wpy),
+                    a.wpz + t * (b.wpz - a.wpz), a.nx + t * (b.nx - a.nx),
+                    a.ny + t * (b.ny - a.ny), a.nz + t * (b.nz - a.nz));
+            });
+        }
+
+        /// Rasterizes an XNA/CNA point as one framebuffer pixel centered on the transformed
+        /// coordinate.  Like GPU point-list paths, it is unaffected by culling and FillMode.
+        void RasterizePointShaded(
+            SoftwareFramebuffer& fb, const RasterDepthState& depthState,
+            const RasterStencilState& stencilState, const SoftwareBlendState& blendState,
+            const std::array<float, 4>& blendFactor, const GpuDrawParams& params,
+            const RasterClipRect& clip, const RasterVertex& point, int colorWriteMask,
+            unsigned int multiSampleMask, const SoftwareSamplerState& sampler0,
+            const SoftwareSamplerState& sampler1)
+        {
+            if (!std::isfinite(point.x) || !std::isfinite(point.y))
+                return;
+            const ShadedContext ctx = MakeLinearShadedContext(
+                params, depthState, stencilState, blendState, blendFactor, colorWriteMask,
+                multiSampleMask, sampler0, sampler1);
+            WriteShadedFragment(fb, ctx, clip,
+                                static_cast<int>(std::floor(point.x)),
+                                static_cast<int>(std::floor(point.y)),
+                                point.depth, point.invW,
+                                point.r, point.g, point.b, point.a, point.u, point.v,
+                                point.wpx, point.wpy, point.wpz,
+                                point.nx, point.ny, point.nz);
         }
 
         /// General-purpose triangle fill for the DrawPrimitivesEx/DrawIndexedPrimitivesEx and
@@ -2927,8 +3077,8 @@ namespace CNA::Internal::Renderers::Software
     // REMED-GFX-DECL-GUARD: the declaration-fidelity boundary. BuildGenericClipVertex reads its
     // attributes at byte offsets chosen by the stride alone (REMED-GFX-217), so a declaration
     // those offsets cannot represent is refused before any vertex is fetched. A stride outside the
-    // 16/20/24/32/52 set is left to this renderer's own established out-of-table rejection, which
-    // is already loud and deterministic.
+    // canonical 16/20/24/32/48/52/56/60/68/76 set is left to this renderer's own established
+    // out-of-table rejection, which is already loud and deterministic.
     static void RequireFaithfulDeclarationEXT(const IVertexBufferRenderer& vb, const char* route)
     {
         const auto& swVb = static_cast<const SoftwareVertexBufferRenderer&>(vb);
@@ -2945,10 +3095,13 @@ namespace CNA::Internal::Renderers::Software
         RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
         if (primitiveCount <= 0)
             throw std::runtime_error("SoftwareRenderer::DrawPrimitivesEx: primitiveCount must be > 0");
-        if (primitive != PrimitiveType::TriangleList)
-            throw std::runtime_error("SoftwareRenderer::DrawPrimitivesEx: only TriangleList is supported in v1");
-        if (params.textureEnabled && params.texture0 == nullptr)
-            throw std::runtime_error("SoftwareRenderer::DrawPrimitivesEx: TextureEnabled=true but texture0 is null");
+        if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::LineList &&
+            primitive != PrimitiveType::LineStrip && primitive != PrimitiveType::PointListEXT)
+            throw std::runtime_error(
+                "SoftwareRenderer::DrawPrimitivesEx: unsupported primitive topology");
+        // Stock PBR and Skinned effects deliberately keep texturing enabled when their optional
+        // base map is unbound. The native shader backends bind white in that case; this rasterizer's
+        // existing null-texture branch is the exact CPU equivalent (factor/vertex colour unchanged).
         if (params.dualTexture && params.texture1 == nullptr)
             throw std::runtime_error("SoftwareRenderer::DrawPrimitivesEx: dualTexture=true but texture1 is null");
         if (params.envMapping && params.envMap == nullptr)
@@ -2971,10 +3124,12 @@ namespace CNA::Internal::Renderers::Software
         // stride that selects it is their sum -- which is this one stream's own stride whenever a
         // single buffer is bound.
         const std::size_t stride = CombinedVertexStrideOr(params, swVb.Stride());
-        if (stride != 16 && stride != 20 && stride != 24 && stride != 32 && stride != 52)
+        if (stride != 16 && stride != 20 && stride != 24 && stride != 32 &&
+            stride != 48 && stride != 52 && stride != 56 && stride != 60 &&
+            stride != 68 && stride != 76)
             throw std::runtime_error(
                 "SoftwareRenderer::DrawPrimitivesEx: unsupported vertex stride "
-                "(only 16/20/24/32/52 supported in v1)");
+                "(only 16/20/24/32/48/52/56/60/68/76 supported in v1)");
 
         const std::uint8_t* base = swVb.Data().data();
 
@@ -3030,6 +3185,33 @@ namespace CNA::Internal::Renderers::Software
 
         for (int i = 0; i < primitiveCount; ++i)
         {
+            if (primitive == PrimitiveType::PointListEXT)
+            {
+                const CombinedVertexReader raw = fetchVertex(i);
+                const ClipVertex cv = BuildGenericClipVertex(raw, stride, combined, params);
+                if (cv.w > 1e-5f)
+                    RasterizePointShaded(
+                        fb, depthState, RasterStencilState{}, blendState, blendFactor, params,
+                        clip, ClipVertexToRasterVertex(cv, vpT), colorWriteMask_, multiSampleMask_,
+                        GetSamplerState(0), GetSamplerState(1));
+                continue;
+            }
+            if (primitive == PrimitiveType::LineList || primitive == PrimitiveType::LineStrip)
+            {
+                const std::int64_t first =
+                    (primitive == PrimitiveType::LineList) ? static_cast<std::int64_t>(i) * 2 : i;
+                ClipVertex a = BuildGenericClipVertex(
+                    fetchVertex(first), stride, combined, params);
+                ClipVertex b = BuildGenericClipVertex(
+                    fetchVertex(first + 1), stride, combined, params);
+                if (ClipLineNearPlane(a, b))
+                    RasterizeLineShaded(
+                        fb, depthState, RasterStencilState{}, blendState, blendFactor, params, clip,
+                        ClipVertexToRasterVertex(a, vpT), ClipVertexToRasterVertex(b, vpT),
+                        colorWriteMask_, multiSampleMask_, GetSamplerState(0), GetSamplerState(1));
+                continue;
+            }
+
             ClipVertex cv[3];
             for (int k = 0; k < 3; ++k)
             {
@@ -3076,10 +3258,11 @@ namespace CNA::Internal::Renderers::Software
         RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
         if (primitiveCount <= 0)
             throw std::runtime_error("SoftwareRenderer::DrawIndexedPrimitivesEx: primitiveCount must be > 0");
-        if (primitive != PrimitiveType::TriangleList)
-            throw std::runtime_error("SoftwareRenderer::DrawIndexedPrimitivesEx: only TriangleList is supported in v1");
-        if (params.textureEnabled && params.texture0 == nullptr)
-            throw std::runtime_error("SoftwareRenderer::DrawIndexedPrimitivesEx: TextureEnabled=true but texture0 is null");
+        if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::LineList &&
+            primitive != PrimitiveType::LineStrip && primitive != PrimitiveType::PointListEXT)
+            throw std::runtime_error(
+                "SoftwareRenderer::DrawIndexedPrimitivesEx: unsupported primitive topology");
+        // See DrawPrimitivesEx: an unbound optional base map is the white fallback, not an error.
         if (params.dualTexture && params.texture1 == nullptr)
             throw std::runtime_error("SoftwareRenderer::DrawIndexedPrimitivesEx: dualTexture=true but texture1 is null");
         if (params.envMapping && params.envMap == nullptr)
@@ -3090,10 +3273,12 @@ namespace CNA::Internal::Renderers::Software
         // REMED-GFX-201: see DrawPrimitivesEx -- the selecting stride is the sum of the bound
         // per-vertex streams' strides, identical to this one stream's whenever one is bound.
         const std::size_t stride = CombinedVertexStrideOr(params, swVb.Stride());
-        if (stride != 16 && stride != 20 && stride != 24 && stride != 32 && stride != 52)
+        if (stride != 16 && stride != 20 && stride != 24 && stride != 32 &&
+            stride != 48 && stride != 52 && stride != 56 && stride != 60 &&
+            stride != 68 && stride != 76)
             throw std::runtime_error(
                 "SoftwareRenderer::DrawIndexedPrimitivesEx: unsupported vertex stride "
-                "(only 16/20/24/32/52 supported in v1)");
+                "(only 16/20/24/32/48/52/56/60/68/76 supported in v1)");
 
         if (g_cubeTrace.enabled) { ++g_cubeTrace.drawId; g_cubeTrace.family = "DrawIndexedPrimitives"; }
 
@@ -3164,6 +3349,33 @@ namespace CNA::Internal::Renderers::Software
 
         for (int i = 0; i < primitiveCount; ++i)
         {
+            if (primitive == PrimitiveType::PointListEXT)
+            {
+                const CombinedVertexReader raw = fetchVertex(i);
+                const ClipVertex cv = BuildGenericClipVertex(raw, stride, combined, params);
+                if (cv.w > 1e-5f)
+                    RasterizePointShaded(
+                        fb, depthState, RasterStencilState{}, blendState, blendFactor, params,
+                        clip, ClipVertexToRasterVertex(cv, vpT), colorWriteMask_, multiSampleMask_,
+                        GetSamplerState(0), GetSamplerState(1));
+                continue;
+            }
+            if (primitive == PrimitiveType::LineList || primitive == PrimitiveType::LineStrip)
+            {
+                const std::int64_t first =
+                    (primitive == PrimitiveType::LineList) ? static_cast<std::int64_t>(i) * 2 : i;
+                ClipVertex a = BuildGenericClipVertex(
+                    fetchVertex(first), stride, combined, params);
+                ClipVertex b = BuildGenericClipVertex(
+                    fetchVertex(first + 1), stride, combined, params);
+                if (ClipLineNearPlane(a, b))
+                    RasterizeLineShaded(
+                        fb, depthState, RasterStencilState{}, blendState, blendFactor, params, clip,
+                        ClipVertexToRasterVertex(a, vpT), ClipVertexToRasterVertex(b, vpT),
+                        colorWriteMask_, multiSampleMask_, GetSamplerState(0), GetSamplerState(1));
+                continue;
+            }
+
             ClipVertex cv[3];
             for (int k = 0; k < 3; ++k)
             {
@@ -3238,7 +3450,12 @@ namespace CNA::Internal::Renderers::Software
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_SOFTWARE
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace Software { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> Software::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<Software::SoftwareRenderer>(args.virtualWidth, args.virtualHeight);
     }

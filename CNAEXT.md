@@ -99,7 +99,7 @@ all closed 2026‑07‑17). The final design builds *on top of* this — do not 
 
 | Type | Notes |
 |---|---|
-| `PbrEffect` | `Effect` + `IEffectMatrices` + `IEffectFog` + `IEffectLights`. Base‑color tint + alpha via `DiffuseColor`/`Alpha`. Maps: `Texture` (base color), `NormalMap`, `MetallicRoughnessMap`, `EmissiveMap`, `OcclusionMap` (all `Texture2D*` `get*Property`/`set*Property` + `SetOwned*` owning variants). Factors: `MetallicFactor`/`RoughnessFactor` (`float`), `EmissiveFactor` (`Vector3`). BRDF = glTF 2.0 Appendix B reference (GGX distribution + Smith‑Schlick‑GGX visibility + Schlick Fresnel). Lit with the **3 directional lights + `AmbientLightColor`** convention (the same one `BasicEffect`/`SkinnedEffect` use) — **not** image‑based lighting. |
+| `PbrEffect` | `Effect` + `IEffectMatrices` + `IEffectFog` + `IEffectLights`. Base‑color tint + alpha via `DiffuseColor`/`Alpha`. Maps: `Texture` (base color), `NormalMap`, `MetallicRoughnessMap`, `EmissiveMap`, `OcclusionMap` (all `Texture2D*` `get*Property`/`set*Property` + `SetOwned*` owning variants). Factors: `MetallicFactor`/`RoughnessFactor` (`float`), `EmissiveFactor` (`Vector3`), plus factor-only `IorEXT`, `SpecularFactorEXT` and `SpecularColorFactorEXT`. The latter derive dielectric F0/F90 in `GpuDrawParams`, consumed by all PBR-capable renderers; the two optional specular texture inputs remain unsupported. BRDF = glTF 2.0 Appendix B reference (GGX distribution + Smith‑Schlick‑GGX visibility + Schlick Fresnel). Lit with the **3 directional lights + `AmbientLightColor`** convention (the same one `BasicEffect`/`SkinnedEffect` use) — **not** image‑based lighting. |
 | `SkinnedPbrEffect` | `PbrEffect`'s full material surface + `SkinnedEffect`'s bone API (`MaxBones = 72`, `SetBoneTransforms`/`GetBoneTransforms`, `WeightsPerVertex`). Game code feeds `AnimationPlayer::GetSkinTransforms()` each frame. |
 
 **Vertex formats (CNAEXT):** `VertexPositionNormalTangentTexture` (stride 48, tangent as `vec4` with
@@ -121,15 +121,69 @@ the stride‑56 skinned+color layout used by `SkinnedEffect.VertexColorEnabled` 
 
 ### 3.2 glTF / GLB import
 
-- **Runtime path:** `Content.Load<Model>("character.glb")` works directly — no offline step.
-  `ContentManager`'s `ModelTypeReader` resolves `.gltf`/`.glb` via `CNA::Internal::GltfImport::GltfImportCore`.
-- **Offline path:** `tools/gltf_to_cnj` produces `.cnj` + sidecars (`.skeleton.bin`, `_morph.bin`, textures).
-- **Imports:** geometry, PBR materials (4 maps + factors → `PbrEffect`/`SkinnedPbrEffect`), a second
-  layer via `DualTextureEffect` (occlusion‑as‑lightmap, brightness‑corrected), skins/skeleton,
-  animation (LINEAR/STEP/**CUBICSPLINE** Hermite), morph targets (CPU‑blended — `MorphTargetDataEXT`,
-  `MorphWeightTrackEXT`), tangents (angle‑weighted generation when absent), **Draco** decode
-  (optional, `CNA_DRACO_AVAILABLE`), and glTF extensions `KHR_texture_transform`,
-  `KHR_lights_punctual` (→ the 3 directional slots), `KHR_materials_emissive_strength`.
+**Status of every capability, with its evidence.** This section used to be a bullet list of what
+imports, which read as a completeness claim; the `plan_gltf.md` campaign (`GLTF-448`) replaced it
+with a table that states what is **partial** and what is **not carried at all**, because a reader
+choosing CNA for a glTF pipeline needs the second list more than the first.
+
+Legend: ✅ implemented · ⚠️ partial, with the limit named · ❌ not carried, and *reported* rather
+than dropped in silence. Every ⚠️/❌ row's full story — including the report field that names the
+loss at run time — is `docs/gltf-limitations.md`.
+
+| Capability | Status | Notes and evidence |
+|---|---|---|
+| Runtime load — `Content.Load<Model>("character.glb")` | ✅ | No offline step. `ContentManager`'s `ModelTypeReader` resolves `.gltf`/`.glb` through `CNA::Internal::GltfImport::GltfImportCore`. |
+| Offline conversion — `tools/gltf_to_cnj` | ✅ | Produces `.cnj` + sidecars (`.skeleton.bin`, `_morph.bin`, textures). The two loaders are held to the same output by per-fixture parity sweeps (`GltfToCnjToolTest`), including all 14 material fixtures at the L6 effect boundary. |
+| Structured import diagnostics | ✅ | `Model::getGltfImportReportEXTProperty()` exposes summary counts plus stable coded warnings, drops and approximations on both direct and offline paths. Non-glTF models and old `.cnj` files return an empty report. |
+| Geometry: `POSITION`, `NORMAL`, `TEXCOORD_0`, indices | ✅ | Byte-exact against committed L5 goldens for every corpus fixture. |
+| Whole-model bounds | ✅ | `Model::getBoundingSphereEXTProperty()` merges every mesh's XNA bounding sphere after its current absolute parent-bone transform. The result is in model-root space before the caller's draw-time `world`; imported mesh spheres cover all primitives and authored default morph weights. |
+| Material variants | ✅ | `KHR_materials_variants` names and sparse primitive mappings survive direct glTF and offline `.cnj`. `Model::getMaterialVariantNamesEXTProperty()` exposes source order and `setMaterialVariantEXTProperty(index)` selects a complete part state; `-1` restores the core/default mapping. |
+| Multiple skins | ✅ | `Model::getSkinsEXTProperty()` exposes every independent glTF `ModelSkinEXT` with its `SkinningData` and exact mesh set. The first skin remains on `Model::Tag` for compatibility; bind-pose application and effect caching keep each palette isolated. |
+| Topology: `TRIANGLE_STRIP`, `TRIANGLE_FAN`, `LINE_LOOP` | ✅ | Converted to lists at import, exactly (same triangles, same winding); the source mode is carried so the conversion is checkable. `LINES`/`LINE_STRIP`/`POINTS` keep their own `PrimitiveTypeEXT`. |
+| Missing `NORMAL` | ✅ | A real geometric normal is computed per face; a vertex shared between differently-oriented faces is averaged rather than duplicated, and the count is reported. |
+| Tangents | ⚠️ | Generated (angle-weighted) when absent. An **authored** `TANGENT` is carried only at the PBR strides 48/60 and 68/76 — no other vertex layout has a tangent slot — and is otherwise dropped and reported. EasyGL's PBR vertex programs preserve its `w` and multiply the per-draw world/instance/skinning determinant sign under mirrors (`GLTF-175`/`176`). |
+| `COLOR_0` vertex colours | ⚠️ | Carried, but not alongside a tangent: a primitive with `COLOR_0` **and** a metallic-roughness material imports through `BasicEffect` with its colours and **without** its material, because no layout carries both and no PBR shader reads a colour stream. Reported, not silent. |
+| `COLOR_1` and beyond | ❌ | XNA's layouts carry exactly one colour channel. Counted. |
+| `TEXCOORD_1` (second sampled UV set) | ✅ | PBR strides 60/76 carry two authored sets simultaneously and each of the five material maps selects its own packed channel. A material sampling a third distinct authored set falls back to packed channel 0 and is named in `uvSetMismatchedMapsEXT`. EasyGL OPENGLES2/3 is framebuffer-verified with independent base-colour and emissive coordinates. |
+| PBR materials — factors + 5 maps | ✅ | `baseColorFactor`, `metallic`, `roughness`, `emissive`, `normalTexture.scale`, `occlusionTexture.strength` all reach `PbrEffect`/`SkinnedPbrEffect`; asserted at the effect boundary (L6) over the whole corpus, not only at import. |
+| `alphaMode` | ⚠️ | `MASK` is **applied** — the cutoff reaches `GpuDrawParams::alphaTest` and every PBR shader discards on it. `BLEND` is carried and **application-applied**: select `BlendState::NonPremultiplied` (PBR emits straight RGB) and draw transparent parts back-to-front. `Model::Draw` preserves state/source order and does not sort. The full path is framebuffer-verified by `EasyGL_Gltf_AlphaBlend` on OPENGLES2/3. |
+| `doubleSided` | ⚠️ | Carried and **application-applied**: select `RasterizerState::CullNone` when the effect property is true; otherwise retain the glTF front-face state, reversing it for mirrored placement. `Model::Draw` preserves caller state. A real imported back face plus its culling control are framebuffer-verified by `EasyGL_Gltf_AlphaBlend` on OPENGLES2/3; `docs/gltf-api-change-review.md` §1.4 records why this remains explicit application policy. |
+| Skinning | ⚠️ | Four influences per vertex, which is what `BlendIndices`/`BlendWeight` carry. Additional `JOINTS_n`/`WEIGHTS_n` sets are dropped, counted, and the largest discarded influence is reported; weights that do not sum to 1 are renormalised, with the worst deviation recorded. |
+| Animation — LINEAR / STEP / **CUBICSPLINE** | ✅ | Real Hermite basis for cubic spline. Channels on paths CNA cannot import, or on nodes outside the scene, are skipped **and counted** per clip. |
+| Morph targets | ✅ | CPU-blended (`MorphTargetDataEXT`, `MorphWeightTrackEXT`). Position, normal and tangent xyz deltas travel both direct glTF and offline `.cnj`; the base tangent's handedness remains unchanged. The sidecar keeps its old position/normal prefix and adds tangent data in a backward-compatible versioned trailer (`GLTF-289`). |
+| Cameras | ✅ | `Model::CamerasEXT` / `ModelCameraEXT` — a property rather than `Tag`, which `SkinningData` and `ModelAnimationsEXT` already contend for. Perspective, orthographic and the view matrix all match the specification's own formulae; an absent `aspectRatio` is flagged rather than guessed. |
+| Lights — `KHR_lights_punctual` | ⚠️ | Up to **three** directional lights, which is XNA's whole lighting model. Point and spot lights become directional lights aimed at the origin; ranges and cone angles are ignored; out-of-gamut intensity clamps. Every one of those is counted. |
+| `KHR_texture_transform` | ✅ | All five PBR maps retain independent offset/rotation/scale plus `texCoord` override state. Direct and offline paths agree, every PBR renderer consumes the affine rows, and an EasyGL L7 fixture proves different base/normal transforms on one authored UV stream. |
+| `KHR_materials_emissive_strength` | ✅ | Applied on the PBR path (a non-PBR material has no emissive term to scale). |
+| `KHR_materials_unlit` | ⚠️ | `LightingEnabled = false` on `BasicEffect`. `SkinnedEffect` has no such flag — real XNA's has none either — so a skinned unlit material is approximated. |
+| `KHR_materials_transmission` | ⚠️ | Approximated as `alpha = 1 - transmissionFactor`; explicitly not physical, and **not claimed**, so a file that *requires* it is refused rather than drawn as tinted alpha. The caller owns opaque-first/back-to-front ordering and selects straight-alpha `BlendState::NonPremultiplied` (`GLTF-340`). |
+| `KHR_materials_pbrSpecularGlossiness` | ⚠️ | Archived by Khronos, so converted rather than refused: diffuse → base colour, metallic 0, roughness `1 - glossiness`. The coloured specular term has no equivalent and its magnitude is reported. |
+| `KHR_materials_ior` | ✅ | IOR survives both loaders and `.cnj`; shader-ready dielectric F0/F90 are analytically verified and consumed by all 15 PBR renderers. The extension is fully implemented and claimed. |
+| `KHR_materials_specular` | ⚠️ | Factor and colour likewise reach every PBR renderer. The optional `specularTexture` and `specularColorTexture` inputs remain unsupported, so the extension is not claimed when required and optional use is warned by name. |
+| `KHR_draco_mesh_compression` | ⚠️ | Decoded when the build has `libdraco` (`CNA_DRACO_AVAILABLE`); claimed only in such a build, so a file requiring Draco is refused rather than arriving empty. |
+| `EXT_meshopt_compression`, `KHR_texture_basisu`, `EXT_texture_webp` | ❌ | No decoder. A texture's plain PNG/JPEG fallback is used when the file provides one; meshopt is refused at validation, because reading such a view without a decoder yields undefined bytes rather than an error. |
+| `EXT_mesh_gpu_instancing` | ❌ | The node's own single placement imports; the per-instance transforms do not, so the file renders one copy where it describes many. Reported per file. |
+| `KHR_materials_variants` | ✅ | Fully imported and claimed; selection swaps effects, compatible vertex layouts, textures and samplers while preserving sparse default fallbacks. |
+| `KHR_materials_clearcoat`, `_sheen`, `_volume` | ❌ | Parsed and ignored, each for a stated reason. None is claimed, so a file requiring one is refused by name. |
+| Any other extension | — | The full classification of all 20 the registry knows is `docs/gltf-limitations.md` §1, generated from `GltfExtensionRegistryEXT()` — the same registry the `extensionsRequired` gate reads. |
+
+**Malformed input** is refused by name rather than imported wrongly: structural validation
+(§3.6.2.4 alignment, accessor spans, `extensionsRequired`), a container fuzz, and a rule that every
+refusal is a `std::runtime_error` naming the file and the problem.
+
+**Diagnostics API (CNAEXT):** include
+`Microsoft/Xna/Framework/Graphics/GltfImportReportEXT.hpp` and query
+`model.getGltfImportReportEXTProperty()`. `AnythingLost()` is the quick display decision;
+`Diagnostics` contains stable `Code`, `Severity`, `Kind`, `Count`, `WorstMagnitude`, `Subject` and
+`Details` fields. Do not branch on `Message` or vector order. `getWarningCountProperty()` counts
+entries, while dropped/approximation helpers sum occurrence counts.
+
+**Vertex formats (CNAEXT):** `VertexPositionNormalTangentTexture` (stride 48, tangent as `vec4` with
+glTF bitangent‑handedness sign in `w`), `VertexPositionNormalTangentTextureSkinned` (stride 68),
+their internal dual-UV extensions at strides 60/76, and the stride‑56 skinned+color layout used by
+`SkinnedEffect.VertexColorEnabled` (CNAEXT field). Which
+layout a primitive lands on — and therefore what it can carry — is a table, not a rule spread across
+the loaders: `CNA::Internal::Graphics::InferredLayoutForStride`.
 
 ### 3.3 Instancing
 
@@ -424,6 +478,13 @@ additive to §3.1's direct‑light BRDF and is the one place PBR meaningfully gr
 
 `PbrMaterial` (in `CNA::Graphics`) predates `PbrEffect` and currently has **no consumer** — the real
 material data lives on `PbrEffect` in the XNA namespace. The final decision:
+
+- **It is not the imported `Model`'s material carrier.** glTF import uses internal
+  `CNA::Internal::GltfImport::MaterialOut` to keep all decoded slots/factors together until they
+  are bound; the public model then carries the resulting `PbrEffect`/`SkinnedPbrEffect` on each
+  part. Exposing `PbrMaterial` there would create two mutable truths for one material and make
+  graphics-core depend on this optional graphics-ext layer. This is the `GLTF-236` API-gate
+  decision; no new public surface was needed.
 
 - **Keep `PbrMaterial` as the engine‑layer, serialization‑friendly material description** (a plain
   data bag: texture slots + factors + alpha mode), and add a **binding helper** rather than a second

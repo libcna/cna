@@ -57,6 +57,7 @@ void main() {
     vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
     gl_Position = pc.mvp * skinnedPos;
     gl_Position.y = -gl_Position.y; // Vulkan NDC Y is inverted vs OpenGL (matches textured3d.vert.glsl)
+    gl_PointSize = 1.0;
     // REMED-GFX-006: FNA composes the bone-skin 3x3 with the outer world normal matrix
     // (SkinnedEffect.fx Skin() then Lighting.fxh's mul(normal, WorldInverseTranspose)).
     // The world factor was missing entirely, so any rotated or non-uniformly-scaled

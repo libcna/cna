@@ -1,0 +1,184 @@
+# plan_runtimerenderer.md RTR-P12-8: CI for the Emscripten multi-renderer bundle.
+#
+# This is the set the feature exists for. On a native build a user can install the renderer they
+# want; in a browser they cannot, so one wasm bundle holding several renderers -- picked by the page
+# before start through Module.cnaPreferredRenderer (RTR-P10-23) -- is where runtime selection stops
+# being a convenience and becomes the only way to serve a mixed audience from one download.
+#
+# The set is WEBGL2 + CANVAS + HTML_DOM + SVG_DOM: one GPU renderer and three that need no GPU at
+# all, which is exactly the fallback shape a real page wants.
+#
+# What this job proves and what it does not:
+#   * it PROVES the four renderers link into one bundle and that the JS selection surface is present
+#     in it -- the failure this guards against is a combination that only breaks when built together
+#   * it does NOT run the bundle in a browser. htmldom-ci.yml already drives a real Chromium for the
+#     HTML_DOM renderer; duplicating that here would test the browser harness, not the multi-renderer
+#     link. Runtime behaviour in a page is covered by that job and by RTR-P10-22's own runs.
+
+name: Emscripten multi-renderer CI
+
+on:
+  push:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [develop, master]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+concurrency:
+  group: emscripten-multi-renderer-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  emscripten-multi:
+    name: One wasm bundle, four renderers (WEBGL2 + CANVAS + HTML_DOM + SVG_DOM)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      # Pinned rather than "latest", for the same reason htmldom-ci.yml pins it: a silent emsdk bump
+      # can break a wasm build in ways that look like a source regression.
+      EMSDK_VERSION: "6.0.3"
+    steps:
+      - name: Checkout cna (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Clone sharp-runtime (public sibling repo, no token needed)
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/.."
+          git clone --depth 1 https://github.com/openeggbert/sharp-runtime.git sharp-runtime
+
+      - name: Cache emsdk install
+        id: emsdk-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/emsdk
+          key: emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}
+
+      - name: Install emsdk (cache miss only)
+        if: steps.emsdk-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          git clone https://github.com/emscripten-core/emsdk.git ~/emsdk
+          cd ~/emsdk
+          ./emsdk install "${EMSDK_VERSION}"
+
+      - name: Activate emsdk
+        run: |
+          cd ~/emsdk
+          ./emsdk activate "${EMSDK_VERSION}"
+
+      - name: Record SDL submodule commit (for the cache key)
+        id: sdlsha
+        run: echo "sha=$(git -C third_party/SDL rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache prebuilt Emscripten SDL (built once from the submodule, reused across runs)
+        uses: actions/cache@v4
+        with:
+          path: .sdl-prebuilt-emscripten
+          key: sdl-emscripten-${{ steps.sdlsha.outputs.sha }}
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-emscripten-multi-${{ github.sha }}
+          restore-keys: |
+            ccache-emscripten-multi-
+
+      - name: Install system dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ccache python3
+
+      - name: Configure one bundle with all four renderers
+        run: |
+          set -euo pipefail
+          source ~/emsdk/emsdk_env.sh
+          emcmake cmake -S . -B cmake-build-wasm-multi -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCNA_GRAPHICS_RENDERER=WEBGL2 \
+            -DCNA_GRAPHICS_RENDERERS="WEBGL2;CANVAS;HTML_DOM;SVG_DOM" \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache
+
+      - name: Build the bundle
+        run: |
+          set -euo pipefail
+          source ~/emsdk/emsdk_env.sh
+          cmake --build cmake-build-wasm-multi -j"$(nproc)"
+
+      # The point of the set is that all four are actually IN the artifact. A configure that quietly
+      # dropped one, or a renderer whose sources never reached the link, would otherwise pass this
+      # job by building three renderers and calling it four.
+      - name: Assert every renderer and the JS selection surface are in the bundle
+        run: |
+          set -euo pipefail
+          source ~/emsdk/emsdk_env.sh
+          core="cmake-build-wasm-multi/modules/core/libcna_core.a"
+          test -f "$core" || { echo "libcna_core.a not built at $core" >&2; exit 1; }
+
+          # RTR-P10-23's surface: the page-facing export and the property reader.
+          for symbol in cna_set_preferred_renderer cna_read_module_preferred_renderer; do
+            if ! "$EMSDK/upstream/bin/llvm-nm" "$core" 2>/dev/null | grep -q "T ${symbol}$"; then
+              echo "missing JS selection export: ${symbol}" >&2
+              exit 1
+            fi
+            echo "found ${symbol}"
+          done
+
+          # Each renderer family must have produced its own archive. The names are the FAMILY's,
+          # not the identity's: WEBGL2 is one of the five public identities of the EasyGL family, so
+          # it builds libcna_renderer_easygl.a. Asserting libcna_renderer_webgl2.a would fail on a
+          # perfectly good bundle -- verified against a real local wasm configure before this job
+          # was written.
+          missing=0
+          for archive in libcna_renderer_easygl.a \
+                         libcna_renderer_canvas.a \
+                         libcna_renderer_html_dom.a \
+                         libcna_renderer_svg_dom.a; do
+            if ! find cmake-build-wasm-multi -name "${archive}" | grep -q .; then
+              echo "missing renderer archive: ${archive}" >&2
+              missing=1
+            fi
+          done
+          find cmake-build-wasm-multi -name "libcna_renderer_*.a" -printf "  %f\n" | sort
+
+          # The archives existing is necessary but not sufficient: a renderer is only SELECTABLE at
+          # run time if it has an entry in the generated registry. Assert the entry count, which is
+          # what CNA::GraphicsRendererSelection can actually reach.
+          #
+          # Match on "::GetDescriptor...()" rather than on renderer names: a family with a single
+          # public identity generates a bare GetDescriptor(), while a family serving several
+          # generates GetDescriptor<Identity>() (EasyGL -> GetDescriptorWebGL2). A pattern requiring
+          # the suffix silently counts only the multi-identity families -- it reported 1 of 4 here
+          # while the bundle was in fact correct.
+          registry=$(find cmake-build-wasm-multi -name "CnaRendererRegistry.generated.cpp" | head -1)
+          test -n "$registry" || { echo "generated registry not found" >&2; exit 1; }
+          registered=$(grep -cE "::GetDescriptor[A-Za-z0-9]*\(\)," "$registry" || true)
+          echo "registered renderers: ${registered}"
+          grep -oE "[A-Za-z]+::GetDescriptor[A-Za-z0-9]*\(\)" "$registry" | sort -u | sed "s/^/  /"
+          if [ "${registered}" -ne 4 ]; then
+            echo "expected 4 registered renderers, found ${registered}" >&2
+            exit 1
+          fi
+
+          exit "$missing"
+
+      - name: Archive the bundle on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emscripten-multi-renderer-bundle
+          path: |
+            cmake-build-wasm-multi/*.js
+            cmake-build-wasm-multi/*.wasm
+            cmake-build-wasm-multi/CMakeFiles/CMakeConfigureLog.yaml
+          retention-days: 7

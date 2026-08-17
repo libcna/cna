@@ -37,12 +37,6 @@
 #include "System/FormatException.hpp"
 #include "System/NotSupportedException.hpp"
 
-// plan_dx9.md Phase D9-10 (D9-103): GraphicsProfile.Reach/HiDef texture-size ceilings are real,
-// enforced-at-creation-time, ONLY on this renderer -- the other 9 CNA renderers have no profile
-// distinction to enforce (matches GraphicsAdapter.cpp's own #ifdef CNA_RENDERER_DIRECTX9 convention).
-#ifdef CNA_RENDERER_DIRECTX9
-#include "CNA/Internal/Renderers/DirectX9/D3D9ProfileCapabilities.hpp"
-#endif
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -53,26 +47,26 @@ namespace Microsoft::Xna::Framework::Graphics
     // Private helpers
     // -----------------------------------------------------------------------
 
-#ifdef CNA_RENDERER_DIRECTX9
-    // D9-103: a HiDef-only size requested on a Reach device (or a size exceeding even HiDef's own
-    // 4096 ceiling) throws the XNA-correct exception (System::NotSupportedException, matching
-    // this file's own established convention for other unsupported-request cases) -- D9-100's own
-    // table, checked as a profile CEILING, not a hardware query: even if this dev environment's
-    // real device could technically allocate a larger texture, a Reach-profile game is restricted
-    // to 2048 and a HiDef-profile game to 4096, matching real XNA's own portability guarantee.
+    // plan_runtimerenderer.md design decision 9 / plan_dx9.md D9-103: GraphicsProfile.Reach/HiDef
+    // texture-size ceilings. Only a renderer with a real capability structure to consult (D3D9)
+    // enforces one; every other renderer reports no ceiling, which is exactly what it did when this
+    // was a compile-time renderer branch. Checked as a profile CEILING, not a hardware
+    // query: even where the device could allocate more, a Reach-profile game is restricted to the
+    // profile's own limit, which is what XNA's portability guarantee means.
     static void ValidateTextureSizeForProfileEXT(const GraphicsDevice& device, int w, int h)
     {
         const int profile = static_cast<int>(device.getGraphicsProfileProperty());
-        const int maxSize = CNA::Internal::Renderers::DirectX9::MaxTextureSizeForProfileEXT(profile);
+        const int maxSize = device.GetRenderer().GetMaxTextureSizeForProfileEXT(profile);
         if (w > maxSize || h > maxSize)
         {
             throw System::NotSupportedException(
-                "Texture2D: " + std::to_string(w) + "x" + std::to_string(h) +
-                " exceeds GraphicsProfile." + (profile == 1 ? std::string("HiDef") : std::string("Reach")) +
-                "'s own maximum texture size of " + std::to_string(maxSize));
+                "Texture size " + std::to_string(w) + "x" + std::to_string(h) +
+                " exceeds GraphicsProfile." +
+                (profile == 1 ? std::string("HiDef") : std::string("Reach")) +
+                "'s own maximum of " + std::to_string(maxSize) + "x" + std::to_string(maxSize));
         }
     }
-#endif
+
 
     // REMED-CONTENT-001: the native graphics APIs' own validation does not substitute for this --
     // Vulkan's validation layer is advisory (RADV proceeds anyway), and wgpu-native validates
@@ -90,82 +84,57 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    static void ValidateTexture2DFormatEXT(SurfaceFormat format)
+    static void ValidateTexture2DFormatEXT(const GraphicsDevice* device, SurfaceFormat format)
     {
-#ifdef CNA_RENDERER_SKIA
-        if (format == SurfaceFormat::Color
-            || format == SurfaceFormat::Bgr565
-            || format == SurfaceFormat::Bgra5551
-            || format == SurfaceFormat::Bgra4444
-            || format == SurfaceFormat::Rgba1010102
-            || format == SurfaceFormat::Rg32
-            || format == SurfaceFormat::Rgba64
-            || format == SurfaceFormat::Alpha8
-            || format == SurfaceFormat::ColorBgraEXT
-            || format == SurfaceFormat::ColorSrgbEXT
-            || format == SurfaceFormat::ByteEXT
-            || format == SurfaceFormat::UShortEXT
-            || format == SurfaceFormat::Single
-            || format == SurfaceFormat::Vector2
-            || format == SurfaceFormat::Vector4
-            || format == SurfaceFormat::HalfSingle
-            || format == SurfaceFormat::HalfVector2
-            || format == SurfaceFormat::HalfVector4
-            || format == SurfaceFormat::NormalizedByte2
-            || format == SurfaceFormat::NormalizedByte4
-            || format == SurfaceFormat::HdrBlendable
-            || format == SurfaceFormat::Dxt1
-            || format == SurfaceFormat::Dxt3
-            || format == SurfaceFormat::Dxt5
-            || format == SurfaceFormat::Bc7EXT
-            || format == SurfaceFormat::Bc7SrgbEXT)
+        // plan_runtimerenderer.md design decision 9: a renderer that stores each format in its own
+        // native layout (SKIA) answers this itself; every other renderer defers to the framework's
+        // own rule, which is what the #else branch of the former #ifdef did.
+        if (device == nullptr)
         {
+            Texture::ValidateFormat(format);
             return;
         }
-        throw std::runtime_error(
-            "Skia Texture2D SurfaceFormat has not passed its promotion gate.");
-#else
-        Texture::ValidateFormat(format);
-#endif
+        switch (device->GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)))
+        {
+            case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
+                return;
+            case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported:
+                throw std::runtime_error(
+                    "Texture2D SurfaceFormat has not passed the renderer's promotion gate.");
+            case CNA::Internal::Renderers::RendererFormatVerdict::Defer:
+                Texture::ValidateFormat(format);
+                return;
+        }
     }
 
-    [[nodiscard]] static bool IsColorTransferFormatEXT(SurfaceFormat format) noexcept
+    [[nodiscard]] static bool IsColorTransferFormatEXT(const GraphicsDevice* device,
+                                                        SurfaceFormat format) noexcept
     {
-        if (format == SurfaceFormat::Color)
-            return true;
-#ifdef CNA_RENDERER_SKIA
-        // Skia stores each promoted format in its own native layout, so a `Color*` transfer is
-        // only meaningful for the two that are genuinely 32-bit RGBA-shaped. Every other promoted
-        // format has a typed overload that reads its real bits instead.
-        return format == SurfaceFormat::ColorBgraEXT
-            || format == SurfaceFormat::ColorSrgbEXT;
-#else
-        // Every other renderer keeps exactly the contract it had before this gate existed: the
-        // `Color*` overloads accept any format whose texel is a multiple of four bytes, which is
-        // the rule Texture::ValidateGetDataFormat(format, 4) applies on the next line. Returning a
-        // flat false here would withdraw a public route those renderers genuinely serve --
-        // MouseCursor::FromTexture2D reads a ColorSrgbEXT texture through it -- from renderers this
-        // lane does not otherwise touch.
+        // The framework rule is "any format whose texel is a multiple of four bytes", which is the
+        // rule Texture::ValidateGetDataFormat(format, 4) applies alongside it. It is a route real
+        // code depends on -- MouseCursor::FromTexture2D reads a ColorSrgbEXT texture through it --
+        // so a renderer has to opt out of it explicitly rather than have it withdrawn by default.
+        if (device != nullptr)
+        {
+            switch (device->GetRenderer().ClassifyColorTransferFormatEXT(static_cast<int>(format)))
+            {
+                case CNA::Internal::Renderers::RendererFormatVerdict::Supported:   return true;
+                case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported: return false;
+                case CNA::Internal::Renderers::RendererFormatVerdict::Defer:       break;
+            }
+        }
         return Texture::GetFormatSizeEXT(format) % 4 == 0;
-#endif
     }
 
     /// SKIA-140/141: Dxt1/Dxt3/Dxt5/Bc7EXT/Bc7SrgbEXT transfer raw compressed blocks through the
     /// same CNAEXT byte-array overloads ByteEXT uses, matching how real XNA/FNA upload compressed
     /// content through the generic SetData<byte>/GetData<byte> overload rather than a dedicated
-    /// method.
-    [[nodiscard]] static bool IsCompressedTransferFormatEXT(SurfaceFormat format) noexcept
+    /// method. Renderers that do not store compressed textures natively never take this path.
+    [[nodiscard]] static bool IsCompressedTransferFormatEXT(const GraphicsDevice* device,
+                                                             SurfaceFormat format) noexcept
     {
-#ifdef CNA_RENDERER_SKIA
-        return format == SurfaceFormat::Dxt1
-            || format == SurfaceFormat::Dxt3
-            || format == SurfaceFormat::Dxt5
-            || format == SurfaceFormat::Bc7EXT
-            || format == SurfaceFormat::Bc7SrgbEXT;
-#else
-        (void)format;
-        return false;
-#endif
+        return device != nullptr
+            && device->GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format));
     }
 
     static int mipDim(int base, int level)
@@ -273,9 +242,7 @@ namespace Microsoft::Xna::Framework::Graphics
     Texture2D::Texture2D(GraphicsDevice& graphicsDevice, int w, int h)
         : Texture(&graphicsDevice), width(w), height(h)
     {
-#ifdef CNA_RENDERER_DIRECTX9
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
-#endif
         ValidateTextureDimensionEXT(graphicsDevice, w, h);
         ImageData data;
         data.width  = w;
@@ -298,11 +265,9 @@ namespace Microsoft::Xna::Framework::Graphics
                          bool mipMap, SurfaceFormat format)
         : Texture(&graphicsDevice), width(w), height(h)
     {
-#ifdef CNA_RENDERER_DIRECTX9
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
-#endif
         ValidateTextureDimensionEXT(graphicsDevice, w, h);
-        ValidateTexture2DFormatEXT(format);
+        ValidateTexture2DFormatEXT(&graphicsDevice, format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(w, h) : 1;
         ImageData data;
@@ -385,7 +350,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (isDisposed_)
             throw System::ObjectDisposedException("Texture2D");
-        if (!IsColorTransferFormatEXT(format_))
+        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
             throw std::invalid_argument(
                 "Texture2D::SetData: Color data requires a Color-compatible 32-bit format");
         if (!graphicsDevice_ || !data || elementCount <= 0) return;
@@ -436,7 +401,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (isDisposed_)
             throw System::ObjectDisposedException("Texture2D");
-        if (!IsColorTransferFormatEXT(format_))
+        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
             throw std::invalid_argument(
                 "Texture2D::SetData: Color data requires a Color-compatible 32-bit format");
         if (!data || elementCount <= 0)
@@ -1264,7 +1229,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const std::uint8_t* data,
                             int startIndex, int elementCount)
     {
-        if (IsCompressedTransferFormatEXT(format_))
+        if (IsCompressedTransferFormatEXT(graphicsDevice_, format_))
         {
             SetCompressedDataBytes(level, rect, data, startIndex, elementCount);
             return;
@@ -1374,7 +1339,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (isDisposed_)
             throw System::ObjectDisposedException("Texture2D");
-        if (!IsColorTransferFormatEXT(format_))
+        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
             throw std::invalid_argument(
                 "Texture2D::GetData: Color data requires a Color-compatible 32-bit format");
         if (!data || elementCount <= 0)
@@ -1465,7 +1430,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (isDisposed_)
             throw System::ObjectDisposedException("Texture2D");
-        if (!IsColorTransferFormatEXT(format_))
+        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
             throw std::invalid_argument(
                 "Texture2D::GetData: Color data requires a Color-compatible 32-bit format");
         if (!data || elementCount <= 0)
@@ -2107,7 +2072,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, std::uint8_t* data,
                             int startIndex, int elementCount) const
     {
-        if (IsCompressedTransferFormatEXT(format_))
+        if (IsCompressedTransferFormatEXT(graphicsDevice_, format_))
         {
             GetCompressedDataBytes(level, rect, data, startIndex, elementCount);
             return;
@@ -2332,9 +2297,7 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsDevice& device, int w, int h,
         std::vector<std::vector<std::uint8_t>>&& rgbaLevels)
     {
-#ifdef CNA_RENDERER_DIRECTX9
         ValidateTextureSizeForProfileEXT(device, w, h);
-#endif
         ValidateTextureDimensionEXT(device, w, h);
         const int maximumLevels = CalculateMipLevels(w, h);
         if (rgbaLevels.empty()

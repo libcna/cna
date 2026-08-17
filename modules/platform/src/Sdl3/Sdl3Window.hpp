@@ -107,6 +107,13 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] std::string GetDisplayName() const override;
 
         /**
+         * @brief Declares which screen orientations the application accepts.
+         *
+         * @param orientations The accepted set, or `ScreenOrientation::None` for no preference.
+         */
+        void SetSupportedOrientations(ScreenOrientation orientations) override;
+
+        /**
          * @brief Gets the underlying SDL window.
          *
          * Implementation-internal: it exists so sibling SDL3 services (displays, GL contexts,

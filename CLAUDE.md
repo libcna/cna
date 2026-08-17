@@ -396,6 +396,33 @@ After making changes:
 2. Report: changed files, added stubs, missing dependencies, intentional deviations, build result, remaining errors.
 
 Default debug build dir: `cmake-build-debug/`. Vulkan build dir: `cmake-build-vulkan/`.
+Multi-renderer build dir: `cmake-build-multi/` (see below).
+
+### Runtime renderer selection (second build mode)
+
+Compile-time renderer selection (`-DCNA_GRAPHICS_RENDERER=<X>`) remains the default and recommended
+mode, and is unchanged in every respect.
+
+A second, opt-in mode compiles several renderers into one binary and chooses between them at
+runtime through `CNA::GraphicsRendererSelection`:
+
+```bash
+cmake -S . -B cmake-build-multi -G Ninja \
+      -DCNA_GRAPHICS_RENDERER=HEADLESS \
+      -DCNA_GRAPHICS_RENDERERS="HEADLESS;SOFTWARE;STUB"
+```
+
+`CNA_GRAPHICS_RENDERER` keeps its meaning as the **default** renderer and must be a member of the
+list. Only the default's `CNA_RENDERER_<X>` macro is defined project-wide; each family's own macro
+is private to its target, which is what keeps the existing renderer-gated tests and examples
+meaningful — they describe the default.
+
+Unbuildable combinations are rejected at configure time with a reason
+(`cmake/RendererCombinations.cmake`). See `docs/runtime-renderer-selection.md` and
+`plan_runtimerenderer.md`.
+
+`cmake-build-multi/` is the one addition to the build-directory list above; it is not a per-ticket
+directory and is shared by all multi-renderer work.
 
 ### Build locations & caching (mandatory)
 

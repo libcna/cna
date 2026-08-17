@@ -228,12 +228,14 @@ namespace CNA::Platform {
         static const std::string willEnterBackground = "WillEnterBackground";
         static const std::string didEnterForeground = "DidEnterForeground";
         static const std::string lowMemory = "LowMemory";
+        static const std::string terminating = "Terminating";
 
         switch (kind)
         {
             case AppLifecycleKind::WillEnterBackground: return willEnterBackground;
             case AppLifecycleKind::DidEnterForeground:  return didEnterForeground;
             case AppLifecycleKind::LowMemory:           return lowMemory;
+            case AppLifecycleKind::Terminating:         return terminating;
         }
         return willEnterBackground;
     }

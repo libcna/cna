@@ -251,10 +251,16 @@ TEST(EasyGLCompiledEffectDrawTest, RefusesADrawWithNoVertexDeclaration)
     GpuDrawParams params{};
     params.compiledEffectRuntime = runtime.get();
 
-    // No SetVertexDeclaration call -- DeclaredVertexLayout stays empty.
+    // No SetVertexDeclaration call -- DeclaredVertexLayout stays empty. Stride 20 (float3 position
+    // + float2 texcoord) is deliberate: it is one of ApplyLayout's recognized fixed-stride
+    // fallbacks (GLTF-157 tightened the unrecognized-stride case to refuse rather than silently
+    // treat it as position-only), so SetData itself succeeds and the compiled-effect draw path's
+    // own declaredElements.empty() refusal -- the thing this test exists to exercise -- is what
+    // actually throws.
     auto vb = renderer->CreateVertexBuffer(3);
-    struct Vertex { float x, y, z; };
-    const std::vector<Vertex> triangle = {{0, 0, 0}, {1, 0, 0}, {0, 1, 0}};
+    struct Vertex { float x, y, z, u, v; };
+    const std::vector<Vertex> triangle = {
+        {0, 0, 0, 0, 0}, {1, 0, 0, 1, 0}, {0, 1, 0, 0, 1}};
     vb->SetData(triangle.data(), 3, sizeof(Vertex));
 
     EXPECT_THROW(

@@ -35,6 +35,16 @@ namespace CNA::Internal::Renderers::Headless
             if (state->ValidationEnabled() && !condition)
                 throw HeadlessValidationException(message);
         }
+
+        bool AllowsNeutralWhitePrimaryTexture(const GpuDrawParams& params)
+        {
+            // SkinnedEffect, PbrEffect and SkinnedPbrEffect deliberately set textureEnabled even
+            // when their optional base texture is absent. GPU renderers bind a neutral white
+            // texture for those stock-effect routes, so HEADLESS must validate the same public
+            // contract rather than rejecting a model that the native renderers accept. Ordinary
+            // BasicEffect draws remain strict: textureEnabled with no texture is still an error.
+            return params.skinned || params.pbr;
+        }
     }
 
     HeadlessMode ParseHeadlessModeFromEnvironment()
@@ -883,7 +893,8 @@ namespace CNA::Internal::Renderers::Headless
                                                PrimitiveType primitive, int primitiveCount,
                                                const GpuDrawParams& params)
     {
-        Require(state_, !(params.textureEnabled && params.texture0 == nullptr),
+        Require(state_, !(params.textureEnabled && params.texture0 == nullptr &&
+                          !AllowsNeutralWhitePrimaryTexture(params)),
                "HeadlessRenderer::DrawPrimitivesEx: TextureEnabled=true but texture0 is null");
         Require(state_, !(params.dualTexture && params.texture1 == nullptr),
                "HeadlessRenderer::DrawPrimitivesEx: DualTexture=true but texture1 is null");
@@ -899,7 +910,8 @@ namespace CNA::Internal::Renderers::Headless
                                                        const Matrix& projection, PrimitiveType primitive,
                                                        int primitiveCount, const GpuDrawParams& params)
     {
-        Require(state_, !(params.textureEnabled && params.texture0 == nullptr),
+        Require(state_, !(params.textureEnabled && params.texture0 == nullptr &&
+                          !AllowsNeutralWhitePrimaryTexture(params)),
                "HeadlessRenderer::DrawIndexedPrimitivesEx: TextureEnabled=true but texture0 is null");
         Require(state_, !(params.dualTexture && params.texture1 == nullptr),
                "HeadlessRenderer::DrawIndexedPrimitivesEx: DualTexture=true but texture1 is null");
@@ -1037,7 +1049,12 @@ namespace CNA::Internal::Renderers::Headless
 
 namespace CNA::Internal::Renderers
 {
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace Headless { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> Headless::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<Headless::HeadlessRenderer>(args.virtualWidth, args.virtualHeight);
     }

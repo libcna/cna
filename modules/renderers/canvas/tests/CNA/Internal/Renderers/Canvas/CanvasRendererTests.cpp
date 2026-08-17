@@ -8,7 +8,10 @@
 // by CANVAS-82's manual checklist.
 #include <gtest/gtest.h>
 
-#if defined(CNA_RENDERER_CANVAS) || defined(CNA_CANVAS_HOST_TESTS)
+// plan_runtimerenderer.md RTR-P9-9 plus `next`'s own host-test build: two independent reasons to
+// compile this suite, so both are kept -- picking one silently drops the other branch's coverage.
+#if defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_PRESENT_CANVAS) \
+    || defined(CNA_CANVAS_HOST_TESTS)
 #include "CNA/Internal/Renderers/Canvas/CanvasRenderer.hpp"
 #include "CNA/Internal/Renderers/Canvas/CanvasSpriteBatchRenderer.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -142,8 +145,8 @@ TEST(CanvasRendererThrowNo3D, VertexAndIndexBufferCreationThrows)
     CanvasRenderer renderer(TestArgs());
     EXPECT_THROW(renderer.CreateVertexBuffer(3), std::runtime_error);
     EXPECT_THROW(renderer.CreateIndexBuffer16(3), std::runtime_error);
-    // CANVAS-62: CreateIndexBuffer32 has no Canvas-local override -- IGraphicsRenderer's own shared
-    // default delegates to CreateIndexBuffer16(), which already throws.
+    // CANVAS-62 / GLTF-163: no Canvas-local override; the shared default now rejects 32-bit
+    // buffers directly rather than delegating to a 16-bit factory.
     EXPECT_THROW(renderer.CreateIndexBuffer32(3), std::runtime_error);
 }
 

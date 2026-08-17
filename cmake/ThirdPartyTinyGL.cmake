@@ -28,6 +28,28 @@ function(cna_configure_tinygl)
     # the C component in this parent directory before adding upstream because imported targets are
     # directory-scoped; when it exists we enable the accelerated regions explicitly below.
     enable_language(C)
+
+    # MSVC gets no OpenMP at all, and the suppression has to happen here, before upstream is added.
+    # Upstream's src/CMakeLists.txt runs its own find_package(OpenMP) and links OpenMP::OpenMP_C
+    # whenever OPENMP_C_FOUND is set, so declining to link it ourselves is not enough -- upstream
+    # turns the flag on again, _OPENMP is defined, and its `#pragma omp simd` in clip.c and
+    # vertex.c fails on MSVC with C7660 (that directive is OpenMP 4.0; MSVC's default /openmp
+    # implements 2.0 and asks for /openmp:experimental). Taking an acceleration that is optional by
+    # design (TINYGL-21) in exchange for a dependency on an experimental compiler switch is a bad
+    # trade, so Windows/MSVC builds take the complete single-threaded path that TINYGL-21 already
+    # tests: 14/14 suites pass with no OpenMP and the archive carries no OpenMP references.
+    #
+    # Both halves were measured with a two-file CMake probe -- a function that sets the variable
+    # and calls add_subdirectory, and a child that calls find_package(OpenMP) and prints both
+    # spellings -- rather than assumed. OPENMP_C_FOUND looks like a typo for CMake's own
+    # OpenMP_C_FOUND but is really set, because FindOpenMP calls
+    # find_package_handle_standard_args(OpenMP_C ...) per language and FPHSA defines the
+    # upper-cased <NAME>_FOUND for every name it handles; and setting
+    # CMAKE_DISABLE_FIND_PACKAGE_OpenMP in this function's scope does reach the subdirectory
+    # FetchContent adds.
+    if(MSVC)
+        set(CMAKE_DISABLE_FIND_PACKAGE_OpenMP ON)
+    endif()
     find_package(OpenMP QUIET COMPONENTS C)
 
     # Upstream builds a shared library and its demo corpus by default; CNA links the static archive
@@ -56,13 +78,18 @@ function(cna_configure_tinygl)
             "CNA: fetched TinyGL at ${tinygl_SOURCE_DIR} but include/GL/gl.h is missing.")
     endif()
 
-    # Upstream checks the incorrectly-cased legacy-style OPENMP_C_FOUND name rather than CMake's
-    # OpenMP_C_FOUND. Attach the target ourselves when available; its compile option defines
-    # _OPENMP and its link interface resolves the resulting runtime references. With no target the
-    # guarded pragmas compile out and no runtime dependency is created.
-    if(TARGET OpenMP::OpenMP_C)
+    # Attach the target ourselves as well: upstream links it only inside its own
+    # `if(OPENMP_C_FOUND)` blocks, and stating it here keeps CNA's build independent of how
+    # upstream spells that check. The compile option defines _OPENMP and the link interface
+    # resolves the resulting runtime references; with no target the guarded pragmas compile out
+    # and no runtime dependency is created. On MSVC there is no target to attach, because the
+    # package was disabled above.
+    if(TARGET OpenMP::OpenMP_C AND NOT MSVC)
         target_link_libraries(tinygl-static PUBLIC OpenMP::OpenMP_C)
         message(STATUS "CNA: TinyGL OpenMP acceleration enabled")
+    elseif(MSVC)
+        message(STATUS "CNA: TinyGL OpenMP skipped on MSVC (omp simd needs OpenMP 4.0); "
+                       "using the complete single-threaded path")
     else()
         message(STATUS "CNA: TinyGL OpenMP unavailable; using the complete single-threaded path")
     endif()

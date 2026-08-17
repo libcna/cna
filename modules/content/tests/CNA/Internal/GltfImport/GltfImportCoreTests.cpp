@@ -4,12 +4,13 @@
 // in-process (cgltf_parse_file + cgltf_load_buffers on a small self-contained fixture written to
 // a scratch file, mirroring gltf_to_cnj.cpp's own parse setup) rather than going through
 // ContentManager or spawning the CLI tool, since the thing under test here (MeshOut::
-// pbrUv2Mismatch) has no separately-observable effect on either of those higher-level paths --
+// uvSetMismatchedMapsEXT) has no separately-observable effect on either of those higher-level paths --
 // the warning it drives (gltf_to_cnj.cpp's own ConvertGroup) is best-effort stdout diagnostics,
 // not asserted on elsewhere in this codebase (see the pre-existing morph-target warning, which
 // has no matching test either).
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -19,6 +20,7 @@
 #include <string>
 
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 using namespace CNA::Internal::GltfImport;
 
@@ -96,7 +98,7 @@ namespace
 })GLTF";
 
     // Identical to kMismatchedUvGltf except the normal map is also on TEXCOORD_0 (matching base
-    // color) -- the negative case, proving pbrUv2Mismatch stays false for the common, non-divergent
+    // color) -- the negative case, proving uvSetMismatchedMapsEXT stays empty for the common, non-divergent
     // authoring pattern.
     const char* kMatchedUvGltf = R"GLTF({
   "asset": { "version": "2.0" },
@@ -236,6 +238,41 @@ namespace
   ]
 })GLTF";
 
+    // GLTF-179: two triangles meet along a data-identical but separately indexed edge. Their UV
+    // gradients produce tangents +X and normalize((1,10,0)) respectively. CNA owns one tangent per
+    // glTF vertex, so it keeps those two bases separate; reference MikkTSpace internally welds the
+    // compatible face corners and returns one shared basis along the edge. This is the smallest
+    // input that measures the representation-level divergence instead of merely stating it.
+    const char* kMikkWeldDivergenceGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": {
+      "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2
+  }, "indices": 3, "material": 0 } ] } ],
+  "materials": [ { "normalTexture": { "index": 0 } } ],
+  "textures": [ { "source": 0 } ],
+  "images": [ { "bufferView": 4, "mimeType": "image/png" } ],
+  "buffers": [ {
+    "byteLength": 273,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAACAvwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAgL8AACBBAAABAAIAAwAEAAUAiVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 72 },
+    { "buffer": 0, "byteOffset": 72,  "byteLength": 72 },
+    { "buffer": 0, "byteOffset": 144, "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 192, "byteLength": 12 },
+    { "buffer": 0, "byteOffset": 204, "byteLength": 69 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 6, "type": "VEC3", "min": [-1,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 6, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 6, "type": "VEC2" },
+    { "bufferView": 3, "componentType": 5123, "count": 6, "type": "SCALAR" }
+  ]
+})GLTF";
+
     // glTF extensions (CNB-97, Phase 14H): a single triangle whose material combines
     // KHR_texture_transform (on the base-color texture: offset=[0.1,0.2], scale=[2.0,0.5],
     // rotation=0 -- chosen to avoid trig in hand-verification) and KHR_materials_emissive_strength
@@ -281,18 +318,24 @@ namespace
 })GLTF";
 }
 
-TEST(GltfImportCoreTest, ExtractMeshDetectsMismatchedPbrMapUvSets)
+TEST(GltfImportCoreTest, ExtractMeshCarriesTwoDifferentPbrMapUvSetsWithoutAFalseLoss)
 {
     const MeshOut out = ExtractPrimitive0(kMismatchedUvGltf);
     ASSERT_TRUE(out.usePbr);
-    EXPECT_TRUE(out.pbrUv2Mismatch);
+    EXPECT_EQ(60, out.stride);
+    EXPECT_TRUE(out.hasSecondTexcoordEXT);
+    EXPECT_EQ(0u, out.material.textureCoordinateSetsEXT[
+                      static_cast<std::size_t>(TextureSlotEXT::BaseColor)]);
+    EXPECT_EQ(1u, out.material.textureCoordinateSetsEXT[
+                      static_cast<std::size_t>(TextureSlotEXT::Normal)]);
+    EXPECT_TRUE(out.uvSetMismatchedMapsEXT.empty());
 }
 
 TEST(GltfImportCoreTest, ExtractMeshDoesNotFlagMatchedPbrMapUvSets)
 {
     const MeshOut out = ExtractPrimitive0(kMatchedUvGltf);
     ASSERT_TRUE(out.usePbr);
-    EXPECT_FALSE(out.pbrUv2Mismatch);
+    EXPECT_TRUE(out.uvSetMismatchedMapsEXT.empty());
 }
 
 // DualTextureEffect occlusion brightness fix (CNB-88, Phase 14E). Pixel-value verification
@@ -335,6 +378,55 @@ TEST(GltfImportCoreTest, RemapOcclusionImageReturnsNulloptOnUndecodableInput)
     EXPECT_FALSE(result.has_value());
 }
 
+TEST(GltfImportCoreTest, DracoUniqueIdsFollowCgltfsFixedUpAttributePointers)
+{
+    // GLTF-359: IDs are deliberately sparse, out of semantic order and different from the core
+    // primitive's accessor mapping. This goes through cgltf_parse itself rather than constructing
+    // pointers by hand, so a cgltf upgrade that changes the extension representation breaks this
+    // adapter test before it can select the wrong decoded Draco attribute in production.
+    const std::string json = R"GLTF({
+      "asset": { "version": "2.0" },
+      "extensionsUsed": [ "KHR_draco_mesh_compression" ],
+      "buffers": [ { "byteLength": 1 } ],
+      "bufferViews": [ { "buffer": 0, "byteLength": 1 } ],
+      "accessors": [
+        { "componentType": 5126, "count": 1, "type": "SCALAR" },
+        { "componentType": 5126, "count": 1, "type": "SCALAR" },
+        { "componentType": 5126, "count": 1, "type": "SCALAR" },
+        { "componentType": 5126, "count": 1, "type": "SCALAR" },
+        { "componentType": 5126, "count": 1, "type": "SCALAR" },
+        { "componentType": 5126, "count": 1, "type": "SCALAR" },
+        { "componentType": 5126, "count": 1, "type": "SCALAR" },
+        { "componentType": 5126, "count": 1, "type": "SCALAR" }
+      ],
+      "meshes": [ { "primitives": [ {
+        "attributes": { "POSITION": 0 },
+        "extensions": { "KHR_draco_mesh_compression": {
+          "bufferView": 0,
+          "attributes": { "POSITION": 7, "NORMAL": 2, "TEXCOORD_1": 5 }
+        } }
+      } ] } ]
+    })GLTF";
+
+    cgltf_options options{};
+    cgltf_data* data = nullptr;
+    ASSERT_EQ(cgltf_result_success, cgltf_parse(&options, json.data(), json.size(), &data));
+    ASSERT_NE(nullptr, data);
+    ASSERT_EQ(1u, data->meshes_count);
+    ASSERT_EQ(1u, data->meshes[0].primitives_count);
+    const cgltf_primitive& primitive = data->meshes[0].primitives[0];
+    ASSERT_TRUE(primitive.has_draco_mesh_compression);
+
+    EXPECT_EQ(7, FindDracoUniqueIdEXT(primitive, data, cgltf_attribute_type_position, 0));
+    EXPECT_EQ(2, FindDracoUniqueIdEXT(primitive, data, cgltf_attribute_type_normal, 0));
+    EXPECT_EQ(5, FindDracoUniqueIdEXT(primitive, data, cgltf_attribute_type_texcoord, 1));
+    EXPECT_EQ(-1, FindDracoUniqueIdEXT(primitive, data, cgltf_attribute_type_texcoord, 0));
+    EXPECT_EQ(-1, FindDracoUniqueIdEXT(primitive, data, cgltf_attribute_type_color, 0));
+    EXPECT_EQ(-1, FindDracoUniqueIdEXT(primitive, nullptr, cgltf_attribute_type_position, 0));
+
+    cgltf_free(data);
+}
+
 #ifdef CNA_DRACO_AVAILABLE
 // Draco mesh compression decoding (CNB-91, Phase 14F). Only compiled when this build actually has
 // libdraco support (see CNA_DRACO_AVAILABLE's own doc comment in cmake/CnaLibrary.cmake) --
@@ -344,12 +436,13 @@ TEST(GltfImportCoreTest, ExtractMeshDecodesDracoCompressedTriangle)
 {
     const MeshOut out = ExtractPrimitive0(kDracoTriangleGltf);
 
-    // Unskinned, uncolored, no PBR maps -> stride 32 (Position+Normal+TextureCoordinate).
-    ASSERT_EQ(out.stride, 32);
+    // glTF's ordinary metallic-roughness material selects the PBR stream even without maps:
+    // Position+Normal+generated Tangent+TextureCoordinate (GLTF-215).
+    ASSERT_EQ(out.stride, 48);
     ASSERT_FALSE(out.skinned);
     ASSERT_FALSE(out.colored);
-    ASSERT_FALSE(out.usePbr);
-    ASSERT_EQ(out.vertexBytes.size(), 3u * 32u);
+    ASSERT_TRUE(out.usePbr);
+    ASSERT_EQ(out.vertexBytes.size(), 3u * 48u);
 
     auto readFloat = [&](std::size_t byteOffset) {
         float v;
@@ -364,20 +457,20 @@ TEST(GltfImportCoreTest, ExtractMeshDecodesDracoCompressedTriangle)
     EXPECT_NEAR(readFloat(12), 0.0f, 1e-5f);
     EXPECT_NEAR(readFloat(16), 0.0f, 1e-5f);
     EXPECT_NEAR(readFloat(20), 1.0f, 1e-5f);
-    EXPECT_NEAR(readFloat(24), 0.0f, 1e-5f);
-    EXPECT_NEAR(readFloat(28), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(40), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(44), 0.0f, 1e-5f);
 
     // Vertex 1: Position (1,0,0), UV (1,0).
-    EXPECT_NEAR(readFloat(32 + 0), 1.0f, 1e-5f);
-    EXPECT_NEAR(readFloat(32 + 4), 0.0f, 1e-5f);
-    EXPECT_NEAR(readFloat(32 + 24), 1.0f, 1e-5f);
-    EXPECT_NEAR(readFloat(32 + 28), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(48 + 0), 1.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(48 + 4), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(48 + 40), 1.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(48 + 44), 0.0f, 1e-5f);
 
     // Vertex 2: Position (0,1,0), UV (0,1).
-    EXPECT_NEAR(readFloat(64 + 0), 0.0f, 1e-5f);
-    EXPECT_NEAR(readFloat(64 + 4), 1.0f, 1e-5f);
-    EXPECT_NEAR(readFloat(64 + 24), 0.0f, 1e-5f);
-    EXPECT_NEAR(readFloat(64 + 28), 1.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(96 + 0), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(96 + 4), 1.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(96 + 40), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(96 + 44), 1.0f, 1e-5f);
 
     // Draco's own decoded face list drives the index buffer directly (prim.indices has no
     // backing data for a Draco-compressed primitive) -- one triangle, 16-bit indices.
@@ -409,6 +502,53 @@ TEST(GltfImportCoreTest, ComputeTangentsEXTAngleWeightsTriangleContributions)
     EXPECT_NEAR(tangent[1], 0.40639884f, 1e-4f);
     EXPECT_NEAR(tangent[2], 0.0f, 1e-4f);
     EXPECT_FLOAT_EQ(tangent[3], 1.0f); // handedness
+}
+
+TEST(GltfImportCoreTest, GeneratedTangentsHaveAQuantifiedMikkTSpaceWeldDivergence)
+{
+    // Reference: upstream mmikk/MikkTSpace commit 3e895b49d05ea07e4c2133156cfa94369e19e409,
+    // mikktspace.c SHA-256 de87e74107df766ce68108801262bd8d53899414236b59810509a8fc2a51e288,
+    // genTangSpaceDefault() with one callback vertex per face corner. The six values below are its
+    // m_setTSpaceBasic results on kMikkWeldDivergenceGltf, not another CNA implementation.
+    constexpr std::array<std::array<float, 4>, 6> kMikkReference{{
+        {{0.741452575f, 0.671005368f, 0.0f, 1.0f}},
+        {{1.000000000f, 0.000000000f, 0.0f, 1.0f}},
+        {{0.741452575f, 0.671005368f, 0.0f, 1.0f}},
+        {{0.741452575f, 0.671005368f, 0.0f, 1.0f}},
+        {{0.741452575f, 0.671005368f, 0.0f, 1.0f}},
+        {{0.099503718f, 0.995037138f, 0.0f, 1.0f}},
+    }};
+
+    const MeshOut out = ExtractPrimitive0(kMikkWeldDivergenceGltf);
+    ASSERT_TRUE(out.usePbr);
+    ASSERT_EQ(48, out.stride);
+    ASSERT_EQ(6u * 48u, out.vertexBytes.size());
+
+    double squaredDegrees = 0.0;
+    double maxDegrees = 0.0;
+    for (std::size_t vertex = 0; vertex < kMikkReference.size(); ++vertex)
+    {
+        std::array<float, 4> actual{};
+        std::memcpy(actual.data(), out.vertexBytes.data() + vertex * 48u + 24u,
+                    sizeof(actual));
+
+        // Both algorithms still return valid unit frames with the same handedness. The measured
+        // difference is the tangent direction Mikk welded across the duplicated shared edge.
+        EXPECT_NEAR(1.0f, std::sqrt(actual[0] * actual[0] + actual[1] * actual[1] +
+                                    actual[2] * actual[2]), 1e-6f);
+        EXPECT_FLOAT_EQ(kMikkReference[vertex][3], actual[3]);
+        const float cosine = std::clamp(
+            actual[0] * kMikkReference[vertex][0] +
+            actual[1] * kMikkReference[vertex][1] +
+            actual[2] * kMikkReference[vertex][2], -1.0f, 1.0f);
+        const double degrees = std::acos(cosine) * 180.0 / 3.14159265358979323846;
+        squaredDegrees += degrees * degrees;
+        maxDegrees = std::max(maxDegrees, degrees);
+    }
+
+    const double rmsDegrees = std::sqrt(squaredDegrees / kMikkReference.size());
+    EXPECT_NEAR(42.1447, maxDegrees, 1e-3);
+    EXPECT_NEAR(34.4110, rmsDegrees, 1e-3);
 }
 
 #ifdef CNA_DRACO_AVAILABLE
@@ -482,7 +622,7 @@ TEST(GltfImportCoreTest, ComputeTangentsEXTWorksOnADracoCompressedPbrPrimitiveWi
 }
 #endif
 
-TEST(GltfImportCoreTest, ExtractMeshAppliesTextureTransformAndEmissiveStrength)
+TEST(GltfImportCoreTest, ExtractMeshCarriesTextureTransformAndEmissiveStrength)
 {
     const MeshOut out = ExtractPrimitive0(kTextureTransformAndEmissiveStrengthGltf);
     ASSERT_TRUE(out.usePbr);
@@ -492,26 +632,28 @@ TEST(GltfImportCoreTest, ExtractMeshAppliesTextureTransformAndEmissiveStrength)
     // KHR_materials_emissive_strength: [0.2,0.3,0.1] * 3.0 = [0.6,0.9,0.3], not clamped to [0,1]
     // (unlike ExtractPunctualLightsEXT's own DiffuseColor) -- glTF's emissive-strength extension
     // exists specifically to allow real HDR emissive values beyond 1.0.
-    EXPECT_NEAR(out.emissiveFactor.X, 0.6f, 1e-5f);
-    EXPECT_NEAR(out.emissiveFactor.Y, 0.9f, 1e-5f);
-    EXPECT_NEAR(out.emissiveFactor.Z, 0.3f, 1e-5f);
+    EXPECT_NEAR(out.material.emissiveFactor.X, 0.6f, 1e-5f);
+    EXPECT_NEAR(out.material.emissiveFactor.Y, 0.9f, 1e-5f);
+    EXPECT_NEAR(out.material.emissiveFactor.Z, 0.3f, 1e-5f);
 
-    // KHR_texture_transform (offset=[0.1,0.2], scale=[2.0,0.5], rotation=0): u'=u*2.0+0.1,
-    // v'=v*0.5+0.2. Stride 48 = Position(12)+Normal(12)+Tangent(16)+UV(8); UV is the last 8 bytes.
+    // GLTF-184: authored UV bytes remain authored; the transform is independent material state so
+    // each of the five maps may transform a shared stream differently in the shader.
     auto readUv = [&](std::size_t vertexIndex) {
         float uv[2];
         std::memcpy(uv, out.vertexBytes.data() + vertexIndex * 48 + 40, sizeof(uv));
         return std::pair<float, float>(uv[0], uv[1]);
     };
-    auto [u0, v0] = readUv(0); // source uv (0,0)
-    EXPECT_NEAR(u0, 0.1f, 1e-5f);
-    EXPECT_NEAR(v0, 0.2f, 1e-5f);
-    auto [u1, v1] = readUv(1); // source uv (1,0)
-    EXPECT_NEAR(u1, 2.1f, 1e-5f);
-    EXPECT_NEAR(v1, 0.2f, 1e-5f);
-    auto [u2, v2] = readUv(2); // source uv (0,1)
-    EXPECT_NEAR(u2, 0.1f, 1e-5f);
-    EXPECT_NEAR(v2, 0.7f, 1e-5f);
+    EXPECT_EQ(readUv(0), (std::pair<float, float>{0.0f, 0.0f}));
+    EXPECT_EQ(readUv(1), (std::pair<float, float>{1.0f, 0.0f}));
+    EXPECT_EQ(readUv(2), (std::pair<float, float>{0.0f, 1.0f}));
+
+    const auto& transform = out.material.textureTransformsEXT[
+        static_cast<std::size_t>(TextureSlotEXT::BaseColor)];
+    EXPECT_FLOAT_EQ(transform.Offset.X, 0.1f);
+    EXPECT_FLOAT_EQ(transform.Offset.Y, 0.2f);
+    EXPECT_FLOAT_EQ(transform.Scale.X, 2.0f);
+    EXPECT_FLOAT_EQ(transform.Scale.Y, 0.5f);
+    EXPECT_FLOAT_EQ(transform.Rotation, 0.0f);
 }
 
 TEST(GltfImportCoreTest, ExtractPunctualLightsEXTApproximatesDirectionalAndPointLights)
@@ -569,6 +711,156 @@ TEST(GltfImportCoreTest, ExtractPunctualLightsEXTApproximatesDirectionalAndPoint
     cgltf_free(data);
 }
 
+// --- plan_gltf.md GLTF-326: what the three-directional-light approximation costs ----------------
+
+namespace
+{
+    /// A scene of `count` lights built from `entries`, one node each at the given positions.
+    std::string LightSceneDocument(const std::string& lightEntries, std::size_t count)
+    {
+        std::string nodes;
+        std::string sceneNodes;
+        for (std::size_t i = 0; i < count; ++i)
+        {
+            if (i != 0) { nodes += ", "; sceneNodes += ", "; }
+            nodes += "{ \"name\": \"L" + std::to_string(i) +
+                     "\", \"translation\": [0, 0, -5], \"extensions\": { "
+                     "\"KHR_lights_punctual\": { \"light\": " + std::to_string(i) + " } } }";
+            sceneNodes += std::to_string(i);
+        }
+        return std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [)GLTF") + sceneNodes + R"GLTF(] } ],
+  "nodes": [ )GLTF" + nodes + R"GLTF( ],
+  "extensions": { "KHR_lights_punctual": { "lights": [ )GLTF" + lightEntries + R"GLTF( ] } },
+  "extensionsUsed": [ "KHR_lights_punctual" ]
+})GLTF";
+    }
+
+    /// Parses a light-scene document into a guard-owned cgltf_data.
+    struct LightScene
+    {
+        cgltf_data* data = nullptr;
+        ~LightScene() { if (data != nullptr) { cgltf_free(data); } }
+        LightScene() = default;
+        LightScene(const LightScene&) = delete;
+        LightScene& operator=(const LightScene&) = delete;
+    };
+
+    bool ParseLightScene(LightScene& out, const std::string& json)
+    {
+        cgltf_options options{};
+        return cgltf_parse(&options, json.data(), json.size(), &out.data) == cgltf_result_success;
+    }
+}
+
+TEST(GltfImportCoreTest, LightReportNamesEveryLightBeyondTheThreeXnaCanBind)
+{
+    // "3 lights imported" is not actionable and "3 of 6 imported" is. Counting the drop means the
+    // loop can no longer stop at three, which is the one behavioural change GLTF-326 makes.
+    std::string entries;
+    for (int i = 0; i < 6; ++i)
+    {
+        if (i != 0) { entries += ", "; }
+        entries += R"({ "type": "directional", "color": [1, 1, 1], "intensity": 1.0 })";
+    }
+    LightScene scene;
+    ASSERT_TRUE(ParseLightScene(scene, LightSceneDocument(entries, 6)));
+
+    LightReportEXT report;
+    const std::vector<LightOut> lights = ExtractPunctualLightsEXT(scene.data, report);
+    EXPECT_EQ(3u, lights.size()) << "the three-light cap itself must not have changed";
+    EXPECT_EQ(3u, report.droppedLightCount);
+    EXPECT_TRUE(report.AnythingLost());
+}
+
+TEST(GltfImportCoreTest, LightReportCountsPointAndSpotApproximationsApart)
+{
+    // A point light loses its falloff; a spot loses its falloff AND its cone. The approximation is
+    // materially worse for one than the other, so one combined "approximated" count would hide the
+    // difference an author most needs to see.
+    LightScene scene;
+    ASSERT_TRUE(ParseLightScene(scene, LightSceneDocument(
+        R"({ "type": "point", "color": [1, 1, 1], "intensity": 1.0 },
+            { "type": "spot", "color": [1, 1, 1], "intensity": 1.0,
+              "spot": { "innerConeAngle": 0.2, "outerConeAngle": 0.5 } },
+            { "type": "directional", "color": [1, 1, 1], "intensity": 1.0 })", 3)));
+
+    LightReportEXT report;
+    const std::vector<LightOut> lights = ExtractPunctualLightsEXT(scene.data, report);
+    ASSERT_EQ(3u, lights.size());
+    EXPECT_EQ(1u, report.approximatedPointLightCount);
+    EXPECT_EQ(1u, report.approximatedSpotLightCount);
+    EXPECT_EQ(0u, report.droppedLightCount) << "three lights fit; nothing was dropped";
+}
+
+TEST(GltfImportCoreTest, LightReportNamesAnIntensityClampedOutOfGamut)
+{
+    // glTF intensity is photometric and unbounded -- lux for a directional light, candela for the
+    // others -- while DiffuseColor is a [0,1] colour. 683 lm/W is the luminous efficacy constant
+    // and turns up in real files; it imports as plain white, which is not a bug and is absolutely
+    // something an author comparing renders deserves to be told.
+    LightScene scene;
+    ASSERT_TRUE(ParseLightScene(scene, LightSceneDocument(
+        R"({ "type": "directional", "color": [1, 0.5, 0.25], "intensity": 683.0 },
+            { "type": "directional", "color": [1, 1, 1], "intensity": 1.0 })", 2)));
+
+    LightReportEXT report;
+    const std::vector<LightOut> lights = ExtractPunctualLightsEXT(scene.data, report);
+    ASSERT_EQ(2u, lights.size());
+    EXPECT_EQ(1u, report.clampedIntensityLightCount) << "only the out-of-gamut light counts";
+    EXPECT_NEAR(683.0f, report.worstPreClampChannelEXT, 1e-3f)
+        << "the worst pre-clamp channel is what says whether the clamp was marginal or total";
+
+    // And the clamp itself still happens -- the report describes the behaviour, it does not
+    // replace it.
+    EXPECT_NEAR(1.0f, lights[0].diffuseColor.X, 1e-5f);
+    EXPECT_NEAR(1.0f, lights[0].diffuseColor.Y, 1e-5f);
+    EXPECT_NEAR(1.0f, lights[0].diffuseColor.Z, 1e-5f);
+}
+
+TEST(GltfImportCoreTest, LightReportIsEmptyForAFileAlreadyInsideXnasLightingModel)
+{
+    // The control. Without it, a report that fired on every file would pass all three tests above
+    // and turn every ordinary import into a warning nobody reads.
+    LightScene scene;
+    ASSERT_TRUE(ParseLightScene(scene, LightSceneDocument(
+        R"({ "type": "directional", "color": [1, 1, 1], "intensity": 1.0 },
+            { "type": "directional", "color": [0.5, 0.5, 0.5], "intensity": 1.0 })", 2)));
+
+    LightReportEXT report;
+    const std::vector<LightOut> lights = ExtractPunctualLightsEXT(scene.data, report);
+    EXPECT_EQ(2u, lights.size());
+    EXPECT_FALSE(report.AnythingLost())
+        << "a file XNA can light exactly must produce no diagnostic at all";
+}
+
+TEST(GltfImportCoreTest, BothLightOverloadsExtractIdenticalLights)
+{
+    // The reporting overload must be the same extraction with a second output, not a second
+    // implementation that can drift from the one every existing caller uses.
+    LightScene scene;
+    ASSERT_TRUE(ParseLightScene(scene, LightSceneDocument(
+        R"({ "type": "point", "color": [1, 0, 0], "intensity": 1.0 },
+            { "type": "directional", "color": [0, 1, 0], "intensity": 2.0 },
+            { "type": "spot", "color": [0, 0, 1], "intensity": 0.5,
+              "spot": { "outerConeAngle": 0.5 } },
+            { "type": "directional", "color": [1, 1, 1], "intensity": 1.0 })", 4)));
+
+    LightReportEXT report;
+    const std::vector<LightOut> reported = ExtractPunctualLightsEXT(scene.data, report);
+    const std::vector<LightOut> plain = ExtractPunctualLightsEXT(scene.data);
+    ASSERT_EQ(plain.size(), reported.size());
+    for (std::size_t i = 0; i < plain.size(); ++i)
+    {
+        SCOPED_TRACE("light " + std::to_string(i));
+        EXPECT_EQ(plain[i].direction, reported[i].direction);
+        EXPECT_EQ(plain[i].diffuseColor, reported[i].diffuseColor);
+    }
+    EXPECT_EQ(1u, report.droppedLightCount);
+}
+
 TEST(GltfImportCoreTest, ExtractPunctualLightsEXTCapsAtThreeLights)
 {
     const char* kFourLightsGltf = R"GLTF({
@@ -608,4 +900,173 @@ TEST(GltfImportCoreTest, ExtractPunctualLightsEXTCapsAtThreeLights)
     EXPECT_EQ(lights.size(), 3u); // capped, not all 4 -- matches every CNA stock effect's own MaxLights=3.
 
     cgltf_free(data);
+}
+
+// --- plan_gltf.md GLTF-173: normals for a primitive that authors none ---------------------------
+
+namespace
+{
+    /// A single-primitive document over the given positions and indices, with no NORMAL attribute.
+    /// Positions are written as a base64 data: URI so the fixture needs no sidecar.
+    std::string NormalLessDocument(const std::vector<float>& positions,
+                                    const std::vector<std::uint16_t>& indices)
+    {
+        std::vector<std::uint8_t> buffer;
+        for (const float value : positions)
+        {
+            std::uint8_t bytes[4];
+            std::memcpy(bytes, &value, 4);
+            buffer.insert(buffer.end(), bytes, bytes + 4);
+        }
+        const std::size_t indexOffset = buffer.size();
+        for (const std::uint16_t value : indices)
+        {
+            buffer.push_back(static_cast<std::uint8_t>(value & 0xFF));
+            buffer.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFF));
+        }
+        while (buffer.size() % 4 != 0) { buffer.push_back(0); }
+
+        static const char* kAlphabet =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        std::string base64;
+        for (std::size_t i = 0; i < buffer.size(); i += 3)
+        {
+            const std::uint32_t chunk =
+                (static_cast<std::uint32_t>(buffer[i]) << 16) |
+                (i + 1 < buffer.size() ? static_cast<std::uint32_t>(buffer[i + 1]) << 8 : 0u) |
+                (i + 2 < buffer.size() ? static_cast<std::uint32_t>(buffer[i + 2]) : 0u);
+            base64 += kAlphabet[(chunk >> 18) & 0x3F];
+            base64 += kAlphabet[(chunk >> 12) & 0x3F];
+            base64 += (i + 1 < buffer.size()) ? kAlphabet[(chunk >> 6) & 0x3F] : '=';
+            base64 += (i + 2 < buffer.size()) ? kAlphabet[chunk & 0x3F] : '=';
+        }
+
+        return std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ {
+      "attributes": { "POSITION": 0 }, "indices": 1, "mode": 4
+  } ] } ],
+  "buffers": [ { "byteLength": )GLTF") + std::to_string(buffer.size()) +
+               R"GLTF(, "uri": "data:application/octet-stream;base64,)GLTF" + base64 + R"GLTF(" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0, "byteLength": )GLTF" + std::to_string(indexOffset) + R"GLTF( },
+    { "buffer": 0, "byteOffset": )GLTF" + std::to_string(indexOffset) +
+               R"GLTF(, "byteLength": )GLTF" + std::to_string(indices.size() * 2) + R"GLTF( }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": )GLTF" +
+               std::to_string(positions.size() / 3) + R"GLTF(, "type": "VEC3" },
+    { "bufferView": 1, "componentType": 5123, "count": )GLTF" +
+               std::to_string(indices.size()) + R"GLTF(, "type": "SCALAR" }
+  ]
+})GLTF";
+    }
+
+    MeshOut ExtractNormalLess(const std::vector<float>& positions,
+                              const std::vector<std::uint16_t>& indices)
+    {
+        const std::string json = NormalLessDocument(positions, indices);
+        cgltf_options options{};
+        cgltf_data* data = nullptr;
+        EXPECT_EQ(cgltf_result_success, cgltf_parse(&options, json.data(), json.size(), &data));
+        if (data == nullptr) { return MeshOut{}; }
+        EXPECT_EQ(cgltf_result_success, cgltf_load_buffers(&options, data, "."));
+        MeshOut out = ExtractMesh(data, data->meshes[0].primitives[0], "probe", nullptr, 1.0f);
+        cgltf_free(data);
+        return out;
+    }
+
+    /// The Normal element of a packed vertex, read through the canonical stride table rather than
+    /// a hardcoded offset -- the lesson of GLTF-278.
+    std::array<float, 3> NormalOfVertex(const MeshOut& mesh, std::size_t vertex)
+    {
+        const CNA::Internal::Graphics::InferredVertexLayout layout =
+            CNA::Internal::Graphics::InferredLayoutForStride(
+                mesh.stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+        EXPECT_TRUE(layout.known) << "stride " << mesh.stride << " is not in the canonical table";
+        int offset = -1;
+        for (std::size_t i = 0; layout.known && i < layout.count; ++i)
+        {
+            if (layout.elements[i].usage ==
+                    Microsoft::Xna::Framework::Graphics::VertexElementUsage::Normal &&
+                layout.elements[i].usageIndex == 0)
+            {
+                offset = layout.elements[i].offset;
+            }
+        }
+        EXPECT_GE(offset, 0);
+        std::array<float, 3> normal{};
+        if (offset >= 0)
+        {
+            std::memcpy(normal.data(),
+                        mesh.vertexBytes.data() +
+                            vertex * static_cast<std::size_t>(mesh.stride) +
+                            static_cast<std::size_t>(offset),
+                        sizeof(normal));
+        }
+        return normal;
+    }
+}
+
+TEST(GltfImportCoreTest, AbsentNormalsAreComputedFromTheFaceRatherThanFabricatedAsPlusZ)
+{
+    // §3.7.2.1 makes calculating flat normals a MUST. CNA wrote (0,0,1) on every vertex instead --
+    // a surface facing +Z regardless of where it points. The triangle is tilted out of the XY plane
+    // precisely so the two answers differ: cross((1,0,0),(0,1,1)) = (0,-1,1).
+    const MeshOut mesh = ExtractNormalLess({0, 0, 0, 1, 0, 0, 0, 1, 1}, {0, 1, 2});
+    ASSERT_EQ(3u, mesh.vertexBytes.size() / static_cast<std::size_t>(mesh.stride));
+    EXPECT_TRUE(mesh.generatedNormalsEXT);
+    EXPECT_EQ(0u, mesh.smoothedNormalVertexCountEXT)
+        << "one triangle shares no vertex, so the flat normal is exact and nothing was averaged";
+
+    const float invSqrt2 = 1.0f / std::sqrt(2.0f);
+    for (std::size_t v = 0; v < 3; ++v)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(v));
+        const std::array<float, 3> normal = NormalOfVertex(mesh, v);
+        EXPECT_NEAR(0.0f, normal[0], 1e-5f);
+        EXPECT_NEAR(-invSqrt2, normal[1], 1e-5f);
+        EXPECT_NEAR(invSqrt2, normal[2], 1e-5f);
+    }
+}
+
+TEST(GltfImportCoreTest, AnAuthoredPlanarTriangleStillGetsExactlyPlusZ)
+{
+    // The control, and the reason the rest of the corpus did not move: a planar CCW triangle's own
+    // face normal IS (0,0,1), so every other normal-less fixture reads identically under the old
+    // behaviour and the new one. Without this test that agreement looks like the change not having
+    // taken effect.
+    const MeshOut mesh = ExtractNormalLess({0, 0, 0, 1, 0, 0, 0, 1, 0}, {0, 1, 2});
+    EXPECT_TRUE(mesh.generatedNormalsEXT);
+    const std::array<float, 3> normal = NormalOfVertex(mesh, 0);
+    EXPECT_NEAR(0.0f, normal[0], 1e-6f);
+    EXPECT_NEAR(0.0f, normal[1], 1e-6f);
+    EXPECT_NEAR(1.0f, normal[2], 1e-6f);
+}
+
+TEST(GltfImportCoreTest, AVertexSharedAcrossFacesOfDifferentOrientationIsCountedAsApproximated)
+{
+    // Two triangles folded along the shared edge (2,3): the first lies in the XY plane, the second
+    // rises out of it. Vertices 2 and 3 belong to both, and flat shading would need each of them
+    // duplicated once per face -- which changes the vertex count and every per-vertex stream, so
+    // this extraction cannot express it. They get the area-weighted average, and the point of this
+    // test is that the approximation is COUNTED rather than assumed.
+    const MeshOut mesh = ExtractNormalLess(
+        {0, 0, 0,   1, 0, 0,   1, 1, 0,   0, 1, 0,   0, 2, 1,   1, 2, 1},
+        {0, 1, 2,  0, 2, 3,  3, 2, 4,  2, 5, 4});
+    EXPECT_TRUE(mesh.generatedNormalsEXT);
+    EXPECT_GT(mesh.smoothedNormalVertexCountEXT, 0u)
+        << "the fold's shared vertices were treated as if flat shading had been achieved";
+    EXPECT_LT(mesh.smoothedNormalVertexCountEXT, 6u)
+        << "only the shared vertices are approximated -- a count of every vertex would mean the "
+           "disagreement test is not discriminating at all";
+
+    // Vertex 0 belongs only to the two coplanar triangles, so its normal is exact.
+    const std::array<float, 3> flat = NormalOfVertex(mesh, 0);
+    EXPECT_NEAR(0.0f, flat[0], 1e-5f);
+    EXPECT_NEAR(0.0f, flat[1], 1e-5f);
+    EXPECT_NEAR(1.0f, flat[2], 1e-5f);
 }

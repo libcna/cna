@@ -10,6 +10,11 @@
 #include <cstring>
 #include <fstream>
 #include <gtest/gtest.h>
+
+#include "CNA/RendererTestGate.hpp"
+
+// Lets CNA_RENDERER_IS name identities bare, matching the compile-time guard it replaced.
+using namespace CNA::Testing::Renderers;
 #include <sstream>
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -50,27 +55,24 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 // real CPU shadow, so its readback is exact at every level too.
 // PortableGL keeps the same nullptr CreateTextureCube default -- no cube resource exists there
 // either (docs/portablegl-renderer.md).
-#if defined(CNA_RENDERER_SDL_RENDERER) || \
-    defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_HTML_DOM) || \
-    defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || \
-    defined(CNA_RENDERER_GDI) || defined(CNA_RENDERER_OPENVG) || \
-    defined(CNA_RENDERER_PORTABLEGL) || defined(CNA_RENDERER_TINYGL)
-constexpr bool kCubeStorageSupported         = false;
-constexpr bool kCubeLevel0ReadbackSupported  = false;
-constexpr bool kCubeMipReadbackSupported     = false;
-#elif defined(CNA_RENDERER_OPENGLES1)
-// OpenGL ES 1.1 stores the whole declared chain and reads the base level back through a scratch
-// framebuffer, but GL_OES_framebuffer_object requires an attached texture's level to be 0, so no
-// mip level above 0 can be read there however much storage exists. The three-way split is exactly
-// why these are separate constants.
-constexpr bool kCubeStorageSupported         = true;
-constexpr bool kCubeLevel0ReadbackSupported  = true;
-constexpr bool kCubeMipReadbackSupported     = false;
-#else
-constexpr bool kCubeStorageSupported         = true;
-constexpr bool kCubeLevel0ReadbackSupported  = true;
-constexpr bool kCubeMipReadbackSupported     = true;
-#endif
+// plan_runtimerenderer.md RTR-P9-11: evaluated at runtime, so these describe the ACTIVE renderer
+// rather than the build default. The three-way split is preserved exactly.
+[[nodiscard]] inline bool CubeStorageSupported()
+{
+    return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi, OpenVg,
+                            PortableGL, TinyGL);
+}
+
+[[nodiscard]] inline bool CubeLevel0ReadbackSupported() { return CubeStorageSupported(); }
+
+/// OpenGL ES 1.1 stores the whole declared chain and reads the base level back through a scratch
+/// framebuffer, but GL_OES_framebuffer_object requires an attached texture's level to be 0, so no
+/// mip level above 0 can be read there however much storage exists. That is exactly why these are
+/// three separate questions rather than one.
+[[nodiscard]] inline bool CubeMipReadbackSupported()
+{
+    return !CNA_RENDERER_IS(OpenGLES1) && CubeLevel0ReadbackSupported();
+}
 
 namespace
 {
@@ -114,7 +116,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
     // throws instead of silently discarding all 42 face/level uploads, so the load fails as a whole
     // rather than handing back a TextureCube that reports LevelCount 7 and holds nothing. That is
     // the content-pipeline consequence of the finding, asserted here rather than worked around.
-    if (!kCubeStorageSupported)
+    if (!CubeStorageSupported())
     {
         EXPECT_THROW((void)cm.Load<TextureCube>("SampleCube64DXT1Mips"),
                      System::NotSupportedException);
@@ -140,7 +142,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
     const Color sentinel(0xA5, 0xA5, 0xA5, 0xA5);
     std::vector<Color> level0(64 * 64, sentinel);
     Color onePixel = sentinel;
-    if (kCubeLevel0ReadbackSupported)
+    if (CubeLevel0ReadbackSupported())
     {
         ASSERT_NO_THROW(cube.GetData(CubeMapFace::PositiveX, level0.data(),
                                      static_cast<int>(level0.size())));
@@ -158,7 +160,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
         // The smallest mip level (1x1) is the sub-4x4 DXT1 block-rounding edge case. Every renderer
         // that stores cube faces at all now stores the whole declared chain (REMED-GFX-135 gave
         // Software the per-mip storage it was the last to be missing).
-        if (kCubeMipReadbackSupported)
+        if (CubeMipReadbackSupported())
         {
             ASSERT_NO_THROW(cube.GetData(CubeMapFace::NegativeZ, 6, nullptr, &onePixel, 0, 1));
             EXPECT_NE(onePixel.getPackedValueProperty(), sentinel.getPackedValueProperty())

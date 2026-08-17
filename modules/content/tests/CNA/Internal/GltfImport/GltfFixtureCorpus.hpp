@@ -118,6 +118,29 @@ namespace CnaTest::GltfOracle
                                bool fallback);
 
     /**
+     * @brief True when a fixture's expectation is that the importer refuses the file outright.
+     *
+     * Such a fixture has no L3 semantic mesh and no L4 world geometry, because a conforming reader
+     * never gets that far -- the rejection itself is the expectation, and `GltfContainerValidation`
+     * owns asserting it, including that the diagnostic names the cause. Skipping it in a
+     * later-layer suite is not a suppression: nothing about it is left unchecked.
+     *
+     * @param expected The fixture's parsed expectation manifest.
+     * @return True when the manifest carries a `rejection` block.
+     */
+    [[nodiscard]] bool IsRejectionFixture(const CNA::Internal::JsonValue& expected);
+
+    /**
+     * @brief True when this build intentionally lacks the decoder a Draco fixture requires.
+     *
+     * Structural L1/L2 tests still inspect these fixtures in a decoder-free build. Layers that
+     * require semantic extraction skip only these records, while GltfContainerValidation asserts
+     * their required-extension refusal explicitly. This keeps `CNA_ENABLE_DRACO=OFF` a complete,
+     * green corpus configuration rather than deleting Draco assets from that configuration.
+     */
+    [[nodiscard]] bool RequiresUnavailableDraco(const CNA::Internal::JsonValue& expected);
+
+    /**
      * @brief True when a defect record is still open (`known-failing` or `partially-remediated`).
      *
      * A `fixed` record stays in the corpus forever as the regression witness for the task that

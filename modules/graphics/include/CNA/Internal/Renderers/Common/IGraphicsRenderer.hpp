@@ -20,6 +20,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -1044,12 +1045,78 @@ namespace CNA::Internal::Renderers
         /// PbrEffect: occlusion map (R channel, 1=fully lit .. 0=fully occluded), or null
         /// (no occlusion darkening applied).
         const ITextureRenderer* pbrOcclusionMap = nullptr;
+        /// KHR_materials_specular scalar strength map; only alpha is meaningful and is linear.
+        const ITextureRenderer* pbrSpecularMap = nullptr;
+        /// KHR_materials_specular colour map; RGB is sRGB-encoded by default.
+        const ITextureRenderer* pbrSpecularColorMap = nullptr;
+        /// plan_gltf.md GLTF-182/GLTF-183: bit i selects packed TextureCoordinate1 for PBR
+        /// texture slot i (base colour, normal, metallic-roughness, emissive, occlusion,
+        /// specular strength, specular colour); a clear
+        /// bit selects TextureCoordinate0. The importer maps arbitrary glTF source TEXCOORD_n
+        /// indices onto these two collision-free renderer channels before filling the effect.
+        std::uint32_t pbrTextureCoordinateSetMask = 0;
+        /// plan_gltf.md GLTF-184: two affine rows per core PBR map, in base-colour, normal,
+        /// metallic-roughness, emissive, occlusion order. For row vectors `r0` and `r1`, the
+        /// transformed coordinate is `{dot(float3(uv,1),r0.xyz),
+        /// dot(float3(uv,1),r1.xyz)}`. The fourth component is deterministic padding for native
+        /// constant-buffer alignment. Identity defaults preserve old callers and old content.
+        float pbrTextureTransformRows[10][4] = {
+            {1,0,0,0}, {0,1,0,0}, {1,0,0,0}, {0,1,0,0},
+            {1,0,0,0}, {0,1,0,0}, {1,0,0,0}, {0,1,0,0},
+            {1,0,0,0}, {0,1,0,0}};
+        /// GLTF-344: the same representation for specular strength then specular colour. Kept in
+        /// a separate additive block so existing native renderer structs that copy the ten core
+        /// rows by `sizeof(pbrTextureTransformRows)` retain their exact size and cannot overflow.
+        float pbrSpecularTextureTransformRows[4][4] = {
+            {1,0,0,0}, {0,1,0,0}, {1,0,0,0}, {0,1,0,0}};
         /// PbrEffect: metallic factor [0,1], multiplied with pbrMetallicRoughnessMap's B channel
         /// when bound (or used alone as a constant when it isn't).
         float pbrMetallicFactor = 1.0f;
         /// PbrEffect: roughness factor [0,1], multiplied with pbrMetallicRoughnessMap's G channel
         /// when bound (or used alone as a constant when it isn't).
         float pbrRoughnessFactor = 1.0f;
+        /// plan_gltf.md GLTF-343/GLTF-344: dielectric normal-incidence reflectance after applying
+        /// KHR_materials_ior and the factor-only part of KHR_materials_specular. Core glTF's
+        /// default is 0.04 in every channel. Kept separate from the metallic F0, which remains the
+        /// material's base colour, and from F90 below because specularFactor can reduce grazing
+        /// reflectance independently. Every PBR-capable renderer consumes both endpoints; the
+        /// repository-wide renderer audit keeps those CPU uploads and Schlick terms in lockstep.
+        float pbrDielectricF0[3] = {0.04f, 0.04f, 0.04f};
+        /// Dielectric grazing reflectance after KHR_materials_specular's scalar strength (default 1).
+        float pbrDielectricF90 = 1.0f;
+        /// GLTF-344: IOR F0 times specularColorFactor before clamping/weighting. A colour-map
+        /// sample must multiply this value before the specification's per-channel clamp.
+        float pbrDielectricF0Unclamped[3] = {0.04f, 0.04f, 0.04f};
+        /// GLTF-344: authored scalar strength, retained separately for texture-driven evaluation.
+        float pbrSpecularFactor = 1.0f;
+        /// plan_gltf.md GLTF-224: glTF `normalTexture.scale`. Scales the sampled tangent-space
+        /// normal's x and y before the tangent basis is applied -- 0 flattens the map to the
+        /// geometric normal, 1 is the map as authored, and glTF puts no upper bound on it. Only
+        /// meaningful when `pbrNormalMap` is bound.
+        float pbrNormalScale = 1.0f;
+        /// plan_gltf.md GLTF-225: glTF `occlusionTexture.strength`, applied as the specification's
+        /// own `1 + strength * (sampled - 1)`. At 0 the result is 1 -- no occlusion at all,
+        /// whatever the map holds -- and at 1 it is the map unchanged. Only meaningful when
+        /// `pbrOcclusionMap` is bound.
+        float pbrOcclusionStrength = 1.0f;
+        /// plan_gltf.md GLTF-210: the base-colour texture's samples are sRGB-ENCODED and must be
+        /// decoded to linear before lighting (glTF §3.9.2). The `DiffuseColor` FACTOR is already
+        /// linear and must NOT be decoded -- the two multiply, and decoding both would apply the
+        /// transfer twice to one of them. Renderers that do not implement colour management ignore
+        /// this, the established accepted-and-ignored pattern for a field they do not yet honour.
+        bool pbrBaseColorTextureIsSrgb = true;
+        /// plan_gltf.md GLTF-210: the emissive texture is sRGB-encoded, on the same terms as
+        /// `pbrBaseColorTextureIsSrgb`. `emissiveColor` (the factor, possibly scaled above 1 by
+        /// KHR_materials_emissive_strength) is linear and is not decoded.
+        bool pbrEmissiveTextureIsSrgb = true;
+        /// KHR_materials_specular colour-map RGB follows glTF's sRGB encoding rule.
+        bool pbrSpecularColorTextureIsSrgb = true;
+        /// plan_gltf.md GLTF-212: encode the fragment's RGB from linear back to sRGB before it
+        /// reaches the framebuffer. Alpha is never encoded -- glTF §3.9.4 makes it coverage, not
+        /// colour. Normal, occlusion and metallic-roughness maps carry no flag at all because
+        /// §3.9.2 declares them linear unconditionally; a flag would imply a choice that does not
+        /// exist.
+        bool pbrEncodeOutputToSrgb = true;
     };
 
     /**
@@ -1334,6 +1401,27 @@ namespace CNA::Internal::Renderers
                static_cast<std::size_t>(stream.strideInBytes);
     }
 
+    /**
+     * @brief A renderer's answer about a surface format, or a deferral to the framework's own rule.
+     *
+     * plan_runtimerenderer.md design decision 9. Renderer-specific format behaviour used to live as
+     * #ifdef blocks inside the XNA layer, where the #else branch carried the renderer-agnostic
+     * rule. Moving those behind a virtual has to preserve that structure exactly: a renderer either
+     * has a real, renderer-specific answer, or it defers -- it must never be forced to restate the
+     * framework's rule, because a wrong restatement silently narrows a public API.
+     */
+    enum class RendererFormatVerdict
+    {
+        /** @brief This renderer has no renderer-specific answer; the framework's own rule applies. */
+        Defer,
+
+        /** @brief This renderer genuinely supports the format. */
+        Supported,
+
+        /** @brief This renderer genuinely does not support the format. */
+        Unsupported
+    };
+
     class IGraphicsRenderer
     {
     public:
@@ -1412,6 +1500,25 @@ namespace CNA::Internal::Renderers
         {
             return requestedFormat;
         }
+        /**
+         * @brief Maps a requested MSAA sample count to the count this renderer actually applied.
+         *
+         * plan_runtimerenderer.md design decision 9. The identity default is deliberate and is
+         * exactly what every renderer except GDI did when this was an #ifdef CNA_RENDERER_GDI block
+         * in the XNA layer: PresentationParameters keeps echoing back what the game asked for.
+         * Only a renderer that clamps the request at construction time (GDI, which supports one
+         * real optional mode) needs to correct that, and it must not be generalized to "always
+         * report GetMultiSampleCount()" -- most renderers leave that at its 0 default, so doing so
+         * would report "no MSAA" for every renderer that in fact honoured the request.
+         *
+         * @param requestedMultiSampleCount The count the game asked for.
+         * @return The count actually in effect.
+         */
+        [[nodiscard]] virtual int GetAppliedMultiSampleCountEXT(int requestedMultiSampleCount) const
+        {
+            return requestedMultiSampleCount;
+        }
+
         /** @brief Depth/stencil counterpart of GetAppliedBackBufferFormatEXT(). */
         [[nodiscard]] virtual int GetAppliedDepthStencilFormatEXT(int requestedFormat) const
         {
@@ -1419,6 +1526,150 @@ namespace CNA::Internal::Renderers
         }
         /// Returns the backbuffer's actual (device-clamped) MSAA sample count; 0 if none/unsupported.
         [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
+
+        // --- GraphicsProfile ceilings (plan_runtimerenderer.md design decision 9) -------------
+        //
+        // XNA's GraphicsProfile.Reach/HiDef carry real, enforced-at-creation-time ceilings. Only a
+        // renderer with a genuine capability structure to consult (D3D9's D3DCAPS9) can answer them
+        // honestly; the other 45 have no such structure, and this project refuses to substitute a
+        // hardcoded table pretending to be a capability query. The defaults below are therefore
+        // "no ceiling" -- exactly the behaviour every non-D3D9 renderer had when these lived as
+        // #ifdef CNA_RENDERER_DIRECTX9 blocks inside the XNA layer.
+
+        /**
+         * @brief Largest texture edge length the given GraphicsProfile permits.
+         *
+         * A profile CEILING, not a hardware query: even where the device could allocate more, a
+         * Reach-profile game is restricted to the profile's limit, which is what XNA's portability
+         * guarantee means.
+         *
+         * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
+         * @return The maximum edge length, or std::numeric_limits<int>::max() for no ceiling.
+         */
+        [[nodiscard]] virtual int GetMaxTextureSizeForProfileEXT(int graphicsProfile) const
+        {
+            (void)graphicsProfile;
+            return (std::numeric_limits<int>::max)();
+        }
+
+        /**
+         * @brief Largest cube-map edge length the given GraphicsProfile permits.
+         *
+         * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
+         * @return The maximum edge length, or std::numeric_limits<int>::max() for no ceiling.
+         */
+        [[nodiscard]] virtual int GetMaxCubeSizeForProfileEXT(int graphicsProfile) const
+        {
+            (void)graphicsProfile;
+            return (std::numeric_limits<int>::max)();
+        }
+
+        /**
+         * @brief Largest volume-texture extent the given GraphicsProfile permits.
+         *
+         * Zero has a distinct meaning here: the profile does not support volume (3D) textures at
+         * all, which is genuinely the case for GraphicsProfile.Reach on D3D9 -- not merely a small
+         * size ceiling.
+         *
+         * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
+         * @return The maximum extent, 0 for "no volume textures at all", or
+         *         std::numeric_limits<int>::max() for no ceiling.
+         */
+        [[nodiscard]] virtual int GetMaxVolumeExtentForProfileEXT(int graphicsProfile) const
+        {
+            (void)graphicsProfile;
+            return (std::numeric_limits<int>::max)();
+        }
+
+        /**
+         * @brief Largest number of simultaneous render targets the given GraphicsProfile permits.
+         *
+         * Distinct from XNA's own general 4-target ceiling (which GraphicsDevice enforces for every
+         * renderer) and from any hardware cap the renderer enforces separately.
+         *
+         * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
+         * @return The maximum count, or std::numeric_limits<int>::max() for no ceiling.
+         */
+        [[nodiscard]] virtual int GetMaxRenderTargetsForProfileEXT(int graphicsProfile) const
+        {
+            (void)graphicsProfile;
+            return (std::numeric_limits<int>::max)();
+        }
+
+        // --- Surface-format boundaries (plan_runtimerenderer.md design decision 9) -------------
+
+        /**
+         * @brief Whether a Texture2D may be created with the given surface format.
+         *
+         * Tri-state on purpose. The framework already has a renderer-agnostic rule for this
+         * (Texture::ValidateFormat), and 45 of the 46 renderers are content with it -- so the
+         * default is Defer, meaning "the framework's own rule applies". Only a renderer that
+         * genuinely stores each format in its own native layout (SKIA) answers Supported /
+         * Unsupported. A plain bool would have forced every other renderer to restate the
+         * framework rule, and getting that restatement wrong would silently narrow a public API.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return This renderer's verdict, or Defer to accept the framework's rule.
+         */
+        [[nodiscard]] virtual RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const
+        {
+            (void)surfaceFormat;
+            return RendererFormatVerdict::Defer;
+        }
+
+        /**
+         * @brief Whether a RenderTarget2D may be created with the given surface format.
+         *
+         * Deliberately separate from ClassifySurfaceFormatEXT: renderability is a strictly narrower
+         * question than storability. SKIA's raster surface has no hardware format restriction at
+         * all, yet it still refuses the formats real XNA/FNA hardware cannot render into, because
+         * parity with XNA is the goal rather than "whatever the backing library happens to allow".
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return This renderer's verdict, or Defer to accept the framework's rule.
+         */
+        [[nodiscard]] virtual RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const
+        {
+            (void)surfaceFormat;
+            return RendererFormatVerdict::Defer;
+        }
+
+        /**
+         * @brief Whether GetData/SetData with a Color-shaped element is meaningful for a format.
+         *
+         * Same tri-state reasoning as ClassifySurfaceFormatEXT. The framework rule here is "any
+         * format whose texel is a multiple of four bytes", which is a route real code depends on
+         * (MouseCursor::FromTexture2D reads a ColorSrgbEXT texture through it). SKIA narrows it to
+         * the formats that are genuinely 32-bit RGBA-shaped, because it stores the others in their
+         * own layouts and a Color* transfer would read the wrong bits.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return This renderer's verdict, or Defer to accept the framework's rule.
+         */
+        [[nodiscard]] virtual RendererFormatVerdict ClassifyColorTransferFormatEXT(int surfaceFormat) const
+        {
+            (void)surfaceFormat;
+            return RendererFormatVerdict::Defer;
+        }
+
+        /**
+         * @brief Whether a format is a block-compressed format this renderer transfers as blocks.
+         *
+         * The default is false for every format: renderers that do not store compressed textures
+         * natively never take the compressed transfer path.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return true when the format transfers as compressed blocks rather than pixels.
+         */
+        [[nodiscard]] virtual bool IsCompressedTransferFormatEXT(int surfaceFormat) const
+        {
+            (void)surfaceFormat;
+            return false;
+        }
+
+        /// Converts a point from SDL window-coordinate space to logical (virtual) game
+        /// coordinates. A renderer whose drawable pixel size differs from the window's logical size
+        /// must account for that density internally. Returns true on success. Default: no-op.
         /// Converts a point from the platform window's logical client-coordinate space to the
         /// renderer's virtual game-coordinate space. Presentation scale, crop/letterbox offsets
         /// and any difference between logical client units and drawable pixels are entirely the
@@ -1705,11 +1956,12 @@ namespace CNA::Internal::Renderers
          * @brief Creates a renderer-specific 16-bit index buffer.
          */
         virtual std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int index_capacity) = 0;
-        /// Creates a 32-bit index buffer. Default delegates to CreateIndexBuffer16 for
-        /// renderers that do not yet support 32-bit indices.
-        virtual std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int index_capacity)
+        /// Creates a 32-bit index buffer. A renderer must opt in explicitly: delegating to the
+        /// 16-bit factory makes a valid uint32 upload look successful until draw-time truncation.
+        virtual std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int /*index_capacity*/)
         {
-            return CreateIndexBuffer16(index_capacity);
+            throw std::runtime_error(
+                "IGraphicsRenderer::CreateIndexBuffer32: 32-bit index buffers are not supported by this renderer");
         }
 
         /**
@@ -2160,6 +2412,11 @@ namespace CNA::Internal::Renderers
         std::function<void(RendererDeviceEvent)> deviceEventCallback;
     };
 
+    // plan_runtimerenderer.md design decision 4: the factory used to be declared here, once, and
+    // defined once per renderer family with an identical signature -- which is exactly why two
+    // renderer archives could never link into the same binary. Each family now declares and
+    // defines CNA::Internal::Renderers::<Family>::CreateGraphicsRenderer instead, and
+    // GraphicsRendererRegistry reaches it through GraphicsRendererDescriptor::create.
     // Factory function to be implemented by each renderer. The creation contract deliberately
     // contains only platform value types; renderer-family-specific native API work starts behind
     // this boundary.

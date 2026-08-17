@@ -23,7 +23,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
 
     macro(cna_directx11_test target src)
         add_executable(${target} ${src})
-        target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        target_link_libraries(${target} PRIVATE CNA SDL3::SDL3)
+        cna_link_sharp_runtime(${target} PRIVATE)
         if(TARGET SDL3::SDL3main)
             target_link_libraries(${target} PRIVATE SDL3::SDL3main)
         endif()
@@ -45,6 +46,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
             set(${out_var} $<TARGET_FILE:${target_name}>)
         endif()
     endmacro()
+
+    # GLTF-386: official DXVK archives identify themselves as "DXVK: v2.6" whereas older/package
+    # builds use "DXVK: 2.6.0". Keep the authenticity gate strict while accepting both real forms.
+    cna_register_renderer_test(NAME DirectX11_DxvkGate
+        COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/test-run-wine-dxvk-gate.sh
+        TIMEOUT 10 LABELS "DIRECTX11")
 
     cna_directx11_test(cna_test_directx11_smoke directx11_smoke_test.cpp)
     cna_directx11_ctest_command(_directx11_smoke_cmd cna_test_directx11_smoke)
@@ -101,6 +108,20 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
     cna_directx11_test(cna_test_directx11_pbr_vertexcolor directx11_pbr_vertexcolor_test.cpp)
     cna_directx11_ctest_command(_directx11_pbr_vertexcolor_cmd cna_test_directx11_pbr_vertexcolor)
     cna_register_renderer_test(NAME DirectX11_Pbr_VertexColor COMMAND ${_directx11_pbr_vertexcolor_cmd}
+        TIMEOUT 60 LABELS "DIRECTX11")
+
+    # GLTF-213: exact mid-grey transfer witnesses on the shared D3D PBR pixel shaders.
+    cna_directx11_test(cna_test_directx11_pbr_srgb_transfer
+                       ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
+    cna_directx11_ctest_command(_directx11_pbr_srgb_cmd cna_test_directx11_pbr_srgb_transfer)
+    cna_register_renderer_test(NAME DirectX11_Pbr_SrgbTransfer COMMAND ${_directx11_pbr_srgb_cmd}
+        TIMEOUT 60 LABELS "DIRECTX11")
+
+    # GLTF-343/344: real DXBC witnesses for dielectric F0/F90 on rigid and skinned PBR paths.
+    cna_directx11_test(cna_test_directx11_pbr_fresnel_factors
+                       ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
+    cna_directx11_ctest_command(_directx11_pbr_fresnel_cmd cna_test_directx11_pbr_fresnel_factors)
+    cna_register_renderer_test(NAME DirectX11_Pbr_FresnelFactors COMMAND ${_directx11_pbr_fresnel_cmd}
         TIMEOUT 60 LABELS "DIRECTX11")
 
     # REMED-GFX-007: EnvironmentMapEffect emissive must be added UNSCALED (FNA Lighting.fxh:

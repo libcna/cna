@@ -1,15 +1,20 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-005 / GLTF-006 -- see GltfOracleEXT.hpp for the scope rules. Test scope only.
+// plan_gltf.md GLTF-005 / GLTF-006 -- see GltfOracleEXT.hpp for the diagnostic/test scope rules.
 
 #include "GltfOracleEXT.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <limits>
 #include <unordered_set>
+
+#ifdef CNA_DRACO_AVAILABLE
+#include "draco/compression/decode.h"
+#endif
 
 namespace CnaTest::GltfOracle
 {
@@ -50,6 +55,185 @@ namespace CnaTest::GltfOracle
                 }
             }
             return out + "\"";
+        }
+
+        /// glTF §3.6.2.2's component reader, restated on the oracle side (plan_gltf.md GLTF-062).
+        /// A normalized integer maps onto its unit range with the divisors the specification names
+        /// -- 255/127/65535/32767 -- and a signed value clamps at -1 rather than reaching -1.008.
+        float ReadFloatComponent(const std::uint8_t* p, cgltf_component_type type, bool normalized)
+        {
+            switch (type)
+            {
+                case cgltf_component_type_r_8:
+                {
+                    std::int8_t v = 0;
+                    std::memcpy(&v, p, sizeof(v));
+                    return normalized ? std::max(static_cast<float>(v) / 127.0f, -1.0f)
+                                      : static_cast<float>(v);
+                }
+                case cgltf_component_type_r_8u:
+                {
+                    std::uint8_t v = 0;
+                    std::memcpy(&v, p, sizeof(v));
+                    return normalized ? static_cast<float>(v) / 255.0f : static_cast<float>(v);
+                }
+                case cgltf_component_type_r_16:
+                {
+                    std::int16_t v = 0;
+                    std::memcpy(&v, p, sizeof(v));
+                    return normalized ? std::max(static_cast<float>(v) / 32767.0f, -1.0f)
+                                      : static_cast<float>(v);
+                }
+                case cgltf_component_type_r_16u:
+                {
+                    std::uint16_t v = 0;
+                    std::memcpy(&v, p, sizeof(v));
+                    return normalized ? static_cast<float>(v) / 65535.0f : static_cast<float>(v);
+                }
+                case cgltf_component_type_r_32u:
+                {
+                    std::uint32_t v = 0;
+                    std::memcpy(&v, p, sizeof(v));
+                    return normalized ? static_cast<float>(v) / 4294967295.0f
+                                      : static_cast<float>(v);
+                }
+                case cgltf_component_type_r_32f:
+                {
+                    float v = 0.0f;
+                    std::memcpy(&v, p, sizeof(v));
+                    return v;
+                }
+                default: return 0.0f;
+            }
+        }
+
+        /// The unsigned integer at `p`, for a sparse block's own index array (§3.6.2.3).
+        std::size_t ReadIndexComponent(const std::uint8_t* p, cgltf_component_type type)
+        {
+            switch (type)
+            {
+                case cgltf_component_type_r_8u:
+                {
+                    std::uint8_t v = 0;
+                    std::memcpy(&v, p, sizeof(v));
+                    return v;
+                }
+                case cgltf_component_type_r_16u:
+                {
+                    std::uint16_t v = 0;
+                    std::memcpy(&v, p, sizeof(v));
+                    return v;
+                }
+                case cgltf_component_type_r_32u:
+                {
+                    std::uint32_t v = 0;
+                    std::memcpy(&v, p, sizeof(v));
+                    return v;
+                }
+                default: return 0;
+            }
+        }
+
+        /// Byte offset of component `c` inside one element, per §3.6.2.4. Only ``MAT2``/``MAT3``
+        /// differ from plain `c * componentSize`: their columns are padded up to a 4-byte boundary.
+        std::size_t ComponentByteOffset(cgltf_type type, std::size_t componentSize, std::size_t c)
+        {
+            std::size_t rows = 0;
+            if (type == cgltf_type_mat2) { rows = 2; }
+            else if (type == cgltf_type_mat3) { rows = 3; }
+            else if (type == cgltf_type_mat4) { rows = 4; }
+            if (rows == 0) { return c * componentSize; }
+            const std::size_t columnBytes = ((rows * componentSize + 3) / 4) * 4;
+            return (c / rows) * columnBytes + (c % rows) * componentSize;
+        }
+
+        /// Decodes a whole accessor to floats, as `cgltf_accessor_unpack_floats` does but with
+        /// §3.6.2.3's sparse addressing rather than cgltf's (plan_gltf.md GLTF-062).
+        ///
+        /// The oracle normally delegates the decode to cgltf precisely so it is not CNA's importer
+        /// judging itself -- but for one combination cgltf is the component under test. A sparse
+        /// accessor's `values` array is tightly packed, while cgltf's reader walks it at the BASE
+        /// accessor's stride; the two coincide unless the base bufferView is interleaved. So the
+        /// specification's own addressing is restated here rather than inheriting the bug and
+        /// calling the result "expected". This is an independent restatement, not a call into CNA:
+        /// both this and `GltfImportCore::UnpackAccessor` are checked against the Python-generated
+        /// manifest, which is where the truth actually lives.
+        /// `GltfAccessorDecodeLock.VendoredParserStillMisreadsSparseValuesAtTheBaseStride` pins the
+        /// underlying bug, so a cgltf upgrade that fixes it retires both copies at once.
+        ///
+        /// :return: an empty string on success, or a description of what could not be decoded.
+        std::string UnpackAccessorFloats(const cgltf_accessor& accessor, std::vector<float>& values)
+        {
+            const std::size_t components = static_cast<std::size_t>(cgltf_num_components(accessor.type));
+            if (components == 0) { return "accessor has an invalid type"; }
+            values.assign(static_cast<std::size_t>(accessor.count) * components, 0.0f);
+            if (values.empty()) { return ""; }
+
+            const cgltf_size unpacked =
+                cgltf_accessor_unpack_floats(&accessor, values.data(), values.size());
+            if (unpacked != values.size())
+            {
+                return "cgltf_accessor_unpack_floats decoded " + std::to_string(unpacked) + " of " +
+                       std::to_string(values.size()) + " components";
+            }
+
+            // plan_gltf.md GLTF-056. §3.6.2.2's signed normalized conversions are
+            // `max(c / 127, -1)` and `max(c / 32767, -1)`; cgltf divides and returns with no clamp,
+            // so -128 decodes to -1.0079. Restated on the oracle side for the same reason as
+            // GLTF-062's sparse addressing: the oracle must apply the specification, not inherit
+            // the defect and certify it as "expected".
+            if (accessor.normalized != 0 &&
+                (accessor.component_type == cgltf_component_type_r_8 ||
+                 accessor.component_type == cgltf_component_type_r_16))
+            {
+                for (float& value : values)
+                {
+                    if (value < -1.0f) { value = -1.0f; }
+                }
+            }
+
+            if (accessor.is_sparse == 0) { return ""; }
+            const cgltf_accessor_sparse& sparse = accessor.sparse;
+            const cgltf_size elementSize = cgltf_calc_size(accessor.type, accessor.component_type);
+            if (accessor.stride == elementSize || sparse.count == 0 ||
+                sparse.values_buffer_view == nullptr || sparse.indices_buffer_view == nullptr)
+            {
+                return "";
+            }
+
+            const auto* valueBytes =
+                static_cast<const std::uint8_t*>(cgltf_buffer_view_data(sparse.values_buffer_view));
+            const auto* indexBytes =
+                static_cast<const std::uint8_t*>(cgltf_buffer_view_data(sparse.indices_buffer_view));
+            if (valueBytes == nullptr || indexBytes == nullptr)
+            {
+                return "sparse accessor has an unreadable indices or values bufferView";
+            }
+            valueBytes += sparse.values_byte_offset;
+            indexBytes += sparse.indices_byte_offset;
+
+            const cgltf_size indexStride = cgltf_component_size(sparse.indices_component_type);
+            const std::size_t componentSize =
+                static_cast<std::size_t>(cgltf_component_size(accessor.component_type));
+            for (cgltf_size i = 0; i < sparse.count; ++i)
+            {
+                const std::size_t writer =
+                    ReadIndexComponent(indexBytes + i * indexStride, sparse.indices_component_type);
+                if (writer >= static_cast<std::size_t>(accessor.count))
+                {
+                    return "sparse override " + std::to_string(i) + " targets element " +
+                           std::to_string(writer) + ", past the accessor's own " +
+                           std::to_string(accessor.count);
+                }
+                for (std::size_t c = 0; c < components; ++c)
+                {
+                    values[writer * components + c] = ReadFloatComponent(
+                        valueBytes + i * elementSize +
+                            ComponentByteOffset(accessor.type, componentSize, c),
+                        accessor.component_type, accessor.normalized != 0);
+                }
+            }
+            return "";
         }
 
         template <std::size_t N>
@@ -162,19 +346,57 @@ namespace CnaTest::GltfOracle
             }
         }
 
-        /// The primitive's POSITION values, decoded straight from its accessor. Deliberately not
-        /// routed through MeshOut: the L4 oracle must stay usable on a fixture whose L3 is wrong.
-        std::vector<std::array<float, 3>> PrimitivePositions(const cgltf_primitive& prim)
+        /// The primitive's POSITION values, decoded straight from its declared source.
+        /// Deliberately not routed through MeshOut: the L4 oracle must stay usable on a fixture
+        /// whose L3 is wrong. For Draco the independent oracle invokes the pinned reference
+        /// decoder itself; only the extension's cgltf unique-id representation is shared with the
+        /// production importer.
+        std::vector<std::array<float, 3>> PrimitivePositions(const cgltf_data& data,
+                                                              const cgltf_primitive& prim)
         {
             std::vector<std::array<float, 3>> out;
             const cgltf_accessor* accessor =
                 cgltf_find_accessor(&prim, cgltf_attribute_type_position, 0);
             if (accessor == nullptr || cgltf_num_components(accessor->type) != 3) { return out; }
-            std::vector<float> raw(static_cast<std::size_t>(accessor->count) * 3);
-            if (cgltf_accessor_unpack_floats(accessor, raw.data(), raw.size()) != raw.size())
+
+#ifdef CNA_DRACO_AVAILABLE
+            if (prim.has_draco_mesh_compression != 0)
             {
+                const cgltf_buffer_view* view = prim.draco_mesh_compression.buffer_view;
+                const std::uint8_t* bytes = view != nullptr ? cgltf_buffer_view_data(view) : nullptr;
+                if (view == nullptr || bytes == nullptr) { return out; }
+
+                draco::DecoderBuffer buffer;
+                buffer.Init(reinterpret_cast<const char*>(bytes), view->size);
+                draco::Decoder decoder;
+                draco::StatusOr<std::unique_ptr<draco::Mesh>> decoded =
+                    decoder.DecodeMeshFromBuffer(&buffer);
+                if (!decoded.ok()) { return out; }
+
+                const int uniqueId = CNA::Internal::GltfImport::FindDracoUniqueIdEXT(
+                    prim, &data, cgltf_attribute_type_position, 0);
+                const draco::PointAttribute* position = uniqueId >= 0
+                    ? decoded.value()->GetAttributeByUniqueId(static_cast<std::uint32_t>(uniqueId))
+                    : nullptr;
+                if (position == nullptr) { return out; }
+
+                out.reserve(static_cast<std::size_t>(decoded.value()->num_points()));
+                for (draco::PointIndex point(0); point < decoded.value()->num_points(); ++point)
+                {
+                    std::array<float, 3> value{};
+                    if (!position->ConvertValue<float>(position->mapped_index(point), 3,
+                                                       value.data()))
+                    {
+                        return {};
+                    }
+                    out.push_back(value);
+                }
                 return out;
             }
+#endif
+
+            std::vector<float> raw;
+            if (!UnpackAccessorFloats(*accessor, raw).empty()) { return out; }
             out.reserve(static_cast<std::size_t>(accessor->count));
             for (cgltf_size v = 0; v < accessor->count; ++v)
             {
@@ -184,16 +406,6 @@ namespace CnaTest::GltfOracle
             return out;
         }
 
-        std::vector<std::array<float, 3>> MeshPositions(const cgltf_mesh& mesh)
-        {
-            std::vector<std::array<float, 3>> out;
-            for (cgltf_size p = 0; p < mesh.primitives_count; ++p)
-            {
-                const std::vector<std::array<float, 3>> prim = PrimitivePositions(mesh.primitives[p]);
-                out.insert(out.end(), prim.begin(), prim.end());
-            }
-            return out;
-        }
     }
 
     GltfMatrix IdentityMatrix()
@@ -318,15 +530,14 @@ namespace CnaTest::GltfOracle
             return dump;
         }
 
-        std::vector<float> values(dump.count * dump.componentsPerElement);
-        const cgltf_size unpacked = values.empty()
-            ? 0 : cgltf_accessor_unpack_floats(&accessor, values.data(), values.size());
-        if (unpacked != values.size())
+        std::vector<float> values;
+        const std::string unpackError = UnpackAccessorFloats(accessor, values);
+        if (!unpackError.empty())
         {
-            dump.error = "cgltf_accessor_unpack_floats decoded " + std::to_string(unpacked) +
-                         " of " + std::to_string(values.size()) + " components";
+            dump.error = unpackError;
             return dump;
         }
+
         dump.values = std::move(values);
         dump.decoded = true;
         return dump;
@@ -369,21 +580,37 @@ namespace CnaTest::GltfOracle
         dump.colored = mesh.colored;
         dump.usePbr = mesh.usePbr;
         dump.useDualTexture = mesh.useDualTexture;
-        dump.metallicFactor = mesh.metallicFactor;
-        dump.roughnessFactor = mesh.roughnessFactor;
-        dump.emissiveFactor = {mesh.emissiveFactor.X, mesh.emissiveFactor.Y, mesh.emissiveFactor.Z};
-        dump.hasBaseColorImage = mesh.baseColorImage != nullptr;
-        dump.hasOcclusionImage = mesh.occlusionImage != nullptr;
-        dump.hasNormalImage = mesh.normalImage != nullptr;
-        dump.hasMetallicRoughnessImage = mesh.metallicRoughnessImage != nullptr;
-        dump.hasEmissiveImage = mesh.emissiveImage != nullptr;
+        dump.metallicFactor = mesh.material.metallicFactor;
+        dump.roughnessFactor = mesh.material.roughnessFactor;
+        dump.ior = mesh.material.iorEXT;
+        dump.specularFactor = mesh.material.specularFactorEXT;
+        dump.specularColorFactor = {mesh.material.specularColorFactorEXT.X,
+                                    mesh.material.specularColorFactorEXT.Y,
+                                    mesh.material.specularColorFactorEXT.Z};
+        dump.emissiveFactor = {mesh.material.emissiveFactor.X,
+                               mesh.material.emissiveFactor.Y,
+                               mesh.material.emissiveFactor.Z};
+        dump.hasBaseColorImage = mesh.material.baseColorImage != nullptr;
+        dump.hasOcclusionImage = mesh.material.occlusionImage != nullptr;
+        dump.hasNormalImage = mesh.material.normalImage != nullptr;
+        dump.hasMetallicRoughnessImage = mesh.material.metallicRoughnessImage != nullptr;
+        dump.hasEmissiveImage = mesh.material.emissiveImage != nullptr;
         dump.morphTargetCount = mesh.morphPositionDeltas.size();
+        dump.baseColorFactor = {mesh.material.baseColorFactor.X,
+                                mesh.material.baseColorFactor.Y,
+                                mesh.material.baseColorFactor.Z,
+                                mesh.material.baseColorFactor.W};
         // GLTF-071 gave MeshOut a real topology member, so the source primitive's mode now reaches
         // L3 instead of being assumed. Reading it back here is what lets an L3 comparison assert
         // the topology rather than infer it from an index count.
         dump.topologyCarried = true;
-        dump.topologyMode = CNA::Internal::GltfImport::PrimitiveTopologyMode(mesh.topology);
-        dump.topologyName = CNA::Internal::GltfImport::PrimitiveTopologyName(mesh.topology);
+        dump.topologyMode = CNA::Internal::GltfImport::PrimitiveTopologyMode(mesh.sourceTopology);
+        dump.topologyName = CNA::Internal::GltfImport::PrimitiveTopologyName(mesh.sourceTopology);
+        // GLTF-072 made the two distinct: the file's declared mode and the mode its index list is
+        // in after conversion. Reading both back is what lets L3 assert the conversion happened
+        // rather than merely that a topology is present.
+        dump.importedTopologyMode = CNA::Internal::GltfImport::PrimitiveTopologyMode(mesh.topology);
+        dump.importedTopologyName = CNA::Internal::GltfImport::PrimitiveTopologyName(mesh.topology);
 
         // Every layout in the stride ABI begins with a 3-float position, so a stride that cannot
         // hold one is not a layout this helper can read. Reporting zero vertices is the right
@@ -394,7 +621,7 @@ namespace CnaTest::GltfOracle
 
         // Slot offsets per the stride ABI (plan_gltf.md §2.3). -1 means "this layout has no such
         // slot", which is itself part of the L3 answer.
-        long long normalOffset = -1, tangentOffset = -1, uvOffset = -1;
+        long long normalOffset = -1, tangentOffset = -1, uvOffset = -1, uv1Offset = -1;
         long long weightOffset = -1, jointOffset = -1, colorOffset = -1;
         switch (mesh.stride)
         {
@@ -405,8 +632,11 @@ namespace CnaTest::GltfOracle
             case 52: normalOffset = 12; uvOffset = 24; weightOffset = 32; jointOffset = 48; break;
             case 56: normalOffset = 12; uvOffset = 24; weightOffset = 32; jointOffset = 48;
                      colorOffset = 52; break;
+            case 60: normalOffset = 12; tangentOffset = 24; uvOffset = 40; uv1Offset = 48; break;
             case 68: normalOffset = 12; tangentOffset = 24; uvOffset = 40; weightOffset = 48;
                      jointOffset = 64; break;
+            case 76: normalOffset = 12; tangentOffset = 24; uvOffset = 40; weightOffset = 48;
+                     jointOffset = 64; uv1Offset = 68; break;
             default: break;
         }
 
@@ -436,6 +666,12 @@ namespace CnaTest::GltfOracle
                 const std::size_t o = base + static_cast<std::size_t>(uvOffset);
                 dump.texcoords.push_back({ReadFloat(mesh.vertexBytes, o),
                                           ReadFloat(mesh.vertexBytes, o + 4)});
+            }
+            if (uv1Offset >= 0)
+            {
+                const std::size_t o = base + static_cast<std::size_t>(uv1Offset);
+                dump.texcoords1.push_back({ReadFloat(mesh.vertexBytes, o),
+                                           ReadFloat(mesh.vertexBytes, o + 4)});
             }
             if (weightOffset >= 0)
             {
@@ -487,6 +723,8 @@ namespace CnaTest::GltfOracle
         out += ",\"topologyCarried\":" + std::string(dump.topologyCarried ? "true" : "false");
         out += ",\"topologyMode\":" + std::to_string(dump.topologyMode);
         out += ",\"topologyName\":" + Quote(dump.topologyName);
+        out += ",\"importedTopologyMode\":" + std::to_string(dump.importedTopologyMode);
+        out += ",\"importedTopologyName\":" + Quote(dump.importedTopologyName);
         out += ",\"skinned\":" + std::string(dump.skinned ? "true" : "false");
         out += ",\"colored\":" + std::string(dump.colored ? "true" : "false");
         out += ",\"usePbr\":" + std::string(dump.usePbr ? "true" : "false");
@@ -494,6 +732,10 @@ namespace CnaTest::GltfOracle
         out += ",\"use32BitIndices\":" + std::string(dump.use32BitIndices ? "true" : "false");
         out += ",\"metallicFactor\":" + Num(dump.metallicFactor);
         out += ",\"roughnessFactor\":" + Num(dump.roughnessFactor);
+        out += ",\"ior\":" + Num(dump.ior);
+        out += ",\"specularFactor\":" + Num(dump.specularFactor);
+        out += ",\"specularColorFactor\":[" + Num(dump.specularColorFactor[0]) + "," +
+               Num(dump.specularColorFactor[1]) + "," + Num(dump.specularColorFactor[2]) + "]";
         out += ",\"emissiveFactor\":[" + Num(dump.emissiveFactor[0]) + "," +
                Num(dump.emissiveFactor[1]) + "," + Num(dump.emissiveFactor[2]) + "]";
         out += ",\"hasBaseColorImage\":" + std::string(dump.hasBaseColorImage ? "true" : "false");
@@ -507,6 +749,7 @@ namespace CnaTest::GltfOracle
         out += ",\"normals\":" + FloatArray(dump.normals);
         out += ",\"tangents\":" + FloatArray(dump.tangents);
         out += ",\"texcoords\":" + FloatArray(dump.texcoords);
+        out += ",\"texcoords1\":" + FloatArray(dump.texcoords1);
         out += ",\"colors\":" + ByteArray(dump.colors);
         out += ",\"weights\":" + FloatArray(dump.weights);
         out += ",\"joints\":" + ByteArray(dump.joints);
@@ -529,7 +772,15 @@ namespace CnaTest::GltfOracle
         {
             SkeletonResult skeleton;
             const bool hasSkin = group.skin != nullptr;
-            if (hasSkin) { skeleton = BuildSkeleton(group.skin, 1.0f); }
+            std::string skeletonError;
+            if (hasSkin)
+            {
+                // Total, like every other helper here: a skin CNA refuses -- an over-limit rig
+                // (GLTF-261), say -- is recorded as this group's error rather than thrown through
+                // the sweep, so one malformed fixture cannot take every other one's L3 with it.
+                try { skeleton = BuildSkeleton(group.skin, 1.0f); }
+                catch (const std::exception& e) { skeletonError = e.what(); }
+            }
 
             for (const MeshInstanceOut& placement : group.instances)
             {
@@ -541,6 +792,12 @@ namespace CnaTest::GltfOracle
                     entry.mesh = static_cast<int>(mesh - data.meshes);
                     entry.primitive = static_cast<int>(p);
                     entry.meshName = mesh->name != nullptr ? mesh->name : "";
+                    if (!skeletonError.empty())
+                    {
+                        entry.error = skeletonError;
+                        out.push_back(std::move(entry));
+                        continue;
+                    }
                     try
                     {
                         const MeshOut extracted = ExtractMesh(
@@ -548,6 +805,8 @@ namespace CnaTest::GltfOracle
                                                                                : entry.meshName,
                             hasSkin ? &skeleton : nullptr, 1.0f);
                         entry.dump = DumpMeshOutEXT(extracted);
+                        entry.vertexBytes = extracted.vertexBytes;
+                        entry.indexBytes = extracted.indexBytes;
                         entry.extracted = true;
                     }
                     catch (const std::exception& e)
@@ -567,7 +826,20 @@ namespace CnaTest::GltfOracle
 
         const cgltf_scene* scene = data.scene != nullptr
             ? data.scene : (data.scenes_count > 0 ? &data.scenes[0] : nullptr);
-        if (scene == nullptr) { return positions; }
+        // §3.5 permits a file with no `scenes` array at all, and defines that as "nothing is
+        // REQUIRED to be rendered" -- which is not "nothing may be". CNA imports every root node
+        // in that case, which is the reading every viewer takes, and the oracle mirrors the
+        // decision deliberately: returning nothing here would make `scene-no-scenes` assert that
+        // CNA does the opposite of what it documents (plan_gltf.md GLTF-399).
+        std::vector<const cgltf_node*> fallbackRoots;
+        if (scene == nullptr)
+        {
+            for (cgltf_size i = 0; i < data.nodes_count; ++i)
+            {
+                if (data.nodes[i].parent == nullptr) { fallbackRoots.push_back(&data.nodes[i]); }
+            }
+            if (fallbackRoots.empty()) { return positions; }
+        }
 
         struct Walker
         {
@@ -598,10 +870,6 @@ namespace CnaTest::GltfOracle
 
                 if (node.mesh != nullptr)
                 {
-                    WorldInstance instance;
-                    instance.node = static_cast<int>(&node - data.nodes);
-                    instance.nodeName = node.name != nullptr ? node.name : "";
-                    instance.mesh = static_cast<int>(node.mesh - data.meshes);
                     // A skinned mesh is not placed by its own node: the specification (§3.7.3) has
                     // the joints place it, and the joint matrix carries
                     // inverse(globalTransform(meshNode)) precisely so that node's transform cancels
@@ -609,12 +877,22 @@ namespace CnaTest::GltfOracle
                     // it is simply not this mesh's placement. The skinned result is a separate
                     // expectation (l4.skin), not this one.
                     const GltfMatrix placement = node.skin != nullptr ? IdentityMatrix() : world;
-                    instance.worldMatrix = placement;
-                    for (const std::array<float, 3>& p : MeshPositions(*node.mesh))
+                    for (cgltf_size p = 0; p < node.mesh->primitives_count; ++p)
                     {
-                        instance.worldPositions.push_back(TransformPoint(placement, p[0], p[1], p[2]));
+                        WorldInstance instance;
+                        instance.node = static_cast<int>(&node - data.nodes);
+                        instance.nodeName = node.name != nullptr ? node.name : "";
+                        instance.mesh = static_cast<int>(node.mesh - data.meshes);
+                        instance.primitive = static_cast<int>(p);
+                        instance.worldMatrix = placement;
+                        for (const std::array<float, 3>& local :
+                             PrimitivePositions(data, node.mesh->primitives[p]))
+                        {
+                            instance.worldPositions.push_back(
+                                TransformPoint(placement, local[0], local[1], local[2]));
+                        }
+                        out.instances.push_back(std::move(instance));
                     }
-                    out.instances.push_back(std::move(instance));
                 }
 
                 for (cgltf_size i = 0; i < node.children_count; ++i)
@@ -626,9 +904,16 @@ namespace CnaTest::GltfOracle
         };
 
         Walker walker{data, positions, {}};
-        for (cgltf_size i = 0; i < scene->nodes_count; ++i)
+        if (scene == nullptr)
         {
-            walker.Visit(*scene->nodes[i], IdentityMatrix());
+            for (const cgltf_node* root : fallbackRoots) { walker.Visit(*root, IdentityMatrix()); }
+        }
+        else
+        {
+            for (cgltf_size i = 0; i < scene->nodes_count; ++i)
+            {
+                walker.Visit(*scene->nodes[i], IdentityMatrix());
+            }
         }
         AccumulateBounds(positions);
         return positions;
@@ -662,6 +947,7 @@ namespace CnaTest::GltfOracle
                     instance.nodeName = (placement.node != nullptr && placement.node->name != nullptr)
                         ? placement.node->name : "";
                     instance.mesh = static_cast<int>(mesh - data.meshes);
+                    instance.primitive = static_cast<int>(p);
                     const GltfMatrix world = placement.skinned
                         ? IdentityMatrix() : ToGltfMatrixEXT(placement.worldTransform);
                     instance.worldMatrix = world;
@@ -705,6 +991,7 @@ namespace CnaTest::GltfOracle
             out += "{\"node\":" + std::to_string(instance.node);
             out += ",\"nodeName\":" + Quote(instance.nodeName);
             out += ",\"mesh\":" + std::to_string(instance.mesh);
+            out += ",\"primitive\":" + std::to_string(instance.primitive);
             out += ",\"worldMatrixColumnMajor\":[";
             for (std::size_t c = 0; c < 16; ++c)
             {

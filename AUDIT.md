@@ -9,6 +9,140 @@ Systematic per-class, per-method comparison: FNA (reference) vs CNA (implementat
 
 For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 
+> **C ABI tracking note (2026-08-15):** `modules/c-api/` remains an experimental C17 ABI and is
+> complete through `CBIND-035` (all slices closed): the graphics-resource, texture, vertex/index buffer, effect and
+> model/animation families are mapped, and the graphics-device family now has its Viewport values,
+> clear/status/2D-policy identities, complete device state, events and exception conversion, and
+> stage-addressed texture collections, frame control, buffer binding, complete draw submission,
+> SpriteBatch text, occlusion queries and the complete extended graphics layer. `CBIND-036A` adds
+> the complete `storage` module: owned storage devices, containers and file streams, count/copy
+> directory and file listings, and synchronous equivalents of the canonical fake-async selector and
+> container pairs that still invoke the completion callback. `CBIND-036B` then completes the whole
+> `content` module: asset-path/cache-key queries, loader registration, graphics-device get/set,
+> manifest and `.xnb` reader-usage snapshots, typed Texture2D, TextureCube and SoundEffect load
+> routes, and the compiled-asset reader pipeline with its owned readers, type readers and
+> process-wide registry. `CBIND-036C` adds the network identity enumerations, the
+> quality-of-service value, owned session-property lists with enumerators, owned packet read and
+> write buffers, and the join-failure conversion with its per-thread join-error record.
+> `CBIND-036D` adds owned network gamers and machines and the seven event descriptions, and
+> `CBIND-036E1` adds discovered sessions and their collection, and `CBIND-036E2` adds the session
+> object itself with its rosters, state and gamer management plus the minimum signed-in-gamer
+> surface a session needs to exist, `CBIND-036E3` adds the ten session event registrations and
+> `CBIND-036E4` adds discovery, join and the collapsed fake-async pairs, and `CBIND-036E5` adds the
+> local gamers that close parent `CBIND-036`: every receive and send overload, the borrowed sender
+> view and the two CNAEXT queue routes, leaving the whole `net` module mapped. `CBIND-037A` then
+> opens `CBIND-037` by closing CNA's own `core` module: the logger, the process-wide minimum level,
+> the compile-time platform, desktop operating system, renderer identity and renderer name, and
+> both backend classifications for any of the 46 public renderer identities, and `CBIND-037B1`
+> adds the gamepad controller type and the complete gamepad-capabilities value, and `CBIND-037B2`
+> adds the five gamepad value types — button set, directional pad, thumbsticks, triggers and the
+> snapshot itself — with every constructor, comparison, hash and string operation, and
+> `CBIND-037B3` adds the `GamePad` statics: vibration, light bar, sensors, player index, power
+> info, button labels, the four identity strings, connection state and the touchpad queries. The
+> `CBIND-037B4a` adds the keyboard: the whole `KeyboardState` value surface, the key-state
+> identity and every `Keyboard` static including both key-name families. The
+> `CBIND-037B4b` adds the mouse, including the static clicked event as an owned registration,
+> `CBIND-037B4c` adds the mouse cursor with its stock singletons as borrowed views, and
+> `CBIND-037B4d` closes the input module's text surface: all three `TextInputEXT` events as owned
+> registrations, the activation and screen-keyboard queries, the typed start and the input
+> rectangle. `CBIND-037B5` then adds touch and gestures: the gesture type and sample, the touch
+> location and collection value surfaces over the existing fixed snapshot, and every `TouchPanel`
+> static. `CBIND-037B6` then adds the haptics extension family: device enumeration and opening,
+> the owned device handle with its whole effect and rumble lifecycle, and the feature, effect,
+> direction and capability values, and `CBIND-037B7a` adds the raw joystick family: the type and
+> hat-position identities, the descriptor and capability values, an owned captured snapshot with a
+> count/copy pair per array, and both hot-plug events as owned registrations, and `CBIND-037B7b`
+> closes the whole `input` module with the last host extensions: the motion sensors, the
+> mouse/keyboard/touch-device enumerations with their four hot-plug events, the system clipboard
+> and the host power state, and `CBIND-037C1` opens the media module with its identities, the
+> fixed visualization value and the media-source enumeration, and `CBIND-037C2` adds `Song` and
+> `SongCollection` as reference-counted owned handles, and `CBIND-037C3` adds the whole music
+> catalog: the media library plus albums, artists, genres, playlists and their collections as
+> borrowed views that keep their library alive, and `CBIND-037C4` adds the picture surface:
+> pictures, the picture-album tree, both collections and the library's picture and save routes, and
+> `CBIND-037C6` adds playback: every `MediaPlayer` static, both of its events and a view of the
+> process-wide media queue, and `CBIND-037C7` closes the whole media module with `Video` and
+> `VideoPlayer`, and `CBIND-037D1` opens the devices module with the sensor state identity, the
+> date-and-offset timestamp and all five sensor reading values, and `CBIND-037D2a` adds the two
+> motion sensors that produce them — owned handles carrying the support probe, state, start/stop,
+> current value, data validity, update interval, reading callback, the sensor error identifier of
+> the last failure, and the canonical test-support surface that lets a machine with no sensors
+> reach the supported path at all, and `CBIND-037D2b` closes the sensor namespace with `Compass`,
+> `Motion` and the three event-argument types, this ABI's own installable sensor backend, and the
+> legacy accelerometer reading event, and `CBIND-037D3` adds the vibration controller and the whole
+> `CNA::Devices` service set — host power, system information, preferred locales, display metrics,
+> clipboard acceptance, URL launching, message boxes, file dialogs and the system tray — each
+> exported in both build states and reporting `NOT_SUPPORTED` where the extension layer is compiled
+> out, and `CBIND-037D4` closes the devices module with the camera: the driver probe, the camera
+> enumeration, frame acquisition into a caller-owned texture, and this ABI's own installable camera
+> backend, and `CBIND-037E1` opens the runtime module with the component model: components of both
+> kinds built from a C callback set, the game's component collection with both change events, and a
+> named-identity view of the service container, and `CBIND-037E2` adds the game's own state, frame
+> control, events, launch parameters, framework pump and title content, and `CBIND-037E3` adds the
+> game window with its state, metrics and events, and `CBIND-037E4` adds the graphics device manager
+> with its preferences, its candidate configuration, its device lifecycle events and the services it
+> registers with the game, and `CBIND-037E2b` adds the game's own content manager as a borrowed
+> handle, and `CBIND-037E5` closes the runtime module by recording the unimplemented `CNA::Runtime`
+> facade as not applicable, guarded by a check that fails if its symbols ever appear, and
+> `CBIND-037F1` opens the audio module by completing the sound-effect surface: three more creation
+> routes, the process-wide 3D-audio settings, the static sample computations and both audio
+> exceptions converting at the boundary, and `CBIND-037F2` adds streaming instances and the
+> index-addressed microphone surface, and `CBIND-037F3` adds 3D
+> positioning: the emitter and listener values and both `Apply3D` overloads, and `CBIND-037F4`
+> closes the audio module with the XACT family against binary fixtures the test authors itself, and
+> `CBIND-037G1` opens the last module with the gamer and guide identities, and `CBIND-037G2`
+> adds the avatar identities, and `CBIND-037G3` converts the six gamer-services exceptions at the
+> boundary, and `CBIND-037G4` completes the gamer, its collections and its per-gamer surfaces, and
+> `CBIND-037G5` completes the guide, its dispatcher and its component, and `CBIND-037G6a`
+> completes achievements, and `CBIND-037G6b` completes property storage and game defaults, and `CBIND-037G6c`
+> completes leaderboards, and `CBIND-037G7` completes the avatar surfaces and **closes the
+> `CBIND-037` campaign**. The
+> generated inventory currently records 6,063 implemented, 32 partial, **0 planned** and 320
+> not-applicable public/protected declarations: every public/protected declaration it tracks is now
+> either mapped, partially mapped with the subset named, or explicitly recorded as having no C form
+> with the reason. This
+> is not complete CNA C API coverage; status
+> and the required full-surface mapping remain tracked in `plan_binding.md` and
+> `docs/c-api/COVERAGE.md`. Phase B7 hardening then adds two mechanical gates over that surface:
+> `CBIND-038` compiles every public header on its own across 23 toolchain cells, and `CBIND-039`
+> records what the ABI **actually is** — 166 struct layouts, 258 scalar widths, 1,338 constant
+> values and 2,720 exported symbols — in `tools/c-api/abi_baseline.json`, so a moved field or a
+> changed constant arrives as a reviewable diff rather than a silently different binary.
+> `CBIND-040A` then puts the lifetime rules under load and finds a heap use-after-free: a game-event
+> registration could outlive its game, and unsubscribing afterwards reached into a freed handler
+> collection. Live registrations are now invalidated once the game has raised its disposal event,
+> the way graphics-device subscriptions already were. `CBIND-040B` closes the pair by covering the
+> ABI's byte-facing surface two ways: 16,843,008 enumerated UTF-8 cases — the whole space up to
+> three bytes — plus a libFuzzer target, both judged against an oracle written as a deliberately
+> different algorithm rather than a copy. `CBIND-041` then finds that `find_package(CNA CONFIG)`
+> could not work at all — the module installed a targets file and no package config — and replaces
+> the gap with a real package, a complete C example, and a gate that installs the C ABI component
+> and builds that example as a standalone project from outside the source tree. `CBIND-042A` then
+> publishes `docs/c-api/LIMITATIONS.md`, the matrix of what the ABI does **not** do, generated from
+> the same inventory; enforcing that every unmapped reason has a declared theme and that no deferral
+> names a finished task turned up three stale deferrals, one of which had silently become
+> implemented — the snapshot is now 6,067 implemented, 28 partial, 0 planned, 320 not-applicable.
+> `CBIND-042B` closes Phase B7's release question with a gate that is measured rather than written
+> down: ten criteria, eight of them met and re-measured on every run, and two packaging decisions
+> that no implementer may make alone. The published verdict is **not ready**, and correctly so.
+> The owner ruled on both on 2026-08-16. `CBIND-045` implements the first: the package now carries
+> the SDL3 libraries CNA builds, so an installed C API links and runs with no environment variable
+> at all, while FFmpeg stays a system dependency on purpose. `CBIND-046` implements the second: a
+> static archive that publishes the same 2,720 `cna_*` names the shared library does, built by
+> partially linking the whole closure into one object and localizing everything else, with the build
+> failing outright if a non-ABI symbol survives. With both decisions delivered the release gate's
+> verdict is **ready**. `CBIND-044A` then turns the first of the remaining partial rows into a real
+> route -- both `SpriteBatch::Begin` overloads that take a custom effect -- and `CBIND-044B` closes
+> the largest remaining group by adding the `Draw` family that places a sprite by position and
+> scale, as a new structure and route rather than by growing a published one. `CBIND-044C` completes
+> the signed-in gamer collection, and `CBIND-044D` gives each of the 12 symbols that remain a
+> recorded disposition and a callable route that reports it, with the generator failing if one lacks
+> either. The snapshot is now 6,083 implemented, 12 partial, 0 planned and 320 not-applicable, and
+> every remaining partial row is a structural property of C rather than unfinished work. The project
+> owner **approved those twelve on 2026-08-16**, which closes `CBIND-044` and with it the whole
+> CBIND campaign: 6,415 public C++ declarations, 6,083 implemented, 12 approved partial, 0 planned,
+> 320 not applicable, and an experimental release gate that reads ready.
+
 ---
 
 ## `Microsoft::Xna::Framework` (root)
@@ -107,6 +241,37 @@ and corrected or confirmed as expected C++ adaptations.
 
 ---
 
+## CNAEXT: runtime graphics renderer selection
+
+Not XNA 4.0 API — XNA had exactly one renderer and no notion of choosing between several, so this
+whole surface is a CNA extension (`plan_runtimerenderer.md`).
+
+| API | Status | Tests |
+|---|---|---|
+| `CNA::GraphicsRendererSelection::SetPreferred(GraphicsRendererType)` | ✅ | latch, unavailable-renderer refusal, precedence |
+| `CNA::GraphicsRendererSelection::SetPreferred(std::string_view)` | ✅ | canonical + case-insensitive names, unknown-name rejection |
+| `CNA::GraphicsRendererSelection::GetSelected()` | ✅ | default, env var, explicit call, does-not-latch |
+| `CNA::GraphicsRendererSelection::GetActive()` | ✅ | equals selected, diverges after substitution, throws before creation |
+| `CNA::GraphicsRendererSelection::IsLatched()` | ✅ | latches on success only, survives device destruction |
+| `CNA::GraphicsRendererSelection::GetAvailable()` / `IsAvailable()` | ✅ | matches the compiled-in registry |
+| `CNA::GraphicsRendererSelection::SetFallbackChain(span)` | ✅ | ordering, dedup, absent entries permitted |
+| `CNA::GraphicsRendererSelection::EnableAutomaticFallback(bool)` | ✅ | covers every compiled-in renderer, disable restores single attempt |
+| `CNA::GraphicsRendererSelection::IsFallbackEnabled()` | ✅ | off by default |
+| `CNA::GraphicsRendererSelection::GetFallbackHistory()` | ✅ | empty on first-attempt success, ordered otherwise, reason + message |
+| `CNA::GraphicsRendererSelection::ResetForTestingEXT()` | ✅ | test-only; documented as not part of the supported API |
+| `GraphicsDevice::GetGraphicsRendererType()` / `GetGraphicsRendererName()` | ✅ | report the device's real renderer (no longer `constexpr` — see below) |
+| `CNA::getGraphicsRendererName(GraphicsRendererType)` | ✅ | all 46 identities, distinct, non-placeholder |
+| `CNA::tryParseGraphicsRendererName()` | ✅ | round-trips every identity, case-insensitive |
+
+**Intentional deviation.** `GraphicsDevice::GetGraphicsRendererType()` and
+`GetGraphicsRendererName()` were `constexpr` and ignored `this`, returning the compile-time
+identity. They are now real accessors returning the renderer *that device* is using, and the
+`constexpr` was dropped: a compile-time answer cannot describe a runtime choice. Callers who want
+the build's compile-time identity still have `CNA::getCurrentGraphicsRendererType()`, which remains
+a constant expression in both build modes.
+
+---
+
 ## `Microsoft::Xna::Framework::Graphics`
 
 Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloads added as stubs.
@@ -161,13 +326,13 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | IndexElementSize (enum) | ✅ | Member names match FNA, and — **fixed, Task 921** (2026-07-09) — the underlying numeric values now do too: `SixteenBits = 0`, `ThirtyTwoBits = 1`, matching FNA's implicit sequential values exactly (previously `16`/`32`, apparently assuming the enum encoded a literal bit-width; found from Task 479's real FNA-vs-CNA JSON comparison, confirmed via both reading FNA's `IndexElementSize.cs` directly and the real running `FNA.dll`'s own reflection dump). |
 | IRenderTarget | ✅ | Complete |
 | IVertexType | ✅ | Complete |
-| Model | ✅ | API complete. The non-default constructor used to auto-default `Root` to `bones[0]` with no way to specify a different root bone index (FNA's real `Model` constructor never sets `Root` at all — `ModelReader` assigns it externally from an explicit `rootBoneIndex`) — **fixed, Task 916** (2026-07-09): an additive optional `rootBoneIndex` parameter (default `0`, matching prior behavior) was added, so a hand-built CNA model whose true root isn't the first bone in `bones` can now be represented correctly. |
+| Model | ✅ | XNA surface complete, plus a CNAEXT `CamerasEXT` property — see the glTF note below the table. API complete. The non-default constructor used to auto-default `Root` to `bones[0]` with no way to specify a different root bone index (FNA's real `Model` constructor never sets `Root` at all — `ModelReader` assigns it externally from an explicit `rootBoneIndex`) — **fixed, Task 916** (2026-07-09): an additive optional `rootBoneIndex` parameter (default `0`, matching prior behavior) was added, so a hand-built CNA model whose true root isn't the first bone in `bones` can now be represented correctly. |
 | ModelBone | ✅ | API complete |
 | ModelBoneCollection | ✅ | API complete |
 | ModelEffectCollection | ✅ | API complete |
 | ModelMesh | ✅ | API complete |
 | ModelMeshCollection | ✅ | API complete |
-| ModelMeshPart | ✅ | API complete |
+| ModelMeshPart | ✅ | XNA surface complete, plus a CNAEXT `PrimitiveTypeEXT` property and a widened `PrimitiveCount` **meaning** — see the glTF note below the table. API complete |
 | ModelMeshPartCollection | ✅ | API complete |
 | NoSuitableGraphicsDeviceException | ✅ | Complete |
 | OcclusionQuery | ✅ | API complete; full 4-backend correctness audit done (Tasks 441-450, `docs/occlusionquery-support.md`). EasyGL: fully correct, pixel-verified both directions. **Vulkan: fixed, Task 447/854** (2026-07-10) — a real `VulkanOcclusionQueryBackend` now correlates each query's Begin/End span with its draw calls via `Pending3DDraw::occlusionQuery` tagging plus `vkCmdBeginQuery`/`vkCmdEndQuery` recording, verified both visible/occluded directions plus a multi-draw-span case. Bgfx: real fix shipped (Task 448) matching bgfx's own documented API, but this sandbox's software GL driver couldn't discriminate whether it changes observable behavior at all; a further gap (query attached to the same view as other geometry rather than a dedicated view, unlike bgfx's own reference example) is tracked as Task 917. SDL_Renderer correctly throws (2D-only, no occlusion queries in FNA's own 2D path either). |
@@ -213,6 +378,28 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | VertexPositionTexture | ✅ | API complete |
 | Viewport | ✅ | API complete |
 | SkinnedModelEXT | ✅ | NOXNA — not part of the XNA 4.0 API. Real, GPU-skinnable mesh + skeleton + animation-clip container for the Avatar real-rendering extension. Deliberately not built on `Model`/`ModelBone`/`ModelMesh` (those encode rigid multi-part model animation, the wrong shape for per-vertex GPU skinning). Its bone hierarchy is entirely independent of the real Xbox Avatar 71-bone arrays. Loaded via a new `SkinnedModelTypeReader` (`.skinnedmodel.json`/`.skeleton.bin`/`.clip.bin`) registered in `ContentManager` |
+
+### glTF campaign additions to the types above (`GLTF-453`)
+
+`plan_gltf.md`'s correctness campaign added CNAEXT members to three types this table calls "API
+complete", and that phrase stays accurate: it is a statement about **XNA 4.0 parity**, and every
+member below is an extension to XNA rather than a piece of it that was missing. They are listed here
+so a reader of this table is not surprised by a header that carries more than FNA does.
+
+Per `CLAUDE.md`, none of them counts as complete until its tests do, so each row names them.
+
+| Type | CNAEXT addition | Why XNA has no equivalent | Tests |
+|---|---|---|---|
+| `ModelMeshPart` | `PrimitiveTypeEXT` | XNA passes the topology to `DrawIndexedPrimitives`, so every XNA part is implicitly a triangle list; a glTF line or point primitive has nowhere else to live | `GltfPrimitiveTopology`, `GltfDrawTopology`, `GltfConformanceL5` |
+| `ModelMeshPart` | `PrimitiveCount` now means "primitives of this part's topology" | The value is unchanged for every triangle-list part — which is every XNA part — so the meaning generalises rather than changing | `GltfConformanceL5`, `GltfConformanceL6` |
+| `Model` | `CamerasEXT` / `ModelCameraEXT` | XNA's `Model` has no cameras. A property rather than `Tag`, because `Tag` holds one object and `SkinningData` and `ModelAnimationsEXT` already contend for it | `GltfCameras` |
+| `PbrEffect`, `SkinnedPbrEffect` | the types themselves | XNA 4.0 has no PBR effect at all (`plan_cnj.md` Phase 13A); they are additions, not reinterpretations, and so are outside this FNA-parity table | `GltfConformanceL6`, `GltfMaterialState`, `GltfDrawParamsOracleL6` |
+| `PbrEffect`, `SkinnedPbrEffect` | `AlphaModeEXT`, `AlphaCutoffEXT`, `DoubleSidedEXT` | XNA has no material-level alpha coverage: transparency is a `BlendState` and cutout rendering is `AlphaTestEffect::ReferenceAlpha` | `GltfConformanceL6` (`AMaskMaterialsCutoffReachesTheDrawsAlphaTestVector` and its corpus-wide control) |
+
+Every one went through `docs/gltf-api-change-review.md` before it existed — that gate's standing
+default is **no new public glTF API**, and each row above records why keeping it internal was
+rejected. What the import path still cannot carry is `docs/gltf-limitations.md`, and the deliberate
+divergences from XNA are `CHECKLIST.md`'s glTF table.
 
 ---
 

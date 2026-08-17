@@ -56,7 +56,24 @@ float ComputeFogKeep(float3 objectPosition)
 
         /// Appended to pixel shaders only. `discard` is not valid in a vertex shader, so this
         /// cannot live in the shared constants block above even though every stage includes that.
-        constexpr const char* kPixelHelpersHlsl = R"(
+constexpr const char* kPixelHelpersHlsl = R"(
+float3 CnaSrgbToLinear(float3 color)
+{
+    float3 low = color / 12.92;
+    // Use a vector exponent: Diligent's HLSL2GLSL path preserves pow() literally, while GLSL
+    // (unlike HLSL) requires both pow operands to have the same vector width.
+    float3 high = pow((color + 0.055) / 1.055, float3(2.4, 2.4, 2.4));
+    return lerp(low, high, step(0.04045, color));
+}
+
+float3 CnaLinearToSrgb(float3 color)
+{
+    float3 low = color * 12.92;
+    float exponent = 1.0 / 2.4;
+    float3 high = 1.055 * pow(max(color, 0.0), float3(exponent, exponent, exponent)) - 0.055;
+    return lerp(low, high, step(0.0031308, color));
+}
+
 /// XNA alpha test, in the encoding GpuDrawParams::alphaTest documents:
 ///   tolerance > 0 -> pass = |alpha - reference| < tolerance
 ///   otherwise     -> pass = alpha < reference
@@ -69,7 +86,11 @@ float4 FinishPixel(float4 color, float fogKeep)
     float weight = passesAlphaTest ? g_AlphaTest.z : g_AlphaTest.w;
     if (weight < 0.0)
         discard;
-    color.rgb = lerp(g_FogColor.rgb, color.rgb, fogKeep);
+    // g_FogColor.w is zero for every ordinary effect. PBR repurposes that otherwise-unused lane
+    // as its output-transfer flag, so fog and the final OETF stay in the same linear workflow.
+    float3 fogColor = lerp(g_FogColor.rgb, CnaSrgbToLinear(g_FogColor.rgb), g_FogColor.w);
+    color.rgb = lerp(fogColor, color.rgb, fogKeep);
+    color.rgb = lerp(color.rgb, CnaLinearToSrgb(color.rgb), g_FogColor.w);
     return color;
 }
 
@@ -359,6 +380,23 @@ float3x3 InverseTranspose3x3(float3x3 m)
     return float3x3(c0 * invDeterminant, c1 * invDeterminant, c2 * invDeterminant);
 }
 
+float3 CnaSkinNormal(float3x3 m, float3 n)
+{
+    float3 c0 = cross(m[1], m[2]);
+    float3 c1 = cross(m[2], m[0]);
+    float3 c2 = cross(m[0], m[1]);
+    float determinant = dot(m[0], c0);
+    float3 transformed = mul(n, float3x3(c0, c1, c2));
+    return abs(determinant) > 1e-6
+        ? transformed * sign(determinant)
+        : mul(n, m);
+}
+
+float CnaDirectionHandedness(float3x3 m)
+{
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
+
 // A disabled light's direction is left at exactly (0,0,0) by the effect layer (see this file's own
 // note on that convention); plain normalize() of a zero-length vector is undefined/NaN, which would
 // otherwise poison the whole per-light sum through dot()/max() once every enabled light's own math
@@ -511,6 +549,7 @@ struct VSInput
     float3 Normal  : ATTRIB1;
     float4 Tangent : ATTRIB2;
     float2 UV      : ATTRIB3;
+    /* CNA_PBR_UV1_RIGID_ATTRIBUTE */
 };
 
 struct PSInput
@@ -519,6 +558,7 @@ struct PSInput
     float3 Normal   : NORMAL;
     float4 Tangent  : TANGENT;
     float2 UV       : TEX_COORD;
+    /* CNA_PBR_UV1_INTERPOLANT */
     float  FogKeep  : FOG_KEEP;
     float3 WorldPos : WORLD_POS;
 };
@@ -543,9 +583,12 @@ void main(in VSInput vsIn, out PSInput psIn)
     // Tangent transforms as a plain direction under World (not the inverse-transpose used for the
     // normal above) -- correct for uniform-scale World transforms, matching this renderer's own
     // established pbr3d.vert.hlsl reference exactly.
-    psIn.Tangent = float4(mul(vsIn.Tangent.xyz, float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz)), vsIn.Tangent.w);
+    float3x3 worldDirectionMat = float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz);
+    psIn.Tangent = float4(mul(vsIn.Tangent.xyz, worldDirectionMat),
+                          vsIn.Tangent.w * CnaDirectionHandedness(worldDirectionMat));
 
     psIn.UV       = vsIn.UV;
+    /* CNA_PBR_UV1_ASSIGNMENT */
     psIn.WorldPos = mul(float4(vsIn.Pos, 1.0), g_World).xyz;
     psIn.FogKeep  = ComputeFogKeep(vsIn.Pos);
 }
@@ -568,11 +611,23 @@ Texture2D    g_EmissiveMap;
 SamplerState g_EmissiveMap_sampler;
 Texture2D    g_OcclusionMap;
 SamplerState g_OcclusionMap_sampler;
+Texture2D    g_SpecularMap;
+SamplerState g_SpecularMap_sampler;
+Texture2D    g_SpecularColorMap;
+SamplerState g_SpecularColorMap_sampler;
 
 cbuffer PbrConstants
 {
     float4 g_PbrAmbientMetallic;   // xyz = ambient colour, w = metallic factor
     float4 g_PbrEmissiveRoughness; // xyz = emissive colour, w = roughness factor
+    // x = normal scale, y = occlusion strength, z = decode base, w = decode emissive.
+    float4 g_PbrMapScales;
+    // xyz = unclamped dielectric F0 before the colour texture, w = specular factor.
+    float4 g_PbrDielectricFresnel;
+    // x = decode specular-colour texture, y = seven-bit TEXCOORD_1 selector mask.
+    float4 g_PbrSpecularState;
+    float4 g_PbrTextureTransformRows[10]; // two affine UV rows per PBR map
+    float4 g_PbrSpecularTextureTransformRows[4];
 };
 
 struct PSInput
@@ -581,6 +636,7 @@ struct PSInput
     float3 Normal   : NORMAL;
     float4 Tangent  : TANGENT;
     float2 UV       : TEX_COORD;
+    /* CNA_PBR_UV1_INTERPOLANT */
     float  FogKeep  : FOG_KEEP;
     float3 WorldPos : WORLD_POS;
 };
@@ -592,8 +648,27 @@ struct PSOutput
 
 static const float kPbrPi = 3.14159265;
 
+float2 CnaPbrTransformUv(float2 uv, int slot)
+{
+    float3 value = float3(uv, 1.0);
+    return float2(dot(value, g_PbrTextureTransformRows[slot * 2].xyz),
+                  dot(value, g_PbrTextureTransformRows[slot * 2 + 1].xyz));
+}
+
+float2 CnaPbrSpecularTransformUv(float2 uv, int slot)
+{
+    float3 value = float3(uv, 1.0);
+    return float2(dot(value, g_PbrSpecularTextureTransformRows[slot * 2].xyz),
+                  dot(value, g_PbrSpecularTextureTransformRows[slot * 2 + 1].xyz));
+}
+
+float2 CnaPbrUv(PSInput value, int slot)
+{
+    /* CNA_PBR_UV_SELECTOR */
+}
+
 float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0,
-                float roughness, float metallic)
+                float3 F90, float roughness, float metallic)
 {
     float3 H = normalize(V + L);
     float NdotL = max(dot(N, L), 0.0);
@@ -605,7 +680,7 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
     float D = a2 / (kPbrPi * dTerm * dTerm + 1e-7);
     float k = (roughness + 1.0); k = k * k / 8.0;
     float G = (NdotV / (NdotV * (1.0 - k) + k)) * (NdotL / (NdotL * (1.0 - k) + k));
-    float3 F = F0 + (float3(1.0, 1.0, 1.0) - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
+    float3 F = F0 + (F90 - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
     float3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
     float3 diffuseColor = albedo * (1.0 - metallic);
     float3 kd = float3(1.0, 1.0, 1.0) - F;
@@ -614,32 +689,57 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
 
 void main(in PSInput psIn, out PSOutput psOut)
 {
-    float4 baseColorTex = g_Texture.Sample(g_Texture_sampler, psIn.UV);
-    float3 albedo = baseColorTex.rgb * g_DiffuseColor.rgb;
+    float4 baseColorTex = g_Texture.Sample(
+        g_Texture_sampler, CnaPbrTransformUv(CnaPbrUv(psIn, 0), 0));
+    float3 baseColor = lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb),
+                            g_PbrMapScales.z);
+    float3 albedo = baseColor * g_DiffuseColor.rgb;
     float alpha = baseColorTex.a * g_DiffuseColor.a;
 
     float3 N = normalize(psIn.Normal);
     float3 T = normalize(psIn.Tangent.xyz - N * dot(N, psIn.Tangent.xyz));
     float3 B = cross(N, T) * psIn.Tangent.w;
-    float3x3 TBN = float3x3(T, B, N);
-    float3 sampledNormal = g_NormalMap.Sample(g_NormalMap_sampler, psIn.UV).rgb * 2.0 - 1.0;
-    float3 finalNormal = normalize(mul(sampledNormal, TBN));
+    float3 sampledNormal = g_NormalMap.Sample(
+        g_NormalMap_sampler, CnaPbrTransformUv(CnaPbrUv(psIn, 1), 1)).rgb * 2.0 - 1.0;
+    sampledNormal.xy *= g_PbrMapScales.x;
+    // Spell out the tangent-basis transform. HLSL-to-GLSL conversion otherwise disagrees with
+    // native HLSL/SPIR-V about mul(float3, float3x3)'s row/column interpretation for non-axis-
+    // aligned normals, while this linear combination states the intended basis unambiguously.
+    float3 finalNormal = normalize(sampledNormal.x * T + sampledNormal.y * B + sampledNormal.z * N);
 
-    float4 mr = g_MetallicRoughnessMap.Sample(g_MetallicRoughnessMap_sampler, psIn.UV);
+    float4 mr = g_MetallicRoughnessMap.Sample(
+        g_MetallicRoughnessMap_sampler, CnaPbrTransformUv(CnaPbrUv(psIn, 2), 2));
     float roughness = clamp(mr.g * g_PbrEmissiveRoughness.w, 0.045, 1.0);
     float metallic  = clamp(mr.b * g_PbrAmbientMetallic.w, 0.0, 1.0);
 
     float3 V = normalize(g_EyePositionSpecularPower.xyz - psIn.WorldPos);
-    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
+    float specularWeight = g_PbrDielectricFresnel.w * g_SpecularMap.Sample(
+        g_SpecularMap_sampler,
+        CnaPbrSpecularTransformUv(CnaPbrUv(psIn, 5), 0)).a;
+    float3 specularColorTex = g_SpecularColorMap.Sample(
+        g_SpecularColorMap_sampler,
+        CnaPbrSpecularTransformUv(CnaPbrUv(psIn, 6), 1)).rgb;
+    specularColorTex = lerp(specularColorTex, CnaSrgbToLinear(specularColorTex),
+                            g_PbrSpecularState.x);
+    float3 dielectricF0 = min(g_PbrDielectricFresnel.xyz * specularColorTex,
+                              float3(1.0, 1.0, 1.0)) * specularWeight;
+    float3 F0 = lerp(dielectricF0, albedo, metallic);
+    float3 F90 = lerp(float3(specularWeight, specularWeight, specularWeight),
+                      float3(1.0, 1.0, 1.0), metallic);
 
     float3 Lo = float3(0.0, 0.0, 0.0);
-    Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[0].xyz), g_LightDiffuse[0].xyz, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[1].xyz), g_LightDiffuse[1].xyz, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[2].xyz), g_LightDiffuse[2].xyz, albedo, F0, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[0].xyz), g_LightDiffuse[0].xyz, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[1].xyz), g_LightDiffuse[1].xyz, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[2].xyz), g_LightDiffuse[2].xyz, albedo, F0, F90, roughness, metallic);
 
-    float occlusion = g_OcclusionMap.Sample(g_OcclusionMap_sampler, psIn.UV).r;
+    float occlusion = g_OcclusionMap.Sample(
+        g_OcclusionMap_sampler, CnaPbrTransformUv(CnaPbrUv(psIn, 4), 4)).r;
+    occlusion = 1.0 + g_PbrMapScales.y * (occlusion - 1.0);
     float3 ambient = g_PbrAmbientMetallic.xyz * albedo * occlusion;
-    float3 emissive = g_PbrEmissiveRoughness.xyz * g_EmissiveMap.Sample(g_EmissiveMap_sampler, psIn.UV).rgb;
+    float3 emissiveSample = g_EmissiveMap.Sample(
+        g_EmissiveMap_sampler, CnaPbrTransformUv(CnaPbrUv(psIn, 3), 3)).rgb;
+    emissiveSample = lerp(emissiveSample, CnaSrgbToLinear(emissiveSample), g_PbrMapScales.w);
+    float3 emissive = g_PbrEmissiveRoughness.xyz * emissiveSample;
 
     psOut.Color = FinishPixel(float4(ambient + Lo + emissive, alpha), psIn.FogKeep);
 }
@@ -658,6 +758,7 @@ struct VSInput
     float2 UV           : ATTRIB3;
     float4 BlendWeights : ATTRIB4;
     uint4  BlendIndices : ATTRIB5;
+    /* CNA_PBR_UV1_SKINNED_ATTRIBUTE */
 };
 
 struct PSInput
@@ -666,6 +767,7 @@ struct PSInput
     float3 Normal   : NORMAL;
     float4 Tangent  : TANGENT;
     float2 UV       : TEX_COORD;
+    /* CNA_PBR_UV1_INTERPOLANT */
     float  FogKeep  : FOG_KEEP;
     float3 WorldPos : WORLD_POS;
 };
@@ -677,17 +779,18 @@ void main(in VSInput vsIn, out PSInput psIn)
 
     psIn.Pos = mul(skinnedPos, g_WorldViewProj);
 
-    // Same composition kSkinnedVertexHlsl already uses: the skin matrix's own 3x3 applied first,
-    // then the inverse-transpose of World (not a full inverse-transpose of skin*World) -- a
-    // documented simplification shared with this renderer's own unskinned-lit skinning path.
-    // InverseTranspose3x3() comes from kVertexLightingHlsl (always prepended to every vertex
-    // shader), the same helper kSkinnedVertexHlsl itself already uses.
+    // GLTF-264: inverse-transpose the complete blended joint matrix before composing it with
+    // World's inverse-transpose. Tangents remain ordinary directions on both matrices.
     float3x3 skinNormalMat = float3x3(skin[0].xyz, skin[1].xyz, skin[2].xyz);
-    float3x3 worldNormalMat = InverseTranspose3x3(float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz));
-    psIn.Normal = normalize(mul(mul(vsIn.Normal, skinNormalMat), worldNormalMat));
-    psIn.Tangent = float4(mul(mul(vsIn.Tangent.xyz, skinNormalMat), float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz)), vsIn.Tangent.w);
+    float3x3 worldDirectionMat = float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz);
+    float3x3 worldNormalMat = InverseTranspose3x3(worldDirectionMat);
+    psIn.Normal = normalize(mul(CnaSkinNormal(skinNormalMat, vsIn.Normal), worldNormalMat));
+    psIn.Tangent = float4(mul(mul(vsIn.Tangent.xyz, skinNormalMat), worldDirectionMat),
+                          vsIn.Tangent.w * CnaDirectionHandedness(worldDirectionMat)
+                              * CnaDirectionHandedness(skinNormalMat));
 
     psIn.UV       = vsIn.UV;
+    /* CNA_PBR_UV1_ASSIGNMENT */
     psIn.WorldPos = mul(skinnedPos, g_World).xyz;
     psIn.FogKeep  = ComputeFogKeep(skinnedPos.xyz);
 }

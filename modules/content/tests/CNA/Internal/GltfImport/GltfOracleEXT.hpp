@@ -4,11 +4,12 @@
 // plan_gltf.md GLTF-005 / GLTF-006: the L2, L3 and L4 rungs of the numerical oracle ladder
 // (plan_gltf.md §7.1).
 //
-// TEST SCOPE ONLY. Nothing here is CNA public API, CNAEXT surface, or part of
-// CNA::Internal::GltfImport. It is compiled into CnaTests alone, and no translation unit under
-// modules/*/src may call it. The EXT-suffixed names are the ones plan_gltf.md's task rows cite, so
-// a later session searching for DumpAccessorEXT / DumpMeshOutEXT / EvaluateWorldPositionsEXT finds
-// them -- the namespace, not the suffix, is what marks them non-production.
+// DIAGNOSTIC/TEST SCOPE ONLY. Nothing here is CNA public API, CNAEXT surface, or part of
+// CNA::Internal::GltfImport. It is compiled into CnaTests and the standalone glTF converter's
+// `--dump-oracle` diagnostic mode; no translation unit under modules/*/src may call it. The
+// EXT-suffixed names are the ones plan_gltf.md's task rows cite, so a later session searching for
+// DumpAccessorEXT / DumpMeshOutEXT / EvaluateWorldPositionsEXT finds them -- the namespace, not
+// the suffix, is what marks them non-runtime.
 //
 // The point of these helpers is to answer "at which layer does reality first diverge?" with
 // numbers rather than screenshots. They therefore never drive production behaviour: the world
@@ -123,6 +124,8 @@ namespace CnaTest::GltfOracle
         std::vector<std::array<float, 4>> tangents;
         /** @brief Per-vertex texture coordinates, empty when the layout has no UV slot. */
         std::vector<std::array<float, 2>> texcoords;
+        /** @brief Per-vertex packed UV1 coordinates, empty outside stride 60/76 layouts. */
+        std::vector<std::array<float, 2>> texcoords1;
         /** @brief Per-vertex colours as the bytes actually packed, empty when uncoloured. */
         std::vector<std::array<std::uint8_t, 4>> colors;
         /** @brief Per-vertex blend weights, empty when unskinned. */
@@ -141,11 +144,19 @@ namespace CnaTest::GltfOracle
         bool usePbr = false;
         /** @brief `MeshOut::useDualTexture`. */
         bool useDualTexture = false;
-        /** @brief `MeshOut::metallicFactor`. */
+        /** @brief The material's base colour factor (RGBA) as it reached `MeshOut` (`GLTF-216`). */
+        std::array<float, 4> baseColorFactor{1.0f, 1.0f, 1.0f, 1.0f};
+        /** @brief `MeshOut::material.metallicFactor`. */
         float metallicFactor = 0.0f;
-        /** @brief `MeshOut::roughnessFactor`. */
+        /** @brief `MeshOut::material.roughnessFactor`. */
         float roughnessFactor = 0.0f;
-        /** @brief `MeshOut::emissiveFactor`. */
+        /** @brief `MeshOut::material.iorEXT`. */
+        float ior = 1.5f;
+        /** @brief `MeshOut::material.specularFactorEXT`. */
+        float specularFactor = 1.0f;
+        /** @brief `MeshOut::material.specularColorFactorEXT`. */
+        std::array<float, 3> specularColorFactor{1.0f, 1.0f, 1.0f};
+        /** @brief `MeshOut::material.emissiveFactor`. */
         std::array<float, 3> emissiveFactor{};
         /** @brief Which material images survived import, by presence only. */
         bool hasBaseColorImage = false;
@@ -167,10 +178,25 @@ namespace CnaTest::GltfOracle
          * true, so a fixture's L3 topology can now be asserted rather than inferred.
          */
         bool topologyCarried = false;
-        /** @brief The carried `mesh.primitive.mode` value, or -1 when no topology is carried. */
+        /**
+         * @brief The `mesh.primitive.mode` the SOURCE file declared, or -1 when none is carried.
+         *
+         * This is the spec-derived quantity a fixture's `l3.mode` states. It is unaffected by any
+         * import-time conversion, which is exactly what makes a conversion checkable.
+         */
         int topologyMode = -1;
-        /** @brief The carried topology's specification name, empty when no topology is carried. */
+        /** @brief The source topology's specification name, empty when no topology is carried. */
         std::string topologyName;
+        /**
+         * @brief The mode the emitted index list is actually in, after `GLTF-072`'s conversion.
+         *
+         * `4` (`TRIANGLES`) for every primitive `ExtractMesh` returns. A fixture's
+         * `l3.importPolicy` states this separately from `l3.mode`, because it is CNA's own
+         * documented conversion policy (plan_gltf.md §10.1) rather than a specification value.
+         */
+        int importedTopologyMode = -1;
+        /** @brief The imported topology's specification name, empty when no topology is carried. */
+        std::string importedTopologyName;
     };
 
     /** @brief Unpacks a `MeshOut` into named semantic streams (L3). */
@@ -191,6 +217,10 @@ namespace CnaTest::GltfOracle
         std::string error;
         /** @brief The L3 view of what `ExtractMesh` produced. */
         MeshOutDump dump;
+        /** @brief Exact L5 vertex bytes emitted by `ExtractMesh`. */
+        std::vector<std::uint8_t> vertexBytes;
+        /** @brief Exact L5 index bytes emitted by `ExtractMesh`. */
+        std::vector<std::uint8_t> indexBytes;
     };
 
     /**
@@ -219,6 +249,8 @@ namespace CnaTest::GltfOracle
         std::string nodeName;
         /** @brief The instanced mesh's index. */
         int mesh = -1;
+        /** @brief The primitive within the instanced mesh. */
+        int primitive = 0;
         /** @brief The composed world transform, glTF column-major. */
         GltfMatrix worldMatrix = IdentityMatrix();
         /** @brief The instance's vertex positions in world space. */
@@ -228,7 +260,7 @@ namespace CnaTest::GltfOracle
     /** @brief Every mesh instance of a file in world space, plus the union bounds. */
     struct WorldPositions
     {
-        /** @brief One entry per instanced mesh, in scene traversal order. */
+        /** @brief One entry per instanced primitive, in scene traversal then primitive order. */
         std::vector<WorldInstance> instances;
         /** @brief Component-wise minimum over every instance's positions. */
         std::array<float, 3> min{};

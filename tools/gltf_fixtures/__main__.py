@@ -7,6 +7,12 @@ Run from the repository root::
     PYTHONPATH=tools python3 -m gltf_fixtures --check tests/assets/gltf
     PYTHONPATH=tools python3 -m gltf_fixtures --list
 
+or, for the two ordinary cases, through the wrapper that also verifies the result and reports
+whether the working tree changed (`GLTF-020`)::
+
+    scripts/regenerate-gltf-goldens.sh            # regenerate, then verify
+    scripts/regenerate-gltf-goldens.sh --check    # verify only -- what CI runs
+
 Generation is deterministic: regenerating an unchanged tree produces a zero diff, which is what
 ``--check`` asserts and what the corpus tests rely on.
 """
@@ -67,10 +73,105 @@ def main(argv: list[str] | None = None) -> int:
                        help="verify DIR is byte-identical to the generator output")
     group.add_argument("--list", action="store_true",
                        help="print the corpus manifest to stdout without writing anything")
+    group.add_argument("--fixture-table", action="store_true",
+                       help="print the corpus inventory as a markdown table (GLTF-416); "
+                            "docs/gltf-conformance.md §6 is this output")
+    group.add_argument("--reference-pins", action="store_true",
+                       help="validate and print the development-only Khronos reference pins")
+    group.add_argument("--validator-pin", action="store_true",
+                       help="validate and print the pinned Khronos glTF Validator release")
+    group.add_argument("--fetch-validator", metavar="DIR",
+                       help="download and SHA-256-verify the pinned Linux Validator into DIR")
+    group.add_argument("--asset-generator-map", nargs=2,
+                       metavar=("POSITIVE_MANIFEST", "NEGATIVE_MANIFEST"),
+                       help="read the two pinned glTF-Asset-Generator root manifests and print "
+                            "their machine-readable projection onto CNA fixtures (GLTF-014)")
+    group.add_argument("--explain", metavar="GOLDEN",
+                       help="decode how an L5 golden differs from --against, using the fixture's "
+                            "own layout (GLTF-410)")
+    parser.add_argument("--against", metavar="FILE",
+                       help="the bytes --explain compares GOLDEN with (usually the committed "
+                            "version, extracted with 'git show HEAD:<path>')")
+    parser.add_argument("--validator", metavar="EXECUTABLE",
+                       help="validate both containers of every fixture with the pinned Khronos "
+                            "Validator before --out or --check succeeds (GLTF-015)")
     args = parser.parse_args(argv)
 
+    if args.explain:
+        if not args.against:
+            sys.stderr.write("gltf_fixtures: --explain also needs --against FILE\n")
+            return 2
+        from .explain import explain
+        for line in explain(Path(args.explain), Path(args.against).read_bytes()):
+            sys.stdout.write(line + "\n")
+        return 0
+
     fixtures = all_fixtures()
+
+    if args.reference_pins or args.asset_generator_map:
+        from .references import load_reference_pins, project_asset_generator
+        try:
+            fixture_ids = [fixture.id for fixture in fixtures]
+            if args.reference_pins:
+                document = load_reference_pins(fixture_ids)
+            else:
+                document = project_asset_generator(
+                    Path(args.asset_generator_map[0]), Path(args.asset_generator_map[1]), fixture_ids)
+        except (OSError, ValueError) as error:
+            sys.stderr.write(f"gltf_fixtures: reference map: {error}\n")
+            return 1
+        sys.stdout.write(dumps(document))
+        return 0
+
+    if args.validator_pin:
+        from .validator import ValidatorError, load_validator_pin
+        try:
+            document = load_validator_pin()
+        except (OSError, ValidatorError) as error:
+            sys.stderr.write(f"gltf_fixtures: Validator pin: {error}\n")
+            return 1
+        sys.stdout.write(dumps(document))
+        return 0
+
+    if args.fetch_validator:
+        from .validator import ValidatorError, install_pinned_validator
+        try:
+            executable = install_pinned_validator(Path(args.fetch_validator))
+        except (OSError, ValidatorError) as error:
+            sys.stderr.write(f"gltf_fixtures: Validator download: {error}\n")
+            return 1
+        sys.stdout.write(f"gltf_fixtures: installed pinned Validator at {executable}\n")
+        return 0
+
     files = emit(fixtures)
+
+    if args.validator:
+        if not (args.out or args.check):
+            sys.stderr.write("gltf_fixtures: --validator requires --out or --check\n")
+            return 2
+        from .validator import ValidatorError, validate_emission
+        try:
+            summary = validate_emission(fixtures, files, Path(args.validator))
+        except (OSError, ValidatorError) as error:
+            sys.stderr.write(f"gltf_fixtures: Validator: {error}\n")
+            return 1
+        sys.stdout.write(
+            f"gltf_fixtures: Khronos Validator {summary['validatorVersion']} -- "
+            f"{summary['validContainers']} valid containers, "
+            f"{summary['expectedInvalidContainers']} expected-invalid containers, "
+            f"{summary['warningCount']} warning(s)\n")
+
+    if args.fixture_table:
+        # Generated rather than maintained: a corpus inventory written by hand is stale the first
+        # time a fixture is added, and a stale inventory is worse than none because it reads as a
+        # coverage claim (`GLTF-416`).
+        sys.stdout.write("| Fixture | Group | Layers | What it proves |\n|---|---|---|---|\n")
+        for fixture in fixtures:
+            layers = ", ".join(fixture.validated_layers)
+            proves = "; ".join(fixture.features) if fixture.features else "\u2014"
+            sys.stdout.write(
+                f"| `{fixture.id}` | {fixture.owning_group} | {layers} | {proves} |\n")
+        return 0
 
     if args.list:
         import json

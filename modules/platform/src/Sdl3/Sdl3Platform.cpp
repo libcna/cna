@@ -3,6 +3,7 @@
 #include "Sdl3Platform.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
+#include "CNA/TargetPlatform.hpp"
 
 #include "Sdl3EventMapper.hpp"
 #include "Sdl3Synchronization.hpp"
@@ -61,6 +62,20 @@ namespace CNA::Platform::Sdl3 {
         // platform edge rather than making GraphicsDevice depend on the native toolkit.
         SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
 #endif
+
+        // plan_apple.md APPLE-15. The orientation set is a pre-initialization hint: it has to be
+        // in place before the video subsystem starts, which is earlier than any window exists and
+        // therefore earlier than the game can have chosen anything. Seed the full XNA default set
+        // here so the first window is not accidentally locked to one orientation;
+        // IPlatformWindow::SetSupportedOrientations narrows it afterwards. Only seed when the host
+        // has not already expressed a preference, so an embedding application still wins.
+        if constexpr (CNA::isMobilePlatform())
+        {
+            if (SDL_GetHint(SDL_HINT_ORIENTATIONS) == nullptr)
+            {
+                SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight Portrait");
+            }
+        }
     }
 
     Sdl3Platform::~Sdl3Platform()

@@ -43,6 +43,9 @@
     "nodeCount": 3,
     "meshCount": 1,
     "materialCount": 0,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
     "skinCount": 1,
     "animationCount": 0,
     "accessorCount": 5,
@@ -50,7 +53,8 @@
     "bufferCount": 1,
     "bufferByteLength": 168,
     "extensionsUsed": [],
-    "extensionsRequired": []
+    "extensionsRequired": [],
+    "punctualLightCount": 0
   },
   "l2": {
     "accessors": [
@@ -221,6 +225,7 @@
           ]
         ],
         "normals": [],
+        "tangents": [],
         "texcoords": [],
         "colors": [],
         "joints": [
@@ -275,6 +280,18 @@
             2
           ]
         ],
+        "importPolicy": {
+          "imported": true,
+          "topologyMode": 4,
+          "topologyName": "TRIANGLES",
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "converted": false,
+          "primitiveCount": 1
+        },
         "material": null
       }
     ]
@@ -443,7 +460,7 @@
       {
         "mesh": 0,
         "primitive": 0,
-        "stride": 52,
+        "stride": 68,
         "vertexCount": 3,
         "fields": [
           {
@@ -457,34 +474,41 @@
             "size": 12
           },
           {
-            "name": "TextureCoordinate",
+            "name": "Tangent",
             "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
             "size": 8
           },
           {
             "name": "BlendWeight",
-            "offset": 32,
+            "offset": 48,
             "size": 16
           },
           {
             "name": "BlendIndices",
-            "offset": 48,
+            "offset": 64,
             "size": 4
           }
         ],
         "vertexBufferFile": "skin-armature-ancestor.vb.bin",
-        "vertexBufferBytes": 156,
-        "vertexBufferSha256": "25fbc45fe26066e3d7e194f6c1c7be32817e2182fdda49a750a69ace04e343f9",
+        "vertexBufferBytes": 204,
+        "vertexBufferSha256": "27139c2c76b5f29f820e547de00829201bc180bedba97c6f574cdcf73a0610ea",
         "indexElementSize": 2,
         "indexCount": 3,
         "indexBufferFile": "skin-armature-ancestor.ib.bin",
         "indexBufferBytes": 6,
         "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "sourceTopology": "TRIANGLES",
         "topology": "TRIANGLES",
         "primitiveCount": 1
       }
     ]
   },
+  "rejection": null,
   "defects": [
     {
       "id": "D8",

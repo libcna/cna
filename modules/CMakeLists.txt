@@ -11,7 +11,11 @@
 # silently resolve to the host's native FFmpeg and poison the cross-compile's include path with
 # native glibc headers). WIN32 covers both MinGW and native MSVC uniformly; MINGW is kept for
 # clarity/documentation even though it's now redundant with WIN32. ---
-if(MINGW OR WIN32 OR EMSCRIPTEN OR ANDROID)
+# iOS joins that list for the same reason as the MinGW cross-build: pkg-config on a macOS host
+# resolves to Homebrew's *macOS* FFmpeg, whose headers and dylibs would poison an iOS
+# cross-compile (and fail the link with "built for macOS"). macOS itself keeps FFmpeg -- that is a
+# native build against exactly the libraries pkg-config reports.
+if(MINGW OR WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
     set(CNA_FFMPEG_AVAILABLE OFF)
 else()
     set(CNA_FFMPEG_AVAILABLE ON)
@@ -30,20 +34,57 @@ if(CNA_FFMPEG_AVAILABLE)
     pkg_check_modules(LIBSWRESAMPLE REQUIRED IMPORTED_TARGET libswresample)
 endif()
 
-# --- Draco (KHR_draco_mesh_compression mesh decoding, plan_cnj.md CNB-91, Phase 14F) — optional,
-# genuinely a system dependency (unlike cgltf.h/stb_image.h, which are vendored single-header
-# libs): Draco is a real multi-file C++ library, not something worth vendoring wholesale just to
-# decode compressed meshes. Detected via CMake's own exported package config (Debian's
-# libdraco-dev ships draco-config.cmake); when absent, GltfImportCore::ExtractMesh keeps its own
-# existing "throws a clear unsupported-format error" behavior for a Draco-compressed primitive,
-# exactly like FFmpeg's own CNA_FFMPEG_AVAILABLE=OFF fallback above.
-find_package(draco CONFIG QUIET)
-if(draco_FOUND)
-    set(CNA_DRACO_AVAILABLE ON)
-    message(STATUS "CNA: Draco found (${draco_VERSION}) -- KHR_draco_mesh_compression decoding enabled")
-else()
+# --- Draco (KHR_draco_mesh_compression mesh decoding, plan_gltf.md GLTF-353/GLTF-363) ---------
+# The default is the repository's immutable gitlink at google/draco 1.5.7, not a host package:
+# conformance must not silently depend on which distro version happened to be installed. A system
+# package remains an explicit escape hatch for packagers, and the decoder-free configuration stays
+# available as an intentional test mode for the extension-required refusal path.
+option(CNA_ENABLE_DRACO "Enable KHR_draco_mesh_compression decoding" ON)
+option(CNA_USE_SYSTEM_DRACO "Use a system Draco package instead of CNA's pinned submodule" OFF)
+
+if(NOT CNA_ENABLE_DRACO)
     set(CNA_DRACO_AVAILABLE OFF)
-    message(STATUS "CNA: Draco not found -- KHR_draco_mesh_compression primitives will throw at import time")
+    message(STATUS "CNA: Draco explicitly disabled -- KHR_draco_mesh_compression primitives will throw at import time")
+elseif(CNA_USE_SYSTEM_DRACO)
+    find_package(draco CONFIG REQUIRED)
+    set(CNA_DRACO_AVAILABLE ON)
+    message(STATUS "CNA: Using system Draco (${draco_VERSION}) -- KHR_draco_mesh_compression decoding enabled")
+else()
+    set(_cna_draco_dir "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/draco")
+    if(NOT EXISTS "${_cna_draco_dir}/CMakeLists.txt")
+        message(FATAL_ERROR
+            "CNA: pinned Draco source not found at ${_cna_draco_dir}. "
+            "Run: git submodule update --init third_party/draco, or configure "
+            "-DCNA_ENABLE_DRACO=OFF for the intentional decoder-free build.")
+    endif()
+
+    # Only the normative KHR_draco_mesh_compression bitstream feature set is enabled. Draco 1.5.7
+    # still builds one static library containing its encoder too; CNA links only the public
+    # draco::draco target and exposes none of that API as its own public surface.
+    set(DRACO_GLTF_BITSTREAM ON CACHE BOOL "Build only Draco's glTF bitstream features" FORCE)
+    set(DRACO_TESTS OFF CACHE BOOL "Disable vendored Draco tests" FORCE)
+    set(DRACO_INSTALL OFF CACHE BOOL "Disable vendored Draco install rules" FORCE)
+    set(DRACO_JS_GLUE OFF CACHE BOOL "Disable vendored Draco JavaScript glue" FORCE)
+    set(DRACO_WASM OFF CACHE BOOL "Disable vendored Draco WASM targets" FORCE)
+    set(DRACO_UNITY_PLUGIN OFF CACHE BOOL "Disable vendored Draco Unity plugin" FORCE)
+    set(DRACO_MAYA_PLUGIN OFF CACHE BOOL "Disable vendored Draco Maya plugin" FORCE)
+    set(DRACO_TRANSCODER_SUPPORTED OFF CACHE BOOL "Disable vendored Draco transcoder" FORCE)
+    add_subdirectory("${_cna_draco_dir}" "${CMAKE_CURRENT_BINARY_DIR}/draco" EXCLUDE_FROM_ALL)
+    set(CNA_DRACO_AVAILABLE ON)
+    message(STATUS "CNA: Using pinned vendored Draco 1.5.7 (8786740086a9f4d83f44aa83badfbea4dce7a1b5)")
+endif()
+
+if(CNA_DRACO_AVAILABLE)
+    # Draco 1.5.7's in-tree draco::draco alias exposes only its install include directory even
+    # though its headers include generated draco_features.h. Keep that upstream target unmodified
+    # and provide CNA's private consumption wrapper with the two build-tree include roots.
+    add_library(cna_draco INTERFACE)
+    target_link_libraries(cna_draco INTERFACE draco::draco)
+    if(NOT CNA_USE_SYSTEM_DRACO)
+        target_include_directories(cna_draco INTERFACE
+            "${_cna_draco_dir}/src"
+            "${CMAKE_BINARY_DIR}")
+    endif()
 endif()
 
 # The root-scope test registration (cmake/UnitTests.cmake) keys its FFmpeg-gated test
@@ -150,6 +191,12 @@ target_link_libraries(CNA INTERFACE
         ${RENDERER_TARGET}
 )
 
+# The C API is a separate shared-library adapter over the canonical C++ aggregate. It remains
+# opt-in until its experimental ABI is proven by the C-only test matrix.
+if(CNA_BUILD_C_API)
+    add_subdirectory(c-api)
+endif()
+
 # --- Physical source-partition validator (no-loss ownership gate, MODULARIZATION_PLAN.md
 # §5/§11): file physical module location == declared CMake ownership. Every production TU
 # must live under a declared module's src/ tree (module CMakeLists glob exactly their own
@@ -161,7 +208,7 @@ target_link_libraries(CNA INTERFACE
 # moved into their owning modules (module-examples campaign): a module may own
 # modules/<name>/examples/, and example TUs outside every declared module still fail.
 set(_cna_framework_modules
-    core math platform runtime graphics input audio media content storage
+    c-api core math platform runtime graphics input audio media content storage
     devices devices-ext graphics-ext gamer-services net)
 set(_cna_renderer_modules
     bgfx blend2d canvas diligent direct2d directx1 directx2 directx3 directx5 directx6

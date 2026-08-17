@@ -15,20 +15,130 @@
 # machine" framing. A renderer that DOES configure/build but whose smoke test
 # fails makes the overall run fail (non-zero exit), so this composes cleanly
 # as a CI step if/when this project's CI is extended to call it.
+#
+# plan_runtimerenderer.md RTR-P9-22: a MULTI-RENDERER mode. Passing a semicolon-separated renderer
+# list runs every one of them from ONE build directory, selecting each at runtime through
+# CNA_GRAPHICS_RENDERER rather than reconfiguring and rebuilding per renderer:
+#
+#     scripts/run-all-renderer-smoke-tests.sh --multi "HEADLESS;SOFTWARE;STUB"
+#
+# That is where a multi-renderer build actually pays for itself: N renderers cost one build instead
+# of N. The default per-renderer mode is unchanged, and remains the right choice when the renderers
+# cannot share a binary (see docs/runtime-renderer-selection.md's combination table).
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 CNA_SMOKE_TEST_DISPLAY="${CNA_SMOKE_TEST_DISPLAY:-:99}"
 
+MULTI_LIST=""
+if [ "${1:-}" = "--multi" ]; then
+    MULTI_LIST="${2:-}"
+    if [ -z "${MULTI_LIST}" ]; then
+        echo "usage: $0 --multi \"RENDERER;RENDERER;...\"" >&2
+        exit 2
+    fi
+fi
+
+# plan_runtimerenderer.md RTR-P2-8: two tiers, because checking every renderer on every change is
+# not affordable -- each one is a separate configure and build, and this project treats repeated
+# clean rebuilds as real SSD wear.
+#
+#   --tier routine   the renderers that need NO third-party checkout: run these often
+#   --tier full      every family that owns a GraphicsSmoke target: run these occasionally
+#
+# No flag keeps the historical four-renderer set, so existing callers are unaffected.
+#
+# A family whose dependency is missing is REPORTED as unavailable, never silently counted as a
+# pass. That distinction is the point of the gate: "7 of 9 ran, 2 could not be built here" is a
+# result, "all green" over a set that quietly shrank is not.
 RENDERERS=(OPENGLES3 VULKAN BGFX SDL_RENDERER)
+if [ "${1:-}" = "--tier" ]; then
+    case "${2:-}" in
+        routine) RENDERERS=(OPENGLES3 SDL_RENDERER OPENGLES1) ;;
+        full)    RENDERERS=(OPENGLES3 SDL_RENDERER OPENGLES1 VULKAN LLGL MAGNUM DILIGENT BGFX WEBGPU) ;;
+        *) echo "usage: $0 [--tier routine|full] | [--multi \"R;R;...\"]" >&2; exit 2 ;;
+    esac
+    shift 2
+fi
+
 declare -A RENDERER_DIRS=(
     [OPENGLES3]="cmake-build-debug"
     [VULKAN]="cmake-build-vulkan"
     [BGFX]="cmake-build-bgfx"
     [SDL_RENDERER]="cmake-build-sdl"
+    [OPENGLES1]="cmake-build-opengles1"
+    [LLGL]="cmake-build-llgl"
+    [MAGNUM]="cmake-build-magnum"
+    [DILIGENT]="cmake-build-diligent"
+    [WEBGPU]="cmake-build-webgpu"
 )
 declare -A RESULTS
+
+if [ -n "${MULTI_LIST}" ]; then
+    # One build, every renderer selected at runtime.
+    IFS=';' read -r -a MULTI_RENDERERS <<< "${MULTI_LIST}"
+    dir="cmake-build-multi"
+    default="${MULTI_RENDERERS[0]}"
+
+    echo "=== multi-renderer build (${dir}): ${MULTI_LIST} ==="
+    if ! cmake -S . -B "${dir}" -DCNA_GRAPHICS_RENDERER="${default}" \
+            -DCNA_GRAPHICS_RENDERERS="${MULTI_LIST}" \
+            -DCNA_BUILD_TESTS=ON -DCNA_TEST_DISPLAY="${CNA_SMOKE_TEST_DISPLAY}"; then
+        echo "FAIL: the requested renderer combination does not configure."
+        echo "      See docs/runtime-renderer-selection.md for which combinations are refused and why."
+        exit 1
+    fi
+    cmake --build "${dir}" -j4 -- -k
+
+    for renderer in "${MULTI_RENDERERS[@]}"; do
+        echo "=== ${renderer} (selected at runtime from the ${dir} build) ==="
+
+        # Which label carries this renderer's smoke test. The GL/Vulkan/bgfx family registers
+        # "GraphicsSmoke"; the CPU renderers register under their own name (Stub_Smoke is labelled
+        # "Stub"). Try both rather than assuming, because `ctest -L <nothing matched>` exits 0 --
+        # so a wrong label would report PASS for a renderer that ran no test at all.
+        # Labels are spelled in the renderers' own capitalisation ("Headless", "Stub"), not the
+        # uppercase identity, so the match is case-insensitive and ignores underscores.
+        label=""
+        renderer_key="$(printf '%s' "${renderer}" | tr -d '_' | tr '[:upper:]' '[:lower:]')"
+        while IFS= read -r candidate; do
+            candidate_key="$(printf '%s' "${candidate}" | tr -d '_' | tr '[:upper:]' '[:lower:]')"
+            if [ "${candidate_key}" = "graphicssmoke" ] || [ "${candidate_key}" = "${renderer_key}" ]; then
+                if [ "$(ctest --test-dir "${dir}" -N -L "^${candidate}$" 2>/dev/null \
+                        | grep -c 'Test *#')" -gt 0 ]; then
+                    label="${candidate}"
+                    break
+                fi
+            fi
+        done < <(ctest --test-dir "${dir}" --print-labels 2>/dev/null | sed -n 's/^  //p')
+
+        if [ -z "${label}" ]; then
+            echo "SKIP: no smoke test registered for ${renderer} in this build"
+            RESULTS[${renderer}]="SKIPPED (no smoke test)"
+            continue
+        fi
+
+        echo "-- using ctest label '${label}' --"
+        if CNA_GRAPHICS_RENDERER="${renderer}" \
+                ctest --test-dir "${dir}" -L "${label}" --output-on-failure; then
+            RESULTS[${renderer}]="PASS"
+        else
+            RESULTS[${renderer}]="FAIL"
+        fi
+    done
+
+    echo
+    echo "=== Cross-renderer smoke test summary (one build, ${#MULTI_RENDERERS[@]} renderers) ==="
+    overall=0
+    for renderer in "${MULTI_RENDERERS[@]}"; do
+        printf '%-14s %s\n' "${renderer}" "${RESULTS[${renderer}]:-UNKNOWN}"
+        if [ "${RESULTS[${renderer}]:-}" = "FAIL" ]; then
+            overall=1
+        fi
+    done
+    exit "${overall}"
+fi
 
 for renderer in "${RENDERERS[@]}"; do
     dir="${RENDERER_DIRS[$renderer]}"

@@ -559,5 +559,18 @@ if(dynamic_cast<const IRenderTargetRenderer*>(&t))std::swap(v0,v1);
 glPushMatrix();glTranslatef((float)d.X,(float)d.Y,z);glRotatef(rot*57.2957795f,0,0,1);glTranslatef(-o.X,-o.Y,0);Color4(c);glBegin(GL_QUADS);glTexCoord2f(u0,v0);glVertex2f(0,0);glTexCoord2f(u1,v0);glVertex2f((float)d.Width,0);glTexCoord2f(u1,v1);glVertex2f((float)d.Width,(float)d.Height);glTexCoord2f(u0,v1);glVertex2f(0,(float)d.Height);glEnd();glPopMatrix();}
 }
 #ifdef CNA_RENDERER_OPENGL1
-namespace CNA::Internal::Renderers {std::unique_ptr<IGraphicsRenderer>CreateGraphicsRenderer(const GraphicsRendererCreateArgs&args){return std::make_unique<OpenGL1::OpenGL1Renderer>(args);}}
+namespace CNA::Internal::Renderers
+{
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace OpenGL1
+    {
+        std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(
+            const GraphicsRendererCreateArgs& args)
+        {
+            return std::make_unique<OpenGL1Renderer>(args);
+        }
+    }
+}
 #endif

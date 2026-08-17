@@ -18,12 +18,12 @@ dated) write-up:
 cmake -S . -B cmake-build-android -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE="$HOME/Android/Sdk/ndk/30.0.14904198/build/cmake/android.toolchain.cmake" \
   -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -DCNA_BUILD_TESTS=OFF
-cmake --build cmake-build-android --target CNA -j"$(nproc)"
+cmake --build cmake-build-android -j"$(nproc)"
 ```
 
 Configure succeeds and confirms `SDL_RENDERER` is selected, as expected. **The build itself fails**
 — not in any CNA or graphics-renderer source file, but in 2 unrelated files belonging to the sibling
-`sharp-runtime` repository, before the `SHARP_RUNTIME` target (a hard dependency of `CNA`) can even
+`sharp-runtime` repository, before CNA's configured library graph can even
 finish, so **`SdlRenderer.cpp`'s own Android buildability is currently unverified** — the
 build never gets far enough to attempt it:
 
@@ -44,7 +44,7 @@ and is tracked separately as new Task 920 below rather than fixed here.
 
 This is a **regression against `docs/devices-build.md`'s own dated write-up** (§4, dated
 2026-07-05/06 under `plan_devices_phase4.md`/`plan_devices_phase7.md`/`plan_devices_phase8.md`,
-which documented this exact cross-compile command succeeding for the `CNA` static library at that
+which documented this cross-compile succeeding for the configured CNA libraries at that
 time) — `sharp-runtime` is a separate, independently-evolving repository, and something committed
 there since has broken NDK compatibility. This document does not attempt to identify which
 `sharp-runtime` commit introduced it (out of scope — a different repo's own history).

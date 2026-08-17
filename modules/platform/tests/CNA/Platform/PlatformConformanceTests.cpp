@@ -164,6 +164,20 @@ TEST_P(PlatformConformance, UnpairedReleaseIsANoOp)
 
 TEST_P(PlatformConformance, PollEventsClearsStaleCallerContent)
 {
+    // MERGE (plan_platform.md x plan_runtimerenderer.md): PollEvents clears the caller's batch and
+    // then fills it with whatever is genuinely pending, so "fewer than four came back" measures the
+    // clearing only while the queue is near-empty. It is not near-empty once renderer tests earlier
+    // in the suite have created and destroyed windows: this read 18 real events and failed while
+    // the implementation was correct. Drain first, so what follows measures the clearing and
+    // nothing else.
+    std::vector<PlatformEvent> drain;
+    for (int attempt = 0; attempt < 8; ++attempt)
+    {
+        platform_->PollEvents(drain);
+        if (drain.empty())
+            break;
+    }
+
     std::vector<PlatformEvent> batch;
     batch.resize(4, PlatformEvent{QuitEvent{}});
     platform_->PollEvents(batch);

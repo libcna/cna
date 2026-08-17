@@ -28,6 +28,8 @@
 //   Check C's particular draw order.
 // Check E -- DrawIndexedPrimitives produces the identical pixel result as the equivalent
 //   DrawPrimitives call for the same triangle.
+// Checks F-J -- effect-aware point-list, line-list and line-strip draws cover both indexed and
+//   non-indexed dispatch, including the exact topologies emitted by the glTF importer.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -219,8 +221,133 @@ protected:
                   "DrawIndexedPrimitives produces the same pixel result as the equivalent DrawPrimitives call");
         }
 
-        std::printf("=== %d/%d PASS ===\n", g_passCount, 5);
-        result_ = (g_passCount == 5) ? 0 : 1;
+        // Check F: non-indexed point-list writes exactly the transformed point pixel.
+        {
+            dev.Clear(Color::Black, 1.0f);
+            const VertexPositionColor verts[1] = {
+                { Vector3(0.0f, 0.0f, 0.5f), Color::Red },
+            };
+            VertexBuffer vb(dev, 1);
+            vb.SetData(verts, 1);
+            BasicEffect fx(dev);
+            fx.VertexColorEnabled = true;
+            fx.Apply();
+            dev.SetVertexBuffer(&vb);
+            dev.DrawPrimitives(PrimitiveType::PointListEXT, 0, 1);
+            dev.SetVertexBuffer(nullptr);
+
+            const Color center = ReadPixel(dev, 32, 32);
+            Check(Close(center.getRProperty(), 255, 2),
+                  "DrawPrimitives PointListEXT writes the transformed point pixel");
+        }
+
+        // Check G: indexed point-list honors the index rather than drawing vertex zero.
+        {
+            dev.Clear(Color::Black, 1.0f);
+            const Color pureGreen(0, 255, 0, 255);
+            const VertexPositionColor verts[2] = {
+                { Vector3(-0.75f, -0.75f, 0.5f), Color::Red },
+                { Vector3(0.0f, 0.0f, 0.5f), pureGreen },
+            };
+            const std::uint16_t indices[1] = {1};
+            VertexBuffer vb(dev, 2);
+            vb.SetData(verts, 2);
+            IndexBuffer ib(dev, IndexElementSize::SixteenBits, 1, BufferUsage::None);
+            ib.SetData(indices, 0, 1);
+            BasicEffect fx(dev);
+            fx.VertexColorEnabled = true;
+            fx.Apply();
+            dev.SetVertexBuffer(&vb);
+            dev.SetIndexBuffer(&ib);
+            dev.DrawIndexedPrimitives(PrimitiveType::PointListEXT, 0, 0, 2, 0, 1);
+            dev.SetVertexBuffer(nullptr);
+            dev.SetIndexBuffer(nullptr);
+
+            const Color center = ReadPixel(dev, 32, 32);
+            Check(Close(center.getGProperty(), 255, 2) && Close(center.getRProperty(), 0, 2),
+                  "DrawIndexedPrimitives PointListEXT honors the decoded index");
+        }
+
+        // Check H: a non-indexed line list walks every pixel between its two endpoints.
+        {
+            dev.Clear(Color::Black, 1.0f);
+            const VertexPositionColor verts[2] = {
+                { Vector3(-0.8f, 0.0f, 0.5f), Color::Blue },
+                { Vector3( 0.8f, 0.0f, 0.5f), Color::Blue },
+            };
+            VertexBuffer vb(dev, 2);
+            vb.SetData(verts, 2);
+            BasicEffect fx(dev);
+            fx.VertexColorEnabled = true;
+            fx.Apply();
+            dev.SetVertexBuffer(&vb);
+            dev.DrawPrimitives(PrimitiveType::LineList, 0, 1);
+            dev.SetVertexBuffer(nullptr);
+
+            const Color center = ReadPixel(dev, 32, 32);
+            Check(Close(center.getBProperty(), 255, 2),
+                  "DrawPrimitives LineList rasterizes the segment midpoint");
+        }
+
+        // Check I: indexed line-list uses each independent decoded pair.
+        {
+            dev.Clear(Color::Black, 1.0f);
+            const VertexPositionColor verts[3] = {
+                { Vector3(-0.8f, 0.0f, 0.5f), Color::Red },
+                { Vector3( 0.8f, 0.0f, 0.5f), Color::Red },
+                { Vector3( 0.8f, 0.8f, 0.5f), Color::Blue },
+            };
+            const std::uint16_t indices[2] = {0, 1};
+            VertexBuffer vb(dev, 3);
+            vb.SetData(verts, 3);
+            IndexBuffer ib(dev, IndexElementSize::SixteenBits, 2, BufferUsage::None);
+            ib.SetData(indices, 0, 2);
+            BasicEffect fx(dev);
+            fx.VertexColorEnabled = true;
+            fx.Apply();
+            dev.SetVertexBuffer(&vb);
+            dev.SetIndexBuffer(&ib);
+            dev.DrawIndexedPrimitives(PrimitiveType::LineList, 0, 0, 3, 0, 1);
+            dev.SetVertexBuffer(nullptr);
+            dev.SetIndexBuffer(nullptr);
+
+            const Color center = ReadPixel(dev, 32, 32);
+            Check(Close(center.getRProperty(), 255, 2) && Close(center.getBProperty(), 0, 2),
+                  "DrawIndexedPrimitives LineList honors the decoded endpoint pair");
+        }
+
+        // Check J: indexed line-strip shares the middle vertex and emits both segments.
+        {
+            dev.Clear(Color::Black, 1.0f);
+            const Color pureGreen(0, 255, 0, 255);
+            const VertexPositionColor verts[3] = {
+                { Vector3(-0.8f, 0.0f, 0.5f), pureGreen },
+                { Vector3( 0.0f, 0.0f, 0.5f), pureGreen },
+                { Vector3( 0.0f, 0.8f, 0.5f), pureGreen },
+            };
+            const std::uint16_t indices[3] = {0, 1, 2};
+            VertexBuffer vb(dev, 3);
+            vb.SetData(verts, 3);
+            IndexBuffer ib(dev, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+            ib.SetData(indices, 0, 3);
+            BasicEffect fx(dev);
+            fx.VertexColorEnabled = true;
+            fx.Apply();
+            dev.SetVertexBuffer(&vb);
+            dev.SetIndexBuffer(&ib);
+            dev.DrawIndexedPrimitives(PrimitiveType::LineStrip, 0, 0, 3, 0, 2);
+            dev.SetVertexBuffer(nullptr);
+            dev.SetIndexBuffer(nullptr);
+
+            const Color horizontal = ReadPixel(dev, 20, 32);
+            const Color vertical = ReadPixel(dev, 32, 20);
+            Check(Close(horizontal.getGProperty(), 255, 2) &&
+                      Close(vertical.getGProperty(), 255, 2),
+                  "DrawIndexedPrimitives LineStrip emits both connected segments");
+        }
+
+        std::printf("=== %d/%d PASS ===\n", g_passCount, 10);
+        result_ = (g_passCount == 10) ? 0 : 1;
         Exit();
     }
 

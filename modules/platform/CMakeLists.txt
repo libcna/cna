@@ -14,6 +14,12 @@ file(GLOB CNA_PLATFORM_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 if(CNA_PLATFORM STREQUAL "SDL3")
     file(GLOB CNA_PLATFORM_IMPL_SOURCES CONFIGURE_DEPENDS "src/Sdl3/*.cpp")
     list(APPEND CNA_PLATFORM_SOURCES ${CNA_PLATFORM_IMPL_SOURCES})
+    # The one Objective-C++ translation unit: asking UIKit to re-read the orientation set has no
+    # C API. Listed explicitly rather than globbed, so it cannot be picked up on a target whose
+    # compiler would reject it.
+    if(CNA_APPLE_IOS)
+        list(APPEND CNA_PLATFORM_SOURCES "src/Sdl3/Sdl3AppleOrientation.mm")
+    endif()
 endif()
 if(CNA_PLATFORM STREQUAL "SDL2")
     file(GLOB CNA_PLATFORM_IMPL_SOURCES CONFIGURE_DEPENDS "src/Sdl2/*.cpp")
@@ -53,6 +59,26 @@ target_link_libraries(cna_platform PUBLIC cna_core_headers)
 # probe (PLAT-27) is what proves it does not.
 if(CNA_PLATFORM STREQUAL "SDL3")
     target_link_libraries(cna_platform PRIVATE SDL3::SDL3)
+
+    # Android and iOS are the exception the probe cannot cover, because on exactly those two
+    # targets CNA/Platform/Entrypoint.hpp really does include a platform header into the
+    # consumer's own translation unit -- that is its whole job, and why PLAT-54 exempted it from
+    # the SDL-free probe. A downstream executable therefore needs the include directory, and the
+    # separately packaged main() implementation, or it compiles and then fails its final link on
+    # a missing entry point. Desktop keeps the strict PRIVATE linkage above, so PLAT-27's probe
+    # is unaffected: it builds for the host, never for a mobile target.
+    if(ANDROID OR CNA_APPLE_IOS)
+        target_link_libraries(cna_platform PUBLIC SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_platform PUBLIC SDL3::SDL3main)
+        endif()
+    endif()
+
+    if(CNA_APPLE_IOS)
+        set_source_files_properties(src/Sdl3/Sdl3AppleOrientation.mm
+                PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+        target_link_libraries(cna_platform PRIVATE "-framework UIKit")
+    endif()
 endif()
 if(CNA_PLATFORM STREQUAL "SDL2")
     target_link_libraries(cna_platform PRIVATE SDL2::SDL2)

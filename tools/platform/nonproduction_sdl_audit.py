@@ -57,6 +57,11 @@ CATEGORY_RATIONALES = {
         "its own native types, at the level where it is reachable while the public API path to "
         "it is still incomplete or deliberately gated off; documented at the top of the file."
     ),
+    "text-evidence-assertion": (
+        "Reads committed text -- renderer source, a generator script, or a recorded evidence "
+        "artifact -- and asserts on SDL tokens found inside it. The tokens exist only as string "
+        "literals to search for; the test neither includes nor calls the native API."
+    ),
 }
 
 
@@ -96,6 +101,12 @@ def classify(record: FileRecord) -> str | None:
         "SdlGpuCompiledEffectTests.cpp",
     }:
         return "renderer-native-runtime-test"
+
+    if path in {
+        "modules/content/tests/CNA/Internal/GltfImport/GltfFixtureCorpusTests.cpp",
+        "modules/content/tests/CNA/Internal/GltfImport/GltfRendererPbrFallbackPolicyTests.cpp",
+    }:
+        return "text-evidence-assertion"
 
     return None
 

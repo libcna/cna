@@ -1,0 +1,2203 @@
+{
+  "schemaVersion": 1,
+  "task": "GLTF-429",
+  "capturedOn": "2026-08-14",
+  "result": "pass",
+  "gateRows": 14,
+  "captureCases": 15,
+  "pins": {
+    "referenceRenderer": {
+      "repository": "KhronosGroup/glTF-Sample-Renderer",
+      "commit": "863b981fb755359063e370ff7b6e956bda0716e2"
+    },
+    "sampleAssets": {
+      "repository": "KhronosGroup/glTF-Sample-Assets",
+      "commit": "2bac6f8c57bf471df0d2a1e8a8ec023c7801dddf",
+      "models": [
+        "Fox",
+        "DamagedHelmet",
+        "Sponza"
+      ],
+      "redistributed": false
+    }
+  },
+  "cna": {
+    "commit": "d3c5bca6d71991fbf9a75ed9a4226a9cb3441313",
+    "viewerCommit": "3cd89e9deddf4903f0c766c75c75ba367a4d0749",
+    "viewerExecutableSha256": "09dc143148c4aa9edf055789e6430710be08cc2237d0f66a97bb6fd1f0b992a2"
+  },
+  "protocol": {
+    "resolution": [
+      512,
+      512
+    ],
+    "clearPixel": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "twoIndependentCnaProcesses": true,
+    "requireByteIdenticalCnaPng": true,
+    "minimumNonClearMaskIntersectionOverUnion": 0.99,
+    "foregroundCoverageRatioRange": [
+      0.99,
+      1.01
+    ],
+    "maximumIntersectionRgbMeanAbsoluteError": 100.0,
+    "fixedLightingDifference": "CNA and Khronos use independent directional-light rigs; the silhouette/coverage gate is primary and RGB MAE rejects gross material/shader failures.",
+    "sparseRowCases": [
+      "sparse-attribute",
+      "sparse-index"
+    ]
+  },
+  "cases": [
+    {
+      "row": 1,
+      "case": "static-untextured",
+      "rowName": "Static untextured mesh",
+      "proof": "Phases 2-5",
+      "sourceKind": "corpus",
+      "source": "xf-identity.gltf",
+      "sourceSha256": "77a46b402d5aa10e66d592d8882bd90a761a634d450eab1fe950af91a0845998",
+      "resourceFootprint": {
+        "bytes": 1421,
+        "files": [
+          "xf-identity.gltf"
+        ]
+      },
+      "semanticEvidence": {},
+      "viewerArguments": [
+        "--direct",
+        "--reference-capture"
+      ],
+      "camera": {
+        "target": [
+          0.361803412,
+          0.276393205,
+          0
+        ],
+        "sceneRadius": 0.809017003,
+        "distance": 2.42705107,
+        "near": 0.00100000005,
+        "far": 100,
+        "yaw": 0.699999988,
+        "pitch": 0.349999994
+      },
+      "twoProcessPngByteIdentical": true,
+      "cnaPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "cnaNonClearPixelCount": 23729,
+      "cnaRuns": [
+        {
+          "camera": {
+            "target": [
+              0.361803412,
+              0.276393205,
+              0
+            ],
+            "sceneRadius": 0.809017003,
+            "distance": 2.42705107,
+            "near": 0.00100000005,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.28330212098080665,
+          "gnuTimeWallSeconds": 0.28,
+          "maximumRssKiB": 146876,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+          "nonClearPixelCount": 23729
+        },
+        {
+          "camera": {
+            "target": [
+              0.361803412,
+              0.276393205,
+              0
+            ],
+            "sceneRadius": 0.809017003,
+            "distance": 2.42705107,
+            "near": 0.00100000005,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.17067070899065584,
+          "gnuTimeWallSeconds": 0.16,
+          "maximumRssKiB": 147828,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+          "nonClearPixelCount": 23729
+        }
+      ],
+      "committedGolden": {
+        "path": "tests/gltf-l7/easygl/xf-identity.png",
+        "sha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+        "byteIdentical": true
+      },
+      "animationContrast": null,
+      "referencePngSha256": "4014b6fd89dd224fe69d5899d8cac05fd961894d68836ddfe5cee61554c78848",
+      "metrics": {
+        "referenceForegroundPixels": 23719,
+        "cnaForegroundPixels": 23729,
+        "foregroundCoverageRatio": 1.0004216029343564,
+        "nonClearMaskIntersectionOverUnion": 0.9995785747397699,
+        "nonClearMaskDifferentPixels": 10,
+        "intersectionRgbMeanAbsoluteError": 66.71508073696192,
+        "intersectionRgbMaxAbsoluteError": 87
+      },
+      "referenceEnvironment": {
+        "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+        "webglVendor": "WebKit",
+        "webglRenderer": "WebKit WebGL",
+        "unmaskedVendor": "Google Inc. (Google)",
+        "unmaskedRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "state": {
+          "canvas": [
+            512,
+            512
+          ],
+          "deviceScaleFactor": 1,
+          "webgl": 2,
+          "antialias": false,
+          "preserveDrawingBuffer": true,
+          "sceneIndex": 0,
+          "animationName": null,
+          "animationTime": 0,
+          "morphing": true,
+          "skinning": true,
+          "variant": null,
+          "clearColor": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "exposure": 1,
+          "useIBL": false,
+          "usePunctual": true,
+          "useDirectionalLightsWithDisabledIBL": true,
+          "renderEnvironmentMap": false,
+          "toneMap": "Khronos PBR Neutral",
+          "internalMSAA": 1,
+          "floatingPointFramebuffer": false,
+          "warmupFrames": 1,
+          "evidenceFrame": 2
+        }
+      }
+    },
+    {
+      "row": 2,
+      "case": "textured",
+      "rowName": "Textured mesh",
+      "proof": "Phases 9-10",
+      "sourceKind": "corpus",
+      "source": "tex-reference-checkerboard.gltf",
+      "sourceSha256": "9f3a6b57fd31fab4ac0f52c7f9ddcb238e34f8576ab7433e41772dfb864dccf4",
+      "resourceFootprint": {
+        "bytes": 2771,
+        "files": [
+          "tex-reference-checkerboard.gltf"
+        ]
+      },
+      "semanticEvidence": {},
+      "viewerArguments": [
+        "--direct",
+        "--reference-capture"
+      ],
+      "camera": {
+        "target": [
+          0.413336158,
+          0.334822595,
+          0
+        ],
+        "sceneRadius": 0.886924744,
+        "distance": 2.66077423,
+        "near": 0.00100000005,
+        "far": 100,
+        "yaw": 0.699999988,
+        "pitch": 0.349999994
+      },
+      "twoProcessPngByteIdentical": true,
+      "cnaPngSha256": "8562e0fe8bd831153bddba6531c475f4cd9546332435ec0c78eb17f9b7823966",
+      "cnaNonClearPixelCount": 45644,
+      "cnaRuns": [
+        {
+          "camera": {
+            "target": [
+              0.413336158,
+              0.334822595,
+              0
+            ],
+            "sceneRadius": 0.886924744,
+            "distance": 2.66077423,
+            "near": 0.00100000005,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.24911183200310916,
+          "gnuTimeWallSeconds": 0.24,
+          "maximumRssKiB": 148256,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "8562e0fe8bd831153bddba6531c475f4cd9546332435ec0c78eb17f9b7823966",
+          "nonClearPixelCount": 45644
+        },
+        {
+          "camera": {
+            "target": [
+              0.413336158,
+              0.334822595,
+              0
+            ],
+            "sceneRadius": 0.886924744,
+            "distance": 2.66077423,
+            "near": 0.00100000005,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.2158016599714756,
+          "gnuTimeWallSeconds": 0.21,
+          "maximumRssKiB": 147804,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "8562e0fe8bd831153bddba6531c475f4cd9546332435ec0c78eb17f9b7823966",
+          "nonClearPixelCount": 45644
+        }
+      ],
+      "committedGolden": {
+        "path": "tests/gltf-l7/easygl/tex-reference-checkerboard.png",
+        "sha256": "8562e0fe8bd831153bddba6531c475f4cd9546332435ec0c78eb17f9b7823966",
+        "byteIdentical": true
+      },
+      "animationContrast": null,
+      "referencePngSha256": "e086ab47134fe8a6cbfc034519253bba9fd02ed6ada6af1f635453a12cbc37de",
+      "metrics": {
+        "referenceForegroundPixels": 45647,
+        "cnaForegroundPixels": 45644,
+        "foregroundCoverageRatio": 0.9999342782658225,
+        "nonClearMaskIntersectionOverUnion": 0.999846656005608,
+        "nonClearMaskDifferentPixels": 7,
+        "intersectionRgbMeanAbsoluteError": 24.07230182726436,
+        "intersectionRgbMaxAbsoluteError": 134
+      },
+      "referenceEnvironment": {
+        "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+        "webglVendor": "WebKit",
+        "webglRenderer": "WebKit WebGL",
+        "unmaskedVendor": "Google Inc. (Google)",
+        "unmaskedRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "state": {
+          "canvas": [
+            512,
+            512
+          ],
+          "deviceScaleFactor": 1,
+          "webgl": 2,
+          "antialias": false,
+          "preserveDrawingBuffer": true,
+          "sceneIndex": 0,
+          "animationName": null,
+          "animationTime": 0,
+          "morphing": true,
+          "skinning": true,
+          "variant": null,
+          "clearColor": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "exposure": 1,
+          "useIBL": false,
+          "usePunctual": true,
+          "useDirectionalLightsWithDisabledIBL": true,
+          "renderEnvironmentMap": false,
+          "toneMap": "Khronos PBR Neutral",
+          "internalMSAA": 1,
+          "floatingPointFramebuffer": false,
+          "warmupFrames": 1,
+          "evidenceFrame": 2
+        }
+      }
+    },
+    {
+      "row": 3,
+      "case": "full-pbr",
+      "rowName": "Full PBR model (all maps + factors)",
+      "proof": "Phase 11",
+      "sourceKind": "derived",
+      "source": "DamagedHelmet/DamagedHelmetFactors.gltf",
+      "sourceSha256": "0734ce57ae7d9fe6a0086e174ad25606986c7355d5eb99351ea9fa0cd04f922e",
+      "resourceFootprint": {
+        "bytes": 3775246,
+        "files": [
+          "DamagedHelmetFactors.gltf",
+          "DamagedHelmet.bin",
+          "Default_albedo.jpg",
+          "Default_metalRoughness.jpg",
+          "Default_emissive.jpg",
+          "Default_AO.jpg",
+          "Default_normal.jpg"
+        ]
+      },
+      "semanticEvidence": {
+        "authoredMapRoles": [
+          "baseColor",
+          "metallicRoughness",
+          "normal",
+          "occlusion",
+          "emissive"
+        ],
+        "authoredFactors": {
+          "baseColor": [
+            0.8,
+            0.9,
+            1.0,
+            1.0
+          ],
+          "metallic": 0.85,
+          "roughness": 0.4,
+          "normalScale": 0.65,
+          "occlusionStrength": 0.75,
+          "emissive": [
+            0.2,
+            0.3,
+            0.4
+          ]
+        }
+      },
+      "viewerArguments": [
+        "--direct",
+        "--reference-capture"
+      ],
+      "camera": {
+        "target": [
+          -0.0356226936,
+          -0.17369996,
+          -0.214259729
+        ],
+        "sceneRadius": 1.1903969,
+        "distance": 3.57119083,
+        "near": 0.00119039696,
+        "far": 100,
+        "yaw": 0.699999988,
+        "pitch": 0.349999994
+      },
+      "twoProcessPngByteIdentical": true,
+      "cnaPngSha256": "bdcaa2404a83c2f0001039787a685cd63f4ad8ad0d70dcffa0d4cfb14855566d",
+      "cnaNonClearPixelCount": 91427,
+      "cnaRuns": [
+        {
+          "camera": {
+            "target": [
+              -0.0356226936,
+              -0.17369996,
+              -0.214259729
+            ],
+            "sceneRadius": 1.1903969,
+            "distance": 3.57119083,
+            "near": 0.00119039696,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.6496453590225428,
+          "gnuTimeWallSeconds": 0.64,
+          "maximumRssKiB": 319444,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "bdcaa2404a83c2f0001039787a685cd63f4ad8ad0d70dcffa0d4cfb14855566d",
+          "nonClearPixelCount": 91427
+        },
+        {
+          "camera": {
+            "target": [
+              -0.0356226936,
+              -0.17369996,
+              -0.214259729
+            ],
+            "sceneRadius": 1.1903969,
+            "distance": 3.57119083,
+            "near": 0.00119039696,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.6540659710299224,
+          "gnuTimeWallSeconds": 0.65,
+          "maximumRssKiB": 319272,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "bdcaa2404a83c2f0001039787a685cd63f4ad8ad0d70dcffa0d4cfb14855566d",
+          "nonClearPixelCount": 91427
+        }
+      ],
+      "committedGolden": null,
+      "animationContrast": null,
+      "referencePngSha256": "81907b7b38f239afe73ef835ae97c9462129444b934f42fc29df1e90e4497db9",
+      "metrics": {
+        "referenceForegroundPixels": 91425,
+        "cnaForegroundPixels": 91427,
+        "foregroundCoverageRatio": 1.0000218758545256,
+        "nonClearMaskIntersectionOverUnion": 0.999825010390008,
+        "nonClearMaskDifferentPixels": 16,
+        "intersectionRgbMeanAbsoluteError": 39.00573555900734,
+        "intersectionRgbMaxAbsoluteError": 255
+      },
+      "referenceEnvironment": {
+        "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+        "webglVendor": "WebKit",
+        "webglRenderer": "WebKit WebGL",
+        "unmaskedVendor": "Google Inc. (Google)",
+        "unmaskedRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "state": {
+          "canvas": [
+            512,
+            512
+          ],
+          "deviceScaleFactor": 1,
+          "webgl": 2,
+          "antialias": false,
+          "preserveDrawingBuffer": true,
+          "sceneIndex": 0,
+          "animationName": null,
+          "animationTime": 0,
+          "morphing": true,
+          "skinning": true,
+          "variant": null,
+          "clearColor": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "exposure": 1,
+          "useIBL": false,
+          "usePunctual": true,
+          "useDirectionalLightsWithDisabledIBL": true,
+          "renderEnvironmentMap": false,
+          "toneMap": "Khronos PBR Neutral",
+          "internalMSAA": 1,
+          "floatingPointFramebuffer": false,
+          "warmupFrames": 1,
+          "evidenceFrame": 2
+        }
+      }
+    },
+    {
+      "row": 4,
+      "case": "hierarchical",
+      "rowName": "Hierarchical multi-part model",
+      "proof": "Phase 5 center-collapse retake",
+      "sourceKind": "corpus",
+      "source": "xf-parent-child.gltf",
+      "sourceSha256": "ffd4d33b04f1e8141f27c3144a951a9067cf238c977503c6567f76c3a1ead5e0",
+      "resourceFootprint": {
+        "bytes": 1620,
+        "files": [
+          "xf-parent-child.gltf"
+        ]
+      },
+      "semanticEvidence": {},
+      "viewerArguments": [
+        "--direct",
+        "--reference-capture"
+      ],
+      "camera": {
+        "target": [
+          0.723606825,
+          6.55278635,
+          0
+        ],
+        "sceneRadius": 1.61803401,
+        "distance": 4.85410213,
+        "near": 0.00161803409,
+        "far": 100,
+        "yaw": 0.699999988,
+        "pitch": 0.349999994
+      },
+      "twoProcessPngByteIdentical": true,
+      "cnaPngSha256": "73b856294d769d1b9d0b1576ca4f253a7b17bc17f5a6da6fb3d90e92498b602e",
+      "cnaNonClearPixelCount": 23729,
+      "cnaRuns": [
+        {
+          "camera": {
+            "target": [
+              0.723606825,
+              6.55278635,
+              0
+            ],
+            "sceneRadius": 1.61803401,
+            "distance": 4.85410213,
+            "near": 0.00161803409,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.23753748700255528,
+          "gnuTimeWallSeconds": 0.23,
+          "maximumRssKiB": 147252,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "73b856294d769d1b9d0b1576ca4f253a7b17bc17f5a6da6fb3d90e92498b602e",
+          "nonClearPixelCount": 23729
+        },
+        {
+          "camera": {
+            "target": [
+              0.723606825,
+              6.55278635,
+              0
+            ],
+            "sceneRadius": 1.61803401,
+            "distance": 4.85410213,
+            "near": 0.00161803409,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.21108866203576326,
+          "gnuTimeWallSeconds": 0.21,
+          "maximumRssKiB": 147296,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "73b856294d769d1b9d0b1576ca4f253a7b17bc17f5a6da6fb3d90e92498b602e",
+          "nonClearPixelCount": 23729
+        }
+      ],
+      "committedGolden": {
+        "path": "tests/gltf-l7/easygl/xf-parent-child.png",
+        "sha256": "73b856294d769d1b9d0b1576ca4f253a7b17bc17f5a6da6fb3d90e92498b602e",
+        "byteIdentical": true
+      },
+      "animationContrast": null,
+      "referencePngSha256": "4014b6fd89dd224fe69d5899d8cac05fd961894d68836ddfe5cee61554c78848",
+      "metrics": {
+        "referenceForegroundPixels": 23719,
+        "cnaForegroundPixels": 23729,
+        "foregroundCoverageRatio": 1.0004216029343564,
+        "nonClearMaskIntersectionOverUnion": 0.9995785747397699,
+        "nonClearMaskDifferentPixels": 10,
+        "intersectionRgbMeanAbsoluteError": 66.71602231684867,
+        "intersectionRgbMaxAbsoluteError": 87
+      },
+      "referenceEnvironment": {
+        "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+        "webglVendor": "WebKit",
+        "webglRenderer": "WebKit WebGL",
+        "unmaskedVendor": "Google Inc. (Google)",
+        "unmaskedRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "state": {
+          "canvas": [
+            512,
+            512
+          ],
+          "deviceScaleFactor": 1,
+          "webgl": 2,
+          "antialias": false,
+          "preserveDrawingBuffer": true,
+          "sceneIndex": 0,
+          "animationName": null,
+          "animationTime": 0,
+          "morphing": true,
+          "skinning": true,
+          "variant": null,
+          "clearColor": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "exposure": 1,
+          "useIBL": false,
+          "usePunctual": true,
+          "useDirectionalLightsWithDisabledIBL": true,
+          "renderEnvironmentMap": false,
+          "toneMap": "Khronos PBR Neutral",
+          "internalMSAA": 1,
+          "floatingPointFramebuffer": false,
+          "warmupFrames": 1,
+          "evidenceFrame": 2
+        }
+      }
+    },
+    {
+      "row": 5,
+      "case": "skinned-bind",
+      "rowName": "Skinned model in bind pose",
+      "proof": "Phase 12",
+      "sourceKind": "corpus",
+      "source": "skin-armature-ancestor.gltf",
+      "sourceSha256": "76897639f2681df7cb7251b84bdfb02987ec95d0c52be9adef009bbbf39ccd7e",
+      "resourceFootprint": {
+        "bytes": 2286,
+        "files": [
+          "skin-armature-ancestor.gltf"
+        ]
+      },
+      "semanticEvidence": {},
+      "viewerArguments": [
+        "--direct",
+        "--reference-capture"
+      ],
+      "camera": {
+        "target": [
+          0.361803412,
+          0.276393205,
+          0
+        ],
+        "sceneRadius": 0.809017003,
+        "distance": 2.42705107,
+        "near": 0.00100000005,
+        "far": 100,
+        "yaw": 0.699999988,
+        "pitch": 0.349999994
+      },
+      "twoProcessPngByteIdentical": true,
+      "cnaPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "cnaNonClearPixelCount": 23729,
+      "cnaRuns": [
+        {
+          "camera": {
+            "target": [
+              0.361803412,
+              0.276393205,
+              0
+            ],
+            "sceneRadius": 0.809017003,
+            "distance": 2.42705107,
+            "near": 0.00100000005,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.19104333699215204,
+          "gnuTimeWallSeconds": 0.18,
+          "maximumRssKiB": 147940,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+          "nonClearPixelCount": 23729
+        },
+        {
+          "camera": {
+            "target": [
+              0.361803412,
+              0.276393205,
+              0
+            ],
+            "sceneRadius": 0.809017003,
+            "distance": 2.42705107,
+            "near": 0.00100000005,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.1829495540005155,
+          "gnuTimeWallSeconds": 0.18,
+          "maximumRssKiB": 149896,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+          "nonClearPixelCount": 23729
+        }
+      ],
+      "committedGolden": {
+        "path": "tests/gltf-l7/easygl/skin-armature-ancestor.png",
+        "sha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+        "byteIdentical": true
+      },
+      "animationContrast": null,
+      "referencePngSha256": "4014b6fd89dd224fe69d5899d8cac05fd961894d68836ddfe5cee61554c78848",
+      "metrics": {
+        "referenceForegroundPixels": 23719,
+        "cnaForegroundPixels": 23729,
+        "foregroundCoverageRatio": 1.0004216029343564,
+        "nonClearMaskIntersectionOverUnion": 0.9995785747397699,
+        "nonClearMaskDifferentPixels": 10,
+        "intersectionRgbMeanAbsoluteError": 66.71508073696192,
+        "intersectionRgbMaxAbsoluteError": 87
+      },
+      "referenceEnvironment": {
+        "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+        "webglVendor": "WebKit",
+        "webglRenderer": "WebKit WebGL",
+        "unmaskedVendor": "Google Inc. (Google)",
+        "unmaskedRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "state": {
+          "canvas": [
+            512,
+            512
+          ],
+          "deviceScaleFactor": 1,
+          "webgl": 2,
+          "antialias": false,
+          "preserveDrawingBuffer": true,
+          "sceneIndex": 0,
+          "animationName": null,
+          "animationTime": 0,
+          "morphing": true,
+          "skinning": true,
+          "variant": null,
+          "clearColor": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "exposure": 1,
+          "useIBL": false,
+          "usePunctual": true,
+          "useDirectionalLightsWithDisabledIBL": true,
+          "renderEnvironmentMap": false,
+          "toneMap": "Khronos PBR Neutral",
+          "internalMSAA": 1,
+          "floatingPointFramebuffer": false,
+          "warmupFrames": 1,
+          "evidenceFrame": 2
+        }
+      }
+    },
+    {
+      "row": 6,
+      "case": "skinned-animated",
+      "rowName": "Animated skinned model",
+      "proof": "Phases 12 + 14",
+      "sourceKind": "sample",
+      "source": "Fox/glTF/Fox.gltf",
+      "sourceSha256": "6ddcabf511c0257b87dedf6ac51f1bdb6f21e570eee5fa7c4fa6162d055cb002",
+      "resourceFootprint": {
+        "bytes": 191732,
+        "files": [
+          "Fox.gltf",
+          "Fox.bin",
+          "Texture.png"
+        ]
+      },
+      "semanticEvidence": {},
+      "viewerArguments": [
+        "--direct",
+        "--reference-capture",
+        "--clip",
+        "Run",
+        "--animation-time",
+        "0.5"
+      ],
+      "camera": {
+        "target": [
+          -0.0247119442,
+          22.0781784,
+          -18.4390793
+        ],
+        "sceneRadius": 115.848618,
+        "distance": 347.545837,
+        "near": 0.115848623,
+        "far": 810.940308,
+        "yaw": 0.699999988,
+        "pitch": 0.349999994
+      },
+      "twoProcessPngByteIdentical": true,
+      "cnaPngSha256": "075dd62d30cb8dbc173269a7bda01384e84970de53f9f87d8e20293a4fd70840",
+      "cnaNonClearPixelCount": 12484,
+      "cnaRuns": [
+        {
+          "camera": {
+            "target": [
+              -0.0247119442,
+              22.0781784,
+              -18.4390793
+            ],
+            "sceneRadius": 115.848618,
+            "distance": 347.545837,
+            "near": 0.115848623,
+            "far": 810.940308,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.20748514600563794,
+          "gnuTimeWallSeconds": 0.2,
+          "maximumRssKiB": 156604,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "075dd62d30cb8dbc173269a7bda01384e84970de53f9f87d8e20293a4fd70840",
+          "nonClearPixelCount": 12484
+        },
+        {
+          "camera": {
+            "target": [
+              -0.0247119442,
+              22.0781784,
+              -18.4390793
+            ],
+            "sceneRadius": 115.848618,
+            "distance": 347.545837,
+            "near": 0.115848623,
+            "far": 810.940308,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.2052511100191623,
+          "gnuTimeWallSeconds": 0.2,
+          "maximumRssKiB": 156772,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "075dd62d30cb8dbc173269a7bda01384e84970de53f9f87d8e20293a4fd70840",
+          "nonClearPixelCount": 12484
+        }
+      ],
+      "committedGolden": null,
+      "animationContrast": {
+        "viewerArguments": [],
+        "pngSha256": "94b294e9c7650f84574901bdd052214d949aae721740a9c428bf6a211ba469fc",
+        "differentFromRetake": true
+      },
+      "referencePngSha256": "f5f23b104b107745d6ed76b318eac2965db59fdd5921e72abc6d222aaee21f3c",
+      "metrics": {
+        "referenceForegroundPixels": 12482,
+        "cnaForegroundPixels": 12484,
+        "foregroundCoverageRatio": 1.0001602307322544,
+        "nonClearMaskIntersectionOverUnion": 0.9987190777359699,
+        "nonClearMaskDifferentPixels": 16,
+        "intersectionRgbMeanAbsoluteError": 61.086760187040746,
+        "intersectionRgbMaxAbsoluteError": 255
+      },
+      "referenceEnvironment": {
+        "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+        "webglVendor": "WebKit",
+        "webglRenderer": "WebKit WebGL",
+        "unmaskedVendor": "Google Inc. (Google)",
+        "unmaskedRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "state": {
+          "canvas": [
+            512,
+            512
+          ],
+          "deviceScaleFactor": 1,
+          "webgl": 2,
+          "antialias": false,
+          "preserveDrawingBuffer": true,
+          "sceneIndex": 0,
+          "animationName": "Run",
+          "animationTime": 0.5,
+          "morphing": true,
+          "skinning": true,
+          "variant": null,
+          "clearColor": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "exposure": 1,
+          "useIBL": false,
+          "usePunctual": true,
+          "useDirectionalLightsWithDisabledIBL": true,
+          "renderEnvironmentMap": false,
+          "toneMap": "Khronos PBR Neutral",
+          "internalMSAA": 1,
+          "floatingPointFramebuffer": false,
+          "warmupFrames": 1,
+          "evidenceFrame": 2
+        }
+      }
+    },
+    {
+      "row": 7,
+      "case": "rigid-animated",
+      "rowName": "Rigid node animation",
+      "proof": "GLTF-293",
+      "sourceKind": "corpus",
+      "source": "anim-rigid-node.gltf",
+      "sourceSha256": "df49c3cebd0b54771bffc2f936cf2019b11eb98e34efd93eab149711d9c5879e",
+      "resourceFootprint": {
+        "bytes": 2353,
+        "files": [
+          "anim-rigid-node.gltf"
+        ]
+      },
+      "semanticEvidence": {},
+      "viewerArguments": [
+        "--direct",
+        "--reference-capture",
+        "--clip",
+        "Spin",
+        "--animation-time",
+        "0.5"
+      ],
+      "camera": {
+        "target": [
+          0.060394153,
+          0.451273173,
+          0
+        ],
+        "sceneRadius": 0.809017003,
+        "distance": 2.42705107,
+        "near": 0.00100000005,
+        "far": 100,
+        "yaw": 0.699999988,
+        "pitch": 0.349999994
+      },
+      "twoProcessPngByteIdentical": true,
+      "cnaPngSha256": "d9c303b6a3050dcdd2b2d39c20e3a1f49879581d90f777ce2f76824c1e03d47f",
+      "cnaNonClearPixelCount": 23290,
+      "cnaRuns": [
+        {
+          "camera": {
+            "target": [
+              0.060394153,
+              0.451273173,
+              0
+            ],
+            "sceneRadius": 0.809017003,
+            "distance": 2.42705107,
+            "near": 0.00100000005,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.18981059099314734,
+          "gnuTimeWallSeconds": 0.18,
+          "maximumRssKiB": 149316,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "d9c303b6a3050dcdd2b2d39c20e3a1f49879581d90f777ce2f76824c1e03d47f",
+          "nonClearPixelCount": 23290
+        },
+        {
+          "camera": {
+            "target": [
+              0.060394153,
+              0.451273173,
+              0
+            ],
+            "sceneRadius": 0.809017003,
+            "distance": 2.42705107,
+            "near": 0.00100000005,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.1859699230408296,
+          "gnuTimeWallSeconds": 0.18,
+          "maximumRssKiB": 147436,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "d9c303b6a3050dcdd2b2d39c20e3a1f49879581d90f777ce2f76824c1e03d47f",
+          "nonClearPixelCount": 23290
+        }
+      ],
+      "committedGolden": null,
+      "animationContrast": {
+        "viewerArguments": [],
+        "pngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+        "differentFromRetake": true
+      },
+      "referencePngSha256": "a3866ae28675a027efe2fee5cc2b43c1cf80638d3890892a10ac07e01f8f6ad3",
+      "metrics": {
+        "referenceForegroundPixels": 23292,
+        "cnaForegroundPixels": 23290,
+        "foregroundCoverageRatio": 0.9999141336081058,
+        "nonClearMaskIntersectionOverUnion": 0.9993132752478647,
+        "nonClearMaskDifferentPixels": 16,
+        "intersectionRgbMeanAbsoluteError": 66.62700969233633,
+        "intersectionRgbMaxAbsoluteError": 88
+      },
+      "referenceEnvironment": {
+        "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+        "webglVendor": "WebKit",
+        "webglRenderer": "WebKit WebGL",
+        "unmaskedVendor": "Google Inc. (Google)",
+        "unmaskedRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "state": {
+          "canvas": [
+            512,
+            512
+          ],
+          "deviceScaleFactor": 1,
+          "webgl": 2,
+          "antialias": false,
+          "preserveDrawingBuffer": true,
+          "sceneIndex": 0,
+          "animationName": "Spin",
+          "animationTime": 0.5,
+          "morphing": true,
+          "skinning": true,
+          "variant": null,
+          "clearColor": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "exposure": 1,
+          "useIBL": false,
+          "usePunctual": true,
+          "useDirectionalLightsWithDisabledIBL": true,
+          "renderEnvironmentMap": false,
+          "toneMap": "Khronos PBR Neutral",
+          "internalMSAA": 1,
+          "floatingPointFramebuffer": false,
+          "warmupFrames": 1,
+          "evidenceFrame": 2
+        }
+      }
+    },
+    {
+      "row": 8,
+      "case": "morph-target",
+      "rowName": "Morph-target model",
+      "proof": "Phase 13",
+      "sourceKind": "corpus",
+      "source": "morph-position-normal-tangent.gltf",
+      "sourceSha256": "3b60be6967a17cc2af6228178268d2c264ac2b4981f5ed69fea3bd49875d001e",
+      "resourceFootprint": {
+        "bytes": 2734,
+        "files": [
+          "morph-position-normal-tangent.gltf"
+        ]
+      },
+      "semanticEvidence": {
+        "authoredMorphWeights": [
+          1.0
+        ]
+      },
+      "viewerArguments": [
+        "--direct",
+        "--reference-capture"
+      ],
+      "camera": {
+        "target": [
+          0.361803412,
+          0.276393205,
+          1
+        ],
+        "sceneRadius": 0.809017003,
+        "distance": 2.42705107,
+        "near": 0.00100000005,
+        "far": 100,
+        "yaw": 0.699999988,
+        "pitch": 0.349999994
+      },
+      "twoProcessPngByteIdentical": true,
+      "cnaPngSha256": "2bb7822808f99a3fd9d610f7f34a6bf426a4a86d2ddf6795ce1dc1f738f193e9",
+      "cnaNonClearPixelCount": 23729,
+      "cnaRuns": [
+        {
+          "camera": {
+            "target": [
+              0.361803412,
+              0.276393205,
+              1
+            ],
+            "sceneRadius": 0.809017003,
+            "distance": 2.42705107,
+            "near": 0.00100000005,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.18019926798297092,
+          "gnuTimeWallSeconds": 0.17,
+          "maximumRssKiB": 149112,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "2bb7822808f99a3fd9d610f7f34a6bf426a4a86d2ddf6795ce1dc1f738f193e9",
+          "nonClearPixelCount": 23729
+        },
+        {
+          "camera": {
+            "target": [
+              0.361803412,
+              0.276393205,
+              1
+            ],
+            "sceneRadius": 0.809017003,
+            "distance": 2.42705107,
+            "near": 0.00100000005,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.1770294139860198,
+          "gnuTimeWallSeconds": 0.17,
+          "maximumRssKiB": 149760,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "2bb7822808f99a3fd9d610f7f34a6bf426a4a86d2ddf6795ce1dc1f738f193e9",
+          "nonClearPixelCount": 23729
+        }
+      ],
+      "committedGolden": {
+        "path": "tests/gltf-l7/easygl/morph-position-normal-tangent.png",
+        "sha256": "2bb7822808f99a3fd9d610f7f34a6bf426a4a86d2ddf6795ce1dc1f738f193e9",
+        "byteIdentical": true
+      },
+      "animationContrast": null,
+      "referencePngSha256": "9e6097d3d70abe634ffec8e32b79b7301c2c0552cf30920c5c969c95f7c200db",
+      "metrics": {
+        "referenceForegroundPixels": 23719,
+        "cnaForegroundPixels": 23729,
+        "foregroundCoverageRatio": 1.0004216029343564,
+        "nonClearMaskIntersectionOverUnion": 0.9995785747397699,
+        "nonClearMaskDifferentPixels": 10,
+        "intersectionRgbMeanAbsoluteError": 60.15821352783282,
+        "intersectionRgbMaxAbsoluteError": 81
+      },
+      "referenceEnvironment": {
+        "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+        "webglVendor": "WebKit",
+        "webglRenderer": "WebKit WebGL",
+        "unmaskedVendor": "Google Inc. (Google)",
+        "unmaskedRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "state": {
+          "canvas": [
+            512,
+            512
+          ],
+          "deviceScaleFactor": 1,
+          "webgl": 2,
+          "antialias": false,
+          "preserveDrawingBuffer": true,
+          "sceneIndex": 0,
+          "animationName": null,
+          "animationTime": 0,
+          "morphing": true,
+          "skinning": true,
+          "variant": null,
+          "clearColor": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "exposure": 1,
+          "useIBL": false,
+          "usePunctual": true,
+          "useDirectionalLightsWithDisabledIBL": true,
+          "renderEnvironmentMap": false,
+          "toneMap": "Khronos PBR Neutral",
+          "internalMSAA": 1,
+          "floatingPointFramebuffer": false,
+          "warmupFrames": 1,
+          "evidenceFrame": 2
+        }
+      }
+    },
+    {
+      "row": 9,
+      "case": "glb",
+      "rowName": ".glb container",
+      "proof": "Phase 1",
+      "sourceKind": "corpus",
+      "source": "glb-basic.glb",
+      "sourceSha256": "2ac46e66b3c851e2158b663358414ee591088601d6f3d08d330542ceacc9d785",
+      "resourceFootprint": {
+        "bytes": 796,
+        "files": [
+          "glb-basic.glb"
+        ]
+      },
+      "semanticEvidence": {},
+      "viewerArguments": [
+        "--direct",
+        "--reference-capture"
+      ],
+      "camera": {
+        "target": [
+          0.361803412,
+          0.276393205,
+          0
+        ],
+        "sceneRadius": 0.809017003,
+        "distance": 2.42705107,
+        "near": 0.00100000005,
+        "far": 100,
+        "yaw": 0.699999988,
+        "pitch": 0.349999994
+      },
+      "twoProcessPngByteIdentical": true,
+      "cnaPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "cnaNonClearPixelCount": 23729,
+      "cnaRuns": [
+        {
+          "camera": {
+            "target": [
+              0.361803412,
+              0.276393205,
+              0
+            ],
+            "sceneRadius": 0.809017003,
+            "distance": 2.42705107,
+            "near": 0.00100000005,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.4334142519510351,
+          "gnuTimeWallSeconds": 0.43,
+          "maximumRssKiB": 149412,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+          "nonClearPixelCount": 23729
+        },
+        {
+          "camera": {
+            "target": [
+              0.361803412,
+              0.276393205,
+              0
+            ],
+            "sceneRadius": 0.809017003,
+            "distance": 2.42705107,
+            "near": 0.00100000005,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.19364717800635844,
+          "gnuTimeWallSeconds": 0.19,
+          "maximumRssKiB": 148696,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+          "nonClearPixelCount": 23729
+        }
+      ],
+      "committedGolden": {
+        "path": "tests/gltf-l7/easygl/glb-basic.png",
+        "sha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+        "byteIdentical": true
+      },
+      "animationContrast": null,
+      "referencePngSha256": "4014b6fd89dd224fe69d5899d8cac05fd961894d68836ddfe5cee61554c78848",
+      "metrics": {
+        "referenceForegroundPixels": 23719,
+        "cnaForegroundPixels": 23729,
+        "foregroundCoverageRatio": 1.0004216029343564,
+        "nonClearMaskIntersectionOverUnion": 0.9995785747397699,
+        "nonClearMaskDifferentPixels": 10,
+        "intersectionRgbMeanAbsoluteError": 66.71508073696192,
+        "intersectionRgbMaxAbsoluteError": 87
+      },
+      "referenceEnvironment": {
+        "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+        "webglVendor": "WebKit",
+        "webglRenderer": "WebKit WebGL",
+        "unmaskedVendor": "Google Inc. (Google)",
+        "unmaskedRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "state": {
+          "canvas": [
+            512,
+            512
+          ],
+          "deviceScaleFactor": 1,
+          "webgl": 2,
+          "antialias": false,
+          "preserveDrawingBuffer": true,
+          "sceneIndex": 0,
+          "animationName": null,
+          "animationTime": 0,
+          "morphing": true,
+          "skinning": true,
+          "variant": null,
+          "clearColor": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "exposure": 1,
+          "useIBL": false,
+          "usePunctual": true,
+          "useDirectionalLightsWithDisabledIBL": true,
+          "renderEnvironmentMap": false,
+          "toneMap": "Khronos PBR Neutral",
+          "internalMSAA": 1,
+          "floatingPointFramebuffer": false,
+          "warmupFrames": 1,
+          "evidenceFrame": 2
+        }
+      }
+    },
+    {
+      "row": 10,
+      "case": "external-resources",
+      "rowName": ".gltf with external .bin and external images",
+      "proof": "Phase 1",
+      "sourceKind": "sample",
+      "source": "DamagedHelmet/glTF/DamagedHelmet.gltf",
+      "sourceSha256": "efe99dfac198094a30c71dc02a4d3421f0eef6bf335aeb695daa4d62134cd93f",
+      "resourceFootprint": {
+        "bytes": 3776265,
+        "files": [
+          "DamagedHelmet.gltf",
+          "DamagedHelmet.bin",
+          "Default_albedo.jpg",
+          "Default_metalRoughness.jpg",
+          "Default_emissive.jpg",
+          "Default_AO.jpg",
+          "Default_normal.jpg"
+        ]
+      },
+      "semanticEvidence": {
+        "externalBuffers": [
+          "DamagedHelmet.bin"
+        ],
+        "externalImages": [
+          "Default_albedo.jpg",
+          "Default_metalRoughness.jpg",
+          "Default_emissive.jpg",
+          "Default_AO.jpg",
+          "Default_normal.jpg"
+        ]
+      },
+      "viewerArguments": [
+        "--direct",
+        "--reference-capture"
+      ],
+      "camera": {
+        "target": [
+          -0.0356226936,
+          -0.17369996,
+          -0.214259729
+        ],
+        "sceneRadius": 1.1903969,
+        "distance": 3.57119083,
+        "near": 0.00119039696,
+        "far": 100,
+        "yaw": 0.699999988,
+        "pitch": 0.349999994
+      },
+      "twoProcessPngByteIdentical": true,
+      "cnaPngSha256": "d23d91e9a1ed5ebfdaefcbd9a96dffb9f3a516d229227b037fac4e84b1fd762c",
+      "cnaNonClearPixelCount": 91427,
+      "cnaRuns": [
+        {
+          "camera": {
+            "target": [
+              -0.0356226936,
+              -0.17369996,
+              -0.214259729
+            ],
+            "sceneRadius": 1.1903969,
+            "distance": 3.57119083,
+            "near": 0.00119039696,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.6986158780055121,
+          "gnuTimeWallSeconds": 0.69,
+          "maximumRssKiB": 321780,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "d23d91e9a1ed5ebfdaefcbd9a96dffb9f3a516d229227b037fac4e84b1fd762c",
+          "nonClearPixelCount": 91427
+        },
+        {
+          "camera": {
+            "target": [
+              -0.0356226936,
+              -0.17369996,
+              -0.214259729
+            ],
+            "sceneRadius": 1.1903969,
+            "distance": 3.57119083,
+            "near": 0.00119039696,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.7184793140040711,
+          "gnuTimeWallSeconds": 0.71,
+          "maximumRssKiB": 322260,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "d23d91e9a1ed5ebfdaefcbd9a96dffb9f3a516d229227b037fac4e84b1fd762c",
+          "nonClearPixelCount": 91427
+        }
+      ],
+      "committedGolden": null,
+      "animationContrast": null,
+      "referencePngSha256": "f277898f47909845962ae8bc58252a4cda07574a415916fbdaa524fcb4c50d06",
+      "metrics": {
+        "referenceForegroundPixels": 91425,
+        "cnaForegroundPixels": 91427,
+        "foregroundCoverageRatio": 1.0000218758545256,
+        "nonClearMaskIntersectionOverUnion": 0.999825010390008,
+        "nonClearMaskDifferentPixels": 16,
+        "intersectionRgbMeanAbsoluteError": 42.60532936620797,
+        "intersectionRgbMaxAbsoluteError": 255
+      },
+      "referenceEnvironment": {
+        "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+        "webglVendor": "WebKit",
+        "webglRenderer": "WebKit WebGL",
+        "unmaskedVendor": "Google Inc. (Google)",
+        "unmaskedRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "state": {
+          "canvas": [
+            512,
+            512
+          ],
+          "deviceScaleFactor": 1,
+          "webgl": 2,
+          "antialias": false,
+          "preserveDrawingBuffer": true,
+          "sceneIndex": 0,
+          "animationName": null,
+          "animationTime": 0,
+          "morphing": true,
+          "skinning": true,
+          "variant": null,
+          "clearColor": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "exposure": 1,
+          "useIBL": false,
+          "usePunctual": true,
+          "useDirectionalLightsWithDisabledIBL": true,
+          "renderEnvironmentMap": false,
+          "toneMap": "Khronos PBR Neutral",
+          "internalMSAA": 1,
+          "floatingPointFramebuffer": false,
+          "warmupFrames": 1,
+          "evidenceFrame": 2
+        }
+      }
+    },
+    {
+      "row": 11,
+      "case": "interleaved",
+      "rowName": "Interleaved-buffer model",
+      "proof": "Phase 2",
+      "sourceKind": "corpus",
+      "source": "interleaved-position-normal.gltf",
+      "sourceSha256": "3a3f951e63a7b9af458208e34b5304e2c0abc036a5020425d04aacec3f73edea",
+      "resourceFootprint": {
+        "bytes": 1426,
+        "files": [
+          "interleaved-position-normal.gltf"
+        ]
+      },
+      "semanticEvidence": {},
+      "viewerArguments": [
+        "--direct",
+        "--reference-capture"
+      ],
+      "camera": {
+        "target": [
+          0.399999976,
+          1.20000005,
+          0
+        ],
+        "sceneRadius": 2,
+        "distance": 6,
+        "near": 0.00200000009,
+        "far": 100,
+        "yaw": 0.699999988,
+        "pitch": 0.349999994
+      },
+      "twoProcessPngByteIdentical": true,
+      "cnaPngSha256": "8909c71ed5460f43d280dcda7460be7a58599a4a41173cd6f07908625b4ff58c",
+      "cnaNonClearPixelCount": 24255,
+      "cnaRuns": [
+        {
+          "camera": {
+            "target": [
+              0.399999976,
+              1.20000005,
+              0
+            ],
+            "sceneRadius": 2,
+            "distance": 6,
+            "near": 0.00200000009,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.3240736140287481,
+          "gnuTimeWallSeconds": 0.32,
+          "maximumRssKiB": 149152,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "8909c71ed5460f43d280dcda7460be7a58599a4a41173cd6f07908625b4ff58c",
+          "nonClearPixelCount": 24255
+        },
+        {
+          "camera": {
+            "target": [
+              0.399999976,
+              1.20000005,
+              0
+            ],
+            "sceneRadius": 2,
+            "distance": 6,
+            "near": 0.00200000009,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.28479186398908496,
+          "gnuTimeWallSeconds": 0.28,
+          "maximumRssKiB": 149556,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "8909c71ed5460f43d280dcda7460be7a58599a4a41173cd6f07908625b4ff58c",
+          "nonClearPixelCount": 24255
+        }
+      ],
+      "committedGolden": {
+        "path": "tests/gltf-l7/easygl/interleaved-position-normal.png",
+        "sha256": "8909c71ed5460f43d280dcda7460be7a58599a4a41173cd6f07908625b4ff58c",
+        "byteIdentical": true
+      },
+      "animationContrast": null,
+      "referencePngSha256": "1ead9534e5219f46c6cad803f49a174d5917a442506a0435f03b9360e5f0b12a",
+      "metrics": {
+        "referenceForegroundPixels": 24255,
+        "cnaForegroundPixels": 24255,
+        "foregroundCoverageRatio": 1.0,
+        "nonClearMaskIntersectionOverUnion": 0.9995877988458368,
+        "nonClearMaskDifferentPixels": 10,
+        "intersectionRgbMeanAbsoluteError": 67.034529209622,
+        "intersectionRgbMaxAbsoluteError": 87
+      },
+      "referenceEnvironment": {
+        "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+        "webglVendor": "WebKit",
+        "webglRenderer": "WebKit WebGL",
+        "unmaskedVendor": "Google Inc. (Google)",
+        "unmaskedRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "state": {
+          "canvas": [
+            512,
+            512
+          ],
+          "deviceScaleFactor": 1,
+          "webgl": 2,
+          "antialias": false,
+          "preserveDrawingBuffer": true,
+          "sceneIndex": 0,
+          "animationName": null,
+          "animationTime": 0,
+          "morphing": true,
+          "skinning": true,
+          "variant": null,
+          "clearColor": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "exposure": 1,
+          "useIBL": false,
+          "usePunctual": true,
+          "useDirectionalLightsWithDisabledIBL": true,
+          "renderEnvironmentMap": false,
+          "toneMap": "Khronos PBR Neutral",
+          "internalMSAA": 1,
+          "floatingPointFramebuffer": false,
+          "warmupFrames": 1,
+          "evidenceFrame": 2
+        }
+      }
+    },
+    {
+      "row": 12,
+      "case": "sparse-attribute",
+      "rowName": "Sparse accessor: attribute",
+      "proof": "Phase 2 + GLTF-063",
+      "sourceKind": "corpus",
+      "source": "sparse-position.gltf",
+      "sourceSha256": "805959f472a2fcbaa1ceccb3cf71ad6e6c02b233e1f64703a7cc66efaa44ee22",
+      "resourceFootprint": {
+        "bytes": 1465,
+        "files": [
+          "sparse-position.gltf"
+        ]
+      },
+      "semanticEvidence": {},
+      "viewerArguments": [
+        "--direct",
+        "--reference-capture"
+      ],
+      "camera": {
+        "target": [
+          1.06634414,
+          2.75355911,
+          0
+        ],
+        "sceneRadius": 4.8016386,
+        "distance": 14.4049158,
+        "near": 0.00480163889,
+        "far": 100,
+        "yaw": 0.699999988,
+        "pitch": 0.349999994
+      },
+      "twoProcessPngByteIdentical": true,
+      "cnaPngSha256": "494bc48d4810e215f554ea862c134adfadee24121309c7c1235ee4476df49184",
+      "cnaNonClearPixelCount": 24539,
+      "cnaRuns": [
+        {
+          "camera": {
+            "target": [
+              1.06634414,
+              2.75355911,
+              0
+            ],
+            "sceneRadius": 4.8016386,
+            "distance": 14.4049158,
+            "near": 0.00480163889,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.28312036901479587,
+          "gnuTimeWallSeconds": 0.28,
+          "maximumRssKiB": 147304,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "494bc48d4810e215f554ea862c134adfadee24121309c7c1235ee4476df49184",
+          "nonClearPixelCount": 24539
+        },
+        {
+          "camera": {
+            "target": [
+              1.06634414,
+              2.75355911,
+              0
+            ],
+            "sceneRadius": 4.8016386,
+            "distance": 14.4049158,
+            "near": 0.00480163889,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.27296390797710046,
+          "gnuTimeWallSeconds": 0.27,
+          "maximumRssKiB": 147116,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "494bc48d4810e215f554ea862c134adfadee24121309c7c1235ee4476df49184",
+          "nonClearPixelCount": 24539
+        }
+      ],
+      "committedGolden": {
+        "path": "tests/gltf-l7/easygl/sparse-position.png",
+        "sha256": "494bc48d4810e215f554ea862c134adfadee24121309c7c1235ee4476df49184",
+        "byteIdentical": true
+      },
+      "animationContrast": null,
+      "referencePngSha256": "4056794c6522f103a670dd67e51cdb7fdc7108b8dbdd900883da418f143ae000",
+      "metrics": {
+        "referenceForegroundPixels": 24539,
+        "cnaForegroundPixels": 24539,
+        "foregroundCoverageRatio": 1.0,
+        "nonClearMaskIntersectionOverUnion": 0.9995925684485006,
+        "nonClearMaskDifferentPixels": 10,
+        "intersectionRgbMeanAbsoluteError": 67.01150783946089,
+        "intersectionRgbMaxAbsoluteError": 87
+      },
+      "referenceEnvironment": {
+        "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+        "webglVendor": "WebKit",
+        "webglRenderer": "WebKit WebGL",
+        "unmaskedVendor": "Google Inc. (Google)",
+        "unmaskedRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "state": {
+          "canvas": [
+            512,
+            512
+          ],
+          "deviceScaleFactor": 1,
+          "webgl": 2,
+          "antialias": false,
+          "preserveDrawingBuffer": true,
+          "sceneIndex": 0,
+          "animationName": null,
+          "animationTime": 0,
+          "morphing": true,
+          "skinning": true,
+          "variant": null,
+          "clearColor": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "exposure": 1,
+          "useIBL": false,
+          "usePunctual": true,
+          "useDirectionalLightsWithDisabledIBL": true,
+          "renderEnvironmentMap": false,
+          "toneMap": "Khronos PBR Neutral",
+          "internalMSAA": 1,
+          "floatingPointFramebuffer": false,
+          "warmupFrames": 1,
+          "evidenceFrame": 2
+        }
+      }
+    },
+    {
+      "row": 12,
+      "case": "sparse-index",
+      "rowName": "Sparse accessor: index",
+      "proof": "Phase 2 + GLTF-063",
+      "sourceKind": "corpus",
+      "source": "sparse-indices.gltf",
+      "sourceSha256": "ffebfe48fb5e11be4dbcbfa8189c3241eeab34089b56f6feb29cdabf1aeec145",
+      "resourceFootprint": {
+        "bytes": 1614,
+        "files": [
+          "sparse-indices.gltf"
+        ]
+      },
+      "semanticEvidence": {},
+      "viewerArguments": [
+        "--direct",
+        "--reference-capture"
+      ],
+      "camera": {
+        "target": [
+          0.5,
+          0.5,
+          0
+        ],
+        "sceneRadius": 0.707106769,
+        "distance": 2.12132025,
+        "near": 0.00100000005,
+        "far": 100,
+        "yaw": 0.699999988,
+        "pitch": 0.349999994
+      },
+      "twoProcessPngByteIdentical": true,
+      "cnaPngSha256": "8db1b5046cfb275191beeaafd42d1dfd52ae737aa8ffbb979f3b6a7298d4f736",
+      "cnaNonClearPixelCount": 64437,
+      "cnaRuns": [
+        {
+          "camera": {
+            "target": [
+              0.5,
+              0.5,
+              0
+            ],
+            "sceneRadius": 0.707106769,
+            "distance": 2.12132025,
+            "near": 0.00100000005,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.29546903498703614,
+          "gnuTimeWallSeconds": 0.29,
+          "maximumRssKiB": 147776,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "8db1b5046cfb275191beeaafd42d1dfd52ae737aa8ffbb979f3b6a7298d4f736",
+          "nonClearPixelCount": 64437
+        },
+        {
+          "camera": {
+            "target": [
+              0.5,
+              0.5,
+              0
+            ],
+            "sceneRadius": 0.707106769,
+            "distance": 2.12132025,
+            "near": 0.00100000005,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.25889908999670297,
+          "gnuTimeWallSeconds": 0.25,
+          "maximumRssKiB": 147048,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "8db1b5046cfb275191beeaafd42d1dfd52ae737aa8ffbb979f3b6a7298d4f736",
+          "nonClearPixelCount": 64437
+        }
+      ],
+      "committedGolden": {
+        "path": "tests/gltf-l7/easygl/sparse-indices.png",
+        "sha256": "8db1b5046cfb275191beeaafd42d1dfd52ae737aa8ffbb979f3b6a7298d4f736",
+        "byteIdentical": true
+      },
+      "animationContrast": null,
+      "referencePngSha256": "40fa739f24a2d473585b74d2b280f673b9a50a5721448e000741800e84d510e5",
+      "metrics": {
+        "referenceForegroundPixels": 64444,
+        "cnaForegroundPixels": 64437,
+        "foregroundCoverageRatio": 0.9998913785612314,
+        "nonClearMaskIntersectionOverUnion": 0.9998293144648233,
+        "nonClearMaskDifferentPixels": 11,
+        "intersectionRgbMeanAbsoluteError": 66.84384263210988,
+        "intersectionRgbMaxAbsoluteError": 88
+      },
+      "referenceEnvironment": {
+        "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+        "webglVendor": "WebKit",
+        "webglRenderer": "WebKit WebGL",
+        "unmaskedVendor": "Google Inc. (Google)",
+        "unmaskedRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "state": {
+          "canvas": [
+            512,
+            512
+          ],
+          "deviceScaleFactor": 1,
+          "webgl": 2,
+          "antialias": false,
+          "preserveDrawingBuffer": true,
+          "sceneIndex": 0,
+          "animationName": null,
+          "animationTime": 0,
+          "morphing": true,
+          "skinning": true,
+          "variant": null,
+          "clearColor": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "exposure": 1,
+          "useIBL": false,
+          "usePunctual": true,
+          "useDirectionalLightsWithDisabledIBL": true,
+          "renderEnvironmentMap": false,
+          "toneMap": "Khronos PBR Neutral",
+          "internalMSAA": 1,
+          "floatingPointFramebuffer": false,
+          "warmupFrames": 1,
+          "evidenceFrame": 2
+        }
+      }
+    },
+    {
+      "row": 13,
+      "case": "draco",
+      "rowName": "Draco-compressed model",
+      "proof": "Phase 17",
+      "sourceKind": "corpus",
+      "source": "draco-triangle.gltf",
+      "sourceSha256": "1e67b38d85251bdcd0ef211b92990a4879cdc576fe905114d30ce6923f86f329",
+      "resourceFootprint": {
+        "bytes": 1685,
+        "files": [
+          "draco-triangle.gltf"
+        ]
+      },
+      "semanticEvidence": {},
+      "viewerArguments": [
+        "--direct",
+        "--reference-capture"
+      ],
+      "camera": {
+        "target": [
+          0.361803412,
+          0.276393205,
+          0
+        ],
+        "sceneRadius": 0.809017003,
+        "distance": 2.42705107,
+        "near": 0.00100000005,
+        "far": 100,
+        "yaw": 0.699999988,
+        "pitch": 0.349999994
+      },
+      "twoProcessPngByteIdentical": true,
+      "cnaPngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+      "cnaNonClearPixelCount": 23729,
+      "cnaRuns": [
+        {
+          "camera": {
+            "target": [
+              0.361803412,
+              0.276393205,
+              0
+            ],
+            "sceneRadius": 0.809017003,
+            "distance": 2.42705107,
+            "near": 0.00100000005,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.2314521279768087,
+          "gnuTimeWallSeconds": 0.23,
+          "maximumRssKiB": 147708,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+          "nonClearPixelCount": 23729
+        },
+        {
+          "camera": {
+            "target": [
+              0.361803412,
+              0.276393205,
+              0
+            ],
+            "sceneRadius": 0.809017003,
+            "distance": 2.42705107,
+            "near": 0.00100000005,
+            "far": 100,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 0.2644014750258066,
+          "gnuTimeWallSeconds": 0.26,
+          "maximumRssKiB": 147840,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+          "nonClearPixelCount": 23729
+        }
+      ],
+      "committedGolden": {
+        "path": "tests/gltf-l7/easygl/draco-triangle.png",
+        "sha256": "f6e653a304ab2a1100b2f065d3cbfa1af4197d8edfd6fa23e3ac512c3ad208bd",
+        "byteIdentical": true
+      },
+      "animationContrast": null,
+      "referencePngSha256": "4014b6fd89dd224fe69d5899d8cac05fd961894d68836ddfe5cee61554c78848",
+      "metrics": {
+        "referenceForegroundPixels": 23719,
+        "cnaForegroundPixels": 23729,
+        "foregroundCoverageRatio": 1.0004216029343564,
+        "nonClearMaskIntersectionOverUnion": 0.9995785747397699,
+        "nonClearMaskDifferentPixels": 10,
+        "intersectionRgbMeanAbsoluteError": 66.71508073696192,
+        "intersectionRgbMaxAbsoluteError": 87
+      },
+      "referenceEnvironment": {
+        "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+        "webglVendor": "WebKit",
+        "webglRenderer": "WebKit WebGL",
+        "unmaskedVendor": "Google Inc. (Google)",
+        "unmaskedRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "state": {
+          "canvas": [
+            512,
+            512
+          ],
+          "deviceScaleFactor": 1,
+          "webgl": 2,
+          "antialias": false,
+          "preserveDrawingBuffer": true,
+          "sceneIndex": 0,
+          "animationName": null,
+          "animationTime": 0,
+          "morphing": true,
+          "skinning": true,
+          "variant": null,
+          "clearColor": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "exposure": 1,
+          "useIBL": false,
+          "usePunctual": true,
+          "useDirectionalLightsWithDisabledIBL": true,
+          "renderEnvironmentMap": false,
+          "toneMap": "Khronos PBR Neutral",
+          "internalMSAA": 1,
+          "floatingPointFramebuffer": false,
+          "warmupFrames": 1,
+          "evidenceFrame": 2
+        }
+      }
+    },
+    {
+      "row": 14,
+      "case": "large-real-world",
+      "rowName": "Large real-world model (>= 50 MiB)",
+      "proof": "Phase 22",
+      "sourceKind": "sample",
+      "source": "Sponza/glTF/Sponza.gltf",
+      "sourceSha256": "646c10cbc8fab990ca29f363e90e2d65155f3a3569506852eb1434a9465b9501",
+      "resourceFootprint": {
+        "bytes": 52686624,
+        "files": [
+          "Sponza.gltf",
+          "Sponza.bin",
+          "8773302468495022225.jpg",
+          "5061699253647017043.png",
+          "11872827283454512094.jpg",
+          "12501374198249454378.jpg",
+          "8006627369776289000.png",
+          "715093869573992647.jpg",
+          "4477655471536070370.jpg",
+          "7268504077753552595.jpg",
+          "8503262930880235456.jpg",
+          "13982482287905699490.jpg",
+          "8750083169368950601.jpg",
+          "16885566240357350108.jpg",
+          "16299174074766089871.jpg",
+          "5792855332885324923.jpg",
+          "11968150294050148237.jpg",
+          "2051777328469649772.jpg",
+          "14650633544276105767.jpg",
+          "4871783166746854860.jpg",
+          "10388182081421875623.jpg",
+          "15295713303328085182.jpg",
+          "9916269861720640319.jpg",
+          "15722799267630235092.jpg",
+          "6047387724914829168.jpg",
+          "8051790464816141987.jpg",
+          "14267839433702832875.jpg",
+          "5823059166183034438.jpg",
+          "13824894030729245199.jpg",
+          "6667038893015345571.jpg",
+          "7441062115984513793.jpg",
+          "8114461559286000061.jpg",
+          "3628158980083700836.jpg",
+          "11490520546946913238.jpg",
+          "3455394979645218238.jpg",
+          "7645212358685992005.jpg",
+          "6151467286084645207.jpg",
+          "8783994986360286082.jpg",
+          "2299742237651021498.jpg",
+          "4975155472559461469.jpg",
+          "3371964815757888145.jpg",
+          "7056944414013900257.jpg",
+          "4675343432951571524.jpg",
+          "7815564343179553343.jpg",
+          "2374361008830720677.jpg",
+          "2775690330959970771.jpg",
+          "332936164838540657.jpg",
+          "2185409758123873465.jpg",
+          "6593109234861095314.jpg",
+          "17876391417123941155.jpg",
+          "466164707995436622.jpg",
+          "4601176305987539675.jpg",
+          "11474523244911310074.jpg",
+          "4910669866631290573.jpg",
+          "9288698199695299068.jpg",
+          "14170708867020035030.jpg",
+          "16275776544635328252.png",
+          "1219024358953944284.jpg",
+          "3827035219084910048.jpg",
+          "755318871556304029.jpg",
+          "2411100444841994089.jpg",
+          "10381718147657362067.jpg",
+          "8481240838833932244.jpg",
+          "17556969131407844942.jpg",
+          "759203620573749278.jpg",
+          "6772804448157695701.jpg",
+          "13196865903111448057.jpg",
+          "14118779221266351425.jpg",
+          "2969916736137545357.jpg",
+          "8747919177698443163.jpg",
+          "white.png"
+        ]
+      },
+      "semanticEvidence": {
+        "triangleCount": 262267
+      },
+      "viewerArguments": [
+        "--direct",
+        "--reference-capture"
+      ],
+      "camera": {
+        "target": [
+          -1.15942633,
+          8.11924839,
+          -0.55200249
+        ],
+        "sceneRadius": 19.7497787,
+        "distance": 59.2493362,
+        "near": 0.0197497793,
+        "far": 138.248444,
+        "yaw": 0.699999988,
+        "pitch": 0.349999994
+      },
+      "twoProcessPngByteIdentical": true,
+      "cnaPngSha256": "19de4e8d9ad0def327754c9b48acd1392e453833b6da4f8d802459f19d21f945",
+      "cnaNonClearPixelCount": 61805,
+      "cnaRuns": [
+        {
+          "camera": {
+            "target": [
+              -1.15942633,
+              8.11924839,
+              -0.55200249
+            ],
+            "sceneRadius": 19.7497787,
+            "distance": 59.2493362,
+            "near": 0.0197497793,
+            "far": 138.248444,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 9.1943519670167,
+          "gnuTimeWallSeconds": 9.19,
+          "maximumRssKiB": 794328,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "19de4e8d9ad0def327754c9b48acd1392e453833b6da4f8d802459f19d21f945",
+          "nonClearPixelCount": 61805
+        },
+        {
+          "camera": {
+            "target": [
+              -1.15942633,
+              8.11924839,
+              -0.55200249
+            ],
+            "sceneRadius": 19.7497787,
+            "distance": 59.2493362,
+            "near": 0.0197497793,
+            "far": 138.248444,
+            "yaw": 0.699999988,
+            "pitch": 0.349999994
+          },
+          "wallSeconds": 9.352752048987895,
+          "gnuTimeWallSeconds": 9.35,
+          "maximumRssKiB": 794568,
+          "graphicsRenderer": "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+          "pngSha256": "19de4e8d9ad0def327754c9b48acd1392e453833b6da4f8d802459f19d21f945",
+          "nonClearPixelCount": 61805
+        }
+      ],
+      "committedGolden": null,
+      "animationContrast": null,
+      "referencePngSha256": "67e7ff0a9f4758079b2de635ccd76359d652510980699ba43c68ddc55fd10582",
+      "metrics": {
+        "referenceForegroundPixels": 61800,
+        "cnaForegroundPixels": 61805,
+        "foregroundCoverageRatio": 1.0000809061488674,
+        "nonClearMaskIntersectionOverUnion": 0.9997573208218735,
+        "nonClearMaskDifferentPixels": 15,
+        "intersectionRgbMeanAbsoluteError": 32.78537637888718,
+        "intersectionRgbMaxAbsoluteError": 239
+      },
+      "referenceEnvironment": {
+        "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+        "webglVendor": "WebKit",
+        "webglRenderer": "WebKit WebGL",
+        "unmaskedVendor": "Google Inc. (Google)",
+        "unmaskedRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "state": {
+          "canvas": [
+            512,
+            512
+          ],
+          "deviceScaleFactor": 1,
+          "webgl": 2,
+          "antialias": false,
+          "preserveDrawingBuffer": true,
+          "sceneIndex": 0,
+          "animationName": null,
+          "animationTime": 0,
+          "morphing": true,
+          "skinning": true,
+          "variant": null,
+          "clearColor": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "exposure": 1,
+          "useIBL": false,
+          "usePunctual": true,
+          "useDirectionalLightsWithDisabledIBL": true,
+          "renderEnvironmentMap": false,
+          "toneMap": "Khronos PBR Neutral",
+          "internalMSAA": 1,
+          "floatingPointFramebuffer": false,
+          "warmupFrames": 1,
+          "evidenceFrame": 2
+        }
+      }
+    }
+  ]
+}

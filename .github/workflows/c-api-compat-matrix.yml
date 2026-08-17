@@ -1,0 +1,76 @@
+# plan_binding.md CBIND-038: the pure-C compatibility matrix as a gate.
+#
+# The C ABI's whole point is that a C program can consume it. That claim is only worth as much as
+# the set of compilers it has actually been put through, so this job puts every public header
+# through each of them -- on its own, to prove it is self-contained, and through the umbrella, to
+# prove they compose.
+#
+# Two rules make the result honest rather than flattering. A toolchain that is installed is binding:
+# if it rejects a header the job fails, whether the matrix calls it required or optional. A
+# toolchain that is absent is reported as skipped by name, never counted as agreement.
+#
+# Deliberately build-free. It needs the public headers and a compiler, nothing of CNA itself, so it
+# runs on every push instead of waiting for a nightly.
+
+name: C API compatibility matrix
+
+on:
+  push:
+    paths:
+      - 'modules/c-api/include/**'
+      - 'docs/c-api/COMPATIBILITY.md'
+      - 'tools/c-api/compatibility_matrix.json'
+      - 'tools/c-api/generate_compatibility_matrix.py'
+      - '.github/workflows/c-api-compat-matrix.yml'
+  pull_request:
+    branches: [develop, master]
+    paths:
+      - 'modules/c-api/include/**'
+      - 'docs/c-api/COMPATIBILITY.md'
+      - 'tools/c-api/compatibility_matrix.json'
+      - 'tools/c-api/generate_compatibility_matrix.py'
+  workflow_dispatch:
+
+concurrency:
+  group: c-api-compat-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  header-compatibility:
+    name: Every public header, every declared toolchain
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Clang and the MinGW cross-compiler are optional rows: without them the run still passes and
+      # simply records them as skipped. Installing them is what turns those cells into evidence.
+      - name: Install the optional toolchains
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang gcc-mingw-w64-x86-64
+
+      - name: Check the published matrix matches its declaration
+        run: python3 tools/c-api/generate_compatibility_matrix.py --check
+
+      - name: Compile every public header across the matrix
+        run: python3 tools/c-api/generate_compatibility_matrix.py --run
+
+      # Regenerating must be a no-op on a correct tree, for the same reason the coverage matrix's
+      # must: a generator that is not deterministic makes the document unreviewable.
+      - name: Verify regeneration is deterministic
+        run: |
+          set -euo pipefail
+          python3 tools/c-api/generate_compatibility_matrix.py --write
+          if ! git diff --quiet -- docs/c-api/COMPATIBILITY.md; then
+            echo "::error::--write changed COMPATIBILITY.md even though --check passed" >&2
+            git --no-pager diff --stat -- docs/c-api/COMPATIBILITY.md
+            exit 1
+          fi
+          echo "regeneration is a no-op, as it must be"

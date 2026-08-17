@@ -416,3 +416,59 @@ TEST(VertexDeclarationFidelityTest, StockProgramRefusesAColourWhereItExpectsANor
                                                         "EasyGL", "lit_textured3d"),
                  System::NotSupportedException);
 }
+
+// --- plan_gltf.md GLTF-155: the importer's strides and the canonical table are one set ----------
+//
+// The table exists so there is a single source of truth for what a byte stride means. That is only
+// worth anything if every producer's strides are actually in it: a stride the importer emits but
+// the table does not know is one no renderer can bind, and one the table knows but no producer
+// emits is a row nobody validates.
+//
+// The importer's own selection is
+//     skinned ? (colored ? 56 : (usePbr ? 68 : 52))
+//             : (colored ? 24 : (usePbr ? 48 : (useDualTexture ? 20 : 32)))
+// plus stride 16 from the .cnj path's position+colour layout. Restating it here is deliberate:
+// this test is the coupling, so it has to name both sides.
+
+TEST(VertexDeclarationFidelity, EveryStrideTheGltfImporterCanEmitIsInTheCanonicalTable)
+{
+    for (const int stride : {16, 20, 24, 32, 48, 52, 56, 60, 68, 76})
+    {
+        SCOPED_TRACE("stride " + std::to_string(stride));
+        const CNA::Internal::Graphics::InferredVertexLayout layout =
+            CNA::Internal::Graphics::InferredLayoutForStride(
+                stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+        ASSERT_TRUE(layout.known)
+            << "the glTF importer can emit this stride and no renderer would be able to bind it";
+        EXPECT_GT(layout.count, 0u);
+
+        // Position at offset 0 is the one invariant every producer and consumer relies on
+        // (GLTF-150), so it is asserted per stride rather than assumed once.
+        bool positionAtZero = false;
+        for (std::size_t i = 0; i < layout.count; ++i)
+        {
+            if (layout.elements[i].usage ==
+                    Microsoft::Xna::Framework::Graphics::VertexElementUsage::Position &&
+                layout.elements[i].usageIndex == 0)
+            {
+                positionAtZero = layout.elements[i].offset == 0;
+            }
+        }
+        EXPECT_TRUE(positionAtZero) << "Position must be the first element of every stride";
+    }
+}
+
+TEST(VertexDeclarationFidelity, AStrideTheTableDoesNotKnowIsReportedAsUnknownRatherThanGuessed)
+{
+    // The property the importer's new refusal depends on: an unlisted stride must come back
+    // `known == false`, not with a plausible-looking guessed layout. A table that invented one
+    // would turn GLTF-157's loud error back into a silent wrong bind.
+    for (const int stride : {13, 40, 44, 64, 1024})
+    {
+        SCOPED_TRACE("stride " + std::to_string(stride));
+        const CNA::Internal::Graphics::InferredVertexLayout layout =
+            CNA::Internal::Graphics::InferredLayoutForStride(
+                stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+        EXPECT_FALSE(layout.known);
+    }
+}

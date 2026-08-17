@@ -106,6 +106,9 @@ class BgfxPbrEffectTest : public Game
                       float roughness, float metallic, const Vector3& ambient)
     {
         PbrEffect fx(dev);
+        fx.setBaseColorTextureIsSrgbEXTProperty(false);
+        fx.setEmissiveTextureIsSrgbEXTProperty(false);
+        fx.setEncodeOutputToSrgbEXTProperty(false);
         fx.setWorldProperty(Matrix::getIdentityProperty());
         fx.setViewProperty(Matrix::CreateLookAt(Vector3(0.0f, 0.0f, 3.0f), Vector3::Zero, Vector3(0.0f, 1.0f, 0.0f)));
         fx.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(MathHelper::PiOver4, 1.0f, 0.1f, 100.0f));

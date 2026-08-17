@@ -1093,9 +1093,8 @@ namespace CNA::Internal::Renderers::OpenGLES1
 
     std::unique_ptr<IIndexBufferRenderer> OpenGLES1Renderer::CreateIndexBuffer32(int index_capacity)
     {
-        // GL_UNSIGNED_INT indices are not ES 1.1 core. Without the extension, fall back to the base
-        // class's 16-bit delegation rather than silently handing back a buffer that cannot address
-        // what the caller asked for.
+        // GL_UNSIGNED_INT indices are not ES 1.1 core. The base implementation rejects the
+        // request explicitly; it must never manufacture a 16-bit buffer for a 32-bit declaration.
         if (!elementIndexUintSupported_)
             return IGraphicsRenderer::CreateIndexBuffer32(index_capacity);
 
@@ -2513,7 +2512,12 @@ namespace CNA::Internal::Renderers::OpenGLES1
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_OPENGLES1
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace OpenGLES1 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> OpenGLES1::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<OpenGLES1::OpenGLES1Renderer>(args);
     }

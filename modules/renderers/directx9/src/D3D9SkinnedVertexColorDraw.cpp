@@ -49,8 +49,10 @@ namespace CNA::Internal::Renderers::DirectX9
             case PrimitiveType::TriangleStrip: return D3DPT_TRIANGLESTRIP;
             case PrimitiveType::LineList:      return D3DPT_LINELIST;
             case PrimitiveType::LineStrip:     return D3DPT_LINESTRIP;
+            case PrimitiveType::PointListEXT:  return D3DPT_POINTLIST;
             }
-            return D3DPT_TRIANGLELIST;
+            throw std::runtime_error(
+                "DirectX9 skinned vertex-color draw does not support the requested PrimitiveType value");
         }
 
         std::string FormatHr(HRESULT hr)

@@ -1,0 +1,301 @@
+// SPDX-License-Identifier: MS-PL
+
+#include "CnaCApiDetail.hpp"
+
+#include "Microsoft/Xna/Framework/GamerServices/GameUpdateRequiredException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/NetworkException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.hpp"
+#include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
+#include "System/IO/FileNotFoundException.hpp"
+
+#include <cstdint>
+#include <filesystem>
+#include <limits>
+#include <stdexcept>
+#include <string>
+#include <system_error>
+
+namespace {
+
+[[nodiscard]] bool HasLastError(
+    const CNA_Result result,
+    const CNA_ErrorCategory category,
+    const std::string_view message)
+{
+    const CNA::C::Detail::LastError& error = CNA::C::Detail::GetLastError();
+    return error.result == result && error.category == category && error.message == message;
+}
+
+} // namespace
+
+int main()
+{
+    using namespace CNA::C::Detail;
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw std::invalid_argument("argument failure");
+        }) != CNA_RESULT_INVALID_ARGUMENT ||
+        !HasLastError(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "argument failure")) {
+        return 1;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw std::bad_alloc();
+        }) != CNA_RESULT_OUT_OF_MEMORY ||
+        !HasLastError(
+            CNA_RESULT_OUT_OF_MEMORY,
+            CNA_ERROR_CATEGORY_MEMORY,
+            "Native allocation failed.")) {
+        return 2;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw System::NotSupportedException("unsupported operation");
+        }) != CNA_RESULT_NOT_SUPPORTED ||
+        !HasLastError(
+            CNA_RESULT_NOT_SUPPORTED,
+            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            "unsupported operation")) {
+        return 3;
+    }
+
+    SetLastError(
+        CNA_RESULT_INTERNAL,
+        CNA_ERROR_CATEGORY_INTERNAL,
+        "boundary diagnostic");
+    CNA_ErrorInfo errorInfo = {
+        sizeof(CNA_ErrorInfo),
+        UINT32_C(1),
+        CNA_RESULT_SUCCESS,
+        CNA_ERROR_CATEGORY_NONE,
+        0U
+    };
+    char message[19] = {};
+    uint64_t requiredBytes = 0U;
+    if (cna_error_get_last_info(&errorInfo) != CNA_RESULT_SUCCESS ||
+        errorInfo.result != CNA_RESULT_INTERNAL ||
+        errorInfo.category != CNA_ERROR_CATEGORY_INTERNAL ||
+        errorInfo.message_byte_length != 19U ||
+        cna_error_copy_last_message(message, 18U, &requiredBytes) != CNA_RESULT_BUFFER_TOO_SMALL ||
+        requiredBytes != 19U || message[0] != '\0' ||
+        cna_error_copy_last_message(message, sizeof(message), &requiredBytes) != CNA_RESULT_SUCCESS ||
+        requiredBytes != 19U || std::string_view(message, requiredBytes) != "boundary diagnostic") {
+        return 4;
+    }
+
+    const char validUtf8[] = "CNA \xF0\x9F\x8E\xAE";
+    const CNA_StringView valid = {validUtf8, sizeof(validUtf8) - 1U};
+    std::string copied;
+    if (ValidateStringView(valid, true) != CNA_RESULT_SUCCESS ||
+        CopyStringView(valid, true, &copied) != CNA_RESULT_SUCCESS ||
+        copied != validUtf8) {
+        return 5;
+    }
+
+    const char overlong[] = "\xC0\x80";
+    const CNA_StringView invalid = {overlong, sizeof(overlong) - 1U};
+    if (ValidateStringView(invalid, false) != CNA_RESULT_ENCODING ||
+        ValidateStringView({nullptr, 1U}, false) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 6;
+    }
+
+    const char embeddedNul[] = {'a', '\0', 'b'};
+    if (ValidateStringView({embeddedNul, sizeof(embeddedNul)}, true) != CNA_RESULT_ENCODING ||
+        ValidateStringView({embeddedNul, sizeof(embeddedNul)}, false) != CNA_RESULT_SUCCESS) {
+        return 7;
+    }
+
+    std::size_t byteCount = 0U;
+    const uint32_t values[3] = {0U, 0U, 0U};
+    if (CheckedElementByteCount(values, 3U, sizeof(uint32_t), &byteCount) != CNA_RESULT_SUCCESS ||
+        byteCount != sizeof(values) ||
+        CheckedElementByteCount(nullptr, 1U, sizeof(uint32_t), &byteCount) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        CheckedElementByteCount(nullptr, 0U, sizeof(uint32_t), &byteCount) !=
+            CNA_RESULT_SUCCESS ||
+        CheckedElementByteCount(
+            values,
+            std::numeric_limits<uint64_t>::max(),
+            2U,
+            &byteCount) != CNA_RESULT_OVERFLOW) {
+        return 8;
+    }
+
+    // Canonical graphics-device failures must not fall through to the generic internal arm.
+    using Microsoft::Xna::Framework::Graphics::DeviceLostException;
+    using Microsoft::Xna::Framework::Graphics::DeviceNotResetException;
+    using Microsoft::Xna::Framework::Graphics::NoSuitableGraphicsDeviceException;
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw DeviceLostException();
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(
+            CNA_RESULT_INVALID_STATE,
+            CNA_ERROR_CATEGORY_STATE,
+            "The graphics device was lost.")) {
+        return 9;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw DeviceNotResetException("device not reset");
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, "device not reset")) {
+        return 10;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw NoSuitableGraphicsDeviceException();
+        }) != CNA_RESULT_NOT_SUPPORTED ||
+        !HasLastError(
+            CNA_RESULT_NOT_SUPPORTED,
+            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            "No suitable graphics device found.")) {
+        return 11;
+    }
+
+    // File-facing failures must not land in the generic internal arm either: the storage, content
+    // and texture routes all reach real filesystem calls.
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw std::filesystem::filesystem_error(
+                "listing failed",
+                std::make_error_code(std::errc::no_such_file_or_directory));
+        }) != CNA_RESULT_IO ||
+        GetLastError().category != CNA_ERROR_CATEGORY_IO) {
+        return 12;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw System::IO::FileNotFoundException("missing asset");
+        }) != CNA_RESULT_IO ||
+        !HasLastError(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, "missing asset")) {
+        return 13;
+    }
+
+    using Microsoft::Xna::Framework::Storage::StorageDeviceNotConnectedException;
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw StorageDeviceNotConnectedException();
+        }) != CNA_RESULT_INVALID_STATE ||
+        GetLastError().category != CNA_ERROR_CATEGORY_STATE) {
+        return 14;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw StorageDeviceNotConnectedException("storage device removed");
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(
+            CNA_RESULT_INVALID_STATE,
+            CNA_ERROR_CATEGORY_STATE,
+            "storage device removed")) {
+        return 15;
+    }
+
+    using Microsoft::Xna::Framework::Net::NetworkSessionJoinException;
+    using Microsoft::Xna::Framework::Net::NetworkSessionJoinError;
+
+    // The join error lives on the exception object, which never crosses the ABI, so the firewall
+    // has to record it per thread alongside the usual result, category and diagnostic.
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw NetworkSessionJoinException(
+                "session is full",
+                NetworkSessionJoinError::SessionFull);
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, "session is full") ||
+        !GetLastError().hasJoinError ||
+        GetLastError().joinError !=
+            static_cast<std::uint32_t>(NetworkSessionJoinError::SessionFull)) {
+        return 16;
+    }
+
+    // Any later failure clears the record, so a stale join error can never be read back.
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw std::invalid_argument("unrelated failure");
+        }) != CNA_RESULT_INVALID_ARGUMENT ||
+        GetLastError().hasJoinError) {
+        return 17;
+    }
+
+    // A CNA-namespace failure -- the only canonical thrower today is getCurrentDesktopOS() off the
+    // desktop -- is a state failure, not a generic internal one.
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw CNA::CNAException("Current platform is not desktop.");
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(
+            CNA_RESULT_INVALID_STATE,
+            CNA_ERROR_CATEGORY_STATE,
+            "Current platform is not desktop.")) {
+        return 18;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw CNA::CNAException(std::string("core failure"));
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, "core failure")) {
+        return 19;
+    }
+
+    // The six gamer-services exceptions convert to four different answers, and the differences are
+    // the point: what the platform cannot do at all, what a resource's absence makes impossible right
+    // now, and what a native service failed at are three separate things a caller acts on differently.
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException(
+                "no gamer services");
+        }) != CNA_RESULT_NOT_SUPPORTED ||
+        !HasLastError(
+            CNA_RESULT_NOT_SUPPORTED,
+            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            "no gamer services")) {
+        return 20;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw Microsoft::Xna::Framework::GamerServices::GameUpdateRequiredException(
+                "update required");
+        }) != CNA_RESULT_NOT_SUPPORTED ||
+        !HasLastError(
+            CNA_RESULT_NOT_SUPPORTED,
+            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            "update required")) {
+        return 21;
+    }
+
+    // The derived arm must win over its own base, or an absent network would be indistinguishable
+    // from a network operation that failed while connected.
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw Microsoft::Xna::Framework::GamerServices::NetworkNotAvailableException(
+                "no network");
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, "no network")) {
+        return 22;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw Microsoft::Xna::Framework::GamerServices::NetworkException("network failure");
+        }) != CNA_RESULT_PLATFORM ||
+        !HasLastError(CNA_RESULT_PLATFORM, CNA_ERROR_CATEGORY_PLATFORM, "network failure")) {
+        return 23;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw Microsoft::Xna::Framework::GamerServices::GamerPrivilegeException("no privilege");
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, "no privilege")) {
+        return 24;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw Microsoft::Xna::Framework::GamerServices::GuideAlreadyVisibleException(
+                "guide is up");
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, "guide is up")) {
+        return 25;
+    }
+
+    return 0;
+}
