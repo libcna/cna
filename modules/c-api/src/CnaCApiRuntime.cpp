@@ -4,6 +4,7 @@
 #include "CNA/C/graphics.h"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiPlatformOverride.hpp"
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -732,6 +733,10 @@ CNA_Result cna_game_destroy(const CNA_Handle gameHandle)
         // observed its Disposing event. Drop the subscriptions before the device object itself
         // goes away with the game.
         CNA::C::Detail::ResetGraphicsDeviceAdapterState();
+        // CBIND-048: and the platform override with it. The game owns the platform the
+        // override forwards to, so one left installed past this point forwards into freed
+        // memory -- which is what the sanitized tree caught the first time this seam existed.
+        CNA::C::Detail::ResetPlatformOverride();
         // Same rule for the game's own events and its window's: the subscriber has just observed
         // the disposal, and the handler collections are about to go with the game.
         CNA::C::Detail::ResetGameEventRegistrationState();

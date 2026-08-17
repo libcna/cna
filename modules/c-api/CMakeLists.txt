@@ -58,6 +58,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiNetGamers.cpp
     src/CnaCApiNetSessions.cpp
     src/CnaCApiPackedVectors.cpp
+    src/CnaCApiPlatformOverride.cpp
     src/CnaCApiQuaternion.cpp
     src/CnaCApiRuntime.cpp
     src/CnaCApiTexture.cpp

@@ -477,12 +477,19 @@ static int validate_camera(const CNA_Handle game, const CNA_Handle graphics_devi
         return 0;
     }
 
-    /* A camera on this ABI's own backend starts closed with no frame at all. */
+    /* A camera on this ABI's own backend starts with no frame at all, and reports the platform's
+       permission-pending answer rather than "closed": since the platform separation a device that
+       is not open is never handed out, so nothing can report closed and the two identities that
+       say so are refused rather than silently changed into something else. */
     if (cna_camera_create_with_test_backend_ext(game, 0) != CNA_RESULT_INVALID_ARGUMENT ||
         cna_camera_create_with_test_backend_ext(game, &camera) != CNA_RESULT_SUCCESS ||
         camera == CNA_INVALID_HANDLE ||
         cna_camera_get_state_ext(camera, &state) != CNA_RESULT_SUCCESS ||
-        state != CNA_CAMERA_STATE_CLOSED ||
+        state != CNA_CAMERA_STATE_OPENING ||
+        cna_camera_set_test_state_ext(camera, CNA_CAMERA_STATE_CLOSED) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_camera_set_test_state_ext(camera, CNA_CAMERA_STATE_NOT_SUPPORTED) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
         cna_camera_get_frame_width_ext(camera, &value) != CNA_RESULT_SUCCESS || value != 0 ||
         cna_camera_get_frame_height_ext(camera, &value) != CNA_RESULT_SUCCESS || value != 0) {
         return 0;
@@ -538,10 +545,11 @@ static int validate_camera(const CNA_Handle game, const CNA_Handle graphics_devi
         cna_camera_try_acquire_frame_ext(camera, texture, 0) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
-    /* Clearing the frame closes the camera again, and having no frame is an ordinary false. */
+    /* Clearing the frame returns the camera to permission-pending, and having no frame is an
+       ordinary false. */
     if (cna_camera_set_test_frame_ext(camera, 0, 0, 0, UINT64_C(0)) != CNA_RESULT_SUCCESS ||
         cna_camera_get_state_ext(camera, &state) != CNA_RESULT_SUCCESS ||
-        state != CNA_CAMERA_STATE_CLOSED ||
+        state != CNA_CAMERA_STATE_OPENING ||
         cna_camera_try_acquire_frame_ext(camera, texture, &flag) != CNA_RESULT_SUCCESS ||
         flag != CNA_FALSE) {
         return 0;

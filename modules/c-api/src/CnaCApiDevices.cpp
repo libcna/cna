@@ -21,10 +21,10 @@
 #include "CNA/Devices/CameraPosition.hpp"
 #include "CNA/Devices/CameraState.hpp"
 #include "CNA/Devices/Clipboard.hpp"
-#include "CNA/Devices/Detail/ICameraBackend.hpp"
-#include "CNA/Devices/Detail/IFileDialogBackend.hpp"
-#include "CNA/Devices/Detail/IMessageBoxBackend.hpp"
-#include "CNA/Devices/Detail/ITrayBackend.hpp"
+#include "CnaCApiPlatformOverride.hpp"
+
+#include "CNA/Platform/IPlatformCamera.hpp"
+#include "CNA/Platform/IPlatformSystemServices.hpp"
 #include "CNA/Devices/DisplayInfo.hpp"
 #include "CNA/Devices/FileDialog.hpp"
 #include "CNA/Devices/FileDialogFilter.hpp"
@@ -232,35 +232,129 @@ struct MessageBoxTestState final {
     uint32_t lastButtonCount = 0U;
 };
 
-class TestMessageBoxBackend final : public CNA::Devices::Detail::IMessageBoxBackend {
+// The file dialog's recorded answer. Kept beside the message box's because the platform hands
+// out one dialogs service for both.
+struct FileDialogTestState final {
+    std::mutex mutex;
+    std::vector<std::string> results;
+};
+
+class TestDialogsService final : public CNA::Platform::IPlatformDialogs {
 public:
-    explicit TestMessageBoxBackend(std::shared_ptr<MessageBoxTestState> state)
-        : state_(std::move(state))
+    TestDialogsService(
+        std::shared_ptr<MessageBoxTestState> messageBoxState,
+        std::shared_ptr<FileDialogTestState> fileDialogState)
+        : messageBoxState_(std::move(messageBoxState))
+        , fileDialogState_(std::move(fileDialogState))
     {
     }
 
-    void ShowSimple(const MessageBoxType type, const std::string&, const std::string&) override
+    void SetMessageBoxState(std::shared_ptr<MessageBoxTestState> state)
     {
-        const std::lock_guard<std::mutex> lock(state_->mutex);
-        ++state_->simpleCalls;
-        state_->lastType = type;
+        messageBoxState_ = std::move(state);
     }
 
-    int Show(
-        const MessageBoxType type,
-        const std::string&,
-        const std::string&,
-        const std::vector<std::string>& buttonLabels) override
+    void SetFileDialogState(std::shared_ptr<FileDialogTestState> state)
     {
-        const std::lock_guard<std::mutex> lock(state_->mutex);
-        ++state_->choiceCalls;
-        state_->lastType = type;
-        state_->lastButtonCount = static_cast<uint32_t>(buttonLabels.size());
-        return state_->chosenButton;
+        fileDialogState_ = std::move(state);
+    }
+
+    [[nodiscard]] bool HasAnyState() const
+    {
+        return messageBoxState_ != nullptr || fileDialogState_ != nullptr;
+    }
+
+    void ShowMessageBox(
+        const CNA::Platform::MessageBoxSeverity severity,
+        const std::string&,
+        const std::string&,
+        CNA::Platform::IPlatformWindow*) override
+    {
+        if (messageBoxState_ == nullptr) {
+            return;
+        }
+        const std::lock_guard<std::mutex> lock(messageBoxState_->mutex);
+        ++messageBoxState_->simpleCalls;
+        messageBoxState_->lastType = ToMessageBoxType(severity);
+    }
+
+    [[nodiscard]] int ShowMessageBoxWithButtons(
+        const CNA::Platform::MessageBoxSeverity severity,
+        const std::string&,
+        const std::string&,
+        const std::vector<std::string>& buttons,
+        CNA::Platform::IPlatformWindow*) override
+    {
+        if (messageBoxState_ == nullptr) {
+            return 0;
+        }
+        const std::lock_guard<std::mutex> lock(messageBoxState_->mutex);
+        ++messageBoxState_->choiceCalls;
+        messageBoxState_->lastType = ToMessageBoxType(severity);
+        messageBoxState_->lastButtonCount = static_cast<uint32_t>(buttons.size());
+        return messageBoxState_->chosenButton;
+    }
+
+    void ShowOpenFileDialog(
+        CNA::Platform::FileDialogCallback onResult,
+        const std::vector<CNA::Platform::FileDialogFilter>&,
+        const std::string&,
+        bool,
+        CNA::Platform::IPlatformWindow*) override
+    {
+        Answer(std::move(onResult));
+    }
+
+    void ShowSaveFileDialog(
+        CNA::Platform::FileDialogCallback onResult,
+        const std::vector<CNA::Platform::FileDialogFilter>&,
+        const std::string&,
+        CNA::Platform::IPlatformWindow*) override
+    {
+        Answer(std::move(onResult));
+    }
+
+    void ShowOpenFolderDialog(
+        CNA::Platform::FileDialogCallback onResult,
+        const std::string&,
+        bool,
+        CNA::Platform::IPlatformWindow*) override
+    {
+        Answer(std::move(onResult));
     }
 
 private:
-    std::shared_ptr<MessageBoxTestState> state_;
+    // The platform reports severity where the canonical device surface reports a type; the two
+    // enumerate the same three answers, so the mapping is total and needs no fallback.
+    [[nodiscard]] static MessageBoxType ToMessageBoxType(
+        const CNA::Platform::MessageBoxSeverity severity)
+    {
+        switch (severity) {
+        case CNA::Platform::MessageBoxSeverity::Information:
+            return MessageBoxType::Information;
+        case CNA::Platform::MessageBoxSeverity::Warning:
+            return MessageBoxType::Warning;
+        default:
+            return MessageBoxType::Error;
+        }
+    }
+
+    // A real file dialog is asynchronous and driven by a person; this answers the callback before
+    // returning, with whatever result the switch was given.
+    void Answer(CNA::Platform::FileDialogCallback onResult)
+    {
+        std::vector<std::string> results;
+        if (fileDialogState_ != nullptr) {
+            const std::lock_guard<std::mutex> lock(fileDialogState_->mutex);
+            results = fileDialogState_->results;
+        }
+        if (onResult) {
+            onResult(results);
+        }
+    }
+
+    std::shared_ptr<MessageBoxTestState> messageBoxState_;
+    std::shared_ptr<FileDialogTestState> fileDialogState_;
 };
 
 std::mutex& MessageBoxTestMutex()
@@ -275,60 +369,7 @@ std::shared_ptr<MessageBoxTestState>& MessageBoxTestStorage()
     return state;
 }
 
-// A real file dialog is asynchronous and driven by a person; the test backend answers the callback
-// before returning, with whatever result the switch was given.
-struct FileDialogTestState final {
-    std::mutex mutex;
-    std::vector<std::string> results;
-};
 
-class TestFileDialogBackend final : public CNA::Devices::Detail::IFileDialogBackend {
-public:
-    explicit TestFileDialogBackend(std::shared_ptr<FileDialogTestState> state)
-        : state_(std::move(state))
-    {
-    }
-
-    void ShowOpenFile(
-        CNA::Devices::Detail::FileDialogResultCallback onResult,
-        const std::vector<FileDialogFilter>&,
-        const std::string&,
-        bool) override
-    {
-        Answer(std::move(onResult));
-    }
-
-    void ShowSaveFile(
-        CNA::Devices::Detail::FileDialogResultCallback onResult,
-        const std::vector<FileDialogFilter>&,
-        const std::string&) override
-    {
-        Answer(std::move(onResult));
-    }
-
-    void ShowOpenFolder(
-        CNA::Devices::Detail::FileDialogResultCallback onResult,
-        const std::string&,
-        bool) override
-    {
-        Answer(std::move(onResult));
-    }
-
-private:
-    void Answer(CNA::Devices::Detail::FileDialogResultCallback onResult)
-    {
-        std::vector<std::string> results;
-        {
-            const std::lock_guard<std::mutex> lock(state_->mutex);
-            results = state_->results;
-        }
-        if (onResult) {
-            onResult(results);
-        }
-    }
-
-    std::shared_ptr<FileDialogTestState> state_;
-};
 
 std::mutex& FileDialogTestMutex()
 {
@@ -349,7 +390,7 @@ struct TrayTestEntry final {
     bool checkable = false;
     bool checked = false;
     bool enabled = true;
-    CNA::Devices::Detail::TrayEntryClickCallback onClick;
+    CNA::Platform::TrayEntryClickCallback onClick;
 };
 
 struct TrayTestState final {
@@ -359,21 +400,35 @@ struct TrayTestState final {
     std::vector<TrayTestEntry> entries;
 };
 
-class TestTrayBackend final : public CNA::Devices::Detail::ITrayBackend {
+// The platform splits what used to be one tray backend in two: a service that creates an icon and
+// the icon itself. Destruction moved with it -- the old backend had an explicit Destroy(), the new
+// icon simply goes away -- so the recorded state is cleared from the icon's destructor.
+// One dialogs service backs both switches, because the platform hands out one. Each route sets or
+// clears its own half of the state; the service stays installed while either half is present.
+TestDialogsService& DialogsServiceInstance()
+{
+    static TestDialogsService instance(nullptr, nullptr);
+    return instance;
+}
+
+void RefreshDialogsOverride()
+{
+    if (DialogsServiceInstance().HasAnyState()) {
+        CNA::C::Detail::GetPlatformOverride().SetDialogs(&DialogsServiceInstance());
+        return;
+    }
+    CNA::C::Detail::GetPlatformOverride().SetDialogs(nullptr);
+    CNA::C::Detail::ReleasePlatformOverrideIfUnused();
+}
+
+class TestTrayIcon final : public CNA::Platform::IPlatformTrayIcon {
 public:
-    explicit TestTrayBackend(std::shared_ptr<TrayTestState> state)
+    explicit TestTrayIcon(std::shared_ptr<TrayTestState> state)
         : state_(std::move(state))
     {
     }
 
-    void Create(const std::string& tooltip) override
-    {
-        const std::lock_guard<std::mutex> lock(state_->mutex);
-        state_->created = true;
-        state_->tooltip = tooltip;
-    }
-
-    void Destroy() override
+    ~TestTrayIcon() override
     {
         const std::lock_guard<std::mutex> lock(state_->mutex);
         state_->created = false;
@@ -386,12 +441,12 @@ public:
         state_->tooltip = tooltip;
     }
 
-    std::size_t AddEntry(
+    [[nodiscard]] std::size_t AddEntry(
         const std::string& label,
         const bool checkable,
         const bool initiallyChecked,
         const bool initiallyEnabled,
-        CNA::Devices::Detail::TrayEntryClickCallback onClick) override
+        CNA::Platform::TrayEntryClickCallback onClick) override
     {
         const std::lock_guard<std::mutex> lock(state_->mutex);
         TrayTestEntry entry;
@@ -404,8 +459,6 @@ public:
         return state_->entries.size() - 1U;
     }
 
-    // Every entry mutator ignores an index past the last entry and every reader answers false for
-    // one, which is the platform backend's own behavior rather than a refusal invented here.
     void SetEntryLabel(const std::size_t index, const std::string& label) override
     {
         const std::lock_guard<std::mutex> lock(state_->mutex);
@@ -446,9 +499,34 @@ private:
     std::shared_ptr<TrayTestState> state_;
 };
 
+class TestTrayService final : public CNA::Platform::IPlatformTray {
+public:
+    explicit TestTrayService(std::shared_ptr<TrayTestState> state)
+        : state_(std::move(state))
+    {
+    }
+
+    [[nodiscard]] std::unique_ptr<CNA::Platform::IPlatformTrayIcon> CreateTray(
+        const std::string& tooltip) override
+    {
+        {
+            const std::lock_guard<std::mutex> lock(state_->mutex);
+            state_->created = true;
+            state_->tooltip = tooltip;
+        }
+        return std::make_unique<TestTrayIcon>(state_);
+    }
+
+private:
+    std::shared_ptr<TrayTestState> state_;
+};
+
 struct SystemTrayResource final {
     std::unique_ptr<SystemTray> value;
     std::shared_ptr<TrayTestState> testState;
+    // The fake service is installed on the platform override and must outlive the tray that reads
+    // it, so the handle owns it: destroying the tray resource is what takes it away.
+    std::unique_ptr<TestTrayService> testService;
 };
 
 [[nodiscard]] CNA_Result BorrowTray(
@@ -565,48 +643,90 @@ void DeliverFileDialogResult(
 // constructor argument, so this is the only path to a frame.
 struct CameraTestState final {
     std::mutex mutex;
-    CameraState state = CameraState::Closed;
+    // Opening, not Closed: since the platform separation an opened device reports
+    // permission-pending, and nothing can report closed any more.
+    CameraState state = CameraState::Opening;
     int width = 0;
     int height = 0;
     std::vector<std::uint8_t> rgba;
     bool hasFrame = false;
 };
 
-class TestCameraBackend final : public CNA::Devices::Detail::ICameraBackend {
+// The platform splits the camera in two as well: a provider that lists and opens devices, and the
+// opened device. Nothing this ABI is verified on has a real camera, so this is still the only path
+// to a frame -- it just arrives through the platform now rather than through a constructor.
+class TestCamera final : public CNA::Platform::IPlatformCamera {
 public:
-    explicit TestCameraBackend(std::shared_ptr<CameraTestState> state)
+    explicit TestCamera(std::shared_ptr<CameraTestState> state)
         : state_(std::move(state))
     {
     }
 
-    [[nodiscard]] CameraState GetState() override
+    [[nodiscard]] CNA::Platform::PlatformCameraState GetState() override
     {
         const std::lock_guard<std::mutex> lock(state_->mutex);
-        return state_->state;
+        switch (state_->state) {
+        case CameraState::Ready:
+            return CNA::Platform::PlatformCameraState::Ready;
+        case CameraState::Denied:
+            return CNA::Platform::PlatformCameraState::Denied;
+        case CameraState::Opening:
+            return CNA::Platform::PlatformCameraState::Opening;
+        default:
+            // The platform enumerates no "closed": a device that is not open is not handed out at
+            // all. Lost is its answer for one that was opened and cannot be used.
+            return CNA::Platform::PlatformCameraState::Lost;
+        }
     }
 
-    [[nodiscard]] int GetFrameWidth() const override
+    [[nodiscard]] int GetFrameWidth() override
     {
         const std::lock_guard<std::mutex> lock(state_->mutex);
         return state_->width;
     }
 
-    [[nodiscard]] int GetFrameHeight() const override
+    [[nodiscard]] int GetFrameHeight() override
     {
         const std::lock_guard<std::mutex> lock(state_->mutex);
         return state_->height;
     }
 
-    bool TryAcquireFrame(CNA::Devices::Detail::CameraFrame& outFrame) override
+    bool TryAcquireFrame(CNA::Platform::PlatformCameraFrame& outFrame) override
     {
         const std::lock_guard<std::mutex> lock(state_->mutex);
         if (!state_->hasFrame) {
             return false;
         }
-        outFrame.Width = state_->width;
-        outFrame.Height = state_->height;
-        outFrame.RgbaPixels = state_->rgba;
+        outFrame.width = state_->width;
+        outFrame.height = state_->height;
+        outFrame.rgbaPixels = state_->rgba;
         return true;
+    }
+
+private:
+    std::shared_ptr<CameraTestState> state_;
+};
+
+class TestCameraProvider final : public CNA::Platform::IPlatformCameraProvider {
+public:
+    explicit TestCameraProvider(std::shared_ptr<CameraTestState> state)
+        : state_(std::move(state))
+    {
+    }
+
+    [[nodiscard]] std::vector<CNA::Platform::PlatformCameraInfo> GetCameras() const override
+    {
+        CNA::Platform::PlatformCameraInfo info;
+        info.id = 1U;
+        info.name = "CNA C API test camera";
+        info.position = CNA::Platform::PlatformCameraPosition::Unknown;
+        return {info};
+    }
+
+    [[nodiscard]] std::unique_ptr<CNA::Platform::IPlatformCamera> OpenCamera(
+        const CNA::Platform::CameraId) override
+    {
+        return std::make_unique<TestCamera>(state_);
     }
 
 private:
@@ -616,6 +736,8 @@ private:
 struct CameraResource final {
     std::unique_ptr<Camera> value;
     std::shared_ptr<CameraTestState> testState;
+    // Same ownership rule as the tray: the provider lives as long as the camera handle does.
+    std::unique_ptr<TestCameraProvider> testService;
 };
 
 [[nodiscard]] CNA_Result BorrowCamera(
@@ -1253,14 +1375,16 @@ CNA_Result cna_message_box_set_test_backend_ext(
             return result;
         }
         if (installed == CNA_FALSE) {
-            MessageBox::SetBackendForTesting(nullptr);
+            DialogsServiceInstance().SetMessageBoxState(nullptr);
+            RefreshDialogsOverride();
             const std::lock_guard<std::mutex> lock(MessageBoxTestMutex());
             MessageBoxTestStorage().reset();
             return CNA_RESULT_SUCCESS;
         }
         auto state = std::make_shared<MessageBoxTestState>();
         state->chosenButton = static_cast<int>(chosenButton);
-        MessageBox::SetBackendForTesting(std::make_unique<TestMessageBoxBackend>(state));
+        DialogsServiceInstance().SetMessageBoxState(state);
+        RefreshDialogsOverride();
         const std::lock_guard<std::mutex> lock(MessageBoxTestMutex());
         MessageBoxTestStorage() = std::move(state);
         return CNA_RESULT_SUCCESS;
@@ -1444,7 +1568,8 @@ CNA_Result cna_file_dialog_set_test_backend_ext(
             return result;
         }
         if (installed == CNA_FALSE) {
-            FileDialog::SetBackendForTesting(nullptr);
+            DialogsServiceInstance().SetFileDialogState(nullptr);
+            RefreshDialogsOverride();
             const std::lock_guard<std::mutex> lock(FileDialogTestMutex());
             FileDialogTestStorage().reset();
             return CNA_RESULT_SUCCESS;
@@ -1462,7 +1587,8 @@ CNA_Result cna_file_dialog_set_test_backend_ext(
             }
             state->results.push_back(std::move(path));
         }
-        FileDialog::SetBackendForTesting(std::make_unique<TestFileDialogBackend>(state));
+        DialogsServiceInstance().SetFileDialogState(state);
+        RefreshDialogsOverride();
         const std::lock_guard<std::mutex> lock(FileDialogTestMutex());
         FileDialogTestStorage() = std::move(state);
         return CNA_RESULT_SUCCESS;
@@ -1544,9 +1670,12 @@ CNA_Result cna_system_tray_create_with_test_backend_ext(
         }
         auto resource = std::make_shared<SystemTrayResource>();
         resource->testState = std::make_shared<TrayTestState>();
-        resource->value = std::make_unique<SystemTray>(
-            tooltipText,
-            std::make_unique<TestTrayBackend>(resource->testState));
+        // The tray service comes from the platform now, so the fake is installed there and the
+        // SystemTray is constructed the ordinary way -- which is also what makes this test exercise
+        // the real construction path rather than a special one.
+        resource->testService = std::make_unique<TestTrayService>(resource->testState);
+        CNA::C::Detail::GetPlatformOverride().SetTray(resource->testService.get());
+        resource->value = std::make_unique<SystemTray>(tooltipText);
         const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
             ObjectKind::SystemTray,
             std::move(resource),
@@ -1607,7 +1736,7 @@ CNA_Result cna_system_tray_add_entry(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        CNA::Devices::Detail::TrayEntryClickCallback handler;
+        CNA::Platform::TrayEntryClickCallback handler;
         if (onClick != nullptr) {
             handler = [onClick, context]() { onClick(context); };
         }
@@ -1730,7 +1859,7 @@ CNA_Result cna_system_tray_click_entry_for_tests_ext(
         if (!resource->testState) {
             return NoTestBackend();
         }
-        CNA::Devices::Detail::TrayEntryClickCallback handler;
+        CNA::Platform::TrayEntryClickCallback handler;
         {
             const std::lock_guard<std::mutex> lock(resource->testState->mutex);
             if (index >= static_cast<uint64_t>(resource->testState->entries.size())) {
@@ -1900,8 +2029,9 @@ CNA_Result cna_camera_create_with_test_backend_ext(
         }
         auto resource = std::make_shared<CameraResource>();
         resource->testState = std::make_shared<CameraTestState>();
-        resource->value =
-            std::make_unique<Camera>(std::make_unique<TestCameraBackend>(resource->testState));
+        resource->testService = std::make_unique<TestCameraProvider>(resource->testState);
+        CNA::C::Detail::GetPlatformOverride().SetCamera(resource->testService.get());
+        resource->value = std::make_unique<Camera>();
         const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
             ObjectKind::Camera,
             std::move(resource),
@@ -2002,6 +2132,15 @@ CNA_Result cna_camera_set_test_state_ext(
         if (state > CNA_CAMERA_STATE_MAXIMUM) {
             return InvalidInput("The camera state is not a defined identity.");
         }
+        // Two identities are defined but no longer reachable for a camera the platform opened: a
+        // device that is not open is not handed out at all, so nothing can report closed, and
+        // "not supported" is what an absent device answers rather than a state one can be put in.
+        // Refusing them keeps this route honest -- every state it accepts reads back unchanged.
+        if (state == CNA_CAMERA_STATE_CLOSED || state == CNA_CAMERA_STATE_NOT_SUPPORTED) {
+            return InvalidInput(
+                "The camera state cannot be set to closed or not-supported: the platform reports "
+                "neither for a device it opened.");
+        }
         std::shared_ptr<CameraResource> resource;
         if (const CNA_Result result = BorrowCamera(camera, &resource);
             result != CNA_RESULT_SUCCESS) {
@@ -2038,7 +2177,7 @@ CNA_Result cna_camera_set_test_frame_ext(
             resource->testState->rgba.clear();
             resource->testState->width = 0;
             resource->testState->height = 0;
-            resource->testState->state = CameraState::Closed;
+            resource->testState->state = CameraState::Opening;
             return CNA_RESULT_SUCCESS;
         }
         if (width < 0 || height < 0) {
