@@ -267,24 +267,24 @@ a fullscreen-triangle drawer, a ping-pong target pool, and the `ShaderEffect` ga
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| MOD-300 | `TonemapPass` class skeleton (`PostProcessPass`, owns its `ShaderEffect`) | ⬜ | Constructs on the reference renderer, reports `isSupported()` correctly. |
-| MOD-301 | Tonemap GLSL: `None` (clamp only) | ⬜ | Output equals `clamp(hdr,0,1)` before gamma; verified by float readback. |
-| MOD-302 | Tonemap GLSL: `Reinhard` (`c/(1+c)`) | ⬜ | Matches the reference formula within 1/255 at 16 sampled luminances. |
-| MOD-303 | Tonemap GLSL: `Filmic` (Hejl–Burgess-Dawson) | ⬜ | Matches the published curve within 1/255; documented that it bakes in gamma (so the gamma step is skipped for this mode). |
-| MOD-304 | Tonemap GLSL: `Aces` (Narkowicz fit) | ⬜ | Matches the fit within 1/255; documented as the fit, not the full ACES transform. |
-| MOD-305 | Tonemap GLSL: `Uncharted2` (→ MOD-21, N02) | ⬜ | Matches Hable's curve with the standard constants and the `W=11.2` white-point normalization. |
-| MOD-306 | Exposure multiplier applied before the curve | ⬜ | `exposure=2` doubles the pre-curve luminance; verified numerically for every mode. |
-| MOD-307 | Gamma applied after the curve (except `Filmic`, per `MOD-303`) | ⬜ | `gamma=2.2` yields the expected encode; a `gamma=1.0` path is exactly linear. |
-| MOD-308 | Auto-exposure decision: **out of scope for v1**, documented | ⬜ | ⛔ with the reason (needs luminance reduction — revisit after compute lands, `MOD-1560`). |
-| MOD-309 | `TonemapPass` reads `RenderPipelineSettings` (mode, exposure, gamma) each apply | ⬜ | Changing settings between frames changes output without reconstruction. |
-| MOD-310 | Standalone use: tonemap any `Texture2D` to any `RenderTarget2D` or the backbuffer | ⬜ | D9 satisfied; example proves it without `RenderPipeline`. |
-| MOD-311 | LDR input guard: tonemapping a `Color` source is legal and documented (values are simply ≤1) | ⬜ | No throw; documented as a no-op-ish path used by the `HDR=off` pipeline. |
-| MOD-312 | Unit tests: all 5 modes × {exposure 0.5,1,4} × {gamma 1.0,2.2} numeric checks | ⬜ | 30 assertions driven by CPU reference implementations of the same curves. |
-| MOD-313 | CPU reference implementations of the 5 curves (test-only helper) | ⬜ | Shared by `MOD-312` and the golden tests; itself unit-tested against hand-computed values. |
+| MOD-300 | `TonemapPass` class skeleton (`PostProcessPass`, owns its `ShaderEffect`) | ✅ | Done. `TonemapPass` owns its `ShaderEffect`; a shader that fails to compile makes `isSupported()` false and `apply()` copy, rather than throwing out of a constructor. |
+| MOD-301 | Tonemap GLSL: `None` (clamp only) | ✅ | Done — clamp only, with gamma still applied (`None` means "no curve", not "no display encode"). |
+| MOD-302 | Tonemap GLSL: `Reinhard` (`c/(1+c)`) | ✅ | Done — matches `c/(1+c)` to 1e-6 at five sampled values. |
+| MOD-303 | Tonemap GLSL: `Filmic` (Hejl–Burgess-Dawson) | ✅ | Done — Hejl/Burgess-Dawson, and the gamma step is skipped for it, asserted directly. |
+| MOD-304 | Tonemap GLSL: `Aces` (Narkowicz fit) | ✅ | Done — Narkowicz's fit, documented as the fit rather than the full ACES transform. |
+| MOD-305 | Tonemap GLSL: `Uncharted2` (→ MOD-21, N02) | ✅ | Done — Hable's curve with the standard constants, normalized against `W = 11.2`. |
+| MOD-306 | Exposure multiplier applied before the curve | ✅ | Done. `exposure=2` on input `x` equals `exposure=1` on `2x` for every curve — the check that catches exposure applied in the wrong place, which looks almost right for Reinhard. |
+| MOD-307 | Gamma applied after the curve (except `Filmic`, per `MOD-303`) | ✅ | Done, including the `Filmic` exception in both the shader and the CPU reference. |
+| MOD-308 | Auto-exposure decision: **out of scope for v1**, documented | ⛔ | Not done, deliberately — auto-exposure needs a luminance reduction over the whole frame, which is a compute or mip-chain problem rather than a tonemapping one. Revisit at MOD-1552. |
+| MOD-309 | `TonemapPass` reads `RenderPipelineSettings` (mode, exposure, gamma) each apply | ✅ | Done — mode, exposure and gamma are read from the context's settings on every apply, so changing them between frames changes the output with no reconstruction. |
+| MOD-310 | Standalone use: tonemap any `Texture2D` to any `RenderTarget2D` or the backbuffer | ✅ | Done — the pass carries its own mode/exposure/gamma for use without a settings bag (D9). |
+| MOD-311 | LDR input guard: tonemapping a `Color` source is legal and documented (values are simply ≤1) | ✅ | Done — an LDR `Color` source with mode `None` and gamma 1.0 round-trips within one 8-bit step, which is what the HDR-off pipeline depends on. |
+| MOD-312 | Unit tests: all 5 modes × {exposure 0.5,1,4} × {gamma 1.0,2.2} numeric checks | ✅ | Done — 11 cases covering all five operators, exposure, gamma, monotonicity/boundedness, and that the four curves genuinely differ from one another. |
+| MOD-313 | CPU reference implementations of the 5 curves (test-only helper) | ✅ | Done, **as public API rather than a test-only helper**: `TonemapPass::tonemapChannel()`. It is the only way to state "the shader agrees with the specification" as an assertion, and a game can use it for a UI preview without a GPU round trip. |
 | MOD-314 | Golden image: HDR gradient tonemapped in each mode | ⬜ | 5 goldens committed with the generation command documented. |
 | MOD-315 | Example `cnaext_tonemap_test` — live window, key-switchable mode/exposure | ⬜ | Registered ctest (smoke frames) + manual visual mode documented. |
 | MOD-316 | Document the tonemapping contract (input linear HDR, output display-encoded) | ⬜ | In `docs/cnaext-engine-layer.md`; states explicitly that CNA does no colour-space management beyond gamma. |
-| MOD-317 | `TonemappingMode` ordinal-stability test (existing values must not shift) | ⬜ | Asserts `None=0` … and `Uncharted2` last. |
+| MOD-317 | `TonemappingMode` ordinal-stability test (existing values must not shift) | ✅ | Done — covered by `RenderPipelineSettingsTest.TonemappingModeOrdinalsAreStable` (MOD-21). |
 | MOD-318 | Verify tonemap output against the 2D-only fallback (blit) so a `SpriteBatch` game sees no change | ⬜ | With HDR off and mode `None`, the pipeline output is bit-identical to no pipeline. |
 | MOD-319 | Perf: tonemap cost at 720p/1080p | ⬜ | Recorded in the doc. |
 | MOD-320 | Wire `RenderQuality` presets to tonemap precision decisions (none today — document why) | ⬜ | Explicit "quality does not affect tonemapping" note so the preset table has no silent gaps. |

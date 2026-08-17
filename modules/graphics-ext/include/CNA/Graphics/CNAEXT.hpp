@@ -33,6 +33,7 @@
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
 #include "CNA/Graphics/RenderTargetPool.hpp"
+#include "CNA/Graphics/TonemapPass.hpp"
 
 // ---- Materials -----------------------------------------------------------------------------
 #include "CNA/Graphics/PbrMaterial.hpp"
