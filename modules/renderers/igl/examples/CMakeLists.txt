@@ -157,4 +157,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
         COMMAND cna_test_igl_spritebatch_shadereffect
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # IGL-22/IGL-55: MRT at the full 4-slot count.
+    cna_igl_test(cna_test_igl_mrt4 igl_mrt4_test.cpp)
+    cna_register_renderer_test(NAME Igl_Mrt4 COMMAND cna_test_igl_mrt4
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

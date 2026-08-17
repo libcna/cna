@@ -26,7 +26,7 @@ custom `ShaderEffect`).
 |-------|----------------|-------|
 | A | Identity registration and build integration | ✅ verified (OpenGL/GLX) |
 | B | Device bring-up and presentation | ✅ verified (OpenGL/GLX) |
-| C | Resources (textures, buffers, targets) | 🔶 `Texture2D`/`RenderTarget2D`/depth/`RenderTarget2D.GetData` (`Igl_RenderTarget`), 2-slot MRT (`Igl_Mrt`), `TextureCube`/`RenderTargetCube` (`Igl_EnvironmentMapEffect`/`Igl_RenderTargetCube`) and `Texture3D` (`Igl_ShaderEffectTexture3D`) verified; back-buffer readback beyond the smoke test's own use, and MRT beyond 2 of up to 4 slots, remain untested |
+| C | Resources (textures, buffers, targets) | 🔶 `Texture2D`/`RenderTarget2D`/depth/`RenderTarget2D.GetData` (`Igl_RenderTarget`), full 2- and 4-slot MRT (`Igl_Mrt`/`Igl_Mrt4`), `TextureCube`/`RenderTargetCube` (`Igl_EnvironmentMapEffect`/`Igl_RenderTargetCube`) and `Texture3D` (`Igl_ShaderEffectTexture3D`) verified; back-buffer readback beyond the smoke test's own use, and the cube-face-in-a-multi-target-set refuse path, remain untested |
 | D | 2D pipeline (`SpriteBatch`) | ✅ verified (`Igl_2D`) |
 | E | 3D pipeline and stock effects | 🔶 every stock effect (`BasicEffect` through `PbrEffect`, plus fog, stencil, MSAA and instancing) now has at least one verified test (`Igl_3D`, `Igl_AlphaTestEffect`, `Igl_DualTextureEffect`, `Igl_Fog`, `Igl_Stencil`, `Igl_Msaa`, `Igl_EnvironmentMapEffect`, `Igl_SkinnedEffect`, `Igl_PbrEffect`, `Igl_Instancing`); each is a single scenario, not a combinatorial battery (see IGL-55) |
 | F | Custom `ShaderEffect` | 🔶 core compile/uniform/texture path verified (OpenGL/GLX, `Igl_ShaderEffectTexture3D`) after fixing a real texture-binding bug; `SpriteBatch.Begin(effect)` now also verified end-to-end (`Igl_SpriteBatchShaderEffect`); 2D/cube custom textures beyond the 3D volume-texture case share the fix but have no dedicated test yet |
@@ -119,7 +119,7 @@ Legend: ✅ done and verified · ✍️ code written, not yet compiled · 🔶 p
 | IGL-19 | Dynamic buffer pool | ✍️ | 3-frame ring for `SpriteBatch`/`DrawUser*`/uniforms |
 | IGL-20 | `RenderTarget2D` | 🔶 | colour + optional depth/stencil, real MSAA with an IGL resolve attachment, mip regeneration after each pass, `GetData` via `copyBytesColorAttachment`. Colour+depth path verified by `Igl_RenderTarget`; the real-MSAA path was verified this session by `igl_msaa_test.cpp` (`Igl_Msaa`) -- and found a genuine bug on the way (see IGL-15's note). Mip regeneration remains ✍️ |
 | IGL-21 | `RenderTargetCube` | 🔶 | one shared cube image + one shared depth buffer (FNA's own shape), six per-face framebuffers. Verified this session (`Igl_RenderTargetCube`) and found a real bug on the way: `IglRenderTargetCubeRenderer::GetData()` built its `igl::TextureRangeDesc` with the plain `new2D(x, y, w, h)` constructor, which carries no face index -- unlike `SetData()`, which already used the face-aware `newCubeFace(...)`. Since every face's framebuffer attaches the SAME shared cube colour image (there is nothing per-framebuffer to distinguish which face a read means), every `GetData()` call silently read face 0 (PositiveX) regardless of which face was actually requested -- a real test with two differently-cleared faces (magenta on PositiveX, cyan on PositiveY) read PositiveX's colour back for BOTH faces. Fixed by switching to `newCubeFace(x, y, w, h, face)`, matching `SetData()`'s own already-correct pattern |
-| IGL-22 | MRT | 🔶 | 2–4 `RenderTarget2D` slots; a cube face in a multi-target set is refused by name. `igl_mrt_test.cpp` (`Igl_Mrt`) verified the 2-slot case: a single `BasicEffect` draw with 2 `RenderTarget2D`s bound genuinely reaches both simultaneously (not just the first slot), and releasing the set restores the back buffer untouched -- 3/4 slots and the refuse-a-cube-face path remain ✍️ |
+| IGL-22 | MRT | 🔶 | 2–4 `RenderTarget2D` slots; a cube face in a multi-target set is refused by name. `igl_mrt_test.cpp` (`Igl_Mrt`) verified the 2-slot case: a single `BasicEffect` draw with 2 `RenderTarget2D`s bound genuinely reaches both simultaneously (not just the first slot), and releasing the set restores the back buffer untouched. The full 4-slot count (`igl::IGL_COLOR_ATTACHMENTS_MAX`) is now also verified (`igl_mrt4_test.cpp`, `Igl_Mrt4`): all 4 simultaneously bound `RenderTarget2D`s receive the same draw's colour, and releasing the set again restores the back buffer -- rules out an off-by-one in the attachment-count plumbing silently dropping a slot beyond 2. The refuse-a-cube-face-in-a-multi-target-set path remains ✍️ |
 | IGL-23 | Back-buffer readback | ✍️ | `ReadBackbuffer` through the swap framebuffer, presentation-rect aware, nearest-sampled |
 | IGL-24 | Render-target orientation | ✍️ | design decision 6; `igl_rendertarget_test.cpp` is the discriminating test |
 
@@ -281,7 +281,7 @@ modules/renderers/igl/
         igl_pbreffect_test.cpp,igl_rendertargetcube_test.cpp,igl_shadereffect_texture3d_test.cpp,
         igl_instancing_test.cpp,igl_skinnedeffect_translation_bone_test.cpp,
         igl_environmentmapeffect_fresnel_test.cpp,igl_pbreffect_maps_test.cpp,
-        igl_spritebatch_shadereffect_test.cpp}
+        igl_spritebatch_shadereffect_test.cpp,igl_mrt4_test.cpp}
     tests/CNA/Internal/Renderers/Igl/IglRendererSelectionTests.cpp
 docs/igl-renderer.md
 plan_igl.md
