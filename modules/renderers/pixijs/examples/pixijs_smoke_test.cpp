@@ -16,6 +16,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 
 #include "CNA/Internal/Renderers/PixiJs/PixiJsRenderer.hpp"
 
@@ -28,7 +29,7 @@ using namespace CNA::Internal::Renderers::PixiJs;
 
 namespace
 {
-    constexpr int kExpectedChecks = 15;
+    constexpr int kExpectedChecks = 16;
 }
 
 class PixiJsSmokeTest : public Game
@@ -37,6 +38,7 @@ class PixiJsSmokeTest : public Game
     std::unique_ptr<SpriteBatch> spriteBatch_;
     std::unique_ptr<Texture2D> texture_;
     std::unique_ptr<Texture2D> semiTransparentTexture_;
+    std::unique_ptr<SpriteFont> font_;
     int frame_ = 0;
     int passCount_ = 0;
     int result_ = 1;
@@ -62,6 +64,26 @@ protected:
             Texture2D::CreateFromPixels(getGraphicsDeviceProperty(), 1, 1, std::vector<std::uint8_t>{
                 255, 0, 0, 128,
             }));
+
+        // plan_pixijs.md PIXIJS-60: a one-glyph SpriteFont ('A', a 4x4 fully-opaque atlas cell, no
+        // cropping offset, no bearing) -- same fixture htmldom_smoke_test.cpp's own HTMLDOM-38 uses
+        // -- enough to exercise DrawString() through the shared SpriteFont/SpriteBatch layer and
+        // confirm (via a real pixel readback, not just DOM-property inspection) that it reaches
+        // this renderer with zero PixiJS-specific code.
+        std::vector<std::uint8_t> glyphPixels(4 * 4 * 4, 0);
+        for (std::size_t i = 0; i < glyphPixels.size(); i += 4)
+        {
+            glyphPixels[i] = 255; glyphPixels[i + 1] = 200; glyphPixels[i + 2] = 0; glyphPixels[i + 3] = 255;
+        }
+        Texture2D glyphAtlas = Texture2D::CreateFromPixels(getGraphicsDeviceProperty(), 4, 4, glyphPixels);
+        font_ = std::make_unique<SpriteFont>(
+            glyphAtlas,
+            std::vector<Rectangle>{Rectangle(0, 0, 4, 4)},
+            std::vector<Rectangle>{Rectangle(0, 0, 4, 4)},
+            std::vector<charcs>{u'A'},
+            /*lineSpacing=*/4, /*spacing=*/0.0f,
+            std::vector<Vector3>{Vector3(0.0f, 4.0f, 0.0f)},
+            std::nullopt);
     }
 
     void Draw(const GameTime&) override
@@ -79,7 +101,7 @@ protected:
             renderer.GetViewportSize(w, h);
             check(w > 0 && h > 0, "GetViewportSize() reports a positive logical size");
         }
-        else if (frame_ == 9)
+        else if (frame_ == 10)
         {
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             result_ = (passCount_ == kExpectedChecks) ? 0 : 1;
@@ -242,6 +264,19 @@ protected:
             dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
             check(pixels[1 * 64 + 3] == Color(255, 0, 0, 255),
                   "SetSamplerFilter(Point) keeps a texel-edge pixel unblended, unlike the LinearClamp default");
+        }
+        else if (frame_ == 9)
+        {
+            // plan_pixijs.md PIXIJS-60: DrawString needs no renderer-specific code -- every glyph
+            // funnels through the same Draw() overload frames 1-8 already pixel-verified.
+            spriteBatch_->Begin();
+            spriteBatch_->DrawString(*font_, "A", Vector2(2, 2), Color::White);
+            spriteBatch_->End();
+
+            std::vector<Color> pixels(64 * 64, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
+            check(pixels[2 * 64 + 2] == Color(255, 200, 0, 255),
+                  "DrawString renders the glyph's own atlas color at the requested position, with zero renderer-specific code");
         }
     }
 

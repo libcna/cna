@@ -184,18 +184,24 @@
 >   linear-filter edge-bleed case through this renderer's current per-draw-Texture-view architecture,
 >   never large-scale visible tiling (that would need a `PIXI.TilingSprite`-based draw path, out of
 >   this v1 scope). Result: **15/15**.
+> - **`SpriteFont`/`DrawString`** (PIXIJS-60, frame 9) was confirmed, not assumed: a one-glyph
+>   `SpriteFont` (the same fixture `htmldom_smoke_test.cpp`'s own `HTMLDOM-38` uses) drawn via
+>   `DrawString("A", ...)` produces the glyph's exact atlas color at the requested backbuffer
+>   position, on the first try, with zero PixiJS-specific code — confirmed both by this real pixel
+>   readback and by direct inspection of `SpriteBatch.cpp`: `DrawString`'s `pushSprite` funnels every
+>   glyph through the same `Draw(destRect, srcRect, color, rotation, origin, effects, layerDepth)`
+>   overload frames 1-8 already exercised. Result: **16/16**.
 >
-> **Bottom line, this update**: `cna_test_pixijs_smoke` now exercises and passes 15/15 real,
+> **Bottom line, this update**: `cna_test_pixijs_smoke` now exercises and passes 16/16 real,
 > pixel-verified checks in a real headless-Chromium browser, covering scaled draws, rotation, flip,
 > all 3 currently-mapped blend presets with correct compositing math, full render-target
-> bind/Clear/draw/readback round-tripping, and both sampler-state entry points. Five real,
-> independent bugs (`REMED-PIXIJS-1` through `REMED-PIXIJS-5`) were found and fixed this way, none of
-> them guessed — every fix was preceded by a standalone live-browser probe confirming the actual
-> PixiJS/WebGL behavior before the corresponding source change was written. Not yet exercised by any
-> test: `SpriteFont`/`DrawString` (PIXIJS-60), `SetTransformMatrix` with a non-identity matrix
-> (PIXIJS-45, still throws), direct `Texture2D::SetData` on a bound render target (PIXIJS-32, still
-> throws), mip level>0 policy (PIXIJS-31, still throws), and the generic-`BlendState` stretch goal
-> (PIXIJS-52).
+> bind/Clear/draw/readback round-tripping, both sampler-state entry points, and `SpriteFont`. Five
+> real, independent bugs (`REMED-PIXIJS-1` through `REMED-PIXIJS-5`) were found and fixed this way,
+> none of them guessed — every fix was preceded by a standalone live-browser probe confirming the
+> actual PixiJS/WebGL behavior before the corresponding source change was written. Not yet exercised
+> by any test: `SetTransformMatrix` with a non-identity matrix (PIXIJS-45, still throws), direct
+> `Texture2D::SetData` on a bound render target (PIXIJS-32, still throws), mip level>0 policy
+> (PIXIJS-31, still throws), and the generic-`BlendState` stretch goal (PIXIJS-52).
 
 ### What remains (in dependency order)
 
@@ -216,7 +222,7 @@
    this plan.
 5. ~~Run `cna_test_pixijs_smoke` in a real browser and get real pixel-level evidence.~~ **Done**
    (2026-08-17, via a headless Chromium driven by Playwright, not `emrun` specifically, but a real
-   browser regardless): now **15/15 PASS** (grew from the original 5/5 across several rounds this
+   browser regardless): now **16/16 PASS** (grew from the original 5/5 across several rounds this
    same day — see the dated update above for exactly which checks were added and which real bugs
    each one found).
 6. Once basic drawing works, close the still-open design/implementation gaps, roughly in this order:
@@ -245,8 +251,9 @@
      `Draw()` call (see the dated update above).
    - **PIXIJS-45** — `SetTransformMatrix` (non-identity `Begin(transformMatrix)`). **Still open**,
      still throws.
-   - **PIXIJS-60** — confirm `SpriteFont`/`DrawString` actually falls out of the `SpriteBatch` path
-     for free, the way it does on `CANVAS`/`HTML_DOM`. **Still open**, not yet attempted.
+   - ~~**PIXIJS-60** — confirm `SpriteFont`/`DrawString` actually falls out of the `SpriteBatch` path
+     for free.~~ **Verified**: a `DrawString` call renders the glyph's own atlas color at the
+     requested backbuffer position with zero renderer-specific code, same as `CANVAS`/`HTML_DOM`.
 7. **PIXIJS-52** (stretch) — fully generic `BlendState` support via custom PixiJS blend-mode
    registration, once the 4-preset path above is real and verified. **Still open.**
 8. **PIXIJS-80/82** — real GTest execution under Emscripten/`node` (blocked on step 4 above), and a
@@ -561,7 +568,7 @@ For every task: at minimum, get a real Emscripten toolchain in a later session a
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| PIXIJS-60 | Confirm (don't assume) that `SpriteFont`/`DrawString` needs no renderer-specific code beyond Phase P4's `Draw()` path, same discipline `CANVAS-50` used | ⬜ | |
+| PIXIJS-60 | Confirm (don't assume) that `SpriteFont`/`DrawString` needs no renderer-specific code beyond Phase P4's `Draw()` path, same discipline `CANVAS-50` used | ✅ | Verified 2026-08-17: a one-glyph `SpriteFont` (same fixture `htmldom_smoke_test.cpp`'s own `HTMLDOM-38` uses) drawn via `DrawString` produces the glyph's exact atlas color at the requested position in a real backbuffer readback (frame 9, 16/16). `SpriteBatch::DrawString`'s `pushSprite` funnels every glyph through the same `ISpriteBatchRenderer::Draw(destRect, srcRect, color, rotation, origin, effects, layerDepth)` overload already exercised by frames 1-8 -- confirmed by direct code-path inspection of `SpriteBatch.cpp`, not assumed by analogy. |
 
 ## Phase P7 — `ThrowNo3D` completeness and remaining defaults
 

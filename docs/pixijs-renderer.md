@@ -5,12 +5,13 @@
 `PIXIJS` was authored on **2026-08-16** per direct task instruction and is CNA's newest, most
 experimental renderer. On **2026-08-17** a real Emscripten toolchain build was performed for the
 first time, and later the same day `cna_test_pixijs_smoke` was run in a **real browser** (headless
-Chromium), starting at **5/5 PASS** and growing across several rounds the same day to **15/15
+Chromium), starting at **5/5 PASS** and growing across several rounds the same day to **16/16
 PASS**, covering scaled draws, rotation, `SpriteEffects` flip, all 3 currently-mapped blend presets,
-full render-target bind/Clear/draw/readback round-tripping, and both sampler-state entry points
-(`SetSamplerFilter`/`SetSamplerAddressMode`). Five real, independent bugs (`REMED-PIXIJS-1` through
-`REMED-PIXIJS-5`) were found and fixed along the way, each preceded by a standalone live-browser
-probe confirming the actual PixiJS/WebGL behavior before the fix was written. See `plan_pixijs.md`
+full render-target bind/Clear/draw/readback round-tripping, both sampler-state entry points
+(`SetSamplerFilter`/`SetSamplerAddressMode`), and `SpriteFont`/`DrawString`. Five real, independent
+bugs (`REMED-PIXIJS-1` through `REMED-PIXIJS-5`) were found and fixed along the way, each preceded by
+a standalone live-browser probe confirming the actual PixiJS/WebGL behavior before the fix was
+written. See `plan_pixijs.md`
 for the full task breakdown, design decisions, and this renderer's own honest, continuously-updated
 status legend -- what follows here is the real, current verification picture, not the original
 zero-verification starting point.
@@ -47,7 +48,7 @@ obtained copy (e.g. via `npm pack pixi.js@7.4.2`) was used instead; both paths a
   `ReferenceError: window is not defined` before any renderer-specific code runs, because Node has no
   real DOM.
 - **Run in a real browser (headless Chromium, driven by Playwright, `--use-gl=swiftshader`), served
-  over local HTTP: grew from `5/5 PASS` to `15/15 PASS` across several rounds on 2026-08-17.** The
+  over local HTTP: grew from `5/5 PASS` to `16/16 PASS` across several rounds on 2026-08-17.** The
   first attempt scored 3/5 -- window/renderer plumbing checks passed, but both pixel-value checks
   (`GetBackBufferData` after a scaled `Draw`) failed. Diagnosed live in the page (`page.evaluate()`
   dumping texture buffers, sprite state, and a manually-forced re-render + `extract.pixels()`), which
@@ -83,6 +84,10 @@ obtained copy (e.g. via `npm pack pixi.js@7.4.2`) was used instead; both paths a
   - **`SetSamplerFilter`/`SetSamplerAddressMode`** (frame 8, → 15/15): implemented for real, replacing
     the previous no-op stubs -- see "Important limitations" below for the real architectural boundary
     found while implementing wrap mode.
+  - **`SpriteFont`/`DrawString`** (frame 9, → 16/16): confirmed, not assumed, to need zero
+    renderer-specific code -- a one-glyph `SpriteFont` drawn via `DrawString` produced the glyph's
+    exact atlas color at the requested position on the first try, since `DrawString`'s `pushSprite`
+    funnels every glyph through the same `Draw()` overload frames 1-8 already exercised.
 - **Confirmed blocked, and confirmed NOT an emsdk-version issue**: the shared `CnaTests` target
   (built with `-sASYNCIFY=1` and `-fwasm-exceptions`) fails to link under Emscripten --
   `em++` itself warns `ASYNCIFY=1 is not compatible with -fwasm-exceptions`, and `wasm-opt --asyncify`
@@ -174,8 +179,6 @@ described as complete until that task actually closes with real verification:
   case through this renderer's per-draw-Texture-view architecture, never large-scale visible tiling
   within one `Draw()` call. A `PIXI.TilingSprite`-based draw path would be needed for that, and is out
   of this v1 scope.
-- **`SpriteFont` has not been confirmed to fall out for free** (`PIXIJS-60`) -- expected, by the
-  same reasoning `CANVAS-50` used, but not checked.
 - **MRT (`SetRenderTargets` with 2+ bindings) throws** -- a single `PIXI.Application`'s render
   pipeline targets one `RenderTexture` at a time in this v1 scope.
 - **No 3D pipeline in v1** -- a deliberate scope line, not (unlike `CANVAS`/`HTML_DOM`) a structural
