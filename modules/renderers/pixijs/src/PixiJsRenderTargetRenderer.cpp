@@ -75,6 +75,37 @@ EM_JS(int, CNA_PixiJs_ReadTexturePixels, (int id, int x, int y, int w, int h, ui
     }
     return 1;
 });
+
+// plan_pixijs.md PIXIJS-32: direct CPU pixel upload (Texture2D::SetData) into a bound
+// PIXI.RenderTexture. A RenderTexture has no synchronous CPU-buffer upload path the way a plain
+// buffer-backed texture does (PixiJsTextureRenderer.cpp's own BufferResource) -- so this builds a
+// throwaway buffer-backed texture from the given pixels, paints it over the whole target with
+// BLEND_MODES.NONE (a real unconditional overwrite, the exact same trick REMED-PIXIJS-5 already
+// proved correct for Clear()), then discards the temporary texture immediately. `clear: false`
+// matches every other render-texture-target render() call in this renderer (REMED-PIXIJS-5 parts
+// 3/4) -- harmless here since the sprite covers the target's full extent anyway.
+EM_JS(void, CNA_PixiJs_UpdateRenderTexturePixels, (int id, int width, int height, const uint8_t* rgba), {
+    const app = Module['cnaPixiApp'];
+    const entry = Module['cnaPixiTextures'] && Module['cnaPixiTextures'][id];
+    if (!app || !entry) { console.error('[CNA] PixiJS: UpdateRenderTexturePixels on unknown id', id); return; }
+    const buffer = new Uint8Array(HEAPU8.subarray(rgba, rgba + width * height * 4));
+    const tempBaseTexture = new PIXI.BaseTexture(new PIXI.BufferResource(buffer, { width: width, height: height }), {
+        width: width, height: height,
+        scaleMode: PIXI.SCALE_MODES.NEAREST,
+        alphaMode: PIXI.ALPHA_MODES.NPM, // REMED-PIXIJS-4's own finding -- UNPACK silently premultiplies.
+    });
+    const tempTexture = new PIXI.Texture(tempBaseTexture);
+    const sprite = new PIXI.Sprite(tempTexture);
+    sprite.anchor.set(0, 0);
+    sprite.position.set(0, 0);
+    sprite.blendMode = 20; // PIXI.BLEND_MODES.NONE -- unconditional overwrite, matches Opaque.
+    const container = new PIXI.Container();
+    container.addChild(sprite);
+    app.renderer.render(container, { renderTexture: entry.texture, clear: false });
+    sprite.destroy();
+    tempTexture.destroy();
+    tempBaseTexture.destroy(true);
+});
 #endif
 
 namespace CNA::Internal::Renderers::PixiJs
@@ -105,12 +136,12 @@ namespace CNA::Internal::Renderers::PixiJs
 #endif
     }
 
-    void PixiJsRenderTargetRenderer::UpdatePixels(const uint8_t*, int)
+    void PixiJsRenderTargetRenderer::UpdatePixels(const uint8_t* rgba, int /*stride*/)
     {
-        throw std::runtime_error(
-            "PixiJS: direct CPU pixel upload into a bound PIXI.RenderTexture is not yet "
-            "implemented (plan_pixijs.md PIXIJS-32's own doc comment) -- draw into this render "
-            "target via SpriteBatch instead of Texture2D::SetData.");
+        if (!rgba) return;
+#if defined(__EMSCRIPTEN__)
+        CNA_PixiJs_UpdateRenderTexturePixels(id_, width_, height_, rgba);
+#endif
     }
 
     void PixiJsRenderTargetRenderer::BindAsRenderTarget()

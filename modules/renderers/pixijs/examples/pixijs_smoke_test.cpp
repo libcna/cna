@@ -29,7 +29,7 @@ using namespace CNA::Internal::Renderers::PixiJs;
 
 namespace
 {
-    constexpr int kExpectedChecks = 19;
+    constexpr int kExpectedChecks = 21;
 }
 
 class PixiJsSmokeTest : public Game
@@ -101,7 +101,7 @@ protected:
             renderer.GetViewportSize(w, h);
             check(w > 0 && h > 0, "GetViewportSize() reports a positive logical size");
         }
-        else if (frame_ == 11)
+        else if (frame_ == 12)
         {
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             result_ = (passCount_ == kExpectedChecks) ? 0 : 1;
@@ -299,6 +299,31 @@ protected:
                   "Begin(transformMatrix) translation shifts the whole draw, bottom-right texel unaffected");
             check(pixels[8 * 64 + 8] == Color(100, 149, 237, 255),
                   "the untransformed origin (8,8) is back to the CornflowerBlue background -- the draw truly moved, not just replicated");
+        }
+        else if (frame_ == 11)
+        {
+            // plan_pixijs.md PIXIJS-32: Texture2D::SetData directly on a RenderTarget2D (no
+            // SpriteBatch involved), while it is NOT the currently-bound render target -- exercises
+            // PixiJsRenderTargetRenderer::UpdatePixels's real implementation (a throwaway
+            // buffer-backed texture painted over the target with BLEND_MODES.NONE), not the
+            // SpriteBatch::Draw path frame 7 already covers.
+            RenderTarget2D rt2(dev, 2, 2);
+            std::vector<Color> newPixels{
+                Color(9, 8, 7, 255), Color(6, 5, 4, 255),
+                Color(3, 2, 1, 255), Color(0, 255, 0, 255),
+            };
+            rt2.SetData(newPixels.data(), static_cast<int>(newPixels.size()));
+
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+            spriteBatch_->Draw(rt2, Rectangle(48, 48, 2, 2), Rectangle(0, 0, 2, 2), Color::White);
+            spriteBatch_->End();
+
+            std::vector<Color> pixels(64 * 64, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
+            check(pixels[48 * 64 + 48] == Color(9, 8, 7, 255),
+                  "Texture2D::SetData on an unbound RenderTarget2D is visible when later sampled as a texture (top-left texel)");
+            check(pixels[49 * 64 + 49] == Color(0, 255, 0, 255),
+                  "Texture2D::SetData on an unbound RenderTarget2D is visible when later sampled as a texture (bottom-right texel)");
         }
     }
 

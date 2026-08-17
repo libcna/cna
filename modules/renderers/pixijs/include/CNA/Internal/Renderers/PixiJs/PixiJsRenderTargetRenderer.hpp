@@ -29,12 +29,14 @@ namespace CNA::Internal::Renderers::PixiJs
         /**
          * @brief Direct CPU pixel upload into a bound PixiJS RenderTexture.
          *
-         * Not yet implemented: a `PIXI.RenderTexture` has no simple synchronous CPU-buffer upload
-         * path the way a `PIXI.BufferResource`-backed plain texture does (Design decision 8) --
-         * doing this correctly needs a re-upload-via-sprite-draw trick that has not been designed
-         * yet. Throws rather than silently no-opping.
+         * plan_pixijs.md PIXIJS-32: a `PIXI.RenderTexture` has no simple synchronous CPU-buffer
+         * upload path the way a `PIXI.BufferResource`-backed plain texture does (Design decision
+         * 8), so this paints a throwaway buffer-backed texture over the whole target with
+         * `PIXI.BLEND_MODES.NONE` (a real unconditional overwrite, the same trick `REMED-PIXIJS-5`
+         * already proved correct for `Clear()`), then discards it.
          *
-         * @throws std::runtime_error always, until this is implemented.
+         * @param rgba Tightly packed RGBA8 pixel data covering the full target extent.
+         * @param stride Unused -- matches `PixiJsTextureRenderer::UpdatePixels`'s own convention.
          */
         void UpdatePixels(const uint8_t* rgba, int stride) override;
 

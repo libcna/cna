@@ -204,17 +204,25 @@
 >   confirmed back to plain background color (not a leftover copy). The identity-transform case keeps
 >   the renderer's exact pre-existing code path, so none of the other 16 checks were put at risk.
 >   Result: **19/19**.
+> - **`Texture2D::SetData` on a `RenderTarget2D`** (PIXIJS-32, frame 11) was implemented for real,
+>   replacing the previous unconditional throw: a throwaway buffer-backed `PIXI.Texture` (same
+>   `PIXI.BufferResource` + `ALPHA_MODES.NPM` pattern `PixiJsTextureRenderer` already uses) is painted
+>   over the whole render-texture target with `PIXI.BLEND_MODES.NONE` (the exact unconditional-
+>   overwrite trick `REMED-PIXIJS-5` already proved correct for `Clear()`), then destroyed
+>   immediately. Verified on an unbound render target (no `SetRenderTarget` call at all), sampled back
+>   as an ordinary texture afterward -- both the top-left and bottom-right texels of a 2x2 `SetData`
+>   call landed exactly right. Result: **21/21**.
 >
-> **Bottom line, this update**: `cna_test_pixijs_smoke` now exercises and passes 19/19 real,
+> **Bottom line, this update**: `cna_test_pixijs_smoke` now exercises and passes 21/21 real,
 > pixel-verified checks in a real headless-Chromium browser, covering scaled draws, rotation, flip,
 > all 3 currently-mapped blend presets with correct compositing math, full render-target
-> bind/Clear/draw/readback round-tripping, both sampler-state entry points, `SpriteFont`, and a real
-> `Begin(transformMatrix)` camera-style transform. Five real, independent bugs (`REMED-PIXIJS-1`
-> through `REMED-PIXIJS-5`) were found and fixed this way, none of them guessed — every fix (and the
-> `SetTransformMatrix` implementation itself) was preceded by a standalone live-browser probe
-> confirming the actual PixiJS/WebGL behavior before the corresponding source change was written. Not
-> yet exercised by any test: direct `Texture2D::SetData` on a bound render target (PIXIJS-32, still
-> throws), mip level>0 policy (PIXIJS-31, still throws), and the generic-`BlendState` stretch goal
+> bind/Clear/draw/readback round-tripping (both via `SpriteBatch` and via direct `SetData`), both
+> sampler-state entry points, `SpriteFont`, and a real `Begin(transformMatrix)` camera-style
+> transform. Five real, independent bugs (`REMED-PIXIJS-1` through `REMED-PIXIJS-5`) were found and
+> fixed this way, none of them guessed -- every fix (and the `SetTransformMatrix`/`SetData`
+> implementations themselves) was preceded by a standalone live-browser probe confirming the actual
+> PixiJS/WebGL behavior before the corresponding source change was written. Not yet exercised by any
+> test: mip level>0 policy (PIXIJS-31, still throws) and the generic-`BlendState` stretch goal
 > (PIXIJS-52).
 
 ### What remains (in dependency order)
@@ -236,7 +244,7 @@
    this plan.
 5. ~~Run `cna_test_pixijs_smoke` in a real browser and get real pixel-level evidence.~~ **Done**
    (2026-08-17, via a headless Chromium driven by Playwright, not `emrun` specifically, but a real
-   browser regardless): now **19/19 PASS** (grew from the original 5/5 across several rounds this
+   browser regardless): now **21/21 PASS** (grew from the original 5/5 across several rounds this
    same day — see the dated update above for exactly which checks were added and which real bugs
    each one found).
 6. Once basic drawing works, close the still-open design/implementation gaps, roughly in this order:
@@ -253,10 +261,9 @@
      premultiplying `UNPACK` (`REMED-PIXIJS-3`/`REMED-PIXIJS-4`).
    - **PIXIJS-31** — decide and implement the real mip-level (`level > 0`) policy instead of the
      current unconditional throw. **Still open.**
-   - **PIXIJS-32** — implement direct `Texture2D::SetData` on a bound render target (currently
-     throws — no re-upload-via-sprite design written yet). **Still open** (render-target
-     bind/Clear/draw/readback itself is now verified via `REMED-PIXIJS-5`; only the direct-SetData
-     path remains unimplemented).
+   - ~~**PIXIJS-32** — implement direct `Texture2D::SetData` on a bound render target.~~
+     **Implemented and verified**: a throwaway buffer-backed texture painted over the target with
+     `BLEND_MODES.NONE`, same trick as `Clear()`'s own `REMED-PIXIJS-5` fix.
    - ~~**PIXIJS-46/53** — `TextureAddressMode` (wrap/mirror/clamp) and `SetSamplerFilter`.~~
      **Implemented and verified** — both now real (`PIXI.WRAP_MODES`/`PIXI.SCALE_MODES` applied to
      the sampled `baseTexture`), with a documented architectural boundary: PixiJS's per-draw
@@ -552,7 +559,7 @@ For every task: at minimum, get a real Emscripten toolchain in a later session a
 |---|---|---|---|
 | PIXIJS-30 | `PixiJsTextureRenderer : ITextureRenderer` — buffer-backed `PIXI.BaseTexture`/`PIXI.Texture`, registered by integer id in `Module['cnaPixiTextures']` (Design decision 8) | ✅ | Verified 2026-08-17: uploaded 2x2 RGBA8 pixels sampled back byte-for-byte correct through a real WebGL draw. |
 | PIXIJS-31 | `UpdatePixels`/`UpdatePixelsLevel`: in-place buffer mutation + `baseTexture.update()`; mip level>0 policy — implemented as a throw for now (same shape as `CANVAS-21`), explicitly documented as provisional rather than a real investigated decision, since PixiJS textures *can* carry real mipmaps (`PIXI.MIPMAP_MODES`), unlike Canvas2D, and this has not been investigated | 🟨 | level=0 path written; level>0 throws with an explanatory message rather than silently copying Canvas2D's permanent-boundary reasoning. |
-| PIXIJS-32 | `PixiJsRenderTargetRenderer : IRenderTargetRenderer` — `PIXI.RenderTexture.create()` + `Bind/UnbindAsRenderTarget` switching which target `app.renderer.render(...)` calls target (Design decision 8) | 🟨 | Bind/Clear/draw/readback round-trip verified 2026-08-17 (frame 7, 14/14 and 15/15 runs), including the real `REMED-PIXIJS-5` clear/readback fixes. Still 🟨, not ✅: direct `UpdatePixels` on a bound render target still throws (no re-upload-via-sprite design written). |
+| PIXIJS-32 | `PixiJsRenderTargetRenderer : IRenderTargetRenderer` — `PIXI.RenderTexture.create()` + `Bind/UnbindAsRenderTarget` switching which target `app.renderer.render(...)` calls target (Design decision 8) | ✅ | Bind/Clear/draw/readback round-trip verified 2026-08-17 (frame 7). Direct `Texture2D::SetData` (`UpdatePixels`) implemented and verified 2026-08-17 (frame 11, 21/21): paints a throwaway buffer-backed texture over the whole target with `PIXI.BLEND_MODES.NONE` (the same unconditional-overwrite trick `REMED-PIXIJS-5` proved correct for `Clear()`), then discards it -- confirmed on an *unbound* render target, sampled back as an ordinary texture. |
 | PIXIJS-33 | `ReadBackbuffer`/render-target `GetData`: `app.renderer.extract.pixels(...)` (Design decision 9) | ✅ | `ReadBackbuffer` (main stage) verified 2026-08-17, after `REMED-PIXIJS-1`'s force-render fix. `PixiJsRenderTargetRenderer::GetData` independently verified in the same session (frame 7's own `rt.GetData()` check) after its own `REMED-PIXIJS-5` clear/readback fix — both paths now proven. |
 | PIXIJS-34 | `HasRealDepthBuffer()` → `false` (no depth attachment on a 2D sprite-only `RenderTexture` in this renderer's v1 scope) | ✅ | Trivial override, same confidence level as `CANVAS-23`. |
 | PIXIJS-35 | `SetRenderTargets` with 2+ bindings (MRT) → throw, same conclusion `CANVAS-26`/`HTML_DOM` reached (a single `PIXI.Application`'s default render pipeline targets one `RenderTexture` at a time in this renderer's v1 scope) | ✅ | Implemented in `PixiJsRenderer::SetRenderTargets`. |
