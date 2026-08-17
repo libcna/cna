@@ -19,13 +19,16 @@ option(CNA_PIXIJS_AUTO_DOWNLOAD "Download the pinned PixiJS UMD build when CNA_P
 # hash does not match, so a stale pin fails the configure loudly rather than silently linking an
 # unverified/unexpected build.
 #
-# NOT YET POPULATED: this session had no opportunity to actually perform the download (no
-# Emscripten toolchain to consume the result even if it had), so this is deliberately left blank
-# rather than filled with a guessed hash. cna_configure_pixijs() below refuses to proceed with
-# CNA_PIXIJS_AUTO_DOWNLOAD until a real hash is pinned here -- do not remove that guard to "make
-# the configure pass"; populate the real hash from a verified download instead (see
-# plan_pixijs.md PIXIJS-1).
-set(CNA_PIXIJS_SHA256 "" CACHE STRING "Expected SHA256 of the downloaded pixi.min.js")
+# plan_pixijs.md PIXIJS-1: computed 2026-08-17 from the real, official `pixi.js@7.4.2` npm package's
+# `dist/pixi.min.js` (`npm pack pixi.js@7.4.2`, then `sha256sum package/dist/pixi.min.js`) -- this
+# session's outbound proxy blocked cdn.jsdelivr.net directly (403 on CONNECT), so the hash below was
+# NOT independently verified against the jsDelivr CDN URL cna_configure_pixijs() actually downloads
+# from; it was verified against the npm registry's copy of the identical published package instead
+# (registry.npmjs.org was on this sandbox's proxy allowlist). jsDelivr's own npm mirror serves
+# package contents byte-for-byte unmodified, so this should match, but if a real jsDelivr download
+# ever produces a different hash, trust the mismatch (don't just widen this pin) and investigate
+# before proceeding.
+set(CNA_PIXIJS_SHA256 "9ddba9cd78bc8610a1d445ec939393888be83925c78e40d66d9a17e98450228d" CACHE STRING "Expected SHA256 of the downloaded pixi.min.js")
 
 # Sets CNA_PIXIJS_JS_FILE (cache-visible to the calling renderer's own CMakeLists.txt) to a real,
 # on-disk pixi.min.js -- either the caller-supplied CNA_PIXIJS_ROOT, or a freshly verified download.
