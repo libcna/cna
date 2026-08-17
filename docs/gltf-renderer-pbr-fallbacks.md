@@ -465,3 +465,57 @@ ordinary `CnaTests`/glTF conformance run even on a host that cannot build that b
 The source-policy lock proves implementation agreement, not hardware availability. Rows without a
 runtime executable retain their renderer plan's own verification limitation; they do not weaken or
 silently redefine the fallback.
+
+## The stride-60 record and `COLOR_0` (`GLTF-462` / `GLTF-465`)
+
+Stride 60 is the rigid PBR vertex record: Position, Normal, Tangent, `TEXCOORD_0`, `TEXCOORD_1` and
+a packed `COLOR_0`. `GLTF-182` created it for dual-UV materials and reserved its last four bytes
+purely to keep the stride distinct from 56; `GLTF-462` gave those bytes a job, because §3.7.2.1 makes
+`COLOR_0` "an additional linear multiplier to base color" — a term in the metallic-roughness product
+rather than a reason to abandon the model, which is what CNA did before (a vertex-coloured primitive
+fell to the stride-24 layout, which has **no Normal slot at all**, so it could not be lit).
+
+Auditing that change found a **pre-existing defect this table now prevents recurring**: most PBR
+renderers had never learned stride 60 even though it has been live since `GLTF-182`. `OPENGL2` fell
+through a `stride >= 32` catch-all that reads `TEXCOORD` at offset 24 — inside the tangent — so a
+dual-UV PBR mesh textured itself from tangent bytes, silently. `OPENGL4`, `MAGNUM`, `LLGL` and
+`DIRECTX9` degraded visibly instead (position-only, no attributes, or an outright refusal).
+
+Two dispositions, both machine-checked by
+`GltfRendererPbrFallbackPolicy.EveryPbrRendererEitherBindsTheStride60RecordOrIsNamedAsNotYet` and
+`GltfRendererPbrFallbackPolicy.VertexColourReachesTheBaseColourProductOnlyWhereItIsImplemented` —
+read those, not this table, which is a snapshot.
+
+| Renderer | Binds the stride-60 record | Multiplies `COLOR_0` into base colour |
+|---|---|---|
+| EasyGL (OPENGLES2/3, OPENGL33, WEBGL1/2) | yes | **yes** — `uVertexColorEnabled` gates `albedo *= cnaVertexColor.rgb` and `alpha *= cnaVertexColor.a` |
+| Software | yes | **yes** — the CPU raster path already multiplies the decoded vertex colour into the sampled base colour |
+| Bgfx | yes | not yet (`GLTF-465`) |
+| Diligent | yes | not yet (`GLTF-465`) |
+| DirectX 9 | yes (`GLTF-462`: the stride-48 element list describes the record; a D3D9 declaration carries offsets while the stride travels with `SetStreamSource`) | not yet (`GLTF-465`) |
+| DirectX 11 | yes | not yet (`GLTF-465`) |
+| DirectX 12 | yes | not yet (`GLTF-465`) |
+| IGL | yes, **without a stride row**: it builds its vertex input from the public `VertexDeclaration`, so the canonical layout reaches it colour element included | not yet (`GLTF-465`) |
+| LLGL | yes (`GLTF-462` added the row; it previously produced no attributes at all) | not yet (`GLTF-465`) |
+| Magnum | yes (`GLTF-462` added the row; it previously produced no attributes at all) | not yet (`GLTF-465`) |
+| OpenGL 2 | yes (`GLTF-462` **fixed a silent mis-binding**: the record reached a catch-all that read UV inside the tangent) | not yet (`GLTF-465`) |
+| OpenGL 4 | yes (`GLTF-462` added the row; it previously fell to a position-only fallback) | not yet (`GLTF-465`) |
+| Vulkan | yes | not yet (`GLTF-465`) |
+| Metal | **not yet** (`GLTF-465`) | not yet |
+| SDL GPU | **not yet** (`GLTF-465`) | not yet |
+| WebGPU | **not yet** (`GLTF-465`) | not yet |
+| Wicked | **not yet** (`GLTF-465`) | not yet |
+
+**The residue is safe, and that is the property the tests pin.** A primitive with no `COLOR_0` fills
+the slot with **opaque white**, which is the multiplier's identity — so a renderer that ignores the
+slot draws exactly what it drew before `GLTF-462`, and one that starts reading it cannot darken
+anything that used to be right. A renderer in the "not yet" column loses the vertex colour, not the
+material: the authored `NORMAL`, the tangent basis, every PBR factor and every PBR map all arrive,
+which is strictly more than the stride-24 fallback carried.
+
+One combination is still **not** carried anywhere: a **skinned** vertex-coloured metallic-roughness
+primitive. Stride 76 is exactly the skinned PBR record's seven fields and has no reserved bytes to
+reuse, so it needs a stride every renderer's input layout would have to learn. `GLTF-463` owns that;
+until it lands such a primitive keeps `SkinnedEffect` — so it keeps its normals and its colours, and
+loses only the metallic-roughness factors and maps, which `MeshOut::unsupportedMaterialModelEXT`
+names and both loaders log.

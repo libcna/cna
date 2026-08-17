@@ -7,22 +7,56 @@ session needs to start work without re-deriving the state.
 ## Session status
 
 - **Branch:** `feature/gltf`, with local commits. The owner explicitly requested a push when the
-  current autonomous run reaches its weekly-limit cutoff; no pull request has been requested. (The campaign ran on
-  `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **Three remain open: `GLTF-344`
-  (`✅/⬜`, the specular texture pair on 3 of 15 PBR renderers), `GLTF-459` and `GLTF-460`.**
-  Everything else is closed. §27.2 now carries a row-by-row ROBUST assessment — 9 of 12 green —
-  and that section, not this file, is the current record of what the milestone still needs.
-- **Draco is no longer optional local state:** `third_party/draco` is a gitlink pinned to
-  Draco **1.5.7** (`8786740086a9f4d83f44aa83badfbea4dce7a1b5`). The normal build uses it; the sanitizer
-  workflow also runs `CNA_ENABLE_DRACO=OFF` so the named refusal path cannot rot.
-- **All eight audited defects (D1–D8) are `fixed`** in the corpus defect ledger
-  (`tests/assets/gltf/manifest.json` → `defectLedger`). One entry is
-  `partially-remediated`: `GLTF-241`, whose residue is owned by `GLTF-238`.
-- **`GLTF CORE 2.0 CORRECT` was declared on 2026-08-15** (`GLTF-458`) after all 20 §27.1 rows and
-  the freshly rerun four-renderer Gate B were green. The campaign itself is not complete:
-  `GLTF-459` (**GLTF ROBUST**) remains `⬜`, and optional-extension/renderer-specific L7 residue
-  must not be folded into the narrower CORE claim.
+  current autonomous run reaches its weekly-limit cutoff; no pull request has been requested.
+- **Working document:** `plan_gltf.md`, **469** numbered rows. **Six remain open: `GLTF-344`
+  (`✅/⬜`, the specular texture pair on 3 of 15 PBR renderers), `GLTF-459`, `GLTF-460`, and
+  `GLTF-463`–`GLTF-465`** — the three rows the 2026-08-17 re-audit opened. Everything else is closed.
+  §27.2 carries a row-by-row ROBUST assessment; that section, not this file, is the record of what
+  the milestone still needs.
+
+- **⚠ `GLTF CORE 2.0 CORRECT` was declared on 2026-08-15 (`GLTF-458`) and the declaration was
+  premature.** A 2026-08-17 re-audit against the pinned specification found **four core divergences
+  that no §27.1 row asks about**, each sitting inside a row that was green. All four are fixed
+  (`GLTF-461`, `GLTF-462`); §27.1.2 records what they were, which row covered each, and why the row
+  did not catch it. **Read §27.1.2 before trusting §27.1.** In short:
+  1. §3.7.2.1's flat normals were **averaged** at shared vertices rather than produced per face, and
+     `GLTF-173` had recorded the averaging as an unavoidable deviation — so the deviation was cited
+     as evidence of compliance. `GLTF-461` splits the vertex instead.
+  2. §3.7.2.1's "the provided tangents (if present) **MUST** be ignored" was not honoured at all.
+  3. §3.7.2.2's "**MUST** calculate flat normals for **each morph target**" was not implemented, so a
+     normal-less morphed surface was lit with its **rest-pose** normals at every weight — and no
+     delta blend could have fixed it, because §3.7.2.2 forbids such a primitive from carrying
+     `NORMAL` deltas. `morph-no-base-normals` existed and passed because its target translates all
+     three vertices rigidly: **a fixture that cannot fail.**
+  4. `COLOR_0` on a metallic-roughness material abandoned the material model **and took the authored
+     `NORMAL` with it** (stride 24 has no normal slot), so the primitive could not be lit at all.
+     `GLTF-462` carries it in stride 60's own colour slot.
+
+- **The method lesson.** Three of the four were protected by a *fixture that passed*. The corpus rule
+  "a fixture must discriminate" had been applied to **values** and not to **rules**. A conformance row
+  should name the specification *sentence* it tests; `GLTF-461`'s new tests assert §3.7.2.1's own
+  definition **remap-independently** (every corner of every emitted triangle carries that triangle's
+  own geometric normal, derived from the emitted positions), so no numbering or fixture shape can
+  satisfy them by accident.
+
+- **Two further defects were found by *running* things that had not run:**
+  - Stride 60 — the rigid dual-UV PBR record, live since `GLTF-182` — was implemented by only **7 of
+    15** PBR renderers. `OPENGL2` fell through a `stride >= 32` catch-all that reads `TEXCOORD` at
+    offset 24, **inside the tangent**, so every dual-UV PBR mesh textured itself from tangent bytes in
+    silence. `OPENGL4`/`MAGNUM`/`LLGL`/`DIRECTX9` degraded visibly. All five now bind the record
+    (`GLTF-462`).
+  - `scripts/gltf-l7-corpus.py`'s renderer-identity check used `line.startswith(prefix)`, and the
+    SOFTWARE/DirectX11 markers go through **CNA's own logger**, which prefixes every line — so those
+    two policies had been **structurally unrunnable** since the log tag was introduced (`GLTF-467`).
+    That is why the SOFTWARE report could only ever verify itself.
+
+- **Draco is not optional local state:** `third_party/draco` is a gitlink pinned to Draco **1.5.7**
+  (`8786740086a9f4d83f44aa83badfbea4dce7a1b5`). The normal build uses it; the sanitizer workflow also
+  runs `CNA_ENABLE_DRACO=OFF` so the named refusal path cannot rot.
+- **The corpus defect ledger has no open entries.** All eight audited defects (D1–D8) and `GLTF-241`
+  are `fixed` (`tests/assets/gltf/manifest.json` → `defectLedger`); `GLTF-241`'s own known-defect test
+  is now a **fix witness**. `GltfKnownDefect.EveryOpenDefectInTheCorpusLedgerHasAnExecutableTestHere`
+  keeps that honest in both directions.
 
 ## How to verify, exactly
 
