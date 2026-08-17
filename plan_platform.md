@@ -67,21 +67,21 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **925** |
-| Files referencing SDL (all) | **316** |
-| Production files (`src/` + `include/`) referencing SDL | **43** |
-| …of which are renderer production files | **9** |
-| Test/example files referencing SDL | **273** |
-| Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **7** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **980** |
+| Files referencing SDL (all) | **343** |
+| Production files (`src/` + `include/`) referencing SDL | **61** |
+| …of which are renderer production files | **20** |
+| Test/example files referencing SDL | **282** |
+| Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **8** |
 | Renderer families reaching for `SDL_GL_*` directly | **0** |
 
 Production SDL surface per module (`src/` + `include/` only):
 
 | Module | Files | Dominant concern |
 |---|---:|---|
-| `modules/platform` | 28 | - |
-| `modules/audio` | 6 | audio device/stream, mixer, microphone |
-| `modules/renderers/*` | 9 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (4 families) |
+| `modules/platform` | 33 | - |
+| `modules/audio` | 8 | audio device/stream, mixer, microphone |
+| `modules/renderers/*` | 20 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (5 families) |
 
 The native-window properties actually consumed today — these define the minimum
 `NativeWindowHandle` surface, so the struct is derived from measured need, not guessed:
@@ -89,6 +89,7 @@ The native-window properties actually consumed today — these define the minimu
 ```text
 SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER
 SDL_PROP_WINDOW_COCOA_WINDOW_POINTER
+SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER
 SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER
 SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER
 SDL_PROP_WINDOW_WIN32_HWND_POINTER
