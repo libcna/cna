@@ -100,4 +100,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
     cna_register_renderer_test(NAME Igl_EnvironmentMapEffect COMMAND cna_test_igl_environmentmapeffect
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # IGL-36/IGL-55: SkinnedEffect's 72-bone std140 uniform block, identity palette.
+    cna_igl_test(cna_test_igl_skinnedeffect igl_skinnedeffect_test.cpp)
+    cna_register_renderer_test(NAME Igl_SkinnedEffect COMMAND cna_test_igl_skinnedeffect
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
