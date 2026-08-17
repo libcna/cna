@@ -191,6 +191,12 @@ target_link_libraries(CNA INTERFACE
         ${RENDERER_TARGET}
 )
 
+# The C API is a separate shared-library adapter over the canonical C++ aggregate. It remains
+# opt-in until its experimental ABI is proven by the C-only test matrix.
+if(CNA_BUILD_C_API)
+    add_subdirectory(c-api)
+endif()
+
 # --- Physical source-partition validator (no-loss ownership gate, MODULARIZATION_PLAN.md
 # §5/§11): file physical module location == declared CMake ownership. Every production TU
 # must live under a declared module's src/ tree (module CMakeLists glob exactly their own
@@ -202,7 +208,7 @@ target_link_libraries(CNA INTERFACE
 # moved into their owning modules (module-examples campaign): a module may own
 # modules/<name>/examples/, and example TUs outside every declared module still fail.
 set(_cna_framework_modules
-    core math platform runtime graphics input audio media content storage
+    c-api core math platform runtime graphics input audio media content storage
     devices devices-ext graphics-ext gamer-services net)
 set(_cna_renderer_modules
     bgfx blend2d canvas diligent direct2d directx1 directx2 directx3 directx5 directx6

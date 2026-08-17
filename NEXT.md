@@ -1,5 +1,83 @@
 # NEXT.md
 
+## The 2026-08-17 merge of `next`, and what it exposed
+
+> `next` was merged again on 2026-08-17 (`ba0dbbf3e`, 331 commits, merge base `fbc599ab8`). The
+> textual merge was uneventful — three files touched by both sides, all auto-merged — and the four
+> verification trees stayed green at 81/81 after a reconfigure with **`-DCNA_ENABLE_DRACO=OFF`**,
+> which `next` now requires unless the pinned Draco submodule is present.
+>
+> **The merge's real finding is that the coverage gate had been overstating itself, and this is the
+> thing to remember from it.** The merge added 176 public C++ declarations. The inventory honestly
+> flagged 55 as unmapped and silently counted the other **121 as implemented and tested, when no C
+> route existed for any of them** — 84 on `PbrEffect`/`SkinnedPbrEffect` alone. The cause was that
+> 73 of the 497 mapping rules matched an entire header with `.*`: an accurate statement when it was
+> written, and an open-ended promise ever after. `CBIND-050` pins every rule to the stable IDs it
+> was reviewed against, so a declaration added later falls through to `planned` instead of
+> inheriting a claim. Seeding those approvals from the **pre-merge** tree is what makes the fix
+> honest rather than cosmetic, and it reproduced the pre-merge `implemented` figure of 6,111 to the
+> symbol.
+>
+> `CBIND-051A`–`051E` then bound all 176 — the KHR material extensions on both PBR effects, the
+> glTF import report and its diagnostics, the mesh-part and clip target-space families, the model's
+> cameras, skins, bounds and material variants, and the animation-player additions — with exactly
+> one row recorded not applicable. The matrix reads **6,286 implemented, 12 approved partial, 0
+> planned, 386 not applicable** and `RELEASE_GATE.md` is back to **ready**. Every ABI change across
+> the five slices was purely additive: nothing was renamed, resized or relaid out.
+>
+> Two of those slices met the same question and gave it the same answer, which is worth carrying
+> forward. `AnimationClipEXT::TargetSpace` and `MorphTargetDataEXT::TangentDeltas` both belong
+> naturally on a published creation descriptor, and both of those descriptors carry **no size or
+> version header** — so growing either would move every field after it, a break costing a minor
+> version even at experimental 0.1.0. Both became separate routes instead. A new versioned struct
+> gets `struct_size`/`struct_version`; an old unversioned one is frozen, and anything it lacks is
+> reached another way.
+>
+> The lesson generalises past this gate: a rule that says "everything here is covered" needs to name
+> what "here" was when someone checked, or a later merge inherits an approval nobody gave.
+
+## Reading order after the 2026-08-16 merge of `next`
+
+> Two campaigns meet in this file. The **platform separation** block immediately below is a
+> standing, repo-wide rule that now governs code written on this branch as well. The **C binding**
+> campaign that follows it is closed as far as its own plan goes, and is kept as the record of how
+> the C ABI came to be.
+>
+> **The merge left one thing open, and it is deliberate.** Three integration findings came out of
+> it, all fixed here: `next` renamed `CNA/Platform.hpp` to `CNA/TargetPlatform.hpp` (the name
+> `CNA::Platform` now belongs to the new module) and the C API followed; the exception barrier
+> learned `CNA::Platform::PlatformException`, so a platform refusal reaches a caller as
+> `CNA_RESULT_PLATFORM` instead of falling through to `CNA_RESULT_INTERNAL`; and installing a mouse
+> cursor became a **capability** — SDL under the dummy video driver cannot create a system cursor,
+> so the test now accepts a deterministic refusal, which is this campaign's own rule. Four coverage
+> rules describing declarations that took raw `SDL_Cursor*`/`SDL_Haptic*` pointers were deleted,
+> because the platform separation removed exactly those declarations.
+>
+> Two more breakages surfaced only in a **full** build, which is worth remembering: after changing
+> the exception barrier I rebuilt just `cna_c_api` and got a green suite from stale test binaries.
+> The four C++ targets that compile `CnaCApiDetail.cpp` list their include directories by hand
+> instead of inheriting them, so they each needed the platform module's headers. And
+> `modules/renderers/sdl-renderer/src/SdlRenderer.cpp` did not compile **on `next` itself**: merge
+> `2f00c2017` left two consecutive `return` statements in its factory, the first referencing
+> `args.window`, which the platform separation had replaced with `args.surface`. The dead line is
+> removed here, keeping its leading `::` — the comment above it explains that the qualification is
+> required, and the surviving line had lost it. **`next` still carries that defect**; the other four
+> families that resolve a window the same way were checked and are fine.
+>
+> What is **not** fixed here is `CBIND-047`: the merge grew the tracked public surface by 1,327
+> declarations and left **1,303 unmapped**, 1,196 of them in `modules/platform`. The release gate
+> reads **not ready** as a result, and that is the gate working. The first question is whether
+> `CNA::Platform` is in the C ABI's scope at all — it is a substrate the C API sits on top of, not a
+> surface it exposes — and that is the owner's to answer, not an implementer's to settle by editing
+> an exclusion list.
+>
+> Nor is `CBIND-048`, which is why `CNA_DEVICES=ON` does not build: the C API's four fake device
+> backends stand on `CNA::Devices::Detail::I*Backend` interfaces that the platform separation
+> deleted outright. Tray, dialogs and message boxes are platform services now, and `Camera` takes no
+> backend at all, so the published `cna_*_set_test_backend_ext` routes have nothing to inject into.
+> The `headless` and `software` trees pass 81/81; `sdlrenderer` and `asan` are blocked on that one
+> decision.
+
 > **Active campaign — CNA platform separation (`feature/platform`):** `plan_platform.md` is the
 > authoritative task/evidence log, `docs/platform-abstraction.md` is the durable implementer's
 > guide, and `NEXT_platform.md` carries detailed continuity notes.
@@ -18,6 +96,1447 @@
 > Existing reusable builds are `cmake-build-debug` (SDL3 default), `cmake-build-headless`, and
 > `cmake-build-terminal`; do not create another full tree without a distinct configuration need.
 > `CNA_DEVICES` defaults to OFF, so a devices change must be compiled with it explicitly enabled.
+
+## C BINDING / C ABI — CBIND-035 CLOSED (2026-08-15)
+
+> `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
+> the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
+> The owner authorized implementation and requires eventual coverage of the **entire public CNA
+> API** through C-native mappings. `CBIND-001`–`034`, `CBIND-035A`–`035E` and
+> `CBIND-035F1`–`035F7` and `CBIND-035G` are complete, closing parent `CBIND-035`:
+> `docs/c-api/` defines the
+> contract and the opt-in `modules/c-api/` builds a C17 `libcna_c_api` with public `cna_*` exports,
+> the error/handle substrate and a C-owned `Game` lifecycle slice tested under HEADLESS and
+> `SDL_RENDERER`. The work deliberately contains no C#, .NET, JavaScript, Rust, Python, Java, Zig,
+> Go, Swift, or other
+> language-binding work.
+
+> `CBIND-021` passes the same strict-C lifecycle source against `SDL_RENDERER` using SDL's dummy
+> video driver and software renderer. A single clean serial build proved that the earlier missing
+> archive report came from overlapping verification builds, not a CNA archive defect. B4's
+> callback-scoped graphics-device handle and canonical renderer capability queries are now
+> complete. Owned Color `Texture2D` handles now support versioned create/info, full-level bulk
+> RGBA8 upload/readback, explicit destroy and enforced child-before-game teardown. The C
+> `SpriteBatch` slice adds all native sort/effect identities, a single-transition POD command array,
+> fixed default XNA state, retained texture lifetime and cancel-safe destruction. The keyboard C
+> API now captures a fresh 256-key POD snapshot, maps all 160 canonical `Keys` identities and keeps
+> repeated key/count/copy queries local to that value. Full backbuffer RGBA8 readback now proves
+> honest `NOT_SUPPORTED` behavior under HEADLESS and exact uploaded texture/SpriteBatch/clear
+> pixels under SDL_RENDERER. `FEATURE_MATRIX.md` now freezes the exact initial supported surface,
+> backend evidence, ownership/error rules and explicit omissions. B5 now owns a native content
+> manager, controls its UTF-8 root/cache and loads Color Texture2D assets into independent C-owned
+> handles. Expanded input now adds fresh mouse, four-player GamePad and fixed-capacity touch POD
+> snapshots, exact three-mode dead-zone behavior, all current button bits and thread-independent
+> local helpers, tested from strict C under HEADLESS and SDL_RENDERER. Minimal audio now owns
+> copied PCM16LE effects and controllable instances with explicit creation-thread and
+> instance-before-effect-before-game shutdown rules. Content now proves a real valid-UTF-8 fixture
+> path, and an isolated invalid-audio-driver process proves repeatable unavailable capability
+> snapshots, `NOT_SUPPORTED` creation and clean shutdown. Stable C queries now cover renderer and
+> all canonical graphics features, touch availability and real native audio playback availability;
+> applications need not infer them from backend/platform names. `CBIND-033` now establishes the
+> complete public-header baseline: a Doxygen-backed generator inventories 414 public headers and
+> 6,415 public/protected declarations, excluding 95 explicit `Internal`/`Detail` headers. Every
+> symbol has a stable ID, C mapping, test obligation, status and owner task. `CBIND-034` adds
+> complete fixed-layout Blend/DepthStencil/Rasterizer/Sampler descriptors and presets, device and
+> sampler state round-trips, explicit-state SpriteBatch Begin, display/adapter/presentation
+> snapshots and queries, owned RenderTarget2D/RenderTargetCube handles and copied-glyph SpriteFont
+> handles with enforced texture retention. The same strict-C test passes against HEADLESS and
+> SDL_RENDERER, including real SDL 2D target binding and honest unavailable target/state paths.
+> CBIND-035 is split into independently reviewable CBIND-035A–G slices. CBIND-035A now freezes the
+> C layouts for Point, Vector4, Quaternion, Matrix, Plane, Ray, bounding volumes, all 17
+> PackedVector raw values and VertexElement, plus containment/curve/buffer/draw/vertex enum
+> identities. Strict C17 and C++23 assertions cover sizes, offsets and ordinals; no constructor,
+> numeric operation or resource behavior is claimed by this layout-only foundation. The inventory
+> is now 983 implemented, 21 partial, 5,341 planned and 70 explicitly deleted/not applicable.
+> Deterministic `--check` detects drift, and CBIND-043 has since wired it into both CTest and CI.
+> CBIND-035B is further split into B1–B7. B1 now maps every Point and Rectangle constructor,
+> constant, property, overload, operator, hash and exact UTF-8 count/copy string through 37 C
+> operations. Its defined unsigned-bit calculations preserve unchecked 32-bit behavior without
+> signed-overflow UB; division failures preserve output. The strict-C suite passes under HEADLESS,
+> SDL_RENDERER and ASan+UBSan. The inventory is now 1,027 implemented, 21 partial, 5,297 planned
+> and 70 N/A. B2 is split into MathHelper plus Vector2/3/4 slices. B2a now exposes all eight exact
+> scalar constants and all 15 MathHelper operations, including canonical NaN/infinity/epsilon
+> behavior and a defined full-positive-int32 MSAA-power calculation. The inventory is now 1,051
+> implemented, 21 partial, 5,273 planned and 70 N/A. B2b now maps all 75 remaining Vector2 rows
+> through 41 C operations, including all constants/constructors/math/operators plus exact strings
+> and preflight-validated matrix/quaternion/normal bulk ranges. Every entry point is called by the
+> strict-C suite under HEADLESS, SDL_RENDERER and ASan+UBSan. The inventory is now 1,126
+> implemented, 21 partial, 5,198 planned and 70 N/A. B2c now maps all 87 remaining Vector3 rows
+> through 50 C operations, including direction constants, cross products and the full
+> matrix/quaternion/normal single and bulk transform families. Every entry point is covered by
+> strict-C normal, IEEE, alias, string, null and range-atomicity cases. The inventory is now 1,213
+> implemented, 21 partial, 5,111 planned and 70 N/A. B2d now maps all 81 remaining Vector4 rows
+> through 46 C operations, including Vector2/3/4 input transforms and validated Vector4 bulk
+> ranges. All entry points have strict-C normal, IEEE, alias, string, null and range-atomicity
+> coverage. The complete B2 MathHelper/Vector2/3/4 slice is closed; the inventory is now 1,294
+> implemented, 21 partial, 5,030 planned and 70 N/A. B3 is split into Quaternion and Matrix slices;
+> B3a now maps all 50 remaining Quaternion rows through 28 C operations, including factories,
+> concatenation, inverse, normalized/spherical interpolation and exact strings. Every entry point
+> has strict-C normal, IEEE, alias and failure coverage. The inventory is now 1,344 implemented,
+> 21 partial, 4,980 planned and 70 N/A. B3b now maps all 98 remaining Matrix rows through 57 C
+> operations: construction, seven direction/translation properties, decomposition, determinant,
+> every factory and complete operator math. Strict-C tests cover row-major layout, optional
+> billboard inputs, valid and singular decomposition/inversion, projection rejection without
+> output mutation, exact strings and all entry points. Parent B3 is closed; the inventory is now
+> 1,442 implemented, 21 partial, 4,882 planned and 70 N/A. B4 is split into Plane/Ray, BoundingBox,
+> BoundingSphere and BoundingFrustum slices. B4a maps all 42 remaining Plane/Ray rows through 31 C
+> operations with explicit hit-plus-distance optional intersections. Every entry point has strict-C
+> classification, transform, hit/miss, exact-string and failure coverage. The inventory is now
+> 1,484 implemented, 21 partial, 4,840 planned and 70 N/A. B4b maps all 31 remaining BoundingBox
+> rows through one corner-count constant and 20 C operations. Every entry point has strict-C
+> containment, intersection, canonical-corner, capacity-atomicity, factory, string and failure
+> coverage. The inventory is now 1,515 implemented, 21 partial, 4,809 planned and 70 N/A.
+> B4c maps all 31 remaining BoundingSphere rows through 21 C operations. Every entry point has
+> strict-C transform, containment, intersection, hit/miss, factory, merge, exact-string and failure
+> coverage. The inventory is now 1,546 implemented, 21 partial, 4,778 planned and 70 N/A.
+> B4d maps all 31 remaining BoundingFrustum rows through one corner-count constant and 22 C
+> operations, including six planes, atomic corner copies and an explicit `NOT_SUPPORTED` result for
+> the canonical unimplemented boundary-origin ray case. Every entry point has strict-C normal and
+> failure coverage. Parent B4 is closed; the inventory is now 1,577 implemented, 21 partial, 4,747
+> planned and 70 N/A. B5 is split into CurveKey, CurveKeyCollection and Curve/evaluation slices.
+> B5a maps all 19 CurveKey rows through a fixed 20-byte POD and 17 C operations with complete ABI,
+> property, construction, comparison, equality/hash, invalid-enum and null-output coverage. The
+> inventory is now 1,596 implemented, 21 partial, 4,728 planned and 70 N/A. CBIND-035B5b
+> maps all 26 CurveKeyCollection rows through a validated owned handle and 14 C operations.
+> Ordering/repositioning, clone independence, count/index/copy, atomic capacity failure and
+> invalid/stale/wrong-thread handles are covered. The inventory is now 1,622 implemented, 21
+> partial, 4,702 planned and 70 N/A. CBIND-035B5c maps all 15 Curve rows through 14 C operations,
+> including retained mutable key views, both loop properties, deep clone, evaluation and every
+> tangent overload. All five loop modes, clone/view lifetime and invalid/stale/wrong-thread cases
+> are covered. Parent B5 is closed; the inventory is now 1,637 implemented, 21 partial, 4,687
+> planned and 70 N/A. CBIND-035B6 is split into value operations and named constants. B6a maps
+> all 25 previously planned non-constant Color rows through the existing four-byte POD, direct
+> channels and 24 C operations. All constructors, packed values, conversions, exact/debug strings,
+> interpolation, premultiplication, multiplication, equality/hash and packed-vector mutation are
+> covered. The inventory is now 1,662 implemented, 21 partial, 4,662 planned and 70 N/A.
+> CBIND-035B6b maps all 141 named colors to directly usable C17/C++23 `CNA_COLOR_*` value
+> expressions. The strict-C test independently checks every expression against its canonical
+> AABBGGRR packed literal, and public headers compile in both language modes. Parent B6 is closed;
+> the inventory is now 1,803 implemented, 21 partial, 4,521 planned and 70 N/A. CBIND-035B7 maps
+> all 132 remaining concrete PackedVector, HalfTypeHelper and IPackedVector rows through 17 stable
+> format identities, four generic pack/unpack/equality operations and three half conversions.
+> Exact packed bits for every format, half NaN/infinity/signed-zero behavior, storage-width and
+> output-atomicity failures are covered in strict C, with C/C++ identity assertions. Parent
+> CBIND-035B is closed; the inventory is now 1,935 implemented, 21 partial, 4,389 planned and 70
+> N/A. CBIND-035C is partitioned into seven dependency-ordered slices totaling exactly 402 rows.
+> CBIND-035C1 maps its first 104 rows: all seven built-in `VertexPosition*` values, the remaining
+> `VertexElement` operations and the `IVertexType` declaration route now use fixed-layout PODs,
+> stable type identities and generic default/equality/hash/string/stride/element-copy operations.
+> Strict-C tests cover exact native strings and every canonical packed GPU declaration, while
+> C17/C++23 assertions freeze all layouts. The inventory is now 2,039 implemented, 21 partial,
+> 4,285 planned and 70 N/A. CBIND-035C2 maps all 14 VertexDeclaration and VertexBufferBinding
+> rows through standalone owned declaration handles, copied arrays and a fixed 16-byte binding
+> descriptor. Empty/computed/explicit construction, exact type names, atomic copies and
+> wrong-kind/stale/wrong-thread lifetime behavior are strict-C tested. The inventory is now 2,053
+> implemented, 21 partial, 4,271 planned and 70 N/A. CBIND-035C3 then maps all 21
+> GraphicsResource rows through generic validated operations for callback-scoped device identity,
+> disposal state/events, exact UTF-8 Name/ToString and a C-owned opaque tag. Standalone and
+> device-owned resources, generic and typed destruction, event lifetime, UTF-8/capacity failures,
+> stale/wrong-kind/wrong-thread handles and registry tag reset are covered. The inventory is now
+> 2,074 implemented, 21 partial, 4,250 planned and 70 N/A. CBIND-035C4 then completes all 134
+> unfinished Texture/Texture2D rows and upgrades the two inherited partial Texture properties.
+> Standalone and game-owned factories, all 18 typed full/mip/rectangle transfer representations,
+> common/2D/storage properties and PNG/JPEG memory/file routes are strict-C tested under HEADLESS
+> and SDL_RENDERER; SDL's native mip-upload limitation is an explicit `NOT_SUPPORTED` result and
+> the focused ASan+UBSan run is clean. The inventory is now 2,210 implemented, 19 partial, 4,116
+> planned and 70 N/A. CBIND-035C5 then maps all 40 Texture3D/TextureCube rows through owned
+> handles, versioned dimension/region descriptors, complete Color box/face/mip transfer, raw
+> Texture3D upload and copied-memory DDS decode. HEADLESS and SDL_RENDERER prove exact capability
+> refusal, six-face validation, common Texture/GraphicsResource behavior and lifecycle. The
+> inventory is now 2,250 implemented, 19 partial, 4,076 planned and 70 N/A.
+>
+> CBIND-035C6 and CBIND-035C7 then close parent CBIND-035C with owned VertexBuffer and IndexBuffer
+> handles, copied declarations, both index widths, caller-window transfers and ContentLost
+> registration. CBIND-035D1–D9 close parent CBIND-035D: effect-parameter identities, annotations,
+> parameters, techniques/passes, the Effect/ShaderEffect/EffectMaterial/SpriteEffect lifecycle and
+> the BasicEffect, AlphaTest/DualTexture/EnvironmentMap, Skinned, ColorMatrix and PBR stock
+> families, all through owned game-child effect handles with retained texture slots and bounded
+> bone palettes. CBIND-035E1–E7 close parent CBIND-035E: model bones, mesh parts, meshes, Model
+> aggregates, morph-target extension data, SkinnedModelEXT and the SkinningData/AnimationPlayer
+> pair, through stable handles, deep-copied descriptors and deterministic count/copy transfers.
+> CBIND-035F is partitioned into seven slices; CBIND-035F1 maps all 49 Viewport, ClearOptions,
+> GraphicsDeviceStatus, Unsupported3DGraphicsCallBehavior and SpriteEffects-operator rows through a
+> fixed 24-byte viewport POD with complete construction/property/transform/string operations plus
+> fixed-width identities asserted against their native ordinals at the adapter boundary. The
+> inventory is now 3,215 implemented, 19 partial, 3,111 planned and 70 N/A. CBIND-035F2 then maps
+> all 51 device lifetime, state, event, event-args, service and device-exception rows through the
+> borrowed device handle, owned subscriptions with fixed payload structures and a shared
+> exception-firewall conversion of the three canonical device exceptions. The inventory is now
+> 3,259 implemented, 23 partial, 3,060 planned and 73 N/A. CBIND-035F3 then maps all 8
+> TextureCollection and device texture-collection rows through stage-addressed slot reads, binds
+> and unbinds, with a slot-count assertion against the native constant and no native collection
+> reference crossing the ABI. The inventory is now 3,267 implemented, 23 partial, 3,052 planned and
+> 73 N/A. CBIND-035F4 then maps all 21 clear, present, reset, back-buffer-window and
+> buffer-binding rows through versioned descriptors, a nullable adapter index and caller-owned
+> binding arrays, deciding readback capacity in C instead of surfacing a generic native failure.
+> The inventory is now 3,288 implemented, 23 partial, 3,031 planned and 73 N/A. CBIND-035F5 then
+> maps all 49 draw-submission and device-extension rows: two descriptor-driven calls replace the
+> twenty-nine canonical user-primitive overloads, built-in vertex sources are converted because the
+> native structures embed a polymorphic Color, and every draw route refuses a backend without 3D
+> support as `NOT_SUPPORTED`. No planned GraphicsDevice.hpp row remains. The inventory is now
+> 3,337 implemented, 23 partial, 2,982 planned and 73 N/A. CBIND-035F6 then maps all 21 SpriteBatch
+> text/mesh and OcclusionQuery rows: one versioned text command covers every canonical DrawString
+> overload, mesh colors and positions are converted because the native Color carries a vtable, and
+> the owned query handle is capability-gated and behaves as an ordinary graphics resource. The
+> inventory is now 3,358 implemented, 23 partial, 2,961 planned and 73 N/A. CBIND-035F7 then maps
+> all 118 `graphics-ext` rows: seven identities at their native ordinals, two settings-bag PODs
+> with canonical-default initializers, and CRT/depth/ASCII post-process effects. Because the
+> extended layer is an opt-in build option, every declaration exists in every build and the effect
+> routes report `NOT_SUPPORTED` without it, so the exported ABI never changes shape. The inventory
+> is now 3,476 implemented, 23 partial, 2,843 planned and 73 N/A and **no planned CBIND-035 row
+> remains**. CBIND-035G then closes the parent with `Draw3DSmoke.c`: deterministic refusal on a
+> backend without the 3D capability, and observable pixel change through converted user primitives,
+> indexed user primitives, buffered indexed geometry and a full owned Model draw on the CPU-raster
+> SOFTWARE backend. Pixel readback is treated as a capability separate from 3D, so HEADLESS draws
+> without claiming pixel evidence. Adding the third tree exposed three suites that branched on
+> renderer *identity* instead of capability; they now probe actual behavior, which also turned
+> SOFTWARE's real cube storage, mip upload and exact drawn texels into new positive evidence. All
+> three trees run the same 47 tests green.
+>
+> CBIND-036 is partitioned into five dependency-ordered slices totaling exactly 406 rows.
+> CBIND-036A closes the first 42: the whole `storage` module. Storage is independent of the
+> graphics device and of the `Game` lifecycle, so its handles are not game children; ownership
+> instead nests device -> container -> stream, and each level refuses destruction while it
+> still has a live child. The canonical fake-async `BeginShowSelector`/`EndShowSelector` and
+> `BeginOpenContainer`/`EndOpenContainer` pairs complete before `Begin` returns, so each maps
+> to one synchronous C call that still invokes the completion callback -- no `IAsyncResult`
+> or invented operation handle. `System::IO::Stream` stays behind the adapter: a C stream
+> handle exposes read/write/seek/position/length/set-length/flush/capability/close only, and
+> wider-than-Int32 counts are refused instead of truncated. Directory and file listings are a
+> count plus an indexed copy because the canonical getters rebuild an unordered vector per
+> call. Three boundary conversions were added centrally while doing it --
+> `filesystem_error` and `System::IO::IOException` to `CNA_RESULT_IO`, and
+> `StorageDeviceNotConnectedException` to `CNA_RESULT_INVALID_STATE` -- all three proven in
+> the adapter test rather than inferred. All three trees run the same 48 tests green.
+>
+> CBIND-036B is split in two at the boundary between the manager a C consumer drives and the XNB
+> reader pipeline only C++ type readers can join. CBIND-036B1 closes the manager half (40 rows):
+> resolved asset path and normalized cache key, built-in loader registration, service-provider
+> presence, graphics-device get/set validated by borrowed-handle re-validation plus pointer
+> identity, the manifest and `.xnb` reader-usage snapshots as fixed PODs plus count/indexed copy,
+> and typed Texture2D, TextureCube and SoundEffect load routes returning independently owned
+> handles. Two boundaries are recorded rather than papered over: `System::IServiceProvider` may
+> never cross the ABI, so the two service-provider constructors and the property stay `partial` with
+> presence-only observability; and `Load<T>`/`RegisterTypeReader<T>`/`RegisterCnjLoader<T>` are
+> `not-applicable` because C cannot name an arbitrary C++ type — the C API adds a typed route per
+> asset type instead of an invented untyped registration. The manifest scans a whole directory tree,
+> so `ContentSmoke.c` builds its own content root through the storage API rather than pointing the
+> root at the working directory.
+>
+> CBIND-036B2 then closes the reader half and with it parent CBIND-036B. An owned
+> `CNA_ContentReaderHandle` is built over an owned storage stream plus an optional manager handle,
+> both borrowed through new adapter records so neither `System::IO::Stream` nor `ContentManager`
+> crosses the ABI. Two lifetime rules come straight from the canonical types: the borrow blocks
+> closing the stream, and destroying the reader closes it, because the canonical reader derives
+> from a binary reader that owns its stream by default. Type erasure is where the mapping stops,
+> and the inventory says so instead of inventing an untyped operation: the two untyped read routes
+> are `partial` because a type-erased C++ object has no C representation, and every typed reader
+> template, `LooseFileContentTypeReader<T>` and factory registration is `not-applicable`.
+> `ContentLoadException` gained a central boundary conversion to `CNA_RESULT_IO`, which is what
+> made the reader's own limit and truncation failures land correctly. `ContentReaderSmoke.c` builds
+> a compiled-asset fixture through the storage API and asserts the whole protocol byte-exactly. The
+> inventory is now 3,582 implemented, 28 partial, 2,704 planned and 101 N/A, with no planned
+> `content` or `storage` row left; all three trees are green at 49/49.
+>
+> CBIND-036C then maps the 98 network identity, value and packet rows. Four things are worth
+> keeping: `SendDataOptions` is exposed as discrete identities, not a bit set, because the canonical
+> enumeration is marked as flags but uses plain sequential values; the canonical packet color
+> asymmetry (writer emits four bytes, reader consumes four floats) is preserved and proved in both
+> directions rather than corrected; the canonical `NetworkSessionProperties` forwards `Insert` and
+> `RemoveAt` to its backing vector with no bounds check and its enumerator dereferences before its
+> first advance, so the C routes decide both cases themselves instead of passing undefined behavior
+> through; and a join failure's join error -- the one canonical payload a diagnostic message cannot
+> carry -- is recorded per thread by the firewall and read back through
+> `cna_net_get_last_join_error`, cleared by any later failure so it can never go stale. Two `_ext`
+> routes move packet bytes, because the canonical API hands buffers straight to send/receive and
+> never exposes them, which would otherwise leave the whole packet surface untestable. The inventory
+> is now 3,665 implemented, 29 partial, 2,606 planned and 115 N/A; all three trees are green at
+> 50/50.
+>
+> CBIND-036D then maps gamers, machines and the event-argument types, and its slice boundary needed
+> one correction: `LocalNetworkGamer` moved to CBIND-036E, because its receive and send paths
+> dereference the owning session and so it cannot exist before sessions do — the 65/104 split became
+> 47/122. The four CNA extension setters on a gamer keep an `_ext` suffix so a consumer can see
+> which state the canonical API otherwise leaves permanently fixed. A machine's roster is a count
+> plus borrowed views that block the machine's release, and the canonical always-throwing
+> roster-removal placeholder is reported as `NOT_SUPPORTED` rather than faked. The seven
+> event-argument types become fixed descriptions with validating initializers, delivered by value
+> like every other C API event payload. The inventory is now 3,711 implemented, 29 partial, 2,559
+> planned and 116 N/A; all three trees stay green at 50/50.
+>
+> CBIND-036E is partitioned into five slices by what each part needs to exist: discovered sessions
+> first, then the session object's own state, its ten events, the creation/discovery/join surfaces
+> whose fake-async pairs need the session object to exist, and the local gamer last. CBIND-036E1
+> closes the first 17 rows. Two canonical limits shape it: the quality-of-service type accepts only
+> a round-trip sample, so that is all a C caller can supply; and a collection element is copied out
+> rather than aliased, so it survives the collection it came from — which is also how the canonical
+> factory treats its own input. The inventory is now 3,728 implemented, 29 partial, 2,542 planned
+> and 116 N/A; all three trees stay green at 50/50.
+>
+> CBIND-036E2 then maps the session object, and two boundaries moved while implementing it. The
+> three synchronous `Create` overloads came here from CBIND-036E4, because none of the session's
+> state is reachable without a session object (57/20 became 60/17). And the minimum signed-in-gamer
+> surface was borrowed from CBIND-037, because the canonical session constructor selects its host
+> from its local gamers and therefore throws when none is signed in — a session simply cannot exist
+> without one. Three canonical behaviors are preserved rather than smoothed over: start and end only
+> queue a state change until the pump runs; a packet event on a non-`SystemLink` session is a
+> deliberate no-op; and a remote gamer is retained by the C layer because the canonical add
+> explicitly does not take ownership, so releasing the caller's own handle must not invalidate the
+> roster. The inventory is now 3,792 implemented, 30 partial, 2,477 planned and 116 N/A; all three
+> trees stay green at 50/50.
+>
+> CBIND-036E3 then maps the ten session events. Each gets its own typed subscribe route delivering
+> the matching event description, with one shared unsubscribe. The payload gamer is handed over as a
+> handle that exists only for the duration of the callback, so a consumer can never retain a pointer
+> into session-owned state, and an instance registration holds a weak reference to its session so
+> releasing it after the session is gone is a no-op rather than a use-after-free. The canonical
+> gamer-joined replay — which fires once per gamer already present the moment a handler subscribes —
+> is asserted directly. The inventory is now 3,806 implemented, 30 partial, 2,463 planned and 116
+> N/A; all three trees stay green at 50/50.
+>
+> CBIND-036E4 then collapses every canonical `Begin`/`End` pair into one synchronous C route that
+> still invokes the completion delegate — the same shape storage used in CBIND-036A — and maps
+> discovery, join and the invited path alongside them. The asynchronous creations are deliberately
+> **not** aliases of the synchronous ones: the canonical end step substitutes its own gamer limit
+> instead of forwarding the caller's, and the test asserts that difference rather than hiding it.
+> Two more canonical behaviors are preserved: a search refuses a local-only session type outright,
+> and only a SystemLink search reaches real discovery. The inventory is now 3,823 implemented, 30
+> partial, 2,446 planned and 116 N/A, and `LocalNetworkGamer` is the only `net` header with planned
+> rows left; all three trees stay green at 50/50.
+>
+> CBIND-036E5 then maps those local gamers and closes parent CBIND-036. A local gamer is a network
+> gamer, so it reuses `CNA_NetworkGamerHandle` and every route refuses a handle that is not local
+> rather than reinterpreting it. All three `ReceiveData` overloads and all six `SendData` overloads
+> get their own routes, the sender a receive reports comes back as a borrowed view that keeps its
+> session alive, and the two CNAEXT queue operations keep an `_ext` suffix. Three canonical
+> behaviors are preserved and asserted instead of tidied up: the offset receive consumes its packet
+> **before** rejecting an out-of-range offset, the packet-reader receive always reports zero bytes
+> even when it consumed a packet, and `EnableSendVoice`/`SendPartyInvites` are declared no-ops. The
+> inventory is now 3,841 implemented, 30 partial, 2,428 planned and 116 N/A, and the `net` module
+> has no planned row left; all three trees stay green at 50/50.
+>
+> A fourth, verification-only tree then closes the one evidence gap CBIND-035F and CBIND-036 had
+> relative to the earlier slices: a combined ASan+UBSan SOFTWARE/CNAEXT build runs all 50 C API
+> tests green **with leak detection enabled** — stricter than the `detect_leaks=0` the CBIND-035B–E
+> runs used. Nothing in the storage streams, the content readers or the network sessions leaks,
+> reads out of bounds or executes undefined behavior, including the borrowed-view counters and the
+> raw session pointer the C layer owns.
+>
+> CBIND-037 owns everything that remains and is partitioned into seven module-sized slices, ordered
+> by what each part needs to exist. CBIND-037A closes the first of them, CNA's own `core` module:
+> one route per canonical logger static so C never depends on a defaulted argument, the process-wide
+> minimum level, the compile-time platform, desktop operating system, renderer identity and renderer
+> name, and both backend classifications — implementation technology and recommendation maturity —
+> for any of the 46 public renderer identities rather than only the compiled-in one. Names use the
+> project's count/copy pair instead of the canonical static-storage `std::string_view`, so no
+> pointer into CNA storage crosses the ABI.
+>
+> Two decisions are worth recording. `CNA::CNAException` gained a central boundary conversion to
+> `CNA_RESULT_INVALID_STATE`, which is what makes the canonical non-desktop refusal of
+> `getCurrentDesktopOS()` observable in C instead of collapsing into a generic internal failure.
+> And the canonical log levels keep their exact ordinals, including the deliberate 100 for
+> `EXPERIMENT` — the C identities are not renumbered into a dense range, so 6 is not an identity and
+> is refused. `CNAEXT` itself is recorded as not-applicable: a documentation-only marker macro with
+> no callable behavior. The inventory is now 3,912 implemented, 30 partial, 2,356 planned and 117
+> N/A, with no planned `core` row left; all three trees are green at 51/51 and the sanitizer tree
+> agrees with leak detection on.
+>
+> CBIND-037B then splits the input module by device family and opens it with CBIND-037B1: the
+> gamepad controller type at its canonical ordinals, and the whole `GamePadCapabilities` surface as
+> one fixed 48-byte value carrying the type plus 35 directly readable **and writable** flags. A
+> value rather than a handle, because the canonical type is a copyable snapshot with no identity;
+> direct fields rather than 74 routes, because that is what a getter/setter pair means in C. One
+> boundary moved while implementing it: `GamePad::GetCapabilities` came here from CBIND-037B3,
+> since a capabilities value with no producer cannot be tested against anything real. The test
+> cross-checks connection against the gamepad state snapshot, so the two answers can never
+> disagree, and asserts the canonical disconnected value whenever a slot is empty. The inventory is
+> now 3,998 implemented, 30 partial, 2,270 planned and 117 N/A; all three trees and the sanitizer
+> tree stay green at 51/51.
+>
+> CBIND-037B2 then maps the five gamepad value types onto the representations the C API already
+> had, so the ABI never grows a second spelling of the same numbers. The button set and the
+> directional pad are the existing button mask — the pad restricted to its four bits — because that
+> is what each canonical type holds and how CNA itself derives one from the other; the new
+> thumbstick and trigger values are byte-identical to the two halves of the analog block a snapshot
+> already carried, which is asserted rather than assumed.
+>
+> Three canonical behaviors are preserved and asserted rather than tidied up: the thumbstick
+> constructor square-clamps to ±1 while the trigger constructor clamps to 0..1; trigger equality is
+> an **epsilon** comparison, proved with the next representable float above a value — a genuinely
+> different float that still compares equal; and the directional pad's hash uses its own weighting
+> (Down 1, Left 2, Right 4, Up 8) rather than the button bits. One representational limit is
+> recorded instead of hidden: the C snapshot carries a single button mask, so a supplied
+> directional pad is merged into it — which is the relationship every state CNA itself builds
+> already has, since the capture path derives both from one raw mask. The inventory is now 4,063
+> implemented, 30 partial, 2,205 planned and 117 N/A; all four trees stay green at 51/51.
+>
+> CBIND-037B3 then maps the `GamePad` statics. Each takes an active game handle for the same reason
+> the state and capability captures do — CNA is event-driven, so a device query is only meaningful
+> on the game thread of a running game — except the pure dead-zone exclusion, which takes none. Two
+> canonical shapes are preserved rather than collapsed: a query that reports availability through
+> its return value and its answer through an output reference keeps **both** answers separate in C,
+> so "no sensor" is an ordinary answer rather than a failure; and the four identity strings use the
+> project count/copy protocol. The touchpad finger query's four output references become one fixed
+> 16-byte value. Three CNA::Input identity enumerations are borrowed from the later input-extension
+> slice, because three of these statics return them and cannot be mapped without them. The
+> inventory is now 4,108 implemented, 30 partial, 2,160 planned and 117 N/A; all four trees stay
+> green at 51/51.
+>
+> CBIND-037B4 then splits by device — the cursor is an owned disposable type and text input is
+> event-driven, while the keyboard and mouse are plain snapshots — and CBIND-037B4a closes the
+> keyboard. The whole `KeyboardState` value surface and every `Keyboard` static map over the
+> 256-slot bit field C already had; one canonical behavior is deliberately **not** reproduced and
+> is recorded as a deviation: the canonical constructors silently drop a key outside that field,
+> and C refuses instead, so a caller can never lose a key without being told. Both key-name
+> families use the count/copy protocol with borrowed views for the reverse lookups, and an unknown
+> name answers with the canonical none identity rather than failing. The inventory is now 4,143
+> implemented, 30 partial, 2,125 planned and 117 N/A; all four trees stay green at 51/51.
+>
+> CBIND-037B4b then closes the mouse. Each snapshot construction takes the button bit set the
+> snapshot already carries rather than five separately ordered button-state arguments, so a
+> consumer cannot silently transpose two of them, and the eight-argument form leaves the horizontal
+> wheel at zero exactly as the canonical one does. Unlike the gamepad and keyboard snapshots this
+> type **does** override its string conversion, and C reproduces the canonical format exactly. The
+> static `ClickedEXT` event becomes an owned registration that takes no game handle, because the
+> canonical event belongs to the process; `INTERNAL_onClicked` becomes the raise route that makes
+> it observable without a real device, and the canonical test-support reset is documented as
+> dropping every subscription — including ones this API handed out — so a release afterwards is a
+> no-op rather than a failure, which the test proves. The inventory is now 4,164 implemented, 30
+> partial, 2,104 planned and 117 N/A; all four trees stay green at 51/51.
+>
+> CBIND-037B4c then closes the mouse cursor. All twelve stock accessors collapse into one route
+> taking a stock identity, and the handle it returns is a **borrowed view** — precisely because the
+> canonical stock cursors are process-lifetime singletons whose disposal is a deliberate no-op, so
+> destroying the handle must never free the shared native cursor. The test proves that by disposing
+> and releasing one identity and then using a fresh handle for the same identity successfully.
+> Four rows are recorded `not-applicable` with reasons rather than forced into the ABI: the
+> `SDL_Cursor*` constructor and `GetSDLCursor` would expose a native backend pointer, and the two
+> move operations have no counterpart because a handle is the only name C has for a cursor. The
+> texture-derived cursor is probed by behavior, not by renderer identity: whichever documented
+> answer the backend gives, the success path is exercised fully and the refusal path must leave the
+> output handle invalid. The inventory is now 4,182 implemented, 30 partial, 2,082 planned and 121
+> N/A; all four trees stay green at 51/51.
+>
+> CBIND-037B4d then closes text input, and with it the parent CBIND-037B4. All three canonical
+> events — committed text, IME composition and the SDL3 candidate list — become owned registrations
+> that take **no game handle**, because the canonical events are static and belong to the process;
+> one release route covers all three, since a registration already knows which event it came from.
+> Each event's arguments cross as a versioned info structure of borrowed views valid only for the
+> duration of the callback, so no `std::string` or `std::vector` reaches the ABI. The three
+> `INTERNAL_On*` dispatches become raise routes, which is what makes the whole family observable on
+> a backend with no keyboard or IME. Two canonical behaviors are preserved rather than tidied up:
+> `start`/`length` are byte offsets forwarded verbatim and are deliberately not validated against
+> the composition text, and `selected` is not range-checked against the candidate count. One
+> deliberate deviation is documented: an undefined `CNA_TEXT_INPUT_TYPE_*` is **refused** instead of
+> silently falling back to plain text as the canonical conversion does, so a consumer is never
+> handed a different keyboard than it asked for. The suite probes by behavior, not by renderer
+> identity — a windowed backend publishes a real window into the canonical static, so it forces the
+> unbound case to pin the null-guarded contract, then restores whatever was bound and asserts only
+> the relationship between the answers. The inventory is now 4,209 implemented, 30 partial, 2,055
+> planned and 121 N/A; all four trees stay green at 51/51.
+>
+> CBIND-037B5 then adds touch and gestures, 80 rows. `GestureType` becomes a `uint32_t` bit set
+> whose four canonical operators need no route, because C composes real flags with its own
+> operators; `GestureSample` becomes a fixed 64-byte value whose eight getters are plain fields, with
+> `System::TimeSpan` crossing as 100-nanosecond ticks. The touch location and collection surfaces
+> reuse the **existing** fixed eight-slot snapshot rather than adding a second spelling, so the whole
+> mutation surface — add, insert, remove, remove-at, clear, contains, index-of and the
+> insert-semantics copy — operates on it in place. Writing the tests surfaced four canonical
+> behaviors worth keeping rather than smoothing: equality, the hash and the text all ignore the
+> pressure extension and the text carries only the position; reading an empty gesture queue throws
+> canonically and is therefore refused in C rather than answered with a default sample; a raised
+> touch event feeds gesture detection and **not** the snapshot, and is dropped outright until a
+> display size is published; and the canonical reset clears the display metrics and window handle
+> even though the canonical class comment says it leaves them alone — the C contract follows the
+> behavior and says so. Three deliberate C deviations are documented: a negative maximum touch count,
+> a pressure outside zero through one, and an append past the fixed capacity are all refused rather
+> than stored or dropped silently. Five rows are `not-applicable` with reasons: the four iterator
+> overloads and the class-local `intcs` alias. The inventory is now 4,284 implemented, 30 partial,
+> 1,975 planned and 126 N/A; all four trees stay green at 51/51.
+>
+> CBIND-037B6 then adds the haptics extension family, 126 rows — the first input slice with no XNA
+> counterpart at all, so the whole header maps `CNA::Input` and takes no `_ext` suffixes, following
+> `core_ext.h`. It is also the first input slice to produce an **owned handle** rather than a value:
+> `HapticDevice` becomes `CNA_HapticDeviceHandle` (`ObjectKind` 68) with the destructor/`Dispose`
+> split `MouseCursor` established. The design point that makes the family usable at all is that a
+> **closed device is not an error state**: the three open routes never fail for want of hardware,
+> they hand back a real handle whose open flag says whether anything is behind it, and every route
+> on a closed device answers `CNA_FALSE`, zero or -1 through its output. That is what lets the whole
+> surface be tested on machines with no force-feedback hardware, which is every verification tree.
+> Two representational decisions are documented rather than hidden: a custom waveform travels
+> **beside** the effect value instead of inside it, so the C value stays a plain copyable POD with no
+> heap ownership, and the device name is left out of the capability value and read through the
+> count/copy pair — which is why the capability comparison takes both names as arguments, so it
+> reproduces the canonical comparison exactly instead of quietly comparing fewer fields. The
+> canonical pass-throughs are preserved: rumble strength, gain and autocenter reach the platform
+> unvalidated, and freeing an unknown effect identifier is a successful no-op. Three rows are
+> `not-applicable` with reasons: the `SDL_Haptic*` constructor and the two move operations. The
+> inventory is now 4,407 implemented, 30 partial, 1,849 planned and 129 N/A; all four trees stay
+> green, now at 52/52 with the new `CApi_HapticsSmoke` target.
+>
+> CBIND-037B7a then adds the raw joystick family, 54 rows, in `input_joystick.h` /
+> `CnaCApiInputJoystick.cpp` / `JoystickSmoke.c`. Two design points carry the slice. First, **the
+> snapshot is an owned handle, not a fixed POD** — the one deliberate departure from the input
+> families' value rule. `JoystickStateEXT` carries four heterogeneous variable-length arrays with no
+> canonical maximum, unlike the touch panel's fixed eight slots: a fixed value would have to invent
+> a capacity that silently truncates a real HOTAS setup, and four independent per-array queries would
+> answer from four different instants. So `cna_joysticks_capture_state` captures once into a
+> `CNA_JoystickStateHandle` (`ObjectKind` 69) and each array is read with its own count/copy pair
+> against that instant — which also matters because trackball motion is relative and capturing
+> consumes it. Second, **the POV hat is an ordinal identity, not a bit set**: the plan's own handoff
+> guessed "probably a bit set", and the canonical header says the opposite — the platform's
+> combinable up/down and left/right bits are enumerated as the nine reachable combinations, so
+> `RIGHT_UP` is 5 and composing these values is wrong. Both corrections came from reading the
+> canonical source rather than assuming. The haptics **closed-device-is-not-an-error** contract
+> carried over unchanged and is again the only path any verification tree exercises: an unconnected
+> identifier answers with the disconnected defaults, a power percent of -1 meaning "unknown" rather
+> than "empty", two empty strings and four empty arrays. The device name and GUID stay outside the
+> capability value, so the comparison takes both strings alongside both values; both hot-plug events
+> become owned registrations (`ObjectKind` 70) with one shared release route plus raise routes that
+> invoke the same public multicast field the platform layer invokes, so no `Internal` bridge crosses
+> the ABI. The inventory is now 4,461 implemented, 30 partial, 1,795 planned and 129 N/A; all four
+> trees are green at 53/53 with the new `CApi_JoystickSmoke` target, the sanitizer tree with leak
+> detection on. **Next: CBIND-037B7b** — the last 38 `input` rows (host sensors, device enumeration,
+> clipboard, power), which closes parents `CBIND-037B7` and `CBIND-037B` and the whole `input`
+> module. **Done — see below.**
+>
+> CBIND-037B7b then completes those last 38 `input` rows in `input_devices.h` /
+> `CnaCApiInputDevices.cpp` / `InputDevicesSmoke.c`, reusing the shapes B7a settled rather than
+> inventing new ones. Three decisions are recorded. The two sensor reads follow the
+> availability-separate-from-the-answer rule and go one step further: when the flag reports no
+> sensor the reading output is **left exactly as the caller left it**, because that is what the
+> canonical query does with its reference — the test proves it with sentinel components that must
+> survive. `CNA_InputDeviceInfo` carries a **`uint64_t`** identifier where the sensor and joystick
+> descriptors carry `uint32_t`, since a touch-device identifier is natively 64-bit; the test
+> round-trips a value above the 32-bit range so a narrowing conversion could not pass unnoticed.
+> And `cna_clipboard_set_text` **reports that the request was made, not that it succeeded** — the
+> canonical setter returns nothing, so there is no platform outcome to forward and this ABI does not
+> invent one. Because the clipboard is process-external state the suite does not own, its test
+> captures the pre-existing content, asserts a relationship (if the write took effect the read must
+> return exactly those bytes; the presence flag must agree with a non-empty read in both
+> directions), proves the empty and buffer-too-small cases only where the platform actually stored
+> the text, and restores what it found. The inventory is now 4,499 implemented, 30 partial, 1,757
+> planned and 129 N/A; all four trees are green at 54/54 with the new `CApi_InputDevicesSmoke`
+> target, the sanitizer tree with leak detection on. **The `input` module is closed** — 834
+> implemented, 0 partial, 0 planned, 27 N/A — joining `storage`, `content`, `net` and `core`.
+> **Next: CBIND-037C**, the 325-row `media` module; note that `cna_c_api` does not link `cna_media`
+> yet, and that FFmpeg is available in all four trees so the video surface is real rather than a
+> compiled-out stub.
+>
+> CBIND-037C1 then opens that module with its 25 identity, visualization and media-source rows, in
+> `media.h` / `CnaCApiMedia.cpp` / `MediaSmoke.c`, and adds the `cna_media` link edge. The media
+> family is sub-partitioned into C1–C7 in `plan_binding.md`. Two decisions are recorded.
+> `CNA_MediaSourceType` **keeps its canonical 0/4 gap** rather than being renumbered into a dense
+> range, so it deliberately has no `MAXIMUM` and consumers validate membership of the two defined
+> values — the same rule that kept the experiment log level at 100. And the canonical
+> `MediaSource::GetAvailableMediaSources` allocates its sources with `new` and returns raw pointers
+> its caller must free: **none of that ownership crosses the ABI**, because each C route enumerates,
+> reads the one source it was asked about and destroys the whole list before returning, so an index
+> is a point-in-time value with nothing to release. The ASan tree with leak detection is what proves
+> that, rather than a comment claiming it. `ToString` needed no route of its own — the canonical
+> implementation returns the display name unchanged — and `CNA_VisualizationData` is a fixed
+> 2,056-byte value rather than a handle, because both canonical buffers are fixed at 256 floats and
+> the canonical type exposes them both as public fields and through getters. The inventory is now
+> 4,524 implemented, 30 partial, 1,732 planned and 129 N/A; all four trees are green at 55/55 with
+> the new `CApi_MediaSmoke` target.
+>
+> CBIND-037C2 then maps `Song` and `SongCollection`, 37 rows. The shape decision is
+> **reference-counted sharing**: several handles may name one song, which is what lets
+> `cna_song_collection_create` retain every song it was given — the canonical collection only stores
+> non-owning pointers, so a caller that released its handles after building one would otherwise be
+> left with dangling elements. The test proves the retention by releasing every caller-held handle
+> and then still reading a live song out of the collection. Three canonical behaviors are preserved
+> rather than tidied, and the first is another header-contradicts-implementation case like
+> `TouchPanel::ResetForTests`: an **omitted song name stays empty** even though the constructor's own
+> documentation says it defaults to the file name; **equality and the hash come from the file path**
+> rather than handle identity, so two independently created songs over one file compare equal and
+> hash equal (a deliberate CNA improvement over FNA's identity-based hash, kept rather than
+> "fixed"); and `getIsRated` is **not** "rating is nonzero", because both tag formats reserve zero
+> for unrated. Canonical collection disposal **empties** the collection, so its count drops to zero
+> and every index is refused while the songs survive. Seven rows are not-applicable with reasons
+> (the `MediaLibrary` friend declaration; the collection's iterator pair and its two aliases), and
+> three `Song` rows returning library-owned entities are re-partitioned into `CBIND-037C3`, where
+> those handles will exist. `MediaSmoke.c` builds its fixture files through the **storage API** —
+> the only portable way a strict-C17 test can obtain a real absolute path — with one non-ASCII UTF-8
+> file name. The inventory is now 4,554 implemented, 30 partial, 1,695 planned and 136 N/A; all four
+> trees green at 55/55.
+>
+> CBIND-037C3 then lands the whole music catalog in one slice, 117 rows: `MediaLibrary` plus
+> `Album`, `Artist`, `Genre`, `Playlist` and their four collections. It had to be one slice —
+> **none of the entity types is constructible from outside the library**, so a slice that mapped
+> them without it could not have produced a single testable object; `MediaLibrary` was
+> re-partitioned in from `C5` and its six picture rows out to `C4`. The shape decision is that
+> everything except the library is a **borrowed view holding a reference to its library**, so
+> releasing the library handle first is safe and there is no parent-before-child rule; the four
+> structurally identical collections share one C shape rather than four.
+>
+> Two canonical facts came from evidence rather than assumption. Album equality is **not** the name
+> alone — names collide across artists, so the canonical comparison pairs name with artist. And
+> `MediaLibrary(MediaSource*)` **borrows** its argument rather than adopting it: it copies the
+> source's kind and name into an object of its own, so leaving the source to the library leaked 48
+> bytes, which **the sanitizer tree caught** and the C route now avoids by destroying every
+> enumerated source before returning. That is the second time this campaign's ASan tree has paid
+> for itself on a media slice.
+>
+> The test is worth copying for `C4`: it points SDL's user-folder lookup at a generated fixture via
+> `XDG_CONFIG_HOME`, so the library it scans is **deterministic** — two tag-only MP3 files sharing
+> an artist, album and genre plus a folder cover whose exact bytes the album-art routes must return
+> — instead of depending on whatever music the developer's machine holds, and no real user
+> directory is ever read or written. Album art also settles a shape: the canonical members return a
+> caller-owned stream, and C reads it to its end and destroys it inside the call so the image
+> crosses as bytes and **no stream enters the ABI**. The inventory is now 4,646 implemented, 30
+> partial, 1,578 planned and 161 N/A; all four trees green at 56/56. **Next: CBIND-037C4**, the
+> 60-row picture surface, whose one new shape is that `PictureAlbum` is a tree.
+>
+> CBIND-037C4 then lands that picture surface. Two shapes are genuinely new. The **picture-album
+> tree** is walkable because the root's absent parent is an availability answer rather than a
+> failure — a caller climbs until the flag turns false — and the library's root-album route answers
+> the same way, since a device with no readable picture location has no tree at all. And a picture's
+> date is the **ABI's first point in time**: durations elsewhere are 100-nanosecond ticks from zero,
+> so the date uses the same tick counted from the Unix epoch rather than introducing a second time
+> unit. Everything else reuses settled shapes — image and thumbnail bytes follow the album-art
+> contract (caller-owned stream read to its end and destroyed inside the call, thumbnail identical
+> to the full-size image), the two collections are the same six-route shape, and
+> `cna_media_library_save_picture_from_stream` accepts a **storage stream handle** because a storage
+> stream is the only byte source this ABI owns. The fixture gained a one-pixel BMP, so the picture
+> side is as deterministic as the music side: measured 1×1 dimensions, a nonzero date, and image
+> bytes that must match the fixture file byte for byte. The suite deletes the picture it saves so
+> repeated runs start from the same state. The inventory is now 4,694 implemented, 30 partial, 1,518
+> planned and 173 N/A; all four trees green at 56/56. **Next: CBIND-037C6**, `MediaPlayer` and
+> `MediaQueue` (44 rows) — a static event surface, so the process-wide registration shape applies.
+>
+> CBIND-037C6 then maps that playback surface. The player becomes free game-scoped routes (C has no
+> static class) and the queue becomes a **view of one process-lifetime object**, so there is no
+> route to construct, move or destroy a queue — four rows recorded as a stated limitation rather
+> than an oversight. Two canonical behaviors are preserved rather than tightened: the volume setter
+> **clamps** instead of refusing, and the indexed play overload is **not** range-checked. Two
+> deviations are forced by ownership and documented in both the header and the coverage rule: a
+> **queue entry crosses as an independently owned copy** rather than a borrowed view, because the
+> canonical queue destroys its entries on every clear — which every play route does — so a borrowed
+> handle would dangle; and **append copies** for the mirror reason, since the canonical `Add` adopts
+> the pointer it is given and C cannot hand a handle's object away without leaving the caller a
+> stale handle. Both copies carry the same file and name, so they compare equal to the original,
+> which is exactly what the canonical player does when it enqueues a song.
+>
+> The test asserts the playback transitions **as a relationship**, not a fixed answer: whether a
+> play call really starts playing depends on the platform's ability to decode the fixture file, so
+> the paused/playing round trip is asserted when playback began and the no-op contract otherwise.
+> Every process-wide setting it touches is restored. The inventory is now 4,734 implemented, 30
+> partial, 1,474 planned and 177 N/A; all four trees green at 57/57. **Next: CBIND-037C7**, `Video`
+> and `VideoPlayer` (42 rows), which closes the media module — FFmpeg is available in all four
+> trees, and it is the one media family that touches the graphics device.
+>
+> CBIND-037C7 then does exactly that and **closes the media module**: 276 implemented, 0 partial, 0
+> planned, 52 N/A. Its one hard problem is the frame texture, and it is solved by **lifetime rather
+> than by copying**: the player owns and replaces its texture, so `cna_video_player_get_texture`
+> hands back a borrowed `CNA_Texture2DHandle` that the C layer invalidates on the **next call to
+> that player** — any later route, including another `get_texture`, releases it, so a stale frame
+> fails with `INVALID_HANDLE` instead of touching freed memory. The graphics device is reported as
+> **presence only**, because a borrowed device handle is valid solely inside the callback that
+> produced it.
+>
+> Three canonical behaviors are reported rather than corrected, and two of them were established by
+> running the code rather than reading the header: an undecodable file leaves the metadata zeroed
+> and, on play, leaves the player stopped **with its video cleared** (so `get_video` answers false);
+> and `Video::FromUriEXT` **does not parse URIs at all** — unlike the song factory it forwards its
+> string straight to the file constructor, so an `http:` string is simply a missing path. Both were
+> found by probing the built library when the first test draft failed, which is the pattern this
+> campaign keeps rewarding: read the `.cpp`, then check the running code.
+>
+> One process lesson worth keeping: the first version of `VideoSmoke.c` reused the media fixture
+> that `MediaLibrarySmoke` writes at runtime, and passed when run alone but failed under parallel
+> ctest, because test order is not a dependency. It now writes its own fixture. The inventory is now
+> 4,775 implemented, 30 partial, 1,432 planned and 178 N/A; all four trees green at 58/58. **Next:
+> CBIND-037D**, the 289-row devices slice — and note the standing owner decision recorded in
+> `plan_binding.md`: flip `CNA_DEVICES=ON` in the `sdlrenderer` and `asan` trees so the
+> `#ifdef CNA_DEVICES` half of `devices-ext` is actually exercised.
+>
+> That reconfigure is **done**: both trees now build with `CNA_DEVICES=ON` and stayed green, while
+> `headless` and `software` keep it OFF so both states are covered. CBIND-037D1 then opens the
+> devices module with the sensor reading values, 70 rows, in `sensors.h` / `CnaCApiSensors.cpp` /
+> `SensorValuesSmoke.c` — a suite that needs no game at all, since every route is a pure value
+> operation.
+>
+> The slice settles the ABI's **second** point-in-time form. `CNA_DateTimeOffset` is two
+> 100-nanosecond tick counts — local time from **0001-01-01** plus the UTC offset — because that is
+> the canonical runtime type's own base, exactly as the picture date counts from the Unix epoch
+> because *its* canonical type does. Reporting each in its own canonical base, clearly documented,
+> beats inventing one shared epoch that matches neither.
+>
+> Three canonical quirks are preserved rather than tidied, and the first is a deliberate refusal to
+> improve the API: **each reading constructor keeps its own argument order** even though the five
+> disagree — the accelerometer takes the timestamp first, the gyroscope the rate first, the compass
+> the true heading last — because normalizing them would make the C API easier to remember and
+> harder to check against the canonical source. Equality pairs each reading's values **with** its
+> timestamp. And the text conversions carry only part of each reading; the motion reading's names
+> only the device acceleration and gravity, omitting the attitude and rotation rate a reader would
+> expect. The canonical reading *interface* becomes the `timestamp` field every reading carries,
+> since C cannot use an abstract base, and its virtual destructor is the slice's one N/A row. All
+> six sensor-state identities are exposed, including the two the canonical header records as
+> currently unreachable — an identity is not a claim that something produces it. The inventory is
+> now 4,844 implemented, 30 partial, 1,362 planned and 179 N/A; all four trees green at 59/59.
+>
+> CBIND-037D2a then adds the two motion sensors that produce those readings — `Accelerometer` and
+> `Gyroscope` as owned handles, 80 rows, with `SensorDeviceSmoke.c` alongside the value suite. Three
+> shape decisions: the canonical common base is a **class template**, so C repeats its contract per
+> sensor rather than modeling a base type; the reading-changed event delivers the **reading itself**,
+> because the event-argument wrapper holds nothing else; and the canonical **test-support** surface
+> is mapped deliberately rather than skipped as test scaffolding — no verification machine has motion
+> sensors, so `set_supported_for_tests_ext` plus `inject_synthetic_update_ext` are the only way a C
+> consumer, or this suite, reaches the supported path and the real dispatch chain instead of
+> permanently seeing "not supported". The injector takes **platform units** and the reading comes back
+> canonical: inject 9.80665 m/s² and read 1 g.
+>
+> Three canonical behaviors are reported rather than smoothed. Reading an unsupported sensor's
+> current value **fails** `INVALID_STATE` — the canonical property throws there instead of answering
+> a default. **Disposing twice is refused**, unlike every other disposable in this ABI, because the
+> canonical sensor treats a second disposal as use-after-disposal. And there is **no disposal query
+> route at all**: the canonical flag is protected, so the disposed state is observed through the
+> refusals every other route then returns, and no query was invented to paper over that. The
+> protected interval-changed event and value-publishing setters exist for derived classes, which C
+> cannot write, so they have no routes either. `SensorFailedException`'s error id reaches C exactly
+> as the network join error does — recorded per thread by the barrier, read with
+> `cna_sensors_get_last_error_id_ext`. The inventory is now 4,904 implemented, 30 partial, 1,282
+> planned and 199 N/A; all four trees green at 60/60, ASan+UBSan with leak detection clean.
+> CBIND-037D2b then closes the sensor namespace with those 46 rows. The three canonical
+> event-argument types resolve three different ways, and the deciding question is the payload:
+> `SensorReadingEventArgs<T>` is a class template wrapping one reading and nothing else, so it is
+> **flattened** — every current-value callback delivers the reading itself; `CalibrationEventArgs`
+> carries **no data at all**, so it becomes a callback with no payload and a value-free type-name
+> pair, because an empty structure would be an ABI liability in C for nothing gained; and the legacy
+> `AccelerometerReadingEventArgs` carries the acceleration as **three separate components** rather
+> than a vector, so it earns a real 48-byte value with the full set of value routes.
+> `cna_accelerometer_subscribe_reading_changed` maps the obsolete event that delivers it, and the
+> canonical firing order — current value first, legacy second, and the legacy one only for a valid
+> reading — is asserted rather than left to chance.
+>
+> `Compass` and `Motion` are unsupported on **every platform this ABI is verified on** (the canonical
+> implementation is real on Android only), so the unsupported refusal is the path a desktop consumer
+> actually hits — the device's real answer, not a gap in the binding. To reach anything past it, this
+> ABI supplies its own backend: `cna_<sensor>_set_test_backend_ext` installs it and the two injection
+> routes drive it, because the canonical hook takes a caller-implemented C++ object C cannot write.
+> Three canonical limits are reported rather than smoothed: the eleventh simultaneous instance of a
+> sensor is refused, a backend cannot be swapped while acquisition runs, and
+> `cna_motion_get_is_attitude_north_referenced_ext` answers a **vacuous** `CNA_TRUE` before a backend
+> starts — "nothing is drifting yet", not "north is known". The inventory is now 4,948 implemented,
+> 30 partial, 1,236 planned and 201 N/A, with `Microsoft::Devices::Sensors` fully mapped; all four
+> trees green at 61/61, ASan+UBSan with leak detection clean.
+> CBIND-037D3 then adds those 69 rows: the vibration controller and the whole `CNA::Devices` service
+> set. `devices.h` carries two different things and says so — vibration is the always-present
+> canonical layer, everything else is the `#ifdef CNA_DEVICES` extension, exported in both build
+> states and reporting `NOT_SUPPORTED` when compiled out, with `cna_devices_ext_is_available` as the
+> probe a consumer calls first. A refusal means "this build has no extension layer", never "this
+> machine has no such device".
+>
+> The clipboard question the plan left open is answered: the input module's `CNA::Input::Clipboard`
+> and the extension's `CNA::Devices::Clipboard` wrap **the same SDL clipboard**, so this ABI does not
+> give a consumer two names for one answer. The reads stay `cna_clipboard_*`; the one difference —
+> the extension's setter returns whether the platform accepted the text, which the input setter
+> discards — becomes `cna_devices_clipboard_set_text_ext` and nothing else.
+>
+> Four of these services end in something no automated caller can finish: a modal dialog, an
+> asynchronous file picker, a tray icon on a real desktop, and a rumble motor no verification machine
+> has. Three have a canonical backend seam, so this ABI supplies the backend C cannot write and
+> exposes only the switch plus a log to read back. The tray takes its backend as a **second
+> constructor** canonically, so it gets a second creation route rather than a switch. The fifth,
+> `cna_url_launcher_open_ext`, has no seam at all — succeeding would open a browser on whatever
+> machine runs the suite — so only its refusals are covered, a gap recorded rather than papered over.
+>
+> Canonical behaviors preserved rather than tidied: vibration **bounds its duration but clamps its
+> intensity**, and a not-a-number strength becomes no vibration rather than reaching the platform
+> undefined; a tray entry index past the last entry is **ignored** by the mutators and reads false;
+> a windowless session answers a content scale of zero and an empty safe area; and the power
+> queries keep their canonical **-1 means unknown** sentinel instead of gaining an availability flag.
+> The inventory is now 5,016 implemented, 30 partial, 1,167 planned and 202 N/A; all four trees green
+> at 62/62 — with the extension layer ON in `sdlrenderer`/`asan` and OFF in `headless`/`software`, so
+> both halves of every route are exercised — and ASan+UBSan with leak detection clean.
+> CBIND-037D4 then closes the devices module with those 24 rows. The question the plan left open —
+> whether a camera frame reuses the borrowed per-frame texture `CBIND-037C7` settled for video, or
+> something else — is answered by the canonical signature itself: `TryAcquireFrame` fills a
+> `Texture2D&` **the caller already owns**, so the C route takes an existing texture handle and lends
+> nothing. Nothing here is invalidated by the next call, because nothing here is lent. Two canonical
+> behaviors are preserved rather than corrected: having no frame ready is an ordinary `CNA_FALSE`,
+> and **a texture whose size does not match the frame is refused in exactly the same way** — no
+> resize, no distinct reason, so a caller must read the frame size first. The driver probe and the
+> camera enumeration stay separate questions, because a driver is not a camera.
+>
+> The canonical class takes its backend as a constructor argument, so the seam is a second creation
+> route as the system tray's is, and it is the only way any verification tree reaches a frame or the
+> refused state. **`cna_camera_create` is never called by a test**: on a machine that has a camera,
+> opening it switches on the user's webcam — the same reason `cna_url_launcher_open_ext` is only
+> exercised through its refusals. Both gaps are recorded in `docs/c-api/DEVICES.md` rather than
+> papered over with a test that would misbehave on a developer's laptop. The inventory is now 5,040
+> implemented, 30 partial, 1,143 planned and 202 N/A, with the **whole devices module closed**; all
+> four trees green at 62/62, ASan+UBSan with leak detection clean.
+> CBIND-037E1 then opens the runtime module with the component model, 93 rows, and it is the slice
+> where this ABI's direction reverses. Everywhere else a caller consumes canonical behavior; a
+> component **is** behavior the caller supplies. The canonical types are C++ interfaces and C cannot
+> implement one, so a component is a `CNA_GameComponentCallbacks` set plus a context, and this ABI
+> supplies the derived object that implements the interfaces and forwards to it. A null callback
+> member is simply not called, which is how a component opts out of a step.
+>
+> That derivation also settles a question `CBIND-037D2a` answered the other way: the canonical
+> **protected** `LoadContent`/`UnloadContent` hooks are mapped here, while a sensor's protected
+> members were recorded not-applicable. The deciding question is not "is it protected" but **"does
+> this ABI have a derived class to hang it on"** — a component does, a sensor did not.
+>
+> `GameServiceContainer` is the one canonical type C cannot fully have: it is keyed by C++ type
+> identity, and C can neither name a type nor author an object implementing a C++ interface. So
+> lookup and removal are exposed over a named-identity subset covering the two services the runtime
+> actually registers — recorded **partial**, which is what that status is for — and **registration
+> has no C form at all**, recorded not-applicable. A consumer's own services belong in the context
+> pointer every callback here already carries.
+>
+> Canonical behaviors reported rather than corrected: `CompareTo` subtracts this component's order
+> from the other's, so the component that updates earlier compares greater; a second disposal is a
+> no-op, the opposite of a sensor's refusal; adding the same component twice is allowed; and a
+> component that is not in the collection answers -1. One deliberate addition with no canonical
+> counterpart: **releasing a component removes it from the collection first**, because a handle-based
+> ABI must never leave the runtime holding a pointer to something it has released — and a game now
+> refuses to be destroyed while any component handle is alive, exactly as it already did for graphics
+> resources, content managers and audio resources. The inventory is now 5,106 implemented, 34
+> partial, 1,050 planned and 225 N/A; all four trees green at 63/63, ASan+UBSan clean.
+> CBIND-037E2 then adds those 57 rows: the game's own state and frame control, its four events,
+> `GameTime`'s constructors, `LaunchParameters`, the framework pump and the title path and content.
+>
+> **The slice's real decision was made twice.** The canonical `Game` has five lifecycle hooks
+> `CNA_GameCallbacks` does not carry — initialization, begin and end of a run, begin and end of each
+> draw. Appending them to that table was tried first: it is ABI-safe, since the structure is
+> size-prefixed exactly so it can grow, and the adapter was changed to copy only what a caller's own
+> `struct_size` covers. It was reverted, because appending leaves **every positional initializer a
+> consumer has already written incomplete** — 33 files in this repo alone failed to compile under
+> `-Werror=missing-field-initializers`. The hooks are now a **second** table, `CNA_GameFrameHooks`,
+> installed with `cna_game_set_frame_hooks_ext`: one extra call at startup, nothing existing broken.
+> That trade belongs in `ABI_VERSIONING.md` when the growth rule is written down properly.
+>
+> One rule was extended rather than invented: `cna_game_tick` is **refused from inside a lifecycle
+> callback**, joining running and destroying the game, because a frame step called from within a
+> frame re-enters the loop it is part of. That was found by segfaulting the suite, not by reading.
+>
+> Canonical behaviors preserved rather than modernized: launch parameters split names and values on
+> the first **colon** — not an equals sign — trim leading flag markers, skip anything shorter than
+> three characters or without a colon, and keep the first occurrence of a name; the title path is
+> process-wide; and a missing title file's plain runtime error is reported as `CNA_RESULT_IO` rather
+> than reaching a caller as an internal failure. One deliberate narrowing: title content is read
+> **whole**, because this ABI has no stream handle for it, and incremental reads are the omission.
+> The inventory is now 5,154 implemented, 34 partial, 993 planned and 234 N/A; all four trees green
+> at 64/64, ASan+UBSan clean.
+> CBIND-037E3 then adds the window — 35 rows, two more than the plan's estimate. The one-per-game
+> question is answered the **fourth** time the same way: every `cna_game_window_*` route addresses
+> the game handle, as the display metrics, the component collection and the service container already
+> do, because a game owns exactly one of each and a handle would add a lifetime to track for nothing.
+> Two canonical shapes collapse into one route each — the platform-handle property and the
+> native-window accessor answer the same pointer, and the name-only screen-device-change overload is
+> the sized one with the current client size, so a non-positive size means keep it.
+>
+> The slice found a result code this ABI had not been using. **A window state change is a request to
+> the platform**, and one the platform refuses is neither an argument fault nor an internal failure:
+> it is `CNA_RESULT_PLATFORM`. A dummy video driver refuses to minimize a window it never really
+> showed, which is why this was the one slice whose first green run was tree-dependent — headless
+> passed, `sdlrenderer` failed, and the difference was a real answer rather than a flaky test.
+>
+> The window's protected hooks are not mapped, by the same test `CBIND-037E1` applied with the
+> opposite result: this ABI supplies the derived class for a component and does not derive the
+> window. The deciding question is never "is it protected" — it is "does this ABI have a derived
+> class to hang it on". The inventory is now 5,176 implemented, 34 partial, 958 planned and 247 N/A;
+> all four trees green at 64/64, ASan+UBSan clean.
+> CBIND-037E4 then adds the graphics device manager, 80 rows — the **one runtime object a C caller
+> creates**. Creating it registers both services `CBIND-037E1` named, so the service query written
+> before anything registered them now has something to find. The adapter inside a candidate
+> configuration is named by **index**, not by pointer, because a pointer into the runtime's adapter
+> list is nothing a C caller could hold safely.
+>
+> Two findings from this slice are worth more than its routes.
+>
+> **The canonical game caches a raw `IGraphicsDeviceService*` and never clears it** — not when the
+> service is unregistered, not when the manager is disposed. Writing `cna_graphics_device_manager_destroy`
+> the obvious way produced a heap-use-after-free on the very next frame, which AddressSanitizer
+> caught with a clean stack: `Game::getGraphicsDeviceProperty()` dereferencing the freed manager from
+> `Game::EndDraw()`. Releasing a manager therefore disposes it, invalidates the handle and **keeps the
+> object alive until the game is destroyed**; a disposed manager still answers that cached pointer
+> correctly, because disposal does not touch the game-owned device it points at. The retained objects
+> are freed with the game, which is why the suite stays leak-clean. This is a canonical defect worked
+> around, not a C API design choice, and it is written down in `docs/c-api/GAME_COMPONENTS.md`.
+>
+> **`PreparingDeviceSettings` cannot change device settings in this runtime at all.** In XNA it is how
+> an application overrides them; here the canonical event-handler collection delivers its argument as
+> a `const` reference, so the argument type's mutable accessor is unreachable from any subscriber,
+> C++ as much as C. The C callback is read-only and the header says why. Reporting what a subscriber
+> can actually do was the honest choice over `const_cast`-ing a power the canonical event does not
+> grant.
+>
+> `IGraphicsDeviceManager` gets no caller-provided implementation, the opposite of what `CBIND-037E1`
+> decided for game components, and the difference is who constructs the object: the runtime creates
+> the manager itself and resolves it through the service container. The inventory is now 5,243
+> implemented, 34 partial, 878 planned and 260 N/A; all four trees green at 65/65, ASan+UBSan clean.
+> CBIND-037E2b then closes the runtime module with those last three rows, and the contract it was
+> held back for turned out to be short: a game owns its content manager as a **value member**, so
+> `cna_game_get_content_manager_ext` answers a **borrowed** handle — the same one every time,
+> refused by `cna_content_manager_destroy`, released with the game rather than by a caller, and
+> accepted by every other content-manager route. Destroying the game while holding it is allowed and
+> simply invalidates it, which is the opposite of an owned manager.
+> `cna_game_set_content_manager_ext` **copies**, because the canonical setter copy-assigns: the
+> caller keeps its own manager and later changes to it never reach the game. The inventory is now
+> 5,246 implemented, 34 partial, 875 planned and 260 N/A. The runtime module is **11 rows from
+> closed**, not closed: `CNA::Runtime` and `CNA::RuntimeOptions` remain, and the module summary is
+> what caught the premature claim. All four trees green at 65/65, ASan+UBSan clean.
+> CBIND-037E5 then closes the runtime module, and it turned out to have **no routes to write** —
+> finding that out was the work. **`CNA::Runtime` is declared and defined nowhere.** All five of its
+> methods would fail to link if anything called them, nothing in the tree calls them, no translation
+> unit includes `CNA/Misc.hpp`, and the built runtime archive contains no `CNA::Runtime::` symbol at
+> all. The repository's own `audit/include/CNA/Misc.hpp.audit.md` had already reached the same
+> conclusion independently, which is corroboration rather than novelty. This ABI cannot bind a symbol
+> that does not exist, so all 11 rows are recorded **not-applicable** with that reason instead of
+> being left planned as if they were work waiting to be done. `RuntimeOptions` is a sound four-flag
+> value on its own, but its only purpose is to parameterize `Initialize`, so mapping it alone would
+> hand a consumer a structure that configures nothing.
+>
+> The record is **guarded rather than asserted**: the new `CApi_UnimplementedRuntimeFacade` check
+> inspects the built runtime archive and fails the moment any `CNA::Runtime::` symbol appears —
+> verified against a stub that produces one, so it is a real gate and not a vacuous pass. If the
+> facade is ever implemented, the check fires and those rows become real work instead of quietly
+> staying wrong. That pattern is the precedent for any surface this campaign finds unreachable.
+>
+> The runtime module is now genuinely closed: 223 implemented, 4 partial, **0 planned**, 69 not
+> applicable. The inventory is 5,246 implemented, 34 partial, 864 planned and 271 N/A; all four trees
+> green at 66/66, ASan+UBSan clean. Only `audio` (205) and `gamer-services` (665) remain in the whole
+> coverage campaign.
+> CBIND-037F1 then opens the audio module by completing sound effects — 48 rows, the 205-row module
+> having been split into four slices by what each part needs to exist. A sound effect can now be
+> created four ways, and the difference is what the bytes are: raw PCM (whole buffer, or an explicit
+> range with a loop region), an **encoded file already in memory** — the canonical stream factory
+> takes a C++ stream and reads it to the end, so the C route takes the bytes it would have read — or
+> a **path on disk**.
+>
+> Two canonical behaviors are reported rather than evened out: **pan is range-checked while pitch is
+> clamped**, and an **empty asset path yields a silent effect** rather than an error. The C range
+> route adds one check the canonical constructor lacks — a negative offset, an empty count or a range
+> leaving the buffer is refused before the decoder ever sees a length nobody validated — which is
+> boundary validation, this ABI's job, not a behavioral change.
+>
+> The four 3D-audio settings are canonical **statics**: their routes take a game handle for thread
+> affinity only, and setting one changes every sound effect in the process, including ones created
+> later. Move operations are recorded not-applicable, because a handle already names an object C
+> never copies or moves. And both audio exceptions now convert in the **exception firewall** rather
+> than in the single creation route that caught one of them locally, so every audio route gets the
+> same answer. The inventory is now 5,284 implemented, 32 partial, 816 planned and 283 N/A — two
+> long-standing `partial` rows closed along the way; all four trees green at 67/67, ASan+UBSan clean.
+> CBIND-037F2 then adds streaming and capture, 49 rows. The design question was whether a streaming
+> instance earns a handle kind of its own, and the answer is **no**: it *is* a sound-effect instance,
+> so it lives under the same kind and every `cna_sound_effect_instance_*` route accepts it, with the
+> canonical overrides dispatching virtually behind them. The streaming-only routes refuse an ordinary
+> instance with `INVALID_STATE`, which is how a caller tells the two apart. What a streaming instance
+> lacks is a **parent effect** — the caller is the source of every sample — and that needed the
+> existing destroy route taught not to dereference a parent that is not there.
+>
+> **Submitted buffers are copied**, which is what makes submission safe from a producer thread while
+> playback runs; the test proves it by overwriting its own buffer immediately afterwards and
+> asserting the queue still holds the data. The two sample computations here are instance methods
+> rather than statics, because they use the rate and channels the instance was created with.
+>
+> Microphones are **index-addressed**, because the canonical list hands out pointers the runtime owns
+> and never transfers. Two contracts are worth naming: the default microphone follows the
+> availability-separate-from-the-answer rule, and `cna_microphone_get_data_at` is the **one count/copy
+> route in this ABI where a short read is not a failure** — every text route refuses a buffer it
+> cannot fill, but capture is a stream, so this one fills what it can and reports how much arrived.
+> No verification tree has a capture device, so the count is zero and every index route refuses;
+> that is the device's real availability, recorded the way the compass's and the camera's already
+> are. `NoMicrophoneConnectedException` joins the other two audio exceptions in the firewall.
+>
+> One thing learned about the tooling rather than the ABI: **deleted operations are already recorded
+> not-applicable by the generator itself**, before any rule is consulted, so writing rules for them
+> fails the "matched no symbols" check. Two such rules were written and removed. The inventory is now
+> 5,333 implemented, 32 partial, 767 planned and 283 N/A; the audio module stands at 119 implemented
+> with 102 planned, which is exactly `F3` plus `F4`. All four trees green at 68/68, ASan+UBSan clean.
+> CBIND-037F3 then adds 3D positioning, 24 rows. The design question was whether an emitter and a
+> listener earn handles, and the answer is **no**: the canonical types carry settings and no behavior
+> — no identity, no lifetime, nothing observable between calls — so `CNA_AudioEmitter` and
+> `CNA_AudioListener` are fixed values the caller fills in, with `_init` routes writing the canonical
+> defaults. They stay two structures rather than one, because only the emitter has a Doppler scale.
+>
+> Two canonical behaviors are reported rather than smoothed. **Positioning latches**: after
+> `cna_sound_effect_instance_apply_3d`, the spatial gain, pan and pitch it computed are combined with
+> the instance's own settings on every later call and `..._set_pan` stops reaching the output, while
+> the properties keep reading back what the caller last set — the test asserts exactly that. And
+> **this runtime supports exactly one listener**: the array overload accepts the array XNA's
+> split-screen API needs and then refuses every count but one, so `..._apply_3d_multi_ext` is `_ext`
+> and answers `NOT_SUPPORTED` for zero or two rather than quietly using the first listener. A null
+> array stays an argument failure, which is a different answer from an empty one.
+>
+> `RendererDetail` **moved to `F4`**, all 8 rows: its constructor is private with `AudioEngine` as the
+> friend, so `getRendererDetailsProperty` is the only way a C caller could ever obtain one, and an
+> engine needs the binary settings file `F4` has to decide about. The planned split of 32/70 was an
+> estimate; the real inventory is 24 here and 78 there. The inventory is now 5,357 implemented, 32
+> partial, 743 planned and 283 N/A; the audio module stands at 143 implemented with 78 planned, which
+> is exactly `F4`. All four trees green at 69/69, ASan+UBSan clean.
+> CBIND-037F4 then closes the audio module with the XACT family, 78 rows. Its first question was
+> whether the family is reachable at all without a binary fixture this repository does not have, and
+> the answer is **yes**: an XACT file is *authorable*. `XactSmoke.c` writes the settings file, the
+> wave bank and the sound bank itself and drives the real parsers, so nothing had to be recorded
+> unreachable the way `CBIND-037E5` recorded the runtime facade. That is the general lesson: check
+> whether a missing fixture can be built before concluding a family cannot be tested.
+>
+> Two types went opposite ways for the same reason — what C can hold. `RendererDetail` has a
+> **private constructor** and one source, the engine's own list, so it is **addressed by index and
+> never held**: name, id, text, hash and equality all answer against an index. `AudioCategory` has the
+> same private constructor but the canonical lookup answers a *value*, so its handle is simply
+> somewhere for C to keep that value, and releasing one changes nothing. Categories compare by **name
+> alone**, so two from different engines are equal. `InstanceLimitDecision` is the one type with no C
+> form at all: it is public, but every method that produces one is private, so its 4 rows are
+> not-applicable — **a public type whose every producer is private is unreachable**, which is a new
+> variant of the reachability rule worth carrying forward.
+>
+> Four canonical behaviors are reported rather than smoothed: engine-global and cue-scoped variables
+> are **separate domains** that refuse each other's names; a **read-only global write succeeds
+> silently**, because the canonical route never reports that refusal; a cue from a bank arrives
+> **prepared**, not created; and **pausing a cue leaves it playing**, since paused is an independent
+> flag. A fire-and-forget cue gets **no handle at all** — the caller never touches it. The inventory is
+> now 5,431 implemented, 32 partial, 665 planned and 287 N/A, and the `audio` module is closed at 217
+> implemented with 41 not applicable. All four trees green at 70/70, ASan+UBSan clean.
+> CBIND-037G was then split into seven slices in `plan_binding.md` — identities twice (the gamer/guide
+> vocabulary and the avatar one share nothing but their shape), the six exceptions as firewall arms,
+> the gamer and its collections, the guide with its dispatcher, achievements and leaderboards with
+> property storage, and the avatar surfaces last because the renderer composes the graphics module
+> too. One fact applies to all seven: **on every verification tree there is no signed-in gamer and no
+> live service**, so the truthful answer is usually "not signed in" — report it the way the absent
+> compass and the absent microphone were reported, not by pretending a gamer exists.
+>
+> CBIND-037G1 then lands the first of them, 108 rows of gamer and guide identities. Two things are
+> worth carrying forward. `GamerPresenceMode` **keeps `CornflowerBlue`**: the framework's own joke is
+> a presence mode a game may really set, so dropping it would move no ordinal but would leave a C
+> caller unable to name something the canonical API accepts — an identity is the canonical vocabulary,
+> not a curated one. And the test writes **every value of all ten identities out in canonical order
+> and asserts each sits at its own index**, which is stronger than spot-checking a few ordinals: it
+> catches a value inserted or removed in the middle, the change that actually breaks the ABI, while a
+> rename is caught by the compile instead. That is the pattern the remaining identity slices should
+> reuse. New `docs/c-api/GAMER_SERVICES.md`. The inventory is now 5,539 implemented, 32 partial, 557
+> planned and 287 N/A; all four trees green at 71/71, ASan+UBSan clean.
+> CBIND-037G2 then adds the avatar identities, 133 rows, and turns up the one enumeration in the
+> whole inventory that is **not contiguous**: the canonical avatar skeleton numbers its fifty-five
+> bones sparsely over ordinals 0 to 70. Those gaps are preserved rather than renumbered — a bone index
+> is what an avatar animation stores, so closing them would silently repoint every animation onto the
+> wrong joint. The sits-at-its-own-index test from `G1` does not apply there; each bone is pinned
+> against its exact canonical ordinal, with an added strictly-ascending check so a duplicate or a
+> reordering fails too. **Check contiguity before reusing the index pattern on a new enumeration.**
+>
+> The two `*NamesEXT` functions became count/copy pairs over an identity that take **no game handle
+> and no thread affinity** — pure value operations, the shape the static sample computations already
+> use — and the test asserts the two answer genuinely different kinds of string: a clip name is the
+> identity's own spelling, a body-type name is a content path. The inventory is now 5,672
+> implemented, 32 partial, 424 planned and 287 N/A; all four trees green at 72/72, ASan+UBSan clean.
+> CBIND-037G3 then converts the six gamer-services exceptions, 30 rows, into **four** distinct
+> results: no services at all and a title that needs updating are `NOT_SUPPORTED` because nothing the
+> caller supplies or retries changes either; an absent network, a missing privilege and an
+> already-visible guide are `INVALID_STATE`, the shape a disconnected storage device already has; and
+> a network operation that failed while the network was available is `PLATFORM`, a native service
+> failure a retry may get past.
+>
+> The slice turned up a **cross-module fact worth keeping**: the networking module's
+> `NetworkSessionJoinException` derives from *this* module's `NetworkException`, so the two modules
+> share one exception hierarchy. The compiler refused the first arm order outright (`-Werror=exceptions`
+> catches a base shadowing a derived arm), and both derived arms now sit before their common base.
+> When adding a firewall arm, check what already derives from the type being caught. The inventory is
+> now 5,702 implemented, 32 partial, 394 planned and 287 N/A; all four trees green at 72/72,
+> ASan+UBSan clean.
+> CBIND-037G4 then completes the gamer, its collections and its per-gamer surfaces, 124 rows.
+> **Every `cna_gamer_*` route accepts either handle kind** — a gamer or a signed-in gamer — because
+> the canonical surface belongs to the base both derive from; the test drives it twice, once through
+> each. The `GamerCollection<T>` question is answered `implemented` rather than `partial`: the
+> template's rows are mapped once through the instantiation this ABI creates, a friend collection.
+>
+> **The asynchronous shape is now settled for the rest of the campaign.** Each canonical begin/end
+> pair becomes one route that produces the answer and then invokes a completion callback, because the
+> canonical operations complete before `Begin` returns and no operation object crosses this ABI. A
+> null callback is accepted. Two operations cannot succeed at all — the gamertag lookup and the
+> partner token always answer `NOT_SUPPORTED` — and the callback does not run when an operation is
+> refused.
+>
+> Four canonical facts are reported rather than smoothed, and each was found by testing rather than
+> assumed: a friend's presence is **free text** while a signed-in gamer's is a mode and a value; the
+> signed-in collection's player-index lookup is **positional**, reading the collection at that index
+> rather than searching for the gamer whose own index matches; `SetPresenceModeStringEXT` **stores
+> nothing**; and `GetFriends` answers an **empty collection**, a success rather than a refusal.
+>
+> Seventeen rows are not-applicable, and two of the three reasons are new: `GamerAction` because no
+> operation object crosses this ABI, and `begin`/`end` because **a C++ iterator is not expressible
+> across a C ABI at all** — it has no fixed size, no stable representation and no way to be compared
+> from C. The third is the established one: a protected member is mappable only when this ABI supplies
+> a derived class to hang it on. The inventory is now 5,808 implemented, 32 partial, 270 planned and
+> 305 N/A; all four trees green at 73/73, ASan+UBSan clean.
+> CBIND-037G5 then completes the guide, its dispatcher and its component, 58 rows — and the check the
+> handoff asked for paid off. **The guide's two operations do not complete before `Begin` returns.**
+> The on-screen keyboard and the message box stay pending until the user answers, and only then does
+> the completion callback run. So this ABI now has **two** asynchronous shapes, and a new slice has to
+> pick: a pair that completes synchronously is one route that then invokes the callback; a pair that
+> genuinely defers keeps the operation in the C layer and answers through `has_pending` plus an end
+> route with no operation argument. Only one of each may be pending, a second start is refused without
+> disturbing the first, and keeping the operation is also what stops the canonical `new`ed object
+> leaking when a caller never reads the answer.
+>
+> **Thirteen guide screens are no-ops.** There is no UI behind compose message, friends, invites,
+> gamer cards, the marketplace, messages, party, party sessions, player review, players, sign-in or
+> achievements, and no notification system to delay. They validate their arguments and do nothing —
+> and the validation still happens, because that is the boundary's job whether or not anything
+> downstream uses the value. The keyboard and the message box are real only because **this ABI draws
+> them itself**, which is what the two renderers and the readable pending state exist for.
+>
+> Two behaviors were found by testing rather than assumed: a **cancelled keyboard input carries no
+> text at all** (the canonical implementation clears it), so the cancellation flag is the only way to
+> tell it from a confirmed empty string; and **discarding is not completing** — reset runs no callback.
+> The component slice added one small thing worth knowing: `cna_gamer_services_component_create`
+> publishes the **first canonical component** this ABI has, so the components adapter grew a factory
+> that gives a runtime-implemented component the same handle, registry entry and ownership
+> bookkeeping a caller-derived one gets. The inventory is now 5,866 implemented, 32 partial, 212
+> planned and 305 N/A; all four trees green at 74/74, ASan+UBSan clean.
+> CBIND-037G6 was then split into three slices in `plan_binding.md`, because its three families are
+> unrelated to each other but **not independent in order**: a leaderboard entry's columns *are* a
+> `PropertyDictionary`, so property storage has to land before leaderboards. The asynchronous question
+> is already answered too — `LeaderboardReader::Read` spins on `GamerServicesDispatcher::UpdateAsync`
+> until its own `BeginRead` completes, so a leaderboard read is the **deferred** shape, and the
+> synchronous overloads are routes that pump the dispatcher themselves.
+> CBIND-037G6a then completes achievements, 35 rows — and it is the one gamer-services surface that
+> finds **real data** anywhere, because `CBIND-037G4`'s award persists locally and this read answers
+> what it wrote. Each entry carries only a key, an earned flag and a timestamp: no catalog exists here
+> to supply a name, a description or a score, and the binding says so rather than inventing them.
+>
+> Three things are worth carrying forward. An achievement is a **value behind a handle**, so equality
+> is by value across every field and a collection can hand back a **copy** rather than a view — the
+> canonical reference points into storage a later insert or remove would invalidate, and a value loses
+> nothing by being copied. **Two absences are kept distinct**: the gamer picture is *absent* (a clear
+> flag, an ordinary success) while the achievement picture is *unimplemented* (`NOT_SUPPORTED`), so a
+> caller can tell "there is none" from "this runtime cannot" — worth checking which of the two any new
+> missing thing is. And a C trap worth remembering: **`text_is(copy(...), size, ...)` is unsequenced**
+> — C does not order a call against the output it wrote when both are arguments of the same
+> expression, so a comparison against a size the call itself sets has to be sequenced explicitly. That
+> cost one debugging round here. The inventory is now 5,899 implemented, 32 partial, 177 planned and
+> 307 N/A; all four trees green at 75/75, ASan+UBSan clean.
+> CBIND-037G6b then completes property storage and game defaults, 50 rows, and answers the question a
+> variant map poses to any C ABI. What crosses is a **typed family plus a kind query**: ask which of
+> nine kinds a slot holds, then use the matching typed getter. That pair replaces the canonical boxed
+> indexers, `Add` and `Values` — all four have **no C form** — and loses nothing that matters, because
+> every value the canonical getters themselves understand is one of the nine kinds. Reach for this
+> shape whenever a canonical container holds something untyped.
+>
+> **Every typed getter checks the kind at the boundary**, so a wrong-kind read is `INVALID_STATE`
+> (something a caller can act on) rather than the generic internal failure the canonical unboxing
+> would produce, and an unknown key is `INVALID_ARGUMENT` — a deliberately different answer. Keys are
+> walked by index because the canonical key list and bulk copy both answer containers C cannot
+> receive. And one canonical contradiction is reported rather than corrected: **the dictionary
+> describes itself as read-only and is nonetheless writable.** The inventory is now 5,941 implemented,
+> 32 partial, 127 planned and 315 N/A; all four trees green at 76/76, ASan+UBSan clean.
+> CBIND-037G6c then completes leaderboards, 44 rows — and **corrects one of the plan's own notes**. A
+> leaderboard read is *not* the deferred shape: `LeaderboardAction::getIsCompletedProperty` returns
+> `true` unconditionally, so `BeginRead` does the whole read inline and `Read`'s spin loop exits at
+> once. Each pair is one route that then invokes the callback. The lesson is to check the action's
+> completion, not the presence of a spin loop, before deciding which shape a canonical operation is.
+>
+> **The slice surfaced two canonical defects, and each changed what got bound.** The
+> `LeaderboardWriter` has **no C form**: it captures its owning gamer's address at construction and
+> neither it nor `Gamer` re-points that on a copy — the canonical source states the constraint outright
+> — and every gamer this ABI publishes *is* a copy of the value the canonical factory returns, so its
+> writer's owner already dangles and reaching it crashes. Binding it would have handed a caller a route
+> that cannot be used safely, so its three rows are not-applicable. And the canonical synchronous
+> `Read` **leaks the operation it creates**, unlike `Gamer::GetProfile` which deletes its own; the read
+> routes do the same work through the same two public halves and release it. **The ASan tree caught
+> that leak**, which is the clearest argument yet for keeping it in the gate.
+>
+> Everything else follows the settled shapes: every entry handed out is a **copy** (the canonical list
+> is answered by value) while its columns **alias the entry itself**, and the rating-changed hook is
+> one per entry rather than a subscription. The inventory is now 5,982 implemented, 32 partial, 83
+> planned and 318 N/A; all four trees green at 77/77, ASan+UBSan clean.
+> CBIND-037G7 then completes the avatar surfaces and **closes the whole `CBIND-037` campaign**: the
+> inventory has **no planned row left** — 6,063 implemented, 32 partial, 0 planned, 320 not applicable
+> across all fourteen modules.
+>
+> The slice itself is mostly the settled shapes, plus four things an avatar can honestly report and
+> three it cannot. A **description is one fixed size** and any other length is refused, while validity
+> is a separate question its first byte answers; its **height is always zero and its body type always
+> female**, because the canonical format carries neither — asking for a male body still reports
+> female. A **preset animation carries the whole skeleton but no timeline**, so advancing it moves
+> nothing. And a **renderer always refuses the bind pose**, because its state is always unavailable on
+> this runtime while the parent-bone hierarchy still reads. Each of those was found by testing and
+> then written into the binding rather than assumed away.
+>
+> One mapping decision is worth carrying: the canonical **animation interface has no separate C
+> form**, because a C caller cannot implement a C++ interface and this ABI's animation handle is the
+> only thing that does — the renderer's draw route takes the handle exactly where the canonical one
+> takes the interface. That is the same reasoning the component callbacks used, arrived at from the
+> other direction. All four trees green at 78/78, ASan+UBSan clean.
+>
+> **Phase B7 hardening then starts with CBIND-038**, the pure-C compatibility matrix — and it earned
+> its keep on the first run. `CNA_PowerState` was declared **twice**, once for a controller's power
+> and once for the host's, with the same name and the same six values: legal since C11, rejected
+> under C99. Nothing had noticed, because every existing target compiled at C17. The duplicate is
+> gone — `devices.h` now reuses the identity `input_gamepad.h` declares — and **C99 is the floor**
+> rather than an unexamined claim.
+>
+> The matrix compiles **every public header on its own**, which is what proves a header is
+> self-contained, plus the umbrella twice for its include guards: 60 translation units per cell, 1,380
+> across the 23 cells this machine has toolchains for (gcc, clang, g++, clang++ and a MinGW
+> cross-compiler, C99 through C23 and C++11 through C++23). Two rules keep it from flattering itself:
+> **a toolchain that is installed is binding**, and **a toolchain that is absent is skipped by name,
+> never counted as agreement**. Both are worth reusing in the remaining gates.
+>
+> **CBIND-039 then records the ABI baseline.** `tools/c-api/abi_baseline.json` is a checked-in
+> snapshot of what the ABI *actually is*: 166 struct layouts with every field's offset, 258 scalar
+> widths, 1,338 constant values and 2,720 exported symbols, measured by a generated probe rather
+> than asserted by hand. The assertion walls pin what each slice remembered to pin; this pins the
+> rest, and its point is that a change arrives as a **reviewable diff** instead of a silently
+> different binary. Differences are classified: an added struct, field, constant or export is an
+> addition the evolution policy permits; a moved field, a changed value or a vanished export is
+> named as a break.
+>
+> Two findings are worth carrying. First, **the tool's own bugs were the interesting part**: a
+> `\s`-based regex let an include guard swallow the next line as its value, and
+> `CNA_PRESENTATION_PARAMETERS_TYPE_NAME` — written across a line continuation — was consequently
+> measured as a *pointer*, so the baseline disagreed with itself on the very next run. The probe now
+> runs twice and refuses any value that differs, which turns that whole class of mistake into an
+> immediate error. Second, **all four configurations export exactly the same 2,720 symbols**: the
+> ABI surface does not vary with the renderer or with `CNA_DEVICES`, only the answers do. That was
+> an intention the campaign stated repeatedly; it is now measured.
+>
+> The gate is split by what it can honestly see. `CApiAbiHeaderBaseline` measures the header half
+> with no build at all — so the ordinary build and a build-free CI job catch a moved field — and
+> `CApiAbiBaseline` adds the library's own version and export list; what it cannot see it reports as
+> skipped **by name**. The sanitized tree passes its own `-fsanitize` flags to the probe rather than
+> being excluded, because a sanitized shared object will not load into an uninstrumented one.
+>
+> **CBIND-040A then stresses the lifetime rules, and finds a memory-safety bug.** The suite is load
+> rather than assertion: 4,096 create/destroy cycles keeping *every* handle ever issued, then
+> requiring that no value was issued twice and that each dead one still refuses after the slots
+> beneath it were recycled thousands of times; a capacity sweep over a copy route from zero past the
+> exact length, checking that a refusal writes **not one byte** and a success writes no terminator;
+> thread affinity proved from a second thread and then proved not to have half-released anything;
+> and 20,000 parent/child churn cycles that double as the leak check.
+>
+> What it found is the point. **A game-event or game-window registration could outlive its game.**
+> `cna_game_destroy` guards owned *resources* — texture, sprite batch, content manager, audio
+> object, component — but deliberately not subscriptions, so destroying a game with a live
+> registration succeeded and the later `cna_game_unsubscribe` ran `~GameRegistration` against a
+> freed handler collection: a heap use-after-free, and the source carried a comment asserting the
+> invariant it did not actually have. The fix follows the graphics-device family, which had already
+> solved exactly this: live registrations are tracked and invalidated once the game has raised its
+> disposal event, so a subscriber still observes the disposal and the later unsubscribe detaches
+> nothing. **Refusing the destroy was considered and rejected** — it would make
+> `CNA_GAME_EVENT_DISPOSED` unobservable to anybody, since you would have to detach the handler
+> before the event that fires it. Two documentation defects came with it: `HANDLES.md` claimed a
+> zero handle answers `INVALID_ARGUMENT` when every route has always answered `INVALID_HANDLE`, and
+> the compatibility matrix declared the sanitized tree as `HEADLESS` when it is `SOFTWARE`.
+>
+> **CBIND-040B then covers the byte-facing surface, and enumerates rather than samples.** The
+> surface is short — `ValidateStringView`/`CopyStringView` behind every `CNA_StringView`, and
+> `ValidateBuffer`/`CheckedElementByteCount` behind every array and count — and where a space is
+> small enough to enumerate, sampling it wastes a proof. `CApi_Utf8Oracle` runs **every** byte
+> sequence of length one, two and three under both NUL policies: 16,843,008 cases, the entire space
+> in which a UTF-8 scanner's mistakes live. Four bytes is 4.3 billion, so that sweep is structured
+> instead, and longer strings come from a fixed seed so a failure is reproducible. A libFuzzer
+> target covers what enumeration cannot reach; it is not a ctest test, because it needs Clang and
+> does not terminate, but it is compiled by the normal build as an object library nobody links, so
+> it cannot rot unnoticed.
+>
+> The thing worth carrying is **what makes an oracle worth having**. Both tests judge the *answer*,
+> not the absence of a crash, and the oracle is deliberately a different algorithm: the
+> implementation matches byte ranges and never forms a code point, the oracle decodes the code point
+> and applies the Unicode rules to the value; the implementation asks whether a product would
+> overflow by dividing, the oracle forms the whole 128-bit product from 32-bit limbs and looks at
+> it. An oracle that mirrors the implementation agrees with its mistakes. Proved it can fail:
+> inverting the surrogate rule makes the sweep name `ED A0 80` and the fuzz target abort on the same
+> bytes. One practical trap — `__int128` is the obvious tool for the second oracle and is not
+> standard C++ under the `-pedantic` wall these targets build with.
+>
+> **CBIND-041 then discovers that the package was not a package.** The task looked like writing
+> documentation; the first thing it turned up is that `find_package(CNA CONFIG)` **could not work**,
+> because the module installed `CNACTargets.cmake` and no `CNAConfig.cmake` beside it. Every
+> consumption instruction anyone might have written would have been aspirational. There is now a
+> config file, a version file whose version is read out of `abi.h` at configure time so
+> `find_package(CNA 0.1 CONFIG)` cannot drift from `cna_get_abi_version()`, and a `CNACApi` install
+> component so the smallest useful install is the C ABI rather than 113 MB of SDL and GoogleTest
+> headers.
+>
+> `modules/c-api/examples/c/hello_cna.c` is the program a newcomer copies, and
+> **`CApi_InstalledConsumer` is what makes the documentation binding**: it installs the component
+> into a staging prefix, configures the example as a standalone project whose only knowledge of CNA
+> is `CMAKE_PREFIX_PATH`, builds it and runs it, requiring the program's own output lines so it
+> cannot pass by exiting zero without ever reaching the graphics device. Each step fails for a
+> different reason — not a package, wrong headers or export, library will not load — and none of
+> those is visible from inside the build tree, which is the lesson worth keeping: **a test that
+> builds inside the source tree proves nothing about the package**.
+>
+> Two limitations are recorded rather than papered over, at the end of `docs/c-api/CONSUMING.md`,
+> and both are the owner's to rule on in `CBIND-042`: the library carries `DT_NEEDED` entries for
+> SDL3 and FFmpeg that the package does not ship (its `INSTALL_RPATH` is now `$ORIGIN`, so a
+> deployment placing them beside it works), and `CNA_C_API_STATIC` names a static configuration that
+> does not exist — a static build would export every C++ symbol it archived and the ABI promise
+> would be meaningless.
+>
+> **CBIND-042A then publishes what the ABI does not do — and the act of publishing it found three
+> stale deferrals.** `docs/c-api/LIMITATIONS.md` answers the question `COVERAGE.md` structurally
+> cannot: the inventory records all 6,415 declarations and what became of each, this collapses the
+> ones that did *not* become a callable C route into the reasons behind them, and adds the
+> limitations no inventory can hold — the packaging gaps, one runtime per process, thread affinity,
+> 0.x status, the renderer boundary. It is generated, so it cannot drift.
+>
+> Three rules are enforced mechanically and **the first run broke on two of them**. Five unmapped
+> reasons fell under no declared theme, which is precisely how such a document acquires a silent
+> "other" bucket. And two deferrals named tasks the plan records as finished: `SpriteBatch::Begin`'s
+> Effect and transform overloads still pointed at `CBIND-035` (closed, work never landed) and the
+> four `IGraphicsDeviceService` events still pointed at `CBIND-037` (closed, work **did** land —
+> `cna_graphics_device_manager_subscribe` has covered them since, so the rule was simply wrong and
+> is now `implemented`, moving the snapshot to 6,067 / 28 / 0 / 320). A third, the signed-in-gamer
+> collection, named its owner in prose rather than by id and escaped the regex; corrected too.
+>
+> The lesson to carry: **a deferral is only a deferral while somebody owns it.** "Planned in
+> CBIND-035" stops being a plan the moment CBIND-035 closes; after that it is an omission wearing a
+> plan's clothes, and nothing in the repository noticed for weeks. The check that catches it costs
+> six lines.
+>
+> **CBIND-042B then closes Phase B7 with a verdict that is measured, not written down.**
+> `release_gate.json` declares ten criteria, each naming its requirement, its mechanical evidence
+> and its recorded state; `check_release_gate.py` measures all ten on every run and
+> `docs/c-api/RELEASE_GATE.md` publishes the result. Eight are met and re-measured rather than
+> asserted. The other two are **owner decisions**, and the gate's most important property is that it
+> cannot be talked out of them: the verdict is **NOT READY**, phrased exactly as it should be —
+> every mechanical criterion is met, and what remains is two decisions no implementer may make
+> alone.
+>
+> The design point worth carrying: the check fails **in both directions**. A criterion recorded as
+> met that regressed is the ordinary case. The one that matters is a criterion recorded as
+> *blocked* that has quietly become met, because that is how a project ships something it had
+> decided not to ship — nobody re-reads a document that says "not yet". Verified both ways: adding
+> a required document that does not exist turns `documentation` red, and ruling on the
+> static-configuration question in `limitations.json` alone makes the gate refuse until
+> `release_gate.json` agrees. **A decision recorded in one place and not the other is not a
+> decision.** The same rule now applies one level up: a limitation whose owner is a finished task
+> fails the limitations gate, which is what caught `CBIND-042` naming itself as the owner of the two
+> questions it exists to escalate.
+>
+> **The owner ruled on both questions on 2026-08-16: ship the dependencies, and build the static
+> configuration.** `CBIND-045` implements the first. The `CNACApi` component now installs
+> `libSDL3`, `libSDL3_image` and `libSDL3_mixer` -- with their soname symlinks, because `DT_NEEDED`
+> names `libSDL3.so.0` and not the versioned file -- beside `libcna_c_api.so`, whose `INSTALL_RPATH`
+> was already `$ORIGIN`. The package now needs **no environment variable of any kind**, and that is
+> measured rather than claimed: `CApi_InstalledConsumer` passes neither `-rpath-link` nor
+> `LD_LIBRARY_PATH`, and the program was additionally run under `env -i` with every SDL library
+> resolving out of the staged install. **FFmpeg deliberately does not ship** -- copying a
+> distribution's binaries here would take on their redistribution terms, freeze their soname against
+> security updates and drag in the transitive libraries they were linked against.
+>
+> Two traps from that slice. CMake rejects `FILES_MATCHING` after any `PATTERN`, exclusions
+> included. And more usefully: **one tree appeared to pass on a stale generated
+> `cmake_install.cmake`**, because the reconfigure had failed while its output went to `/dev/null`.
+> A green suite proves nothing if the configure that produced it errored — check the exit status.
+>
+> **CBIND-046 then builds the static configuration, without giving up what made it hard.** The
+> objection that had blocked it for the whole campaign was real: an archive carries every object it
+> swallowed, and `ar`-ing the C API together with 25 CNA and Sharp Runtime archives publishes 68,120
+> global C++ symbols into a consumer's program. The answer was to finish the job rather than skip
+> it. `generate_static_archive.py` reads **the link line CMake already computed for the shared
+> library** — so the closure cannot drift from the one that produces the working `.so` — partially
+> links all of it into one relocatable object, localizes every global that is not part of the ABI,
+> and **fails the build** if a non-`cna_*` symbol survives. What survives is 83–95 symbols depending
+> on the tree, every one `STB_GNU_UNIQUE`: function-local statics in inline and template code, which
+> `objcopy` refuses to localize because their uniqueness is what makes them correct. The gate is
+> written as a *property*, not a count, so it holds in every configuration.
+>
+> Three things worth carrying. **Reading CMake's own link line** is the general trick — it is the
+> same one `check_module_link_closure.py` uses, and it beats maintaining a parallel list of what to
+> link. **CMake's `find_program` does not search when its result variable is already defined**, so
+> initializing it to `""` silently finds nothing; that cost a debugging round. And the archive plus
+> its two intermediates are each a few hundred megabytes in a debug tree, so the tool deletes the
+> intermediates and the whole thing is behind `-DCNA_C_API_BUILD_STATIC=OFF` — where it is off, the
+> consumer gate says so by name rather than testing half a package.
+>
+> **With both owner decisions delivered, the release gate's verdict is READY.** All ten criteria are
+> met and re-measured on every run.
+>
+> **CBIND-044 then went from 28 partial rows to 12, and the 12 are not work.** Three of the rows
+> were implementable and were implemented. `044A` added `cna_sprite_batch_begin_with_effect`, which
+> covers both canonical `Begin` overloads that take a custom effect — a null transform is the
+> identity the effect-only overload uses, so one route expresses two. `044B` closed the largest
+> group, the ten `Draw` overloads, with `CNA_SpriteScaledCommand` and
+> `cna_sprite_batch_submit_scaled_many`: **a new structure and route rather than more fields on the
+> published one**, because with a position the origin is measured in source pixels and the scale
+> applies after that offset, and because appending fields would have changed
+> `sizeof(CNA_SpriteCommand)` — which the ABI baseline would have called a break and which would
+> have forced a minor bump. Evolution path 1 costs nothing; path 2 would have cost the promise.
+> `044C` completed the signed-in gamer collection by naming its operations rather than giving the
+> collection a handle, the same judgment `GameServiceContainer` got.
+>
+> `044D` is the mechanical half of the close: every remaining partial rule now carries a
+> **disposition** — the kind of limitation and the callable route that reports it — and the
+> generator fails if one lacks it. "No unspecified omission" is not a claim that nothing is missing;
+> it is a guarantee that nothing is missing *silently*.
+>
+> **The owner approved the twelve on 2026-08-16, and that closes `CBIND-044` and the plan.** They
+> are all structural properties of C: four `GameServiceContainer` lookups and `ContentManager::Load`
+> (C cannot name a C++ type), four content-manager service-provider members (a Sharp Runtime
+> object), two untyped content reads (a type-erased value) and the network-session properties
+> indexer (a proxy). Each has a callable route that reports the reduced answer.
+>
+> The approval is **measured, not minuted**. `generate_limitations.py` fails if a partial row lacks a
+> disposition *or* an approval, and the release gate's `coverage-closed` criterion fails if any
+> partial mapping is unapproved — verified by clearing one, which turns both red. A future session
+> that adds a partial mapping cannot quietly inherit somebody else's approval for it.
+>
+> **Final state: nothing in `plan_binding.md` is open.** 6,415 public C++ declarations, 6,083
+> implemented, 12 approved partial, 0 planned, 320 not applicable; four verification trees green at
+> 81/81 and 88/88; the experimental release gate reads **ready**. What comes next is not in this
+> plan — publishing the experimental release, or opening a new plan for whatever the ABI should grow
+> next. Two things a later session should know before touching it: an added route or struct is an
+> **addition** the baseline permits and re-records, while changing an existing name, value or layout
+> is a break that costs a minor version; and the first thing to run in a fresh tree is
+> `ctest -R CApi` from the tree root, because five of the gates live at the top level and
+> `--test-dir modules/c-api` does not see them. The 28 `partial` rows are not gaps the
+> campaign left open — each is a symbol whose canonical form cannot be fully expressed in C, with
+> its usable subset named in `docs/c-api/COVERAGE.md`; do not "close" one without a concrete new
+> capability to add.
+>
+> **State at this handoff.** Forty-six slices are committed on `feature/binding` since
+> `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
+> `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
+> `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **Nothing remains in the campaign at all**: every
+> module is closed and the inventory has no planned row; `CBIND-038` through `CBIND-042` are done,
+> as are `CBIND-045` and `CBIND-046` from the owner's two decisions and `CBIND-044A`–`D`. With the
+> owner's approval of the twelve remaining limitations on 2026-08-16, **every task in the plan is
+> closed** and the release gate reads ready. All four verification trees are green at
+> 81/81 with the coverage, compatibility, ABI-baseline, limitations and release gates current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
+> and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
+> than an assumption.
+>
+> Four decisions from this stretch are worth carrying forward, because each one will be asked again:
+> **the deciding question for a protected member is not that it is protected** but whether this ABI
+> has a derived class to hang it on — a component's hooks are mapped, a sensor's and a window's are
+> not; **a one-per-game object gets no handle**, answered four times now and worth answering the same
+> way a fifth; **a canonical type keyed by C++ type identity cannot be fully mapped**, so the service
+> container's lookup is `partial` and its registration is `not-applicable`, which is what those
+> statuses are for; and **growing a published structure costs source compatibility even when it is
+> ABI-safe**, so new callbacks arrive as a second table.
+>
+> Two findings from reading the canonical source, neither fixed here. `ExitingEventArgs` exists and
+> **nothing ever constructs or delivers it**: `Game::Exiting` is declared with the plain
+> event-argument type, so the named type is reachable only by a caller who builds one for its own
+> sake — recorded not-applicable, with the reason stated. And the game's content-manager property was
+> deliberately left out of this slice: mapping it needs a **borrowed** content-manager handle the
+> game-destroy path invalidates, which is a contract to settle in `OWNERSHIP.md` rather than a
+> signature to write. It is now `CBIND-037E2b`, three rows.
+>
+> A trap worth naming, because it cost three debugging cycles in this slice: **a refused subscribe
+> route clears its out-handle before validating anything else**, so a test that reuses a live
+> registration variable for its refusal checks silently destroys the handle it is about to
+> unsubscribe. Give the refusal checks a variable of their own.
+>
+> Discovered while reading the canonical source, not fixed here: `AccelerometerReadingEventArgs.hpp`'s
+> class comment says the type "is not raised by that implementation", but
+> `Accelerometer::DispatchSensorReading()` does raise `ReadingChanged` with it — the comment predates
+> the wiring and contradicts the event's own doc comment two headers away. It is a canonical
+> devices-module doc fix, not a C API change, so it belongs to a devices task rather than to this
+> slice.
+>
+> Discovered while writing the docs, not fixed here: the *Intentionally unavailable in 0.1* list at
+> the end of `docs/c-api/FEATURE_MATRIX.md` is stale — it still names occlusion queries, Texture3D /
+> TextureCube, input events and other families that later slices implemented. It belongs to
+> `CBIND-041` (consumer documentation), not to an input slice; a focused pass should reconcile that
+> list against the implemented table rather than each slice patching one line of it.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

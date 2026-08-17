@@ -9,6 +9,140 @@ Systematic per-class, per-method comparison: FNA (reference) vs CNA (implementat
 
 For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 
+> **C ABI tracking note (2026-08-15):** `modules/c-api/` remains an experimental C17 ABI and is
+> complete through `CBIND-035` (all slices closed): the graphics-resource, texture, vertex/index buffer, effect and
+> model/animation families are mapped, and the graphics-device family now has its Viewport values,
+> clear/status/2D-policy identities, complete device state, events and exception conversion, and
+> stage-addressed texture collections, frame control, buffer binding, complete draw submission,
+> SpriteBatch text, occlusion queries and the complete extended graphics layer. `CBIND-036A` adds
+> the complete `storage` module: owned storage devices, containers and file streams, count/copy
+> directory and file listings, and synchronous equivalents of the canonical fake-async selector and
+> container pairs that still invoke the completion callback. `CBIND-036B` then completes the whole
+> `content` module: asset-path/cache-key queries, loader registration, graphics-device get/set,
+> manifest and `.xnb` reader-usage snapshots, typed Texture2D, TextureCube and SoundEffect load
+> routes, and the compiled-asset reader pipeline with its owned readers, type readers and
+> process-wide registry. `CBIND-036C` adds the network identity enumerations, the
+> quality-of-service value, owned session-property lists with enumerators, owned packet read and
+> write buffers, and the join-failure conversion with its per-thread join-error record.
+> `CBIND-036D` adds owned network gamers and machines and the seven event descriptions, and
+> `CBIND-036E1` adds discovered sessions and their collection, and `CBIND-036E2` adds the session
+> object itself with its rosters, state and gamer management plus the minimum signed-in-gamer
+> surface a session needs to exist, `CBIND-036E3` adds the ten session event registrations and
+> `CBIND-036E4` adds discovery, join and the collapsed fake-async pairs, and `CBIND-036E5` adds the
+> local gamers that close parent `CBIND-036`: every receive and send overload, the borrowed sender
+> view and the two CNAEXT queue routes, leaving the whole `net` module mapped. `CBIND-037A` then
+> opens `CBIND-037` by closing CNA's own `core` module: the logger, the process-wide minimum level,
+> the compile-time platform, desktop operating system, renderer identity and renderer name, and
+> both backend classifications for any of the 46 public renderer identities, and `CBIND-037B1`
+> adds the gamepad controller type and the complete gamepad-capabilities value, and `CBIND-037B2`
+> adds the five gamepad value types — button set, directional pad, thumbsticks, triggers and the
+> snapshot itself — with every constructor, comparison, hash and string operation, and
+> `CBIND-037B3` adds the `GamePad` statics: vibration, light bar, sensors, player index, power
+> info, button labels, the four identity strings, connection state and the touchpad queries. The
+> `CBIND-037B4a` adds the keyboard: the whole `KeyboardState` value surface, the key-state
+> identity and every `Keyboard` static including both key-name families. The
+> `CBIND-037B4b` adds the mouse, including the static clicked event as an owned registration,
+> `CBIND-037B4c` adds the mouse cursor with its stock singletons as borrowed views, and
+> `CBIND-037B4d` closes the input module's text surface: all three `TextInputEXT` events as owned
+> registrations, the activation and screen-keyboard queries, the typed start and the input
+> rectangle. `CBIND-037B5` then adds touch and gestures: the gesture type and sample, the touch
+> location and collection value surfaces over the existing fixed snapshot, and every `TouchPanel`
+> static. `CBIND-037B6` then adds the haptics extension family: device enumeration and opening,
+> the owned device handle with its whole effect and rumble lifecycle, and the feature, effect,
+> direction and capability values, and `CBIND-037B7a` adds the raw joystick family: the type and
+> hat-position identities, the descriptor and capability values, an owned captured snapshot with a
+> count/copy pair per array, and both hot-plug events as owned registrations, and `CBIND-037B7b`
+> closes the whole `input` module with the last host extensions: the motion sensors, the
+> mouse/keyboard/touch-device enumerations with their four hot-plug events, the system clipboard
+> and the host power state, and `CBIND-037C1` opens the media module with its identities, the
+> fixed visualization value and the media-source enumeration, and `CBIND-037C2` adds `Song` and
+> `SongCollection` as reference-counted owned handles, and `CBIND-037C3` adds the whole music
+> catalog: the media library plus albums, artists, genres, playlists and their collections as
+> borrowed views that keep their library alive, and `CBIND-037C4` adds the picture surface:
+> pictures, the picture-album tree, both collections and the library's picture and save routes, and
+> `CBIND-037C6` adds playback: every `MediaPlayer` static, both of its events and a view of the
+> process-wide media queue, and `CBIND-037C7` closes the whole media module with `Video` and
+> `VideoPlayer`, and `CBIND-037D1` opens the devices module with the sensor state identity, the
+> date-and-offset timestamp and all five sensor reading values, and `CBIND-037D2a` adds the two
+> motion sensors that produce them — owned handles carrying the support probe, state, start/stop,
+> current value, data validity, update interval, reading callback, the sensor error identifier of
+> the last failure, and the canonical test-support surface that lets a machine with no sensors
+> reach the supported path at all, and `CBIND-037D2b` closes the sensor namespace with `Compass`,
+> `Motion` and the three event-argument types, this ABI's own installable sensor backend, and the
+> legacy accelerometer reading event, and `CBIND-037D3` adds the vibration controller and the whole
+> `CNA::Devices` service set — host power, system information, preferred locales, display metrics,
+> clipboard acceptance, URL launching, message boxes, file dialogs and the system tray — each
+> exported in both build states and reporting `NOT_SUPPORTED` where the extension layer is compiled
+> out, and `CBIND-037D4` closes the devices module with the camera: the driver probe, the camera
+> enumeration, frame acquisition into a caller-owned texture, and this ABI's own installable camera
+> backend, and `CBIND-037E1` opens the runtime module with the component model: components of both
+> kinds built from a C callback set, the game's component collection with both change events, and a
+> named-identity view of the service container, and `CBIND-037E2` adds the game's own state, frame
+> control, events, launch parameters, framework pump and title content, and `CBIND-037E3` adds the
+> game window with its state, metrics and events, and `CBIND-037E4` adds the graphics device manager
+> with its preferences, its candidate configuration, its device lifecycle events and the services it
+> registers with the game, and `CBIND-037E2b` adds the game's own content manager as a borrowed
+> handle, and `CBIND-037E5` closes the runtime module by recording the unimplemented `CNA::Runtime`
+> facade as not applicable, guarded by a check that fails if its symbols ever appear, and
+> `CBIND-037F1` opens the audio module by completing the sound-effect surface: three more creation
+> routes, the process-wide 3D-audio settings, the static sample computations and both audio
+> exceptions converting at the boundary, and `CBIND-037F2` adds streaming instances and the
+> index-addressed microphone surface, and `CBIND-037F3` adds 3D
+> positioning: the emitter and listener values and both `Apply3D` overloads, and `CBIND-037F4`
+> closes the audio module with the XACT family against binary fixtures the test authors itself, and
+> `CBIND-037G1` opens the last module with the gamer and guide identities, and `CBIND-037G2`
+> adds the avatar identities, and `CBIND-037G3` converts the six gamer-services exceptions at the
+> boundary, and `CBIND-037G4` completes the gamer, its collections and its per-gamer surfaces, and
+> `CBIND-037G5` completes the guide, its dispatcher and its component, and `CBIND-037G6a`
+> completes achievements, and `CBIND-037G6b` completes property storage and game defaults, and `CBIND-037G6c`
+> completes leaderboards, and `CBIND-037G7` completes the avatar surfaces and **closes the
+> `CBIND-037` campaign**. The
+> generated inventory currently records 6,063 implemented, 32 partial, **0 planned** and 320
+> not-applicable public/protected declarations: every public/protected declaration it tracks is now
+> either mapped, partially mapped with the subset named, or explicitly recorded as having no C form
+> with the reason. This
+> is not complete CNA C API coverage; status
+> and the required full-surface mapping remain tracked in `plan_binding.md` and
+> `docs/c-api/COVERAGE.md`. Phase B7 hardening then adds two mechanical gates over that surface:
+> `CBIND-038` compiles every public header on its own across 23 toolchain cells, and `CBIND-039`
+> records what the ABI **actually is** — 166 struct layouts, 258 scalar widths, 1,338 constant
+> values and 2,720 exported symbols — in `tools/c-api/abi_baseline.json`, so a moved field or a
+> changed constant arrives as a reviewable diff rather than a silently different binary.
+> `CBIND-040A` then puts the lifetime rules under load and finds a heap use-after-free: a game-event
+> registration could outlive its game, and unsubscribing afterwards reached into a freed handler
+> collection. Live registrations are now invalidated once the game has raised its disposal event,
+> the way graphics-device subscriptions already were. `CBIND-040B` closes the pair by covering the
+> ABI's byte-facing surface two ways: 16,843,008 enumerated UTF-8 cases — the whole space up to
+> three bytes — plus a libFuzzer target, both judged against an oracle written as a deliberately
+> different algorithm rather than a copy. `CBIND-041` then finds that `find_package(CNA CONFIG)`
+> could not work at all — the module installed a targets file and no package config — and replaces
+> the gap with a real package, a complete C example, and a gate that installs the C ABI component
+> and builds that example as a standalone project from outside the source tree. `CBIND-042A` then
+> publishes `docs/c-api/LIMITATIONS.md`, the matrix of what the ABI does **not** do, generated from
+> the same inventory; enforcing that every unmapped reason has a declared theme and that no deferral
+> names a finished task turned up three stale deferrals, one of which had silently become
+> implemented — the snapshot is now 6,067 implemented, 28 partial, 0 planned, 320 not-applicable.
+> `CBIND-042B` closes Phase B7's release question with a gate that is measured rather than written
+> down: ten criteria, eight of them met and re-measured on every run, and two packaging decisions
+> that no implementer may make alone. The published verdict is **not ready**, and correctly so.
+> The owner ruled on both on 2026-08-16. `CBIND-045` implements the first: the package now carries
+> the SDL3 libraries CNA builds, so an installed C API links and runs with no environment variable
+> at all, while FFmpeg stays a system dependency on purpose. `CBIND-046` implements the second: a
+> static archive that publishes the same 2,720 `cna_*` names the shared library does, built by
+> partially linking the whole closure into one object and localizing everything else, with the build
+> failing outright if a non-ABI symbol survives. With both decisions delivered the release gate's
+> verdict is **ready**. `CBIND-044A` then turns the first of the remaining partial rows into a real
+> route -- both `SpriteBatch::Begin` overloads that take a custom effect -- and `CBIND-044B` closes
+> the largest remaining group by adding the `Draw` family that places a sprite by position and
+> scale, as a new structure and route rather than by growing a published one. `CBIND-044C` completes
+> the signed-in gamer collection, and `CBIND-044D` gives each of the 12 symbols that remain a
+> recorded disposition and a callable route that reports it, with the generator failing if one lacks
+> either. The snapshot is now 6,083 implemented, 12 partial, 0 planned and 320 not-applicable, and
+> every remaining partial row is a structural property of C rather than unfinished work. The project
+> owner **approved those twelve on 2026-08-16**, which closes `CBIND-044` and with it the whole
+> CBIND campaign: 6,415 public C++ declarations, 6,083 implemented, 12 approved partial, 0 planned,
+> 320 not applicable, and an experimental release gate that reads ready.
+
 ---
 
 ## `Microsoft::Xna::Framework` (root)

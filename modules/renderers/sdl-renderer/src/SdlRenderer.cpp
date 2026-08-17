@@ -970,9 +970,6 @@ namespace CNA::Internal::Renderers
         // SdlRenderer resolves to the NAMESPACE and SdlRenderer::SdlRenderer no longer names the
         // class. The only family where the P2 rename collides with its own naming.
         return std::make_unique<::CNA::Internal::Renderers::SdlRenderer::SdlRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight,
-            args.presentationMode, args.swapInterval);
-        return std::make_unique<SdlRenderer::SdlRenderer>(
             CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
             args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval);
     }

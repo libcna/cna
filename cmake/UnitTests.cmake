@@ -52,6 +52,15 @@ if(CNA_BUILD_TESTS)
     # as the Glide ABI programs just above.
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/modules/.*\\.cpp$")
 
+    # plan_binding.md CBIND-033: the C API module owns its own test executables
+    # (modules/c-api/CMakeLists.txt) and none of its C++ translation units is a GTest unit --
+    # HandleRegistryTest.cpp and BoundaryDetailTest.cpp define their own main(), and
+    # AbiHeaderCpp.cpp is a pure ABI compile check linked into cna_c_api_abi_smoke. Letting the
+    # recursive glob add them to CnaTests fails the build at <CNA/C/abi.h> (the C API's include
+    # path is scoped to its own targets) and would duplicate main -- same reason as the Glide ABI
+    # programs and the module probes above.
+    list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/c-api/tests/.*\\.cpp$")
+
     # plan_apple.md APPLE-11: the Apple smoke application (cmake/AppleSmoke.cmake) is a complete
     # program with its own main(), for the same reason as the two entries above. Swept into
     # CnaTests it does not merely add a case -- its main() replaces GTest's, so the test binary

@@ -1,0 +1,72 @@
+# plan_binding.md CBIND-043: the C API coverage matrix as a gate.
+#
+# docs/c-api/COVERAGE.md is generated from every public Microsoft/** and CNA/** header in the
+# repository. Its value is entirely in being CURRENT: a matrix that lags the headers reports
+# coverage the C API does not have, which is worse than no matrix at all, because it is read as
+# evidence.
+#
+# So the rule this job enforces is the one CBIND-043 states: new public C++ API cannot land without
+# its C API row. A change that adds a public symbol and not its row makes the checked-in inventory
+# stale, and this fails.
+#
+# Deliberately build-free. The check reads headers and the matrix and compiles nothing, so it needs
+# no renderer, no display, no C API build and no third-party dependency -- which is what lets it run
+# on every push instead of being reserved for a nightly. A gate that is expensive is a gate that
+# gets skipped.
+
+name: C API coverage gate
+
+on:
+  push:
+    paths:
+      - 'modules/**/include/Microsoft/**'
+      - 'modules/**/include/CNA/**'
+      - 'docs/c-api/COVERAGE.md'
+      - 'tools/c-api/generate_coverage_inventory.py'
+      - '.github/workflows/c-api-coverage-gate.yml'
+  pull_request:
+    branches: [develop, master]
+    paths:
+      - 'modules/**/include/Microsoft/**'
+      - 'modules/**/include/CNA/**'
+      - 'docs/c-api/COVERAGE.md'
+      - 'tools/c-api/generate_coverage_inventory.py'
+  workflow_dispatch:
+
+concurrency:
+  group: c-api-coverage-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage-matrix:
+    name: docs/c-api/COVERAGE.md matches the public headers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The failure message the tool prints already names the command that fixes it
+      # ("run tools/c-api/generate_coverage_inventory.py --write"), so this step needs no
+      # interpretation of its own.
+      - name: Check the coverage inventory is current
+        run: python3 tools/c-api/generate_coverage_inventory.py --check
+
+      # Regenerating must be a no-op on a correct tree. If --write produces a diff after --check
+      # passed, the generator is not deterministic, and a non-deterministic generator makes the
+      # matrix unreviewable: every unrelated change would show as coverage churn.
+      - name: Verify regeneration is deterministic
+        run: |
+          set -euo pipefail
+          python3 tools/c-api/generate_coverage_inventory.py --write
+          if ! git diff --quiet -- docs/c-api/COVERAGE.md; then
+            echo "::error::--write changed COVERAGE.md even though --check passed; the generator is not deterministic" >&2
+            git --no-pager diff --stat -- docs/c-api/COVERAGE.md
+            exit 1
+          fi
+          echo "regeneration is a no-op, as it must be"
