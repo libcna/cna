@@ -78,6 +78,24 @@ Consequently **`GraphicsCapability::CompiledEffects` is true**, while
 by anything FNA3D offers, and claiming otherwise would be a promise broken at the first custom
 effect. The two capabilities describe different formats.
 
+## Device creation: `FNA3D_PrepareWindowAttributes` is mandatory
+
+`FNA3D_PrepareWindowAttributes()` is not only a query for the window flags FNA3D's chosen driver
+needs -- it is also **where FNA3D selects that driver**, and `FNA3D_CreateDevice` refuses to run
+before it has, with `"Call FNA3D_PrepareWindowAttributes first!"`.
+
+This is worth stating because CNA already lost the call once. `plan_runtimerenderer.md` RTR-P1-D41
+replaced the renderer descriptor's `prepareWindowFlags` hook with static data
+(`windowKind = OpenGL`, `glFramebuffer = 24/8/double`), which is the right shape for the window's
+visual -- CNA states those requirements through `WindowDescription` and the platform applies them.
+What went with the hook, unnoticed, was the only production call to
+`FNA3D_PrepareWindowAttributes()`, and from then until `plan_fx.md` FX-090 **no FNA3D device could
+be created at all**: every test failed at `GraphicsDevice device;`.
+
+`Fna3dRenderer`'s constructor now calls it before `FNA3D_CreateDevice`. The GL attributes it also
+primes are redundant at that point rather than load-bearing, because the window's visual is already
+fixed from the descriptor's own request.
+
 ## Capabilities
 
 | Capability | Value | Notes |
@@ -152,7 +170,7 @@ effect. The two capabilities describe different formats.
 | Unknown vertex stride with no `VertexDeclaration` | Throws, naming the stride. FNA3D binds real per-stream declarations and this renderer will not guess a layout. |
 | Out-of-contract state ordinals | Throw, naming the state and the ordinal, instead of casting into an undefined FNA3D enumerator. |
 | Instanced stock-effect drawing | `DrawInstancedPrimitivesEx` throws because stock shaders declare no instance input. A compatible compiled effect uses native instancing when the driver reports it. |
-| Compiled FX on non-FNA3D renderers | Outside this renderer; those backends report `CompiledEffects == false` until they implement and pass the shared contract. |
+| Compiled FX on non-FNA3D renderers | Outside this renderer. SDL_GPU and the EasyGL/OpenGL family have since passed the same shared contract and report true behind their own build options (`plan_fx.md` FX-061/FX-062/FX-080-FX-090); every other backend reports `CompiledEffects == false` until it does. |
 | Multiple simultaneous devices on one thread | Not claimed. FNA3D's OpenGL driver does not make each device's context current around commands/teardown; the plan tracks the required contract decision or upstream fix as FNA3D-51. Sequential replacement devices are covered. |
 | Context-loss simulation | Not implemented; FNA3D exposes no device-loss surface, and the shared `DebugSimulateContextLoss` default is a no-op. |
 | Block-compressed readback on OpenGL / D3D11 | `GetData` returns false — "this renderer read nothing" — rather than reporting an untouched buffer as a successful read. Both drivers refuse compressed `GetTextureData2D` upstream; SDL_GPU forwards it. Which one applies is measured once per device by a 4×4 DXT1 probe, not guessed from the driver name. |

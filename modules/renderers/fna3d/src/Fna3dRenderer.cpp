@@ -119,9 +119,21 @@ namespace CNA::Internal::Renderers::Fna3d
                 "has no headless device path.");
         }
 
-        // GraphicsDevice already called FNA3D_PrepareWindowAttributes() before creating the
-        // window (Detail::PrepareWindowNeedsOpenGl), which is also what selected the driver. Calling it
-        // again here would re-run driver selection after the window's visual is fixed.
+        // FNA3D_PrepareWindowAttributes() is not only a window-flag query: it is where FNA3D
+        // *selects its driver*, and FNA3D_CreateDevice refuses to run before it has ("Call
+        // FNA3D_PrepareWindowAttributes first!").
+        //
+        // plan_runtimerenderer.md RTR-P1-D41 replaced the descriptor's `prepareWindowFlags` hook
+        // with static data (`windowKind = OpenGL`, `glFramebuffer = 24/8/double`), which is the
+        // right call for the window's visual -- CNA now states those requirements through
+        // WindowDescription and the platform applies them. What went with the hook, unnoticed, was
+        // the only call to FNA3D_PrepareWindowAttributes() in the whole production path, so every
+        // FNA3D_CreateDevice on this branch failed and the renderer could not create a device at
+        // all. Calling it here restores driver selection; the GL attributes it also primes are
+        // redundant now rather than load-bearing, since the window's visual is already fixed from
+        // the descriptor's own request.
+        (void) FNA3D_PrepareWindowAttributes();
+
         int windowWidth = 0;
         int windowHeight = 0;
         SDL_GetWindowSizeInPixels(window_, &windowWidth, &windowHeight);
