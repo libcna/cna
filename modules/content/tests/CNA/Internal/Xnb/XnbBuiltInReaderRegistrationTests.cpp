@@ -207,6 +207,11 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsASpriteFontFixt
     EXPECT_GT(font.getCharactersProperty().size(), 0u);
 }
 
+// plan_platform.md PLAT-SDL2-8: needs the decoder/mixer engine, which is the SDL3_mixer
+// implementation and is absent from the archive for every other CNA_AUDIO_PLATFORM value.
+// Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
+// so this case is unobservable there rather than merely untested.
+#ifdef SOUND_ENABLED
 TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsASoundEffectFixtureWithNoOtherSetup)
 {
     ContentManager cm(nullptr, std::string(kUncompressedDir) + "/audio");
@@ -214,6 +219,7 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsASoundEffectFix
     SoundEffect effect = cm.Load<SoundEffect>("tone_mono_44khz_16bit");
     EXPECT_GT(effect.getDurationProperty().getTotalMillisecondsProperty(), 0.0);
 }
+#endif  // SOUND_ENABLED
 
 TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsASongFixtureWithNoOtherSetup)
 {

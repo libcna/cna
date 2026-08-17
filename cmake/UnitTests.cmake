@@ -101,14 +101,25 @@ if(CNA_BUILD_TESTS)
             ".*/modules/audio/tests/.*/AudioMixerPlatformTests\\.cpp$")
         # These suites exercise the SDL3_mixer implementation itself, not the portable XNA
         # facade.  The implementation is purposefully absent from SDL2/NULL link graphs.
+        #
+        # plan_platform.md PLAT-SDL2-8 (2026-08-17): AudioCategoryTests and WaveBankTests were
+        # missing from this list. They assert on real XACT playback -- `cue->getIsPlayingProperty()`
+        # is true after Play(), instance limits evict a *playing* cue, a wave-bank entry decodes to
+        # an exact frame count -- all of which need the engine that this branch just excluded, so
+        # they failed 12 times over. Invisible until now because no configuration ever ran the full
+        # suite with a non-SDL3 audio selection: the plan's own HEADLESS regression runs kept the
+        # default SDL3 audio, and the CI cell that does select NULL audio builds CnaTests without
+        # running it. Both gaps are closed alongside this line.
         foreach(_cna_sdl3_mixer_test IN ITEMS
+                AudioCategoryTests
                 AudioMixerTests
                 CueTests
                 DynamicSoundEffectInstanceTests
                 OfflineAudioRendererTests
                 SoundBankTests
                 SoundEffectInstanceTests
-                SoundEffectTests)
+                SoundEffectTests
+                WaveBankTests)
             list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
                 ".*/modules/audio/tests/.*/${_cna_sdl3_mixer_test}\\.cpp$")
         endforeach()
@@ -214,7 +225,11 @@ if(CNA_BUILD_TESTS)
     # (posix_spawn, poll, sys/wait.h) to spawn tools/devices/shutdown_ordering_harness.cpp as an
     # independent OS process, for the same reason TwoProcessLoopbackTest.cpp needs one above.
     # Excluded on the same platforms and for the same reasons.
-    if(WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
+    # plan_platform.md PLAT-SDL2-6: also excluded for an SDL2-only selection, where its harness is
+    # not built at all. That harness exists to call the real SDL3 SDL_Quit() at process teardown,
+    # which is an ordering hazard this selection cannot reach -- and building it would put SDL3
+    # back on a link line the selection is defined by not having (cmake/Sdl2OnlyConfiguration.cmake).
+    if(WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS OR CNA_SDL2_ONLY_CONFIGURATION)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Devices/Detail/DevicesShutdownOrderingTests\\.cpp$")
     endif()
 
@@ -284,8 +299,17 @@ if(CNA_BUILD_TESTS)
             CNA
             SHARP_RUNTIME
             gtest_main
-            SDL3::SDL3
     )
+
+    # plan_platform.md PLAT-SDL2-6: SDL3 is a test-fixture dependency here (native renderer and
+    # audio fixtures), not a framework one -- CNA's own modules link their platform library
+    # privately and conditionally since PLAT-122. Under an SDL2-only selection every source that
+    # needs SDL3 has already been filtered out above, and linking it anyway would put two
+    # libraries exporting the same entry points into one process; see
+    # cmake/Sdl2OnlyConfiguration.cmake for why that silently invalidates the conformance run.
+    if(NOT CNA_SDL2_ONLY_CONFIGURATION)
+        target_link_libraries(CnaTests PRIVATE SDL3::SDL3)
+    endif()
 
     # The Draco corpus owns one test-only encoder oracle: it recreates the committed compressed
     # streams with CNA's pinned dependency and byte-compares them, so the otherwise standard-

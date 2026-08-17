@@ -6,7 +6,9 @@
 #include <cmath>
 #include <span>
 
+#ifdef SOUND_ENABLED
 #include "CNA/Internal/Audio/MixerEngine.hpp"
+#endif
 #include "CNA/Internal/Media/VideoDecoder.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -15,6 +17,56 @@
 
 namespace Microsoft::Xna::Framework::Media
 {
+    namespace
+    {
+        // plan_platform.md PLAT-SDL2-8. The mixer engine is the SDL3_mixer implementation and is
+        // excluded from the archive for every other CNA_AUDIO_PLATFORM value, so this file linked
+        // only under SDL3 audio -- and only ever got built at all where FFmpeg is present, which
+        // is why no CI cell caught it. MediaPlayer.cpp already solved the same problem with
+        // `#ifdef SOUND_ENABLED` around each use; doing that here would put a guard around
+        // fourteen call sites, so the seam is one thin shim layer instead and the playback logic
+        // below stays a single readable version.
+        //
+        // Without the engine `OpenAudioStream` returns null, and every other operation is already
+        // guarded by `if (audioStream_)` at its call site, so a video plays with its audio track
+        // silent -- exactly what MediaPlayer does in this profile, and exactly what
+        // docs/platform-sdl2.md documents. Video decoding and presentation are unaffected.
+#ifdef SOUND_ENABLED
+        using AudioStream = CNA::Internal::Audio::MixerStream;
+
+        AudioStream* OpenAudioStream(int sampleRate, int channels)
+        {
+            return CNA::Internal::Audio::CreateMixerPlaybackStream(
+                {sampleRate, channels, CNA::Internal::Audio::MixerSampleFormat::Float32});
+        }
+        void CloseAudioStream(AudioStream* stream) { CNA::Internal::Audio::DestroyMixerStream(stream); }
+        void SetAudioGain(AudioStream* stream, float gain)
+        {
+            CNA::Internal::Audio::SetMixerStreamGain(stream, gain);
+        }
+        void PauseAudio(AudioStream* stream) { CNA::Internal::Audio::PauseMixerStream(stream); }
+        void ResumeAudio(AudioStream* stream) { CNA::Internal::Audio::ResumeMixerStream(stream); }
+        void SubmitAudio(AudioStream* stream, std::span<const std::byte> pcm)
+        {
+            (void)CNA::Internal::Audio::PutMixerStreamData(stream, pcm);
+        }
+        std::size_t QueuedAudioBytes(const AudioStream* stream)
+        {
+            return CNA::Internal::Audio::GetMixerStreamQueuedBytes(stream);
+        }
+#else
+        using AudioStream = CNA::Internal::Audio::MixerStream;
+
+        AudioStream* OpenAudioStream(int, int) { return nullptr; }
+        void CloseAudioStream(AudioStream*) {}
+        void SetAudioGain(AudioStream*, float) {}
+        void PauseAudio(AudioStream*) {}
+        void ResumeAudio(AudioStream*) {}
+        void SubmitAudio(AudioStream*, std::span<const std::byte>) {}
+        std::size_t QueuedAudioBytes(const AudioStream*) { return 0; }
+#endif
+    }
+
     VideoPlayer::VideoPlayer() = default;
 
     VideoPlayer::~VideoPlayer()
@@ -65,7 +117,7 @@ namespace Microsoft::Xna::Framework::Media
     void VideoPlayer::ApplyVolume()
     {
         if (!audioStream_) return;
-        CNA::Internal::Audio::SetMixerStreamGain(audioStream_, isMuted_ ? 0.0f : volume_);
+        SetAudioGain(audioStream_, isMuted_ ? 0.0f : volume_);
     }
 
     void VideoPlayer::ReconfigureVideoOutputForCurrentTrack()
@@ -97,21 +149,18 @@ namespace Microsoft::Xna::Framework::Media
         // rate/channel count would otherwise keep playing decoded audio at the wrong speed/pitch.
         if (audioStream_)
         {
-            CNA::Internal::Audio::DestroyMixerStream(audioStream_);
+            CloseAudioStream(audioStream_);
             audioStream_ = nullptr;
         }
         if (decoder_->HasAudio())
         {
-            audioStream_ = CNA::Internal::Audio::CreateMixerPlaybackStream({
-                decoder_->GetSampleRate(), decoder_->GetChannels(),
-                CNA::Internal::Audio::MixerSampleFormat::Float32});
+            audioStream_ = OpenAudioStream(decoder_->GetSampleRate(), decoder_->GetChannels());
             if (audioStream_)
             {
-                CNA::Internal::Audio::SetMixerStreamGain(
-                    audioStream_, isMuted_ ? 0.0f : volume_);
+                SetAudioGain(audioStream_, isMuted_ ? 0.0f : volume_);
                 if (state_ == MediaState::Playing)
                 {
-                    CNA::Internal::Audio::ResumeMixerStream(audioStream_);
+                    ResumeAudio(audioStream_);
                 }
             }
         }
@@ -209,8 +258,7 @@ namespace Microsoft::Xna::Framework::Media
         {
             const auto* bytes = reinterpret_cast<const std::byte*>(audioBuffer_.data());
             const auto byteCount = audioBuffer_.size() * sizeof(float);
-            (void)CNA::Internal::Audio::PutMixerStreamData(
-                audioStream_, std::span<const std::byte>(bytes, byteCount));
+            SubmitAudio(audioStream_, std::span<const std::byte>(bytes, byteCount));
         }
         audioBuffer_.clear();
     }
@@ -219,7 +267,7 @@ namespace Microsoft::Xna::Framework::Media
     {
         if (audioStream_)
         {
-            CNA::Internal::Audio::DestroyMixerStream(audioStream_);
+            CloseAudioStream(audioStream_);
             audioStream_ = nullptr;
         }
         // audioBuffer_ can hold undrained decoded samples if the player is being torn down with no
@@ -283,7 +331,7 @@ namespace Microsoft::Xna::Framework::Media
         if (state_ != MediaState::Playing) return;
         pauseOffset_ += std::chrono::duration<double>(Clock::now() - startTime_).count();
         state_ = MediaState::Paused;
-        if (audioStream_) CNA::Internal::Audio::PauseMixerStream(audioStream_);
+        if (audioStream_) PauseAudio(audioStream_);
     }
 
     void VideoPlayer::Resume()
@@ -292,7 +340,7 @@ namespace Microsoft::Xna::Framework::Media
         if (state_ != MediaState::Paused) return;
         startTime_ = Clock::now();
         state_     = MediaState::Playing;
-        if (audioStream_) CNA::Internal::Audio::ResumeMixerStream(audioStream_);
+        if (audioStream_) ResumeAudio(audioStream_);
     }
 
     void VideoPlayer::SetAudioTrackEXT(SharpRuntime::intcs track)
@@ -396,12 +444,12 @@ namespace Microsoft::Xna::Framework::Media
                     // video EOF (plan_media.md MEDIA-41). Re-checked on each GetTexture() call
                     // until the audio device has actually finished playing what was queued.
                     if (audioStream_
-                        && CNA::Internal::Audio::GetMixerStreamQueuedBytes(audioStream_) > 0)
+                        && QueuedAudioBytes(audioStream_) > 0)
                     {
                         break;
                     }
                     state_ = MediaState::Stopped;
-                    if (audioStream_) CNA::Internal::Audio::PauseMixerStream(audioStream_);
+                    if (audioStream_) PauseAudio(audioStream_);
                 }
                 break;
             }
