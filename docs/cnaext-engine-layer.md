@@ -72,6 +72,11 @@ The engine layer's subsystems are rolled out per renderer, exactly as the PBR ef
 matrix is authoritative and is updated by each task that changes a cell; a subsystem with no
 implemented feature has no row yet.
 
+The renderer identities are those of `CNA::GraphicsRendererType` (49 on `next`). Note that a build
+can now contain several renderer families and pick one at run time
+([`runtime-renderer-selection.md`](runtime-renderer-selection.md)), so engine-layer code asks the
+live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*` macro.
+
 | Subsystem | EasyGL (reference) | Vulkan | D3D11 | Other renderers |
 |---|---|---|---|---|
 | Post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ⬜ | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |

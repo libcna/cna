@@ -28,18 +28,18 @@
 
 | Fact | Evidence |
 |---|---|
-| `CNA_CNAEXT` is a real CMake option and is injected as a compile definition | `modules/CMakeLists.txt:66` (`$<$<BOOL:${CNA_CNAEXT}>:CNA_CNAEXT>`) |
+| `CNA_CNAEXT` is a real CMake option and is injected as a compile definition | `modules/CMakeLists.txt:106` (`$<$<BOOL:${CNA_CNAEXT}>:CNA_CNAEXT>`) |
 | The engine layer lives in **`modules/graphics-ext/`**, not in a top-level `include/CNA/Graphics` | `modules/graphics-ext/{include/CNA/Graphics,src,tests,examples}` |
 | Existing `CNA::Graphics` types | `RenderPipelineSettings`, `PbrMaterial`, `TonemappingMode`, `RenderQuality`, `ShadowQuality`, `DepthEffect`(+`DepthEffectMode`,`DitherMode`), `CRTEffect`(+`CRTMaskType`), `AsciiPostProcessEffect`(+`AsciiQuantizeMode`) |
 | `RenderPipelineSettings` has **no consumer** — `GraphicsDevice` does not expose it | no `GetRenderPipelineSettings` anywhere in `GraphicsDevice.hpp` |
-| `CreateRenderTarget2DEXT(w,h,depthFormat,preserve,mipMap,msaa,surfaceFormat)` **already exists** | `IGraphicsRenderer.hpp:1458` (added by `SKIA-142`) |
-| `RenderTarget2D` **already routes** its `SurfaceFormat` into that call | `modules/graphics/src/Xna/RenderTarget2D.cpp:89` |
+| `CreateRenderTarget2DEXT(w,h,depthFormat,preserve,mipMap,msaa,surfaceFormat)` **already exists** | `IGraphicsRenderer.hpp:1730` (added by `SKIA-142`) |
+| `RenderTarget2D` **already routes** its `SurfaceFormat` into that call | `modules/graphics/src/Xna/RenderTarget2D.cpp:69` |
 | …but **no 3D renderer overrides it** — EasyGL/Vulkan/Bgfx/SdlGpu/WebGPU/D3D* all fall through to the format-ignoring `CreateRenderTarget2D` | only Skia, Direct2D, HtmlDom, Fna3d, Metal override it today |
-| `GraphicsCapability` has 13 enumerators; **none** of `FloatRenderTargets` / `ComputeShaders` / `StorageBuffers` / `SeamlessCubeMapFilter` exists | `modules/graphics/include/CNA/GraphicsCapability.hpp` |
+| `GraphicsCapability` has 14 enumerators; **none** of `FloatRenderTargets` / `ComputeShaders` / `StorageBuffers` / `SeamlessCubeMapFilter` exists | `modules/graphics/include/CNA/GraphicsCapability.hpp` |
 | `include/CNA/Graphics/CNAEXT.hpp` master include **does not exist** | `find modules -name CNAEXT.hpp` → empty |
 | Bloom/shadow GLSL exists only as **example code**, not library code | `modules/renderers/easygl/examples/easygl_bloom_{extract,gaussianblur,combine,pipeline}_test.cpp`, `easygl_shadowmapping_*` |
 | `ShaderEffect` (runtime GLSL `Effect`) and `RenderTarget2D`/`RenderTargetCube` with mip+MSAA resolve are available and tested | `modules/graphics/{include,src}/…/ShaderEffect.*` |
-| `GpuDrawParams` is the single struct carrying per-draw shading state to renderers | `IGraphicsRenderer.hpp:846` |
+| `GpuDrawParams` is the single struct carrying per-draw shading state to renderers | `IGraphicsRenderer.hpp:848` |
 
 ### 0.2 Corrections this plan makes to CNAEXT.md
 
@@ -76,7 +76,7 @@ A task is ✅ only when all of these hold:
 |---|---|
 | D1 | **No renderer is mandatory.** Every subsystem checks `GraphicsDevice::SupportsCapability()` and has a documented fallback: post-process → silent pass-through blit; shadows → unshadowed render; IBL → the existing flat `AmbientLightColor`; compute → `std::runtime_error` with a renderer-named message. |
 | D2 | **Renderer boundary stays enum-free.** New `IGraphicsRenderer` virtuals take `int` ordinals of XNA enums, mirroring `CreateRenderTarget2DEXT`. |
-| D3 | **New virtuals always ship with a safe default** so all 44 renderers keep compiling untouched. |
+| D3 | **New virtuals always ship with a safe default** so all 47 renderer families keep compiling untouched. |
 | D4 | **EasyGL is the reference implementation** for every subsystem; per-renderer follow-ups are separate tasks (Phase 16) and never block the reference landing. |
 | D5 | **Per-object shading extensions stay in the XNA namespace** as always-compiled `CNAEXT`/`*EXT` members (shadow receiving, IBL binding). Only frame-level orchestration is `CNA_CNAEXT`-gated. |
 | D6 | **Shaders are GLSL-first** (ES 3.0 profile, the `ShaderEffect` contract). Renderers with other shading languages translate in their own follow-up tasks, exactly like the PBR rollout did. |
@@ -84,6 +84,7 @@ A task is ✅ only when all of these hold:
 | D8 | **HDR is opt-in.** `RenderPipelineSettings::isHDREnabled() == false` (today's default) must produce a pipeline that is byte-identical to rendering without `RenderPipeline` at all, except for the extra blit. |
 | D9 | **Every pass is independently usable.** `BloomPass`/`TonemapPass`/… work standalone on any `Texture2D`, without `RenderPipeline`. `RenderPipeline` is a convenience orchestrator, not a required owner. |
 | D10 | **No dynamic allocation per frame** in pass `apply()` paths — targets/effects are allocated in `resize()`/construction and reused. |
+| D11 | **Runtime renderer selection is respected.** `next` can build several renderer families into one binary and choose at run time (`CNA_GRAPHICS_RENDERERS`, `docs/runtime-renderer-selection.md`). Engine-layer code must therefore ask the *live* device (`GraphicsDevice::SupportsCapability()`), never a compile-time `CNA_RENDERER_*` macro, and must tolerate the answer differing between two devices in one process. |
 
 ---
 
@@ -107,12 +108,12 @@ A task is ✅ only when all of these hold:
 | 13 | `MOD-1300`–`MOD-1315` | Material system reconciliation | 12 | 16 |
 | 14 | `MOD-1400`–`MOD-1414` | Instancing, LOD, culling helpers | — | 15 |
 | 15 | `MOD-1500`–`MOD-1555` | Compute shaders + storage buffers | 0 | 24 |
-| 16 | `MOD-1600`–`MOD-1698` | Per-renderer rollout matrix | 1–15 | 83 |
+| 16 | `MOD-1600`–`MOD-1698` | Per-renderer rollout matrix | 1–15 | 84 |
 | 17 | `MOD-1700`–`MOD-1741` | Tests, golden images, CI | per subsystem | 22 |
 | 18 | `MOD-1800`–`MOD-1813` | Documentation, examples, demos | per subsystem | 14 |
 | 19 | `MOD-1900`–`MOD-1907` | API stabilization / Nova-3D readiness | all | 8 |
 
-**Total: 497 tasks.** IDs are deliberately sparse inside each phase so follow-up work discovered
+**Total: 498 tasks.** IDs are deliberately sparse inside each phase so follow-up work discovered
 during implementation gets a free neighbouring number instead of a renumbering pass.
 
 **Critical path to a first usable HDR frame:** `MOD-1` → `MOD-100`–`MOD-107` → `MOD-200`–`MOD-210`
@@ -164,7 +165,7 @@ verification that a float target actually stores values above 1.0.
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| MOD-100 | Add `GraphicsCapability::FloatRenderTargets` with a full Doxygen paragraph in the established style | ⬜ | Enumerator appended; every renderer's `SupportsCapability` compiles unchanged and returns `false` by default. |
+| MOD-100 | Add `GraphicsCapability::FloatRenderTargets` with a full Doxygen paragraph in the established style | ⬜ | Enumerator appended; every renderer's `SupportsCapability` compiles unchanged and the shared default answers `false`. |
 | MOD-101 | Add `GraphicsCapability::HalfFloatRenderTargets` (16-bit is far more widely supported than 32-bit; conflating them would strand GLES 3.0) | ⬜ | Two independent capabilities documented with the exact `SurfaceFormat` sets each covers. |
 | MOD-102 | Add `GraphicsCapability::ComputeShaders`, `StorageBuffers`, `SeamlessCubeMapFilter` (→ N10) | ⬜ | All appended, all default `false`, all documented with the renderers known to lack them. |
 | MOD-103 | `GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat)` — per-format query above the coarse capability | ⬜ | Returns true only for formats the active renderer actually creates; unit-tested on Headless (all false) and the reference renderer. |
@@ -201,7 +202,7 @@ verification that a float target actually stores values above 1.0.
 | MOD-131 | Example `cnaext_float_rendertarget_test` — clear an HDR target to (4,2,1,1), read back, assert >1.0 | ⬜ | Registered as a ctest under the `cnaext` build; passes on EasyGL, skips with a clear message on `Color`-only renderers. |
 | MOD-132 | Example: HDR target → LDR blit shows the expected clamped colour on screen | ⬜ | Visual test committed under `modules/graphics-ext/examples/`; documented expected output. |
 | MOD-133 | Regression: `Color` render targets behave identically before/after the phase (golden image) | ⬜ | An existing EasyGL render-target golden test is re-run and matches byte-for-byte. |
-| MOD-134 | Regression: all 44 renderers still compile with the new virtuals (configure sweep) | ⬜ | A script configures each `CNA_GRAPHICS_RENDERER` value that is buildable in this environment and reports the rest as skipped-by-toolchain, not as failures. |
+| MOD-134 | Regression: all 47 renderer families still compile with the new virtuals (configure sweep) | ⬜ | A script configures each `CNA_GRAPHICS_RENDERER` value that is buildable in this environment and reports the rest as skipped-by-toolchain, not as failures. |
 | MOD-135 | Headless: `FloatRenderTargets=false` and a clear throw from `RenderTarget2D` | ⬜ | Documented as the reference "renderer cannot do this" behavior for D1. |
 | MOD-136 | Software renderer: decide `Color`-only and document it | ⬜ | `⛔` with a written reason (CPU raster, no float blending path planned in this plan). |
 | MOD-137 | Stub renderer: accepts and ignores, reports `false` | ⬜ | Consistent with its existing contract; test asserts no throw from the renderer itself. |
@@ -691,7 +692,7 @@ place PBR meaningfully grows (CNAEXT.md's own words).
 |---|---|---|---|
 | MOD-1500 | `IComputeShaderRenderer` interface in `IGraphicsRenderer.hpp` (→ §5.0) | ⬜ | Exactly the CNAEXT.md shape; every method documented; no XNA types in the signature (D2). |
 | MOD-1501 | `IStorageBufferRenderer` interface | ⬜ | Same. |
-| MOD-1502 | `IGraphicsRenderer::CreateComputeShader` / `CreateStorageBuffer` / `DispatchCompute` / `MemoryBarrierEXT` with safe defaults | ⬜ | All 44 renderers compile unchanged; defaults return null / no-op (D3). |
+| MOD-1502 | `IGraphicsRenderer::CreateComputeShader` / `CreateStorageBuffer` / `DispatchCompute` / `MemoryBarrierEXT` with safe defaults | ⬜ | All 47 renderer families compile unchanged; defaults return null / no-op (D3). |
 | MOD-1503 | Barrier-bit ordinal enum (`CNA::GraphicsMemoryBarrier`) mapped per renderer | ⬜ | Documented bitmask; renderers translate; unit-tested mapping on the reference. |
 | MOD-1504 | Image-access ordinal enum (`ReadOnly`/`WriteOnly`/`ReadWrite`) | ⬜ | Documented; used by `bindImage`. |
 | MOD-1505 | Workgroup-size limits query (`getMaxComputeWorkGroupCount/Size/Invocations`) | ⬜ | Exposed through the device; a dispatch beyond the limit throws a clear message before submission. |
@@ -741,6 +742,9 @@ documented fallback is verified.*
 
 ### 16.1 Float render targets (→ N12)
 
+Tiers follow `CNA::GraphicsRendererType` on `next` (49 identities). The 2D-only, fixed-function and
+web-DOM identities are handled once in §16.6 rather than repeated per subsystem.
+
 | ID | Renderer | Status | Note |
 |---|---|---|---|
 | MOD-1600 | Vulkan | ⬜ | Real `VK_FORMAT_R16G16B16A16_SFLOAT` attachments; watch the render-pass-compatibility cache noted in `IGraphicsRenderer.hpp` (Task 911). |
@@ -782,6 +786,7 @@ documented fallback is verified.*
 | MOD-1633 | Metal | ⬜ | |
 | MOD-1634 | FNA3D | ⬜ | |
 | MOD-1635 | Wicked | ⬜ | |
+| MOD-1637 | IGL | ⬜ | |
 | MOD-1636 | Cross-renderer pixel-parity test for the tonemap pass | ⬜ | Same HDR input on every ✅ renderer within a documented tolerance; the model is `WEBGPU-123`. |
 
 ### 16.3 Shadow-receiver shaders (→ N33)
@@ -843,14 +848,14 @@ documented fallback is verified.*
 | ID | Renderers | Status | Acceptance criterion |
 |---|---|---|---|
 | MOD-1690 | SDL_Renderer | ⬜ | `SupportsCapability` false for every new capability; `RenderPipeline` constructs and passes through; documented in the support matrix. |
-| MOD-1691 | Canvas, HTML_DOM, SVG_DOM | ⬜ | Same. |
+| MOD-1691 | Canvas, HTML_DOM, SVG_DOM, PixiJs | ⬜ | Same. |
 | MOD-1692 | Software, PortableGL | ⬜ | Same; PortableGL's decision from `MOD-1617` recorded here too. |
 | MOD-1693 | Skia, Blend2D, Direct2D, OpenVG | ⬜ | Same; note Skia already overrides `CreateRenderTarget2DEXT` for its own reasons. |
 | MOD-1694 | GDI, Glide, FreeDirect | ⬜ | Same. |
-| MOD-1695 | DirectX 1–8, OpenGL1, OpenGLES1 | ⬜ | Same; these are fixed-function/legacy by identity. |
+| MOD-1695 | DirectX 1–8, OpenGL1, OpenGLES1, TinyGL | ⬜ | Same; these are fixed-function/legacy by identity (TinyGL has no shaders, render targets, stencil or scissor at all). |
 | MOD-1696 | Headless | ⬜ | Same; the canonical "everything false" reference used by the unit tests. |
 | MOD-1697 | Stub | ⬜ | Accepts and ignores per its existing contract. |
-| MOD-1698 | Support-matrix completeness check | ⬜ | A test (or script) asserts every one of the 46 renderer identities appears in the matrix with an explicit status — no silent omissions. |
+| MOD-1698 | Support-matrix completeness check | ⬜ | A test (or script) asserts every identity in `CNA::GraphicsRendererType` (49 on `next`, and growing — derive the list, never hardcode the count) appears in the matrix with an explicit status — no silent omissions. |
 
 ---
 
