@@ -179,6 +179,10 @@ RULES: list[tuple[str, str, str]] = [
     (r"^SDL_(Get|Set|Has|Clear|Lock|Unlock|Create|Destroy|Copy|Enumerate)\w*Propert", "native-handle", "property access"),
     (r"^SDL_PropertiesID$", "native-handle", "property set handle"),
     (r"^SDL_PropertyType$", "native-handle", "property type"),
+    # SDL2's answer to SDL3's window-property bag: one tagged union of every window system's native
+    # handles. Same concern -- how a renderer would reach HWND/X11/Wayland -- so it classifies here
+    # even though PLAT-SDL2-5 deliberately leaves it unused and reports nativeWindowHandle false.
+    (r"^SDL_SysWM", "native-handle", "SDL2 native window info union"),
 
     # GL / Vulkan / Metal interop, before window flags (SDL_WINDOW_OPENGL is creation intent).
     (r"^SDL_GL_", "gl-vulkan-interop", "GL context"),
@@ -191,6 +195,21 @@ RULES: list[tuple[str, str, str]] = [
     # Events. SDL_EVENT_* covers the whole event taxonomy including input events; the event
     # *payload* is a platform-event concern, while input *state* below is a separate service.
     (r"^SDL_EVENT_", "event", "event type constant"),
+    # SDL2 spells the same taxonomy as bare SCREAMING_CASE constants instead of SDL3's SDL_EVENT_*
+    # family (SDL_KEYDOWN for SDL_EVENT_KEY_DOWN, SDL_QUIT for SDL_EVENT_QUIT), so PLAT-SDL2-3's
+    # translator references a second vocabulary for one concern. Names are the real SDL2
+    # SDL_EventType enumerators, not a guess, and the list is exactly the set Sdl2Platform
+    # translates -- an SDL2 event CNA starts handling later still has to be classified
+    # deliberately, which is what this gate is for.
+    #
+    # Placement matters twice over. Before the input rules, for the reason SDL_EVENT_* already
+    # sits there: SDL_MOUSEBUTTONDOWN is an event, SDL_GetMouseState is input state. And the
+    # anchored SDL_TEXTINPUT$ must precede `^SDL_TEXTINPUT`, which exists for SDL3's
+    # SDL_TEXTINPUT_TYPE_* input-method enum and would otherwise swallow SDL2's event type.
+    (r"^SDL_(QUIT|KEYDOWN|KEYUP|TEXTINPUT|MOUSEMOTION|MOUSEBUTTONDOWN|MOUSEBUTTONUP|MOUSEWHEEL)$", "event", "SDL2 event type constant"),
+    # SDL2 has one window event carrying a sub-code (SDL_WindowEventID); SDL3 promoted every
+    # sub-code to its own SDL_EVENT_WINDOW_* type. Both are the window half of the event taxonomy.
+    (r"^SDL_WINDOWEVENT", "event", "SDL2 window event type/sub-code"),
     (r"^SDL_(Poll|Pump|Push|Peep|Wait|Flush|Has|Add|Remove|Filter|Set|Get)Event", "event", "event pump"),
     (r"^SDL_(Event|CommonEvent|DisplayEvent|WindowEvent|KeyboardEvent|KeyboardDeviceEvent|TextEditingEvent|TextEditingCandidatesEvent|TextInputEvent|MouseMotionEvent|MouseButtonEvent|MouseWheelEvent|MouseDeviceEvent|JoyAxisEvent|JoyBallEvent|JoyHatEvent|JoyButtonEvent|JoyDeviceEvent|JoyBatteryEvent|GamepadAxisEvent|GamepadButtonEvent|GamepadDeviceEvent|GamepadTouchpadEvent|GamepadSensorEvent|AudioDeviceEvent|CameraDeviceEvent|SensorEvent|QuitEvent|UserEvent|TouchFingerEvent|PenProximityEvent|PenMotionEvent|PenTouchEvent|PenButtonEvent|PenAxisEvent|DropEvent|ClipboardEvent|RenderEvent|EventFilter|EventAction|EventType|EventEntry)$", "event", "event payload type"),
 
@@ -226,7 +245,9 @@ RULES: list[tuple[str, str, str]] = [
     (r"^SDL_(GetPowerInfo|PowerState|POWERSTATE_)", "system-service", "power state"),
 
     # Audio.
-    (r"^SDL_(Audio|AUDIO_|OpenAudio|CloseAudio|PauseAudio|ResumeAudio|BindAudio|UnbindAudio|GetAudio|SetAudio|CreateAudioStream|DestroyAudioStream|PutAudioStream|GetAudioStream|ClearAudioStream|FlushAudioStream|LockAudioStream|UnlockAudioStream|MixAudio|ConvertAudioSamples|LoadWAV|IsAudioDevicePlaying|IsAudioDevicePaused|GetNumAudioDrivers|GetAudioDriver|GetCurrentAudioDriver)", "audio", "audio device/stream"),
+    # LockAudioDevice/UnlockAudioDevice are SDL2's device-level callback lock; SDL3 moved the same
+    # serialization onto the stream (LockAudioStream). Both are the audio contract's concern.
+    (r"^SDL_(Audio|AUDIO_|OpenAudio|CloseAudio|PauseAudio|ResumeAudio|BindAudio|UnbindAudio|GetAudio|SetAudio|CreateAudioStream|DestroyAudioStream|PutAudioStream|GetAudioStream|ClearAudioStream|FlushAudioStream|LockAudioStream|UnlockAudioStream|LockAudioDevice|UnlockAudioDevice|MixAudio|ConvertAudioSamples|LoadWAV|IsAudioDevicePlaying|IsAudioDevicePaused|GetNumAudioDrivers|GetAudioDriver|GetCurrentAudioDriver)", "audio", "audio device/stream"),
     (r"^SDL_MIX_MAXVOLUME$", "audio", "mixer constant"),
     (r"^SDL_(IsSupportedChannelCount|IsSupportedSampleRate)", "audio", "audio format query"),
     (r"^SDL_AUDIODRIVER$", "audio", "audio driver selection env var; becomes audio configuration"),
@@ -241,8 +262,11 @@ RULES: list[tuple[str, str, str]] = [
     (r"^SDL_(LoadFile|SaveFile|GetBasePath|GetPrefPath|GetUserFolder|GetCurrentDirectory|CreateDirectory|EnumerateDirectory|RemovePath|RenamePath|CopyFile|GetPathInfo|GlobDirectory|PathType|PathInfo|FOLDER_|Folder|GlobFlags)", "filesystem", "filesystem"),
     (r"^SDL_(Storage|OpenTitleStorage|OpenUserStorage|OpenFileStorage|CloseStorage|StorageReady|GetStorage|ReadStorage|WriteStorage|CopyStorage|RemoveStorage|RenameStorage|CreateStorageDirectory|EnumerateStorageDirectory)", "filesystem", "storage abstraction"),
 
-    # Displays.
-    (r"^SDL_(Display|GetDisplay|GetDisplays|GetPrimaryDisplay|GetCurrentDisplay|GetDesktopDisplay|GetClosestFullscreen|GetFullscreenDisplayModes|GetNumVideoDrivers|GetVideoDriver|GetCurrentVideoDriver|ScreenSaver|EnableScreenSaver|DisableScreenSaver|SystemTheme|SYSTEM_THEME|ORIENTATION_)", "display", "display/video"),
+    # Displays. SDL3 hands out opaque SDL_DisplayIDs and returns arrays; SDL2 uses dense indices
+    # and a separate count call per collection (GetNumVideoDisplays, GetNumDisplayModes), and
+    # spells the screen-saver query IsScreenSaverEnabled rather than ScreenSaverEnabled. Same
+    # contract area either way -- IPlatformDisplays is what both implement.
+    (r"^SDL_(Display|GetDisplay|GetDisplays|GetPrimaryDisplay|GetCurrentDisplay|GetDesktopDisplay|GetClosestFullscreen|GetFullscreenDisplayModes|GetNumDisplayModes|GetNumVideoDisplays|GetNumVideoDrivers|GetVideoDriver|GetCurrentVideoDriver|ScreenSaver|IsScreenSaverEnabled|EnableScreenSaver|DisableScreenSaver|SystemTheme|SYSTEM_THEME|ORIENTATION_)", "display", "display/video"),
 
     # Windows. After native-handle, GL and renderer rules.
     (r"^SDL_WINDOW_", "window", "window flag"),
