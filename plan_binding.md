@@ -1350,9 +1350,17 @@ not build by default. `CBIND-052B` added one public accessor to `modules/graphic
 with `cmake --build <tree> --target CnaTests -j3`, then
 `SDL_VIDEODRIVER=dummy <tree>/CnaTests --gtest_filter='EffectPassTest.*'` **run from the repository
 root**, because the suite's fixtures are resolved relative to the working directory. The binary and
-its object tree are ~1.1 GB, so they were deleted afterwards (`rm -f <tree>/CnaTests &&
+its object tree are ~1.1 GB, so they are deleted afterwards (`rm -f <tree>/CnaTests &&
 rm -rf <tree>/CMakeFiles/CnaTests.dir`) and the C API suite re-run to confirm nothing else depended
-on them. Note the three `GltfRenderer*Policy` inventory audits that fail in a full run at this
+on them. **Deleting the `.dir` takes make's generated `build.make` with it**, so the next attempt to
+build that target fails with `No rule to make target 'CMakeFiles/CnaTests.dir/build.make'` until
+`cmake <tree>` regenerates it -- run the reconfigure first rather than concluding the tree is
+broken. Run the suite on a **virtual display** (`Xvfb :95 -screen 0 1280x1024x24`, then
+`env -u SDL_VIDEODRIVER DISPLAY=:95 <tree>/CnaTests`) rather than under
+`SDL_VIDEODRIVER=dummy`: the dummy driver skips a further handful of SDL3 platform and graphics
+tests, and the repository already has a `CNA_TEST_DISPLAY` cache variable for the same purpose.
+Displays `:99` and `:97` are usually already taken by other sessions -- pick a free one instead of
+reusing theirs. Note the three `GltfRenderer*Policy` inventory audits that fail in a full run at this
 commit: they are pre-existing, they predate this campaign's slices, and `next`'s `09786205e` already
 fixes them on the other side of the merge.
 
