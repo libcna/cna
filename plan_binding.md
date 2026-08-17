@@ -1360,6 +1360,36 @@ fixes them on the other side of the merge.
 backend needs no test edits. `CApi_TextureSmoke`, `CApi_TextureVolumeSmoke` and `CApi_LifecycleSmoke`
 were rewritten once for exactly this reason.
 
+### How to tell a closed matrix from a matrix that merely passes `--check`
+
+`--check` only proves `COVERAGE.md` matches what the generator produces from the rules. It cannot
+see a rule whose `approved_symbols` names something with no C route behind it — that is exactly how
+`TINYGL` read `implemented` with test evidence for two merges. After `CBIND-052B` closed the matrix
+on 2026-08-17 the closure was audited rather than assumed, in three ways worth repeating whenever
+someone needs to trust a "0 planned":
+
+1. **Count C identities against C++ enumerators, per family.** Group the implemented `enum-value`
+   rows by their enum, read the `CNA_XXX_*` glob out of each row's mapping text, and count the
+   matching `#define`s in `modules/c-api/include`. Exclude only `_MAXIMUM`, `_ALL` and `_COUNT` —
+   `_NONE`, `_UNKNOWN` and `_INVALID` are real enumerators and excluding them manufactures an
+   off-by-one in a dozen families. Result: no family publishes fewer C constants than CNA declares
+   enumerators.
+2. **Rely on the compiler for the outward direction.** Since `CBIND-052A` the library builds with
+   `-Werror=switch`, so any C++→C switch missing an enumerator fails the build. That is only worth
+   anything if no such switch carries a `default:` to swallow it — 29 defaulted switches in the
+   adapter return a `CNA_` constant, and every one of them switches on a **C** identity, where a
+   default is correct. Two `std::array<std::pair<CNA_…>>` tables exist; `RendererIdentities` carries
+   the `consteval` count gate, and the fallback-reason table is checked by (1).
+3. **Check that the routes the rules name exist.** Extract every `cna_[a-z0-9_]+` from the
+   `mapping` and `tests` text of every `implemented` rule and hold it against
+   `abi_baseline.json`'s export list. Ignore trailing-underscore family prefixes (`cna_vector3_`)
+   and `cna_c_api_*` test names. This found the campaign's two broken Doxygen cross-references —
+   `cna_gamepad_get_battery_level_ext` and `cna_graphics_device_get_info`, neither of which has
+   ever existed — and after those were repaired all 484 named routes resolve.
+
+None of the three is wired into a gate. They are cheap enough to re-run by hand, and (3) in
+particular is the one that would catch a rule citing a route that a later rename removed.
+
 ### Traps this campaign actually hit
 
 - **A green coverage matrix is not evidence that a mapping exists.** `CBIND-050` pinned every rule
