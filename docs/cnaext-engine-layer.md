@@ -6,11 +6,12 @@ The **CNAEXT engine layer** is the opt-in `CNA::Graphics` namespace that sits *a
 API and orchestrates frame-level work the XNA 4.0 contract has no concept of: an HDR render
 pipeline, post-processing passes, shadow maps, skybox/IBL, and (long term) compute.
 
-It is **early**. As of 2026-08-17 the layer contains only the pieces listed under *What exists
-today* below — a settings bag, a material description, three renderer-neutral post-process effects,
-and their enumerations. The orchestration half (`RenderPipeline`, `BloomPass`, `ShadowMap`,
-`Skybox`, `EnvironmentProcessor`, `ComputeShader`, …) is **designed but not implemented**; do not
-describe it as available. Its design is [`../CNAEXT.md`](../CNAEXT.md) and its task backlog is
+**The HDR pipeline works; the scene-level subsystems do not exist yet.** As of 2026-08-17 a game
+can wrap its drawing in `RenderPipeline`, render into a float scene target, and get ambient
+occlusion, bloom, tonemapping and FXAA — verified on EasyGL against Mesa's software renderer. What
+is still only designed: shadow maps, the skybox, image-based lighting, compute shaders, and the
+instancing/LOD helpers. Do not describe those as available. The design is
+[`../CNAEXT.md`](../CNAEXT.md); the task backlog and its evidence trail are
 [`../plan_modern.md`](../plan_modern.md).
 
 Enable it with:
@@ -46,6 +47,10 @@ orchestration that pulls in extra render targets and GPU memory lives in the gat
 | `DepthEffect` (+ `DepthEffectMode`, `DitherMode`) | `CNA/Graphics/DepthEffect.hpp` | Colour-depth-reduction post-process (RGB565/RGB332, 4/2/1-bit greyscale, palettes, ordered dithering). |
 | `CRTEffect` (+ `CRTMaskType`) | `CNA/Graphics/CRTEffect.hpp` | Scanlines, RGB sub-pixel mask, barrel curvature, vignette. |
 | `AsciiPostProcessEffect` (+ `AsciiQuantizeMode`) | `CNA/Graphics/AsciiPostProcessEffect.hpp` | Renderer-neutral ASCII/glyph-grid post-process (see [`ascii-post-process-effect.md`](ascii-post-process-effect.md)). |
+| `RenderPipeline` | `CNA/Graphics/RenderPipeline.hpp` | Frame-level orchestrator: `begin`/`end` around a game's drawing, an HDR scene target, and the fixed pass chain. |
+| `PostProcessPass`, `PostProcessContext`, `PostProcessChain` | same directory | The pass abstraction, its one invocation struct, and the chain that ping-pongs between intermediates. |
+| `SsaoPass`, `BloomPass`, `TonemapPass`, `FxaaPass`, `BlitPass` | same directory | The built-in passes, in pipeline order. |
+| `FullscreenPass`, `RenderTargetPool` | same directory | The screen-covering draw and the intermediate-target cache every pass shares. |
 | `CNAEXT.hpp` | `CNA/Graphics/CNAEXT.hpp` | Master include — pulls in every public type above. |
 
 ## Conventions for this layer
@@ -80,11 +85,35 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Subsystem | EasyGL (reference) | Vulkan | D3D11 | Other renderers |
 |---|---|---|---|---|
 | Post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ⬜ | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |
-| Float/HDR render targets | ⬜ | ⬜ | ⬜ | ⬜ |
-| `RenderPipeline` + post-process passes | ⬜ | ⬜ | ⬜ | ⬜ |
+| Float/HDR render targets | ✅ RGBA16F + RGBA32F, runtime-probed | ⬜ | ⬜ | ⬜ — each reports `false` and `RenderTarget2D` refuses the format rather than substituting `Color` |
+| `RenderPipeline` + post-process passes | ✅ | ⬜ | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
 | Shadow maps | ⬜ | ⬜ | ⬜ | ⬜ |
 | Skybox + IBL | ⬜ | ⬜ | ⬜ | ⬜ |
 | Compute / storage buffers | ⬜ | ⬜ | ⬜ | ⬜ |
+
+### Using it
+
+```cpp
+CNA::Graphics::RenderPipeline pipeline(GraphicsDevice());
+pipeline.resize(backBufferWidth, backBufferHeight);      // and again on every resize
+
+auto& settings = pipeline.getSettings();
+settings.setHDREnabled(true);
+settings.setTonemappingMode(CNA::Graphics::TonemappingMode::Aces);
+settings.setBloomEnabled(true);
+
+// Per frame:
+pipeline.begin(Color::CornflowerBlue);
+//   ... every SpriteBatch, Model and Effect draw the game already makes ...
+pipeline.end();
+```
+
+With default settings this allocates nothing and renders exactly what the game rendered before,
+which is what makes it safe to add to an existing title before deciding whether to use it.
+
+Ambient occlusion needs one thing the pipeline cannot do for a game: scene depth and view-space
+normals, which means drawing the geometry a second time with a different effect. Supply them with
+`setDepthNormalInputs()`; without them SSAO renders an unoccluded frame rather than failing.
 
 Legend: ✅ implemented and verified · 🟨 partial · ⬜ not implemented · ⛔ deliberately unsupported.
 
