@@ -10,6 +10,7 @@
 
 #include <gtest/gtest.h>
 
+#include "CNA/GraphicsCapability.hpp"
 #include "CNA/Graphics/DirectionalLightEXT.hpp"
 #include "CNA/Graphics/ShadowMap.hpp"
 #include "CNA/Graphics/ShadowQuality.hpp"
@@ -228,6 +229,37 @@ TEST(ShadowMapTest, BothMisusesAreRejected)
     shadowMap.begin(sun, UnitScene());
     EXPECT_THROW(shadowMap.begin(sun, UnitScene()), std::logic_error);
     shadowMap.end();
+}
+
+TEST(ShadowMapTest, AnUnsupportedRendererIsReportedRatherThanFailing)
+{
+    // MOD-811 / D1. The object constructs on every renderer, and the two calls that make up a
+    // pass work on every renderer. What changes is whether anything is drawn -- and on a renderer
+    // that cannot, `isSupported()` says so and there is no caster effect to hand out.
+    GraphicsDevice gd;
+    ShadowMap shadowMap(gd, ShadowQuality::Low);
+
+    const bool canRaster  = gd.SupportsCapability(CNA::GraphicsCapability::ThreeD);
+    const bool canCompile = gd.SupportsCapability(CNA::GraphicsCapability::CustomEffects);
+    if (!canRaster || !canCompile)
+    {
+        EXPECT_FALSE(shadowMap.isSupported());
+        EXPECT_EQ(shadowMap.getCasterEffect(), nullptr);
+    }
+    else
+    {
+        EXPECT_TRUE(shadowMap.isSupported());
+        EXPECT_NE(shadowMap.getCasterEffect(), nullptr);
+    }
+
+    // Either way a pass opens and closes without throwing, which is the property that lets a game
+    // switch shadows on without first asking whether it may.
+    DirectionalLightEXT sun;
+    EXPECT_NO_THROW({
+        shadowMap.begin(sun, UnitScene());
+        shadowMap.end();
+    });
+    EXPECT_NE(shadowMap.getShadowTexture(), nullptr);
 }
 
 TEST(ShadowMapTest, TheDepthBiasRoundTrips)

@@ -78,6 +78,20 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param count  Number of vec3 elements.
          */
         CNAEXT void SetUniformVec3Array(const char* name, const float* values, int count);
+
+        /**
+         * @brief Sets a `mat4` array uniform, e.g. a skinning palette.
+         *
+         * Distinct from SetUniformMat4, which uploads exactly one matrix whatever the uniform's
+         * declared size -- filling a palette with it leaves every element past the first at its
+         * default.
+         *
+         * @param name     The uniform's name in the shader; the `[0]` spelling GLSL uses for the
+         *                 first element is tried too, so either form works.
+         * @param matrices Pointer to @p count * 16 floats, column-major.
+         * @param count    Number of matrices.
+         */
+        CNAEXT void SetUniformMat4Array(const char* name, const float* matrices, int count);
         /**
          * @brief Binds a texture to an additional sampler unit for this effect's shader.
          *

@@ -1661,6 +1661,19 @@ if (!ProfileIsEs2ApiGeneration())
         if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count) * 3), 3);
     }
 
+    void EasyGLEffectRenderer::SetUniformMat4Array(const char* name, const float* matrices,
+                                                  int count)
+    {
+        // GLSL names the first element of an array uniform, so a palette declared `uBones[72]` is
+        // located as "uBones[0]". Both spellings are tried because a caller naturally writes the
+        // array's own name and some drivers accept it.
+        int loc = program_.uniform_location(name);
+        if (loc < 0)
+            loc = program_.uniform_location((std::string(name) + "[0]").c_str());
+        if (loc >= 0 && count > 0)
+            ::metagl::glUniformMatrix4fv(::metagl::UniformLocation{loc}, count, 0, matrices);
+    }
+
     void EasyGLEffectRenderer::BindTexture(int unit, ITextureRenderer* texture)
     {
         if (!texture) return;

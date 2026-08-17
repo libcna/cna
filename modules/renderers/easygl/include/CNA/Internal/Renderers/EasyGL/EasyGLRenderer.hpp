@@ -457,6 +457,7 @@ namespace CNA::Internal::Renderers::EasyGL
         void SetUniformFloatArray(const char* name, const float* values, int count) override;
         void SetUniformVec2Array(const char* name, const float* values, int count) override;
         void SetUniformVec3Array(const char* name, const float* values, int count) override;
+        void SetUniformMat4Array(const char* name, const float* matrices, int count) override;
         void BindTexture(int unit, ITextureRenderer* texture) override;
         void BindTextureCube(int unit, ITextureCubeRenderer* texture) override;
         void BindTexture3D(int unit, ITexture3DRenderer* texture) override;

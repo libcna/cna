@@ -692,6 +692,13 @@ namespace CNA::Internal::Renderers
         /// uniform at zero, silently, which is how an SSAO kernel of 64 vec3s turns into 64 samples
         /// at the origin and an image with no occlusion in it at all.
         virtual void SetUniformVec3Array(const char* name, const float* values, int count) {}
+
+        /// plan_modern.md MOD-810: uploads @p count column-major 4x4 matrices, for a shader that
+        /// declares `mat4 name[N]` -- a skinning palette, most of the time. Separate from
+        /// SetUniformMat4 for the same reason the array forms above are separate from their scalar
+        /// ones: the single-matrix call uploads exactly one matrix whatever the uniform's declared
+        /// size, so filling a palette with it leaves every bone past the first at its default.
+        virtual void SetUniformMat4Array(const char* name, const float* matrices, int count) {}
         /// Binds a texture to the given sampler unit (0-based) for subsequent draw calls.
         /// Unit 0 is normally driven by the caller (e.g. SpriteBatch); this is for additional
         /// units a custom shader samples directly (e.g. a second blend-source texture).

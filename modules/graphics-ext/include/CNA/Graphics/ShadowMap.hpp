@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 
 #include <memory>
+#include <vector>
 
 namespace Microsoft::Xna::Framework {
     struct BoundingBox;
@@ -62,6 +63,20 @@ namespace CNA::Graphics {
         ShadowMap& operator=(const ShadowMap&) = delete;
 
         /**
+         * @brief Returns whether this device can generate shadow maps at all.
+         *
+         * plan_modern.md MOD-811, and design decision D1: no renderer is mandatory, and a
+         * subsystem that cannot run says so instead of failing. Generation needs two things --
+         * the renderer must raster 3D triangles, and it must compile the caster's GLSL. Where
+         * either is missing the object still constructs and `begin`/`end` still work; they simply
+         * leave the map meaning "nothing occludes", so a game that switches shadows on gets an
+         * unshadowed image rather than an exception. The reason is logged once per map.
+         *
+         * @return True if a shadow pass will actually render anything.
+         */
+        [[nodiscard]] bool isSupported() const;
+
+        /**
          * @brief Binds the shadow target and computes the light's view and projection.
          *
          * The projection is fitted to @p sceneBounds: an orthographic volume just large enough to
@@ -91,6 +106,46 @@ namespace CNA::Graphics {
          * @return The caster effect, or null where the renderer cannot compile it.
          */
         [[nodiscard]] Microsoft::Xna::Framework::Graphics::ShaderEffect* getCasterEffect() const;
+
+        /**
+         * @brief Returns the effect skinned caster geometry must be drawn with.
+         *
+         * plan_modern.md MOD-810. A skinned mesh drawn with the rigid caster above casts its
+         * *bind pose*, which is a shadow of a character standing still under one that is running.
+         * This variant applies the same bone palette `SkinnedEffect` does, so the silhouette in
+         * the map is the animated one.
+         *
+         * @return The skinned caster effect, or null where the renderer cannot compile it.
+         */
+        [[nodiscard]] Microsoft::Xna::Framework::Graphics::ShaderEffect* getSkinnedCasterEffect() const;
+
+        /**
+         * @brief Applies the rigid caster effect and re-uploads the current light matrix.
+         *
+         * `begin` already does this, so it is only needed to switch back after drawing skinned
+         * casters in the same pass.
+         *
+         * @throws std::logic_error If no shadow pass is open.
+         */
+        void applyCaster();
+
+        /**
+         * @brief Applies the skinned caster effect with a bone palette, inside an open pass.
+         *
+         * The palette is uploaded here rather than read from an effect, because the shadow pass
+         * does not know which of the app's effects a given mesh is shaded with -- only the app
+         * does, and it already holds the same matrices it gives `SkinnedEffect`.
+         *
+         * @param boneTransforms   The skinning palette, in the same order `SkinnedEffect` takes it.
+         * @param weightsPerVertex 1, 2 or 4 -- only the first N weight/index pairs contribute,
+         *                         matching XNA's own property range.
+         * @throws std::logic_error    If no shadow pass is open.
+         * @throws std::invalid_argument If @p weightsPerVertex is not 1, 2 or 4, or the palette is
+         *                               empty or longer than the shader's 72 bones.
+         */
+        void applySkinnedCaster(
+            const std::vector<Microsoft::Xna::Framework::Matrix>& boneTransforms,
+            int weightsPerVertex);
 
         /**
          * @brief Returns the rendered shadow map.
@@ -186,11 +241,13 @@ namespace CNA::Graphics {
         Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
         ShadowQuality quality_;
         int  size_ = 0;
-        bool passOpen_ = false;
+        bool passOpen_  = false;
+        bool supported_ = false;
         float depthBias_ = 0.0015f;
 
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D> target_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> casterEffect_;
+        std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> skinnedCasterEffect_;
         Microsoft::Xna::Framework::Matrix lightViewProjection_{};
     };
 

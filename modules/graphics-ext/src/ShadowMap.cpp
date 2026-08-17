@@ -3,6 +3,8 @@
 
 #ifdef CNA_CNAEXT
 
+#include "CNA/GraphicsCapability.hpp"
+#include "CNA/Logger.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -16,6 +18,7 @@
 #include <array>
 #include <cmath>
 #include <stdexcept>
+#include <string>
 
 namespace CNA::Graphics {
 
@@ -50,6 +53,36 @@ void main() {
 }
 )";
 
+        /// The skinned caster (MOD-810). Same output as the rigid one; the difference is that the
+        /// position is blended through the bone palette first, so the silhouette recorded in the
+        /// map is the pose the mesh is actually in. Attribute locations follow the custom-effect
+        /// convention -- location N is the Nth element of the vertex declaration -- which for the
+        /// skinned stride is position, normal, uv, weights, indices.
+        constexpr const char* kSkinnedCasterVertexSource = R"(#version 300 es
+precision highp float;
+layout(location = 0) in vec3 aPosition;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aUV;
+layout(location = 3) in vec4 aBoneWeights;
+layout(location = 4) in uvec4 aBoneIndices;
+uniform mat4 uLightViewProjection;
+uniform mat4 uWorld;
+uniform mat4 uBones[72];
+uniform int uWeightsPerVertex;
+out float vDistance;
+void main() {
+    // Only the first uWeightsPerVertex pairs contribute, matching SkinnedEffect: a mesh authored
+    // with one weight per vertex has undefined values in the other three slots.
+    mat4 skin = uBones[aBoneIndices.x] * aBoneWeights.x;
+    if (uWeightsPerVertex >= 2) skin += uBones[aBoneIndices.y] * aBoneWeights.y;
+    if (uWeightsPerVertex >= 4) skin += uBones[aBoneIndices.z] * aBoneWeights.z
+                                      + uBones[aBoneIndices.w] * aBoneWeights.w;
+    vec4 lightSpace = uLightViewProjection * uWorld * skin * vec4(aPosition, 1.0);
+    gl_Position = lightSpace;
+    vDistance = lightSpace.z / lightSpace.w * 0.5 + 0.5;
+}
+)";
+
         constexpr const char* kCasterFragmentSource = R"(#version 300 es
 precision highp float;
 in float vDistance;
@@ -67,6 +100,9 @@ void main() {
             const float inverse = 1.0f / std::sqrt(lengthSquared);
             return Vector3(value.X * inverse, value.Y * inverse, value.Z * inverse);
         }
+
+        /// The palette size the skinned caster declares, matching the stock skinned programs.
+        constexpr std::size_t kMaxCasterBones = 72;
 
     } // namespace
 
@@ -117,12 +153,42 @@ void main() {
 
         target_ = std::make_unique<RenderTarget2D>(device, size_, size_, false, format,
                                                    DepthFormat::Depth24);
-        casterEffect_ = std::make_unique<ShaderEffect>(device, kCasterVertexSource,
-                                                       kCasterFragmentSource);
         lightViewProjection_ = Matrix::getIdentityProperty();
+
+        // MOD-811 / design decision D1. Both are needed and they fail differently, so the log
+        // names which one is missing rather than reporting "shadows unavailable" and leaving the
+        // reader to guess.
+        const bool canRaster = device.SupportsCapability(CNA::GraphicsCapability::ThreeD);
+        const bool canCompile = device.SupportsCapability(CNA::GraphicsCapability::CustomEffects);
+        if (canRaster && canCompile)
+        {
+            casterEffect_ = std::make_unique<ShaderEffect>(device, kCasterVertexSource,
+                                                           kCasterFragmentSource);
+            skinnedCasterEffect_ = std::make_unique<ShaderEffect>(
+                device, kSkinnedCasterVertexSource, kCasterFragmentSource);
+        }
+        // Compilation can still fail on a renderer that claims the capability, so the answer is
+        // the effect that actually exists and links, not the promise that one could.
+        supported_ = casterEffect_ != nullptr && casterEffect_->IsEffectValid();
+        if (!supported_)
+        {
+            CNA::Logger::Info(
+                std::string("CNA::Graphics::ShadowMap: shadows are unavailable on this renderer (")
+                + (!canRaster ? "it does not raster 3D triangles"
+                              : (!canCompile ? "it cannot compile custom effects"
+                                             : "the caster shader failed to compile"))
+                + "). A shadow pass will leave the map meaning nothing occludes, so the frame "
+                  "renders unshadowed rather than failing.",
+                CNA::LogCategory::RENDER);
+        }
     }
 
     ShadowMap::~ShadowMap() = default;
+
+    bool ShadowMap::isSupported() const
+    {
+        return supported_;
+    }
 
     Matrix ShadowMap::computeLightView(const DirectionalLightEXT& light, const BoundingBox& sceneBounds)
     {
@@ -210,13 +276,49 @@ void main() {
         // whole scene would be in shadow wherever no caster was drawn.
         device_.Clear(Color::White);
 
-        if (casterEffect_ != nullptr && casterEffect_->IsEffectValid())
-        {
-            casterEffect_->Apply();
-            casterEffect_->SetUniformMat4("uLightViewProjection", &lightViewProjection_.M11);
-            const Matrix identity = Matrix::getIdentityProperty();
-            casterEffect_->SetUniformMat4("uWorld", &identity.M11);
-        }
+        if (supported_)
+            applyCaster();
+    }
+
+    void ShadowMap::applyCaster()
+    {
+        if (!passOpen_)
+            throw std::logic_error(
+                "CNA::Graphics::ShadowMap::applyCaster: no shadow pass is open");
+        if (!supported_)
+            return;
+
+        casterEffect_->Apply();
+        casterEffect_->SetUniformMat4("uLightViewProjection", &lightViewProjection_.M11);
+        const Matrix identity = Matrix::getIdentityProperty();
+        casterEffect_->SetUniformMat4("uWorld", &identity.M11);
+    }
+
+    void ShadowMap::applySkinnedCaster(const std::vector<Matrix>& boneTransforms,
+                                       const int weightsPerVertex)
+    {
+        if (!passOpen_)
+            throw std::logic_error(
+                "CNA::Graphics::ShadowMap::applySkinnedCaster: no shadow pass is open");
+        if (weightsPerVertex != 1 && weightsPerVertex != 2 && weightsPerVertex != 4)
+            throw std::invalid_argument(
+                "CNA::Graphics::ShadowMap::applySkinnedCaster: weightsPerVertex must be 1, 2 or 4");
+        if (boneTransforms.empty() || boneTransforms.size() > kMaxCasterBones)
+            throw std::invalid_argument(
+                "CNA::Graphics::ShadowMap::applySkinnedCaster: the bone palette must hold between "
+                "1 and 72 matrices");
+        if (!supported_)
+            return;
+
+        skinnedCasterEffect_->Apply();
+        skinnedCasterEffect_->SetUniformMat4("uLightViewProjection", &lightViewProjection_.M11);
+        const Matrix identity = Matrix::getIdentityProperty();
+        skinnedCasterEffect_->SetUniformMat4("uWorld", &identity.M11);
+        // Matrix's own storage is the contiguous column-major block the uniform expects, so the
+        // palette goes up as one upload rather than 72.
+        skinnedCasterEffect_->SetUniformMat4Array("uBones", &boneTransforms.front().M11,
+                                                  static_cast<int>(boneTransforms.size()));
+        skinnedCasterEffect_->SetUniformInt("uWeightsPerVertex", weightsPerVertex);
     }
 
     void ShadowMap::end()
@@ -229,8 +331,15 @@ void main() {
 
     ShaderEffect* ShadowMap::getCasterEffect() const
     {
-        return casterEffect_ != nullptr && casterEffect_->IsEffectValid() ? casterEffect_.get()
-                                                                         : nullptr;
+        return supported_ ? casterEffect_.get() : nullptr;
+    }
+
+    ShaderEffect* ShadowMap::getSkinnedCasterEffect() const
+    {
+        return supported_ && skinnedCasterEffect_ != nullptr
+                       && skinnedCasterEffect_->IsEffectValid()
+                   ? skinnedCasterEffect_.get()
+                   : nullptr;
     }
 
     Texture2D* ShadowMap::getShadowTexture() const

@@ -48,6 +48,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <stdexcept>
 #include <type_traits>
 #include <vector>
 
@@ -865,6 +866,96 @@ TEST_F(ShadowVisibilityTest, TheDefaultBiasSitsBetweenAcneAndPeterPanning)
     EXPECT_LT(withTooMuch, withDefault)
         << "a 130x bias did not shrink the shadow, so the trade-off this default sits on is not "
            "the one documented";
+}
+
+TEST_F(ShadowVisibilityTest, ASkinnedCasterCastsThePoseItIsIn)
+{
+    // MOD-810. Drawn with the rigid caster a skinned mesh records its bind pose, which is the
+    // shadow of a character standing still under one that is running -- and it looks like a
+    // correct shadow, just of the wrong thing. So the bone here is a pure translation, far enough
+    // that the bind-pose shadow and the posed one cannot be confused, and the test asks which of
+    // the two positions the shadow actually landed in.
+    ShadowMap shadowMap(device, ShadowQuality::Medium);
+    if (shadowMap.getSkinnedCasterEffect() == nullptr)
+        GTEST_SKIP() << "this renderer cannot compile the skinned caster";
+
+    RenderTarget2D target(device, kFrame, kFrame, false, SurfaceFormat::Color,
+                          DepthFormat::Depth24);
+
+    constexpr float kBoneOffsetX = 4.0f;
+    std::vector<Matrix> bones{Matrix::CreateTranslation(kBoneOffsetX, 0.0f, 0.0f)};
+
+    const auto quad = Quad(kCasterHeight, kCasterHalfExtent);
+    std::array<GpuSkinnedVertex, 6> caster{};
+    for (std::size_t i = 0; i < caster.size(); ++i)
+    {
+        const Vector3& p = quad[i].Position;
+        caster[i] = GpuSkinnedVertex{p.X, p.Y, p.Z, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+                                     1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0};
+    }
+
+    BasicEffect effect(device);
+    ConfigureLighting(effect);
+    effect.setShadowMapEXT(shadowMap.getShadowTexture());
+    effect.setShadowsEnabledEXT(true);
+
+    const auto ground = Quad(0.0f, kGroundHalfExtent);
+    VertexBuffer casterBuffer(device, 6);
+    casterBuffer.SetDataRaw(caster.data(), 6, static_cast<int>(sizeof(GpuSkinnedVertex)));
+
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::Default);
+        device.setBlendStateProperty(BlendState::Opaque);
+
+        shadowMap.begin(Sun(), SceneBounds());
+        shadowMap.applySkinnedCaster(bones, 1);
+        device.SetVertexBuffer(&casterBuffer);
+        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        device.SetVertexBuffer(nullptr);
+        shadowMap.end();
+        effect.setLightViewProjectionEXT(shadowMap.getLightViewProjection());
+
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        effect.Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, ground.data(), 0, 2);
+        device.SetRenderTarget(nullptr);
+    }
+
+    float gotX = 0.0f, gotY = 0.0f;
+    ASSERT_TRUE(ShadowCentroid(Capture(target), gotX, gotY))
+        << "the skinned caster left no shadow at all";
+
+    float posedX = 0.0f, posedY = 0.0f;
+    ExpectedPixel(Vector3(kBoneOffsetX, 0.0f, 0.0f), posedX, posedY);
+    float bindPoseX = 0.0f, bindPoseY = 0.0f;
+    ExpectedPixel(Vector3(0.0f, 0.0f, 0.0f), bindPoseX, bindPoseY);
+
+    EXPECT_NEAR(gotX, posedX, 2.0f) << "the shadow is at the bind pose (" << bindPoseX
+                                    << ") rather than the posed position (" << posedX << ")";
+    EXPECT_NEAR(gotY, posedY, 2.0f);
+}
+
+TEST_F(ShadowVisibilityTest, TheSkinnedCasterRejectsAPaletteItCannotUse)
+{
+    ShadowMap shadowMap(device, ShadowQuality::Low);
+    const std::vector<Matrix> one{Matrix::getIdentityProperty()};
+
+    // Outside a pass there is nothing to apply to, and silently doing nothing would leave a game
+    // drawing casters with whatever effect happened to be current.
+    EXPECT_THROW(shadowMap.applySkinnedCaster(one, 1), std::logic_error);
+    EXPECT_THROW(shadowMap.applyCaster(), std::logic_error);
+
+    shadowMap.begin(Sun(), SceneBounds());
+    // XNA's own range. 3 is not a typo a shader can absorb -- it would silently blend two weights.
+    EXPECT_THROW(shadowMap.applySkinnedCaster(one, 3), std::invalid_argument);
+    EXPECT_THROW(shadowMap.applySkinnedCaster({}, 1), std::invalid_argument);
+    EXPECT_THROW(shadowMap.applySkinnedCaster(std::vector<Matrix>(73), 1), std::invalid_argument);
+    EXPECT_NO_THROW(shadowMap.applySkinnedCaster(one, 4));
+    EXPECT_NO_THROW(shadowMap.applyCaster());
+    shadowMap.end();
 }
 
 TEST_F(ShadowVisibilityTest, TheQualityToRadiusTableIsWhatTheEffectIsGiven)
