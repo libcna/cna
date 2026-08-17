@@ -29,6 +29,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #include "CNA/Platform/PlatformException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "System/NotSupportedException.hpp"
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -3331,9 +3332,27 @@ if (ProfileUsesGlslEs100())
         // GraphicsDevice_ is a Game base member destroyed after every subclass member; a globally
         // held render target reaches the first one, which is why the ownership is weak at all.)
         IGraphicsRenderer::UnregisterForWindow(surfaceState_.GetWindowId());
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        // Must run here, in the destructor body, rather than relying on member destruction order:
+        // mojoShaderContext_ is a raw pointer (no destructor of its own) and needs the GL context
+        // still current, which platformContext_ (destroyed after this body returns) still owns.
+        if (mojoShaderContext_ != nullptr)
+        {
+            MOJOSHADER_glMakeContextCurrent(nullptr);
+            MOJOSHADER_glDestroyContext(mojoShaderContext_);
+            mojoShaderContext_ = nullptr;
+        }
+#endif
         // platformContext_ is the first-declared member and therefore dies last, after every GL
         // resource member has released while the context is still current.
     }
+
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+    CNA::Platform::GlProcAddressLoader EasyGLRenderer::GetProcAddressLoaderEXT() const
+    {
+        return platformContext_->GetLoader();
+    }
+#endif
 
     bool EasyGLRenderer::SupportsCapability(CNA::GraphicsCapability capability) const
     {
@@ -7647,6 +7666,32 @@ else
                                                  const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        // plan_fx.md FX-062: a compiled effect's vertex layout is arbitrary and validated against
+        // the applied pass's own shader reflection (BindCompiledEffectForDrawEXT), not against the
+        // fixed-stride table RequireDeclarationFitsStockProgramEXT enforces below -- so this
+        // dispatches before that guard runs, not after.
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            const auto& compiledVb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
+            const auto& declaredElements = compiledVb.GetDeclarationElements();
+            if (declaredElements.empty())
+            {
+                throw System::NotSupportedException(
+                    "CNA EasyGL: a compiled-effect draw needs the vertex buffer's own "
+                    "VertexDeclaration; this renderer does not infer one from stride for this "
+                    "route.");
+            }
+            const std::size_t stride = CombinedVertexStrideOr(params, compiledVb.GetStride());
+            compiledVb.vao.bind();
+            compiledVb.vbo.bind(::easygl::BufferTarget::Array);
+            BindCompiledEffectForDrawEXT(declaredElements, stride, *params.compiledEffectRuntime);
+            const int compiledVertexCount = VertexCountForPrimitives(primitive, primitiveCount);
+            device.draw_arrays(ToEasyGl(primitive), params.vertexStart, compiledVertexCount);
+            compiledVb.vao.unbind();
+            return;
+        }
+#endif
         // REMED-GFX-DECL-GUARD (REMED-GFX-218): before the VAO is touched, before a program is
         // selected and before any draw is issued. A custom ShaderEffect owns its own
         // element-index attribute convention and is deliberately untouched.
@@ -7717,6 +7762,55 @@ else
                                                         const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        // plan_fx.md FX-062: see DrawPrimitivesEx's own compiled-effect branch for why this
+        // dispatches before RequireDeclarationFitsStockProgramEXT runs.
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            const auto& compiledVb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
+            const auto& compiledIb = static_cast<const EasyGLIndexBufferRenderer&>(ib_in);
+            const auto& declaredElements = compiledVb.GetDeclarationElements();
+            if (declaredElements.empty())
+            {
+                throw System::NotSupportedException(
+                    "CNA EasyGL: a compiled-effect draw needs the vertex buffer's own "
+                    "VertexDeclaration; this renderer does not infer one from stride for this "
+                    "route.");
+            }
+            const std::size_t stride = CombinedVertexStrideOr(params, compiledVb.GetStride());
+            compiledVb.vao.bind();
+            compiledVb.vbo.bind(::easygl::BufferTarget::Array);
+            BindCompiledEffectForDrawEXT(declaredElements, stride, *params.compiledEffectRuntime);
+            compiledIb.ibo.bind(::easygl::BufferTarget::ElementArray);
+            const int compiledIndexCount = VertexCountForPrimitives(primitive, primitiveCount);
+            const auto compiledIdxType = compiledIb.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
+                                                                  : ::easygl::DataType::UnsignedShort;
+            const int compiledIndexSize = compiledIb.thirtyTwoBit ? 4 : 2;
+            const void* compiledIndexOffset = reinterpret_cast<const void*>(
+                static_cast<std::uintptr_t>(params.startIndex) *
+                static_cast<std::uintptr_t>(compiledIndexSize));
+            if (params.baseVertex == 0)
+            {
+                device.draw_elements(ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
+                                     compiledIndexOffset);
+            }
+            else
+            {
+#if defined(CNA_GL_PROFILE_OPENGLES2)
+                Es2ShiftEnabledVertexAttribPointers(params.baseVertex, +1);
+                device.draw_elements(ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
+                                     compiledIndexOffset);
+                Es2ShiftEnabledVertexAttribPointers(params.baseVertex, -1);
+#else
+                ::metagl::glDrawElementsBaseVertex(ToEasyGl(primitive), compiledIndexCount,
+                                                   compiledIdxType, compiledIndexOffset,
+                                                   params.baseVertex);
+#endif
+            }
+            compiledVb.vao.unbind();
+            return;
+        }
+#endif
         // REMED-GFX-DECL-GUARD (REMED-GFX-218): before the VAO is touched, before a program is
         // selected and before any draw is issued. A custom ShaderEffect owns its own
         // element-index attribute convention and is deliberately untouched.

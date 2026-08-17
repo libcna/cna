@@ -353,6 +353,14 @@ if(CNA_BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/modules/audio/src
     )
 
+    # plan_fx.md FX-060: the shared compiled-effect conformance suite is header-only test support
+    # (fixtures plus the contract assertions every CompiledEffects backend must satisfy). It lives
+    # under the top-level tests/ tree because it belongs to no single renderer module -- the point
+    # is that a new backend runs the identical contract with only its own device setup.
+    target_include_directories(CnaTests PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/support
+    )
+
     # plan_runtimerenderer.md RTR-P9-9: one CNA_RENDERER_PRESENT_<IDENTITY> define per renderer
     # COMPILED INTO THIS BUILD, on the test executable only.
     #

@@ -43,13 +43,28 @@ namespace CNA.FnaReference
 
         public JsonWriter Add(string name, string value)
         {
-            fields.Add(new KeyValuePair<string, string>(name, Quote(value)));
+            // A null is emitted as JSON null rather than as an empty string: FNA leaves a missing
+            // semantic null, and flattening that to "" would hide a real difference from a
+            // consumer comparing against it.
+            fields.Add(new KeyValuePair<string, string>(
+                name, value == null ? "null" : Quote(value)));
             return this;
         }
 
         public JsonWriter Add(string name, JsonWriter nested)
         {
             fields.Add(new KeyValuePair<string, string>(name, nested.ToString()));
+            return this;
+        }
+
+        /// <summary>
+        /// Adds an already-serialized JSON fragment (an array, typically) under a name.
+        /// plan_fx.md FX-005 needs arrays of objects, which the value overloads above cannot
+        /// express; the caller is responsible for the fragment being valid JSON.
+        /// </summary>
+        public JsonWriter AddRaw(string name, string json)
+        {
+            fields.Add(new KeyValuePair<string, string>(name, json));
             return this;
         }
 

@@ -1,5 +1,11 @@
 # Plan: XNA compiled effect (`.fx`) bytecode support
 
+> Historical design record. This document's original dependency and backend assumptions were
+> superseded by [`plan_fx.md`](../plan_fx.md). The implemented FNA3D contract and current format/
+> renderer matrix are documented in
+> [`shader-effect-vs-fx-bytecode.md`](shader-effect-vs-fx-bytecode.md); do not use the milestones
+> below as current implementation status.
+
 Task 352 (`plan_graphics.md`, Phase 41) decided CNA's policy for XNA/FNA compiled effect
 bytecode — the binary blob XNA's Content Pipeline `EffectProcessor` produces from a `.fx` HLSL
 source file, and the same blob a real XNA/FNA game embeds as a compiled `Effect` resource:

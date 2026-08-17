@@ -285,6 +285,112 @@ if(CNA_SKIA_GANESH_BUILD_DIR)
     )
 endif()
 
+# --- plan_fx.md FX-051: compiled Effect Framework fuzz harness ---
+# One entry point covering construction, reflection, clone, technique/pass selection, apply and
+# disposal of an untrusted compiled effect binary. Built by default in its standalone replay
+# shape, which is how a committed corpus is exercised and how a campaign's crashing input is
+# reproduced; CNA_FX_FUZZER_ENTRY_POINT=ON drops main() so clang's libFuzzer (or AFL++ in its
+# libFuzzer compatibility mode) can own the loop instead. Not registered as a ctest test: it
+# needs a real graphics device and a corpus path, and the deterministic corpus that does run on
+# every build lives in the FNA3D compiled-effect suite.
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
+    option(CNA_FX_FUZZER_ENTRY_POINT
+           "Build the compiled-effect fuzz harness for libFuzzer/AFL++ instead of standalone replay"
+           OFF)
+    add_executable(cna_compiled_effect_fuzzer tools/graphics/compiled_effect_fuzzer.cpp)
+    target_link_libraries(cna_compiled_effect_fuzzer PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(CNA_FX_FUZZER_ENTRY_POINT)
+        target_compile_definitions(cna_compiled_effect_fuzzer PRIVATE CNA_FX_FUZZER_ENTRY_POINT)
+        if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            target_link_options(cna_compiled_effect_fuzzer PRIVATE -fsanitize=fuzzer)
+        else()
+            # AFL++'s afl-clang-lto/afl-gcc-fast supply their own driver, so a missing libFuzzer
+            # is only fatal when nothing else provides main().
+            message(WARNING
+                "CNA: CNA_FX_FUZZER_ENTRY_POINT=ON without clang -- the fuzz driver must be "
+                "supplied by the toolchain (for example AFL++) or the link will fail.")
+        endif()
+    endif()
+endif()
+
+# --- plan_fx.md FX-053: compiled Effect Framework performance baseline ---
+# Measures construction, clone, dirty upload, clean apply and draw so the immutable-artifact-cache
+# question is decided on numbers. Manually invoked and never registered with ctest: wall-clock
+# timings on a shared machine are a baseline to compare, not a pass/fail signal.
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
+    add_executable(cna_compiled_effect_benchmark tools/graphics/compiled_effect_benchmark.cpp)
+    target_link_libraries(cna_compiled_effect_benchmark PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+endif()
+
+# plan_fx.md FX-061/FX-062/FX-063/FX-065 existence gate: proves the pinned MojoShader parses a
+# compiled Effect Framework binary while linking only MojoShader -- no FNA3D and no CNA. Every
+# backend planned after FNA3D depends on that being true, and it was not obvious: MojoShader is
+# FNA3D's submodule, its include root is absent from FNA3D's install surface, and its header hides
+# every Effect Framework struct unless the right switches are defined.
+#
+# Built only where cna_mojoshader exists, which today means a configuration that fetched FNA3D.
+# Separating the target is the first half of decoupling those two; the fetch is the second and is
+# not needed until a non-FNA3D backend is actually implemented.
+if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
+    add_executable(cna_mojoshader_effect_probe tools/graphics/mojoshader_effect_probe.cpp)
+    target_link_libraries(cna_mojoshader_effect_probe PRIVATE cna_mojoshader SDL3::SDL3)
+    add_test(NAME cna_mojoshader_effect_probe
+             COMMAND cna_mojoshader_effect_probe
+                     "${CMAKE_CURRENT_SOURCE_DIR}/modules/renderers/fna3d/effects/BasicEffect.fxb"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/modules/renderers/fna3d/effects/CnaConformanceEffect.fxb")
+endif()
+
+# plan_fx.md FX-061 existence gate: proves the pinned MojoShader's SDL_GPU adapter binds a
+# committed effect's shader pairs against a device this machine can create, linking only MojoShader
+# and SDL3. CNA's SDL_GPU renderer already builds pipelines from SPIR-V and MojoShader has both a
+# SPIR-V profile and an SDL_GPU adapter, so the pairing looks obvious on paper -- what the probe
+# settles is whether it links real effect shaders and how much uniform plumbing the adapter owns,
+# which is what sizes the task.
+#
+# Not registered with ctest: it needs a working GPU device, which a headless CI runner may not
+# have, and a missing device is not a CNA regression.
+if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
+    add_executable(cna_mojoshader_sdlgpu_probe tools/graphics/mojoshader_sdlgpu_probe.cpp)
+    target_link_libraries(cna_mojoshader_sdlgpu_probe PRIVATE cna_mojoshader SDL3::SDL3)
+endif()
+
+# plan_fx.md FX-062 existence gate: proves the pinned MojoShader's OpenGL adapter (mojoshader_
+# opengl.c) links and renders a committed effect's shader pair against a real GLES3 context this
+# machine can create, linking only MojoShader and SDL3 -- no CNA, no EasyGL. EasyGL is the shared
+# implementation behind OPENGLES2/OPENGLES3/OPENGL33/OPENGL4/WEBGL1/WEBGL2, and its own stock
+# shaders are authored once in GLSL ES 3.00, but that string-rewriting pipeline is irrelevant to
+# MojoShader-compiled shaders: MojoShader emits already-correct-dialect GLSL for whichever profile
+# its own MOJOSHADER_glCreateContext is asked for, entirely in parallel to EasyGL's own shaders.
+#
+# Not registered with ctest: it needs a working GL-capable display, which a headless CI runner may
+# not have, and a missing display is not a CNA regression. Does not require CNA_EASYGL_COMPILED_
+# EFFECTS or even the EasyGL renderer to be selected -- only cna_mojoshader (any renderer that
+# enables its own compiled-effects option publishes that target) and SDL3's GL context support.
+if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
+    add_executable(cna_mojoshader_gl_probe tools/graphics/mojoshader_gl_probe.cpp)
+    target_link_libraries(cna_mojoshader_gl_probe PRIVATE cna_mojoshader SDL3::SDL3)
+endif()
+
+# plan_fx.md FX-064 existence gate: proves the pinned MojoShader's raw "spirv" profile
+# (MOJOSHADER_PROFILE_SPIRV, MOJOSHADER_linkSPIRVShaders) turns a committed effect's shader pair
+# into a real Vulkan graphics pipeline this machine can create and render with. Unlike GL, SDL_GPU
+# and D3D11, MojoShader ships no Vulkan adapter, so this probe implements the nine-function
+# MOJOSHADER_effectShaderContext backend itself -- it IS the prototype adapter FX-064 exists to
+# produce, not a test of someone else's. Links only MojoShader and the Vulkan loader, no SDL, no
+# CNA, no CNA Vulkan renderer.
+#
+# Not registered with ctest: it needs a working Vulkan device, which a headless CI runner may not
+# have, and a missing device is not a CNA regression. Does not require the VULKAN renderer identity
+# to be selected -- only cna_mojoshader (any renderer that enables its own compiled-effects option
+# publishes that target) and a system Vulkan loader/headers (libvulkan-dev).
+if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
+    find_package(Vulkan QUIET)
+    if(Vulkan_FOUND)
+        add_executable(cna_mojoshader_vulkan_probe tools/graphics/mojoshader_vulkan_probe.cpp)
+        target_link_libraries(cna_mojoshader_vulkan_probe PRIVATE cna_mojoshader Vulkan::Vulkan)
+    endif()
+endif()
+
 # --- plan_platform.md PLAT-131: terminal restoration harness ---
 # A tiny standalone (non-GTest) executable that takes the terminal over with a TerminalSession and
 # then dies in a chosen way: normally, by SIGINT/SIGTERM/SIGHUP, by abort(), or by letting an

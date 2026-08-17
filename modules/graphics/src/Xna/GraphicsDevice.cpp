@@ -1283,8 +1283,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
+        CNA::Internal::Renderers::GpuDrawParams drawParams;
+        currentEffect_->FillGpuDrawParams(drawParams);
+        drawParams.vertexColorEnabled = true;
         applySamplerStatesToRenderer();
-        renderer_->DrawColoredPrimitives(*tmpVb, world, view, proj, primitiveType, primitiveCount);
+        renderer_->DrawPrimitivesEx(*tmpVb, world, view, proj, primitiveType, primitiveCount,
+                                    drawParams);
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(
@@ -1341,8 +1345,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
+        CNA::Internal::Renderers::GpuDrawParams drawParams;
+        currentEffect_->FillGpuDrawParams(drawParams);
+        drawParams.vertexColorEnabled = true;
+        drawParams.numVertices = numVertices;
         applySamplerStatesToRenderer();
-        renderer_->DrawIndexedColoredPrimitives(*tmpVb, *tmpIb, world, view, proj, primitiveType, primitiveCount);
+        renderer_->DrawIndexedPrimitivesEx(*tmpVb, *tmpIb, world, view, proj, primitiveType,
+                                           primitiveCount, drawParams);
     }
 
     // -----------------------------------------------------------------------
@@ -2125,6 +2134,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool GraphicsDevice::SupportsCapability(CNA::GraphicsCapability capability) const
     {
+        // CompiledEffects was appended after many renderer-specific capability switches were
+        // written. Their historical catch-all may return true for unknown enum values, so this
+        // security/compatibility boundary requires a separate explicit renderer opt-in.
+        if (capability == CNA::GraphicsCapability::CompiledEffects)
+            return GetRenderer().SupportsCompiledEffects();
         return GetRenderer().SupportsCapability(capability);
     }
 
@@ -2148,6 +2162,11 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::SetCurrentEffect(Effect* effect)
     {
         currentEffect_ = effect;
+    }
+
+    void GraphicsDevice::ClearCurrentEffectIf(const Effect* effect) noexcept
+    {
+        if (currentEffect_ == effect) currentEffect_ = nullptr;
     }
 
     const std::string& GraphicsDevice::GetTypeName() const
@@ -2801,6 +2820,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 ss.getMaxAnisotropyProperty());
             renderer_->ApplySamplerMipState(i, ss.getMaxMipLevelProperty(),
                                            ss.getMipMapLevelOfDetailBiasProperty());
+            renderer_->ApplySamplerAddressW(i, (int)ss.getAddressWProperty());
         }
     }
 

@@ -63,18 +63,20 @@ through MojoShader, is the *only* shader entry point in `FNA3D.h`. There is no c
 the library that compiles a GLSL or HLSL source string, and the drivers refuse to draw without a
 bound MojoShader program.
 
-This renderer therefore draws through the XNA stock effects, vendored under
+This renderer draws both the XNA stock effects, vendored under
 `modules/renderers/fna3d/effects/` (provenance and license in that directory's README) and
-embedded into a generated header at build time. It is the only CNA renderer that executes **XNA's
+embedded into a generated header at build time, and caller-supplied XNA/FNA Effect Framework
+bytecode through `Effect(GraphicsDevice&, byte[])`. It is the only CNA renderer that executes **XNA's
 actual shader programs** rather than a reimplementation of them: `BasicEffect`, `AlphaTestEffect`,
 `DualTextureEffect`, `EnvironmentMapEffect` and `SkinnedEffect` are the real compiled artefacts,
 and the variant is chosen with the same integer `ShaderIndex` arithmetic XNA's own `OnApply()`
 computes (`Fna3dStockEffects.hpp`, unit-tested exhaustively).
 
-The direct consequence is that **`GraphicsCapability::CustomEffects` is false** and
+Consequently **`GraphicsCapability::CompiledEffects` is true**, while
+**`GraphicsCapability::CustomEffects` is false** and
 `CreateEffectRenderer` returns null: a caller's `ShaderEffect` GLSL/HLSL source cannot be compiled
 by anything FNA3D offers, and claiming otherwise would be a promise broken at the first custom
-effect.
+effect. The two capabilities describe different formats.
 
 ## Capabilities
 
@@ -88,10 +90,11 @@ effect.
 | `WireFrame` | true | `FNA3D_FILLMODE_WIREFRAME` |
 | `OcclusionQuery` | true | `FNA3D_CreateQuery`/`QueryPixelCount` |
 | `Texture3D` | true | `FNA3D_CreateTexture3D` |
-| **`Instancing`** | **false** | FNA3D instances natively, but none of XNA's compiled stock effects declares a per-instance vertex input, so a per-instance stream could not reach a shader that reads it. `DrawInstancedPrimitivesEx` refuses with the same reason. |
+| **`Instancing`** | device-dependent | `FNA3D_SupportsHardwareInstancing`; the draw additionally requires a compiled effect whose vertex shader consumes the instance stream. Stock effects are still rejected. |
 | `AdditiveBlending` | true | |
 | **`MultiStreamVertexInput`** | **true** | Native: `FNA3D_ApplyVertexBufferBindings` takes an array of per-stream declarations, each with its own stride, vertex offset and instance frequency |
 | **`CustomEffects`** | **false** | See above — no source-string shader compilation exists in FNA3D |
+| **`CompiledEffects`** | **true** | Full Effect Framework construction/reflection, mutation, clone, pass state/samplers, primitive draws, instancing, and SpriteBatch through FNA3D/MojoShader |
 
 `GetMaxVertexStreams()` reports XNA's own 16-binding ceiling.
 
@@ -113,11 +116,16 @@ effect.
   only for the internal routes that bind no public buffer (SpriteBatch, `DrawUser*`).
 - Blend / depth-stencil / rasterizer / sampler state, colour write masks, multisample mask, blend
   factor, standalone reference stencil, scissor and viewport.
-- 2D `SpriteBatch` through the stock `SpriteEffect`: tint, source rectangles, rotation about a
-  scaled origin, both flips, layer depth, sampler filter and address modes, Immediate flushing;
-  large batches are split at 16,384 quads before their 16-bit indices can wrap, and deferred
-  texture renderers are retained through backend `End` so queued submissions cannot dangle.
-- 3D through the stock effects (not instanced — see the capability table).
+- 2D `SpriteBatch` through the stock `SpriteEffect` or every pass of a compiled custom effect:
+  tint, source rectangles, rotation about a scaled origin, both flips, layer depth, sampler filter
+  and address modes, Immediate flushing; large batches are split at 16,384 quads before their
+  16-bit indices can wrap, and deferred texture renderers are retained through backend `End` so
+  queued submissions cannot dangle.
+- 3D through the stock effects and caller-supplied compiled effects. Hardware instancing is
+  available only to a compiled vertex shader declaring the instance inputs.
+- XNA/FNA Effect Framework reflection (parameters, arrays/members, annotations, techniques and
+  passes), typed value/texture mutation, native cloning, exact pass application, and legacy
+  blend/depth/stencil/rasterizer/sampler state translation.
 - Hardware occlusion queries.
 - `SetStringMarkerEXT` → `FNA3D_SetStringMarker`.
 - Driver limits queried once at device creation — `FNA3D_SupportsDXT1` / `SupportsS3TC` /
@@ -143,7 +151,8 @@ effect.
 | Render-target array slices | `SetRenderTargets` throws for a non-zero `arraySlice`; CNA exposes no texture arrays and FNA3D's binding has no slice field. |
 | Unknown vertex stride with no `VertexDeclaration` | Throws, naming the stride. FNA3D binds real per-stream declarations and this renderer will not guess a layout. |
 | Out-of-contract state ordinals | Throw, naming the state and the ordinal, instead of casting into an undefined FNA3D enumerator. |
-| Instanced drawing | `DrawInstancedPrimitivesEx` throws; `Instancing` is false. The limit is the stock effects' vertex inputs, which is the custom-shader limit again. |
+| Instanced stock-effect drawing | `DrawInstancedPrimitivesEx` throws because stock shaders declare no instance input. A compatible compiled effect uses native instancing when the driver reports it. |
+| Compiled FX on non-FNA3D renderers | Outside this renderer; those backends report `CompiledEffects == false` until they implement and pass the shared contract. |
 | Multiple simultaneous devices on one thread | Not claimed. FNA3D's OpenGL driver does not make each device's context current around commands/teardown; the plan tracks the required contract decision or upstream fix as FNA3D-51. Sequential replacement devices are covered. |
 | Context-loss simulation | Not implemented; FNA3D exposes no device-loss surface, and the shared `DebugSimulateContextLoss` default is a no-op. |
 | Block-compressed readback on OpenGL / D3D11 | `GetData` returns false — "this renderer read nothing" — rather than reporting an untouched buffer as a successful read. Both drivers refuse compressed `GetTextureData2D` upstream; SDL_GPU forwards it. Which one applies is measured once per device by a 4×4 DXT1 probe, not guessed from the driver name. |
@@ -158,8 +167,6 @@ would need a shared-contract change, so each is reported rather than faked:
 |---|---|
 | `FNA3D_SetTextureDataYUV` | `IGraphicsRenderer` has no YUV texture route; `VideoDecoder` converts YUV→RGBA in the media module before any renderer sees a frame. |
 | `FNA3D_GetVertexBufferData` / `FNA3D_GetIndexBufferData` | The buffer renderer interfaces expose no readback; XNA's `GetData` on those buffers is served from the shared layer's own CPU shadow. |
-| `FNA3D_CloneEffect` | CNA holds one instance of each stock effect per device and has no public `Effect` clone route. |
-| `FNA3D_VerifyVertexSampler` | The stock effects declare no vertex-shader sampler, and there is no vertex-texture binding in the contract. The driver's vertex slot count is still reported through `GetMaxVertexTextureSlotsEXT()`. |
 
 A public block-compressed `Texture2D` is blocked one level above this renderer as well: the shared
 `Texture::ValidateFormat` admits only `SurfaceFormat::Color` for every renderer except Skia. The
@@ -187,7 +194,9 @@ Readback is already a full CPU/GPU sync point FNA3D documents as screenshot-only
 | Native runtime (Linux, SDL offscreen video driver + Mesa llvmpipe, FNA3D OpenGL driver) | **Performed** — all thirteen `Fna3d_*` CTest binaries pass, including the sequential-device/post-device lifetime regression |
 | XNA 4.0 oracle corpus (39 scenes vs real XNA reference images) | **Performed** — `Fna3d_XNA_Oracle`; every scene renders, 10/39 exact at the EasyGL baseline. This is the only coverage DualTextureEffect, EnvironmentMapEffect and SkinnedEffect have. See [`fna3d-parity-report.md`](fna3d-parity-report.md) |
 | Unit tests (`CnaTests`, `Fna3d*` plus the generic disposed-`Texture2D` regression) | **Performed** — format-region and shared transfer-contract coverage pass |
-| Sanitizers (ASan + UBSan) | **Performed** — the enlarged 13-test suite passes, including post-device lifetime and the >16-bit SpriteBatch path. Leak detection is disabled for the external graphics stack; UBSan still reports the pre-existing MojoShader decimal-parser signed overflow, but found no CNA-originating defect (FNA3D-47). |
+| Compiled-effect unit/pixel tests (`Fna3dCompiledEffectTest`) | **Performed** — 17 focused tests cover fixture hashes, parse/apply, reflection, padded matrix arrays, clone/disposal, malformed cleanup, general draws, SpriteBatch pixels, and a legally reproducible synthetic multi-technique/pass/default/annotation/render-state conformance binary |
+| Sanitizers (ASan + UBSan), renderer suite | **Performed** — the enlarged 13-test suite passes, including post-device lifetime and the >16-bit SpriteBatch path. Leak detection is disabled for the external graphics stack; UBSan still reports the pre-existing MojoShader decimal-parser signed overflow, but found no CNA-originating defect (FNA3D-47). |
+| Sanitizers for the new arbitrary compiled-effect path | **Partial** — all 31 targeted FX/XNB/capability tests pass in the ASan/UBSan build with no ASan finding. LeakSanitizer is unavailable under the managed ptrace environment; pinned upstream MojoShader still reports known UBSan findings in float formatting and zero-length clone copies, so the full `plan_fx.md` production gate remains open. |
 | Existence-gate spikes | **Performed** — `fna3d-spike/` |
 | SDL_GPU driver | **Not exercised here**: this container has no Vulkan ICD, so FNA3D declines SDL_GPU and falls through to OpenGL. The code path is driver-agnostic; the gate is external. This is also the only driver on which compressed readback is expected to succeed, so that arm of `Fna3d_Compressed` is unexercised here. |
 | Direct3D 11 driver | **Not exercised here**: Windows-only (or DXVK-native). External gate. |

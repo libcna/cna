@@ -46,6 +46,9 @@
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using CNA::GraphicsCapability;
 
+static_assert(static_cast<int>(GraphicsCapability::CompiledEffects) == 13,
+              "CompiledEffects must remain appended so existing capability ordinals stay stable");
+
 // Lets CNA_RENDERER_IS name identities bare, matching the guards it replaced. The oracle
 // header scopes its own copy inside its namespace, so a consumer needs this for itself.
 using namespace CNA::Testing::Renderers;   // NOLINT(google-build-using-namespace)
@@ -192,6 +195,19 @@ struct CapabilityExpectation
     }
 }
 
+// FNA3D has no separate compiled-effects opt-in: MojoShader is already its own graphics
+// dependency, so support is unconditional whenever this renderer is selected at all. SDL_GPU and
+// EasyGL both pull MojoShader in only as an extra, off-by-default dependency neither otherwise
+// needs (CNA_SDL_GPU_COMPILED_EFFECTS / CNA_EASYGL_COMPILED_EFFECTS) -- selecting the renderer
+// alone is not enough to expect the capability true for either of those two.
+#if defined(CNA_RENDERER_FNA3D) || \
+    (defined(CNA_RENDERER_SDL_GPU) && defined(CNA_SDL_GPU_COMPILED_EFFECTS)) || \
+    (defined(CNA_RENDERER_EASYGL) && defined(CNA_EASYGL_COMPILED_EFFECTS))
+constexpr bool kExpectCompiledEffects = true;
+#else
+constexpr bool kExpectCompiledEffects = false;
+#endif
+
 // Both of these assert `true` for every 3D-capable renderer. A deliberately 2D-only renderer
 // answers false, and that is the correct answer, not a gap -- so it gets its own arm rather than
 // a standing red. Only the arm for the renderer being added is written here; the other 2D-only
@@ -310,6 +326,13 @@ TEST(GraphicsDeviceCapabilityTest, SupportsCustomEffects)
 {
     GraphicsDevice gd;
     EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::CustomEffects), ExpectedCapabilities().customEffects);
+}
+
+TEST(GraphicsDeviceCapabilityTest, SupportsCompiledEffectsOnlyOnCompletedBackends)
+{
+    GraphicsDevice gd;
+    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::CompiledEffects),
+              kExpectCompiledEffects);
 }
 
 // MSAA/anisotropic filtering are genuinely device/driver-dependent -- don't assert a specific

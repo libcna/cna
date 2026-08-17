@@ -52,6 +52,11 @@ CATEGORY_RATIONALES = {
         "Deliberately spells native header guards or API names to prove they are absent from a "
         "public/neutral surface; it does not call or include the native API."
     ),
+    "renderer-native-runtime-test": (
+        "Exercises a renderer-owned native runtime (e.g. a compiled-effect backend) directly by "
+        "its own native types, at the level where it is reachable while the public API path to "
+        "it is still incomplete or deliberately gated off; documented at the top of the file."
+    ),
     "text-evidence-assertion": (
         "Reads committed text -- renderer source, a generator script, or a recorded evidence "
         "artifact -- and asserts on SDL tokens found inside it. The tokens exist only as string "
@@ -90,6 +95,12 @@ def classify(record: FileRecord) -> str | None:
         "modules/platform/tests/CNA/Platform/TerminalPresenterTests.cpp",
     }:
         return "containment-assertion"
+
+    if path in {
+        "modules/renderers/sdl-gpu/tests/CNA/Internal/Renderers/SdlGpu/"
+        "SdlGpuCompiledEffectTests.cpp",
+    }:
+        return "renderer-native-runtime-test"
 
     if path in {
         "modules/content/tests/CNA/Internal/GltfImport/GltfFixtureCorpusTests.cpp",

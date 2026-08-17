@@ -106,32 +106,30 @@ namespace CNA::Internal::Renderers::Fna3d
                                                   PrimitiveType primitive, int primitiveCount,
                                                   int instanceCount, const GpuDrawParams& params)
     {
-        // FNA3D itself instances perfectly well -- FNA3D_DrawInstancedPrimitives exists,
-        // FNA3D_SupportsHardwareInstancing reports true on the drivers CNA reaches, and
-        // FNA3D_ApplyVertexBufferBindings carries each stream's own InstanceFrequency. What is
-        // missing is a SHADER that consumes a per-instance stream: FNA3D's only shader entry
-        // point takes a compiled Direct3D 9 Effect binary, so this renderer draws through XNA's
-        // own stock effects, and not one of them declares a per-instance vertex input. (That is
-        // XNA's own semantic, not a CNA gap: hardware instancing in XNA needs a custom Effect
-        // that declares the extra semantics, which is exactly what CreateEffectRenderer cannot
-        // build here.)
-        //
-        // Submitting anyway would draw every instance from instance record 0 -- geometry stacked
-        // on top of itself, which looks like a rendered scene and is not one. Refusing is the
-        // only honest answer, so it is stated once, in full, here.
-        (void) vb; (void) ib; (void) world; (void) view; (void) projection;
-        (void) primitive; (void) primitiveCount; (void) instanceCount; (void) params;
-        throw std::runtime_error(
-            "FNA3D renderer: instanced drawing is not supported. FNA3D's only shader entry point "
-            "takes a compiled Direct3D 9 Effect binary, so this renderer draws through XNA's "
-            "stock effects, none of which declares a per-instance vertex input.");
+        if (params.compiledEffectRuntime == nullptr)
+        {
+            throw std::runtime_error(
+                "FNA3D renderer: instanced drawing requires a compiled XNA Effect whose vertex "
+                "shader consumes the bound per-instance stream; stock effects do not declare "
+                "instance semantics.");
+        }
+        const auto& indexBuffer = static_cast<const Fna3dIndexBufferRenderer&>(ib);
+        PrepareDrawEXT(vb, world, view, projection, params, params.baseVertex);
+        FNA3D_DrawInstancedPrimitives(
+            device_, ToFna3dPrimitiveType(primitive), params.baseVertex, params.minVertexIndex,
+            params.numVertices > 0 ? params.numVertices : vb.GetVertexCount(), params.startIndex,
+            primitiveCount, instanceCount, indexBuffer.GetFna3dBufferEXT(),
+            indexBuffer.GetElementSizeEXT());
     }
 
     void Fna3dRenderer::PrepareDrawEXT(const IVertexBufferRenderer& vb, const Matrix& world,
                                        const Matrix& view, const Matrix& projection,
                                        const GpuDrawParams& params, int baseVertex)
     {
-        ApplyStockEffectEXT(world, view, projection, params);
+        if (params.compiledEffectRuntime == nullptr)
+        {
+            ApplyStockEffectEXT(world, view, projection, params);
+        }
         ApplyVertexBindingsEXT(vb, params, baseVertex);
     }
 
@@ -263,9 +261,10 @@ namespace CNA::Internal::Renderers::Fna3d
             throw std::runtime_error(
                 "FNA3D renderer: an effect texture was not created by this graphics device.");
         }
-        FNA3D_VerifySampler(
-            device_, slot, sampled != nullptr ? sampled->GetFna3dTextureEXT() : nullptr,
-            &samplerStates_[static_cast<std::size_t>(slot)]);
+        FNA3D_Texture* native = sampled != nullptr ? sampled->GetFna3dTextureEXT() : nullptr;
+        FNA3D_VerifySampler(device_, slot, native,
+                            &samplerStates_[static_cast<std::size_t>(slot)]);
+        boundPixelTextures_[static_cast<std::size_t>(slot)] = native;
     }
 
     void Fna3dRenderer::ApplyStockEffectEXT(const Matrix& world, const Matrix& view,
@@ -352,9 +351,10 @@ namespace CNA::Internal::Renderers::Fna3d
                         "FNA3D renderer: the environment map was not created by this graphics "
                         "device.");
                 }
-                FNA3D_VerifySampler(device_, 1,
-                                    cube != nullptr ? cube->GetFna3dTextureEXT() : nullptr,
-                                    &samplerStates_[1]);
+                FNA3D_Texture* cubeNative =
+                    cube != nullptr ? cube->GetFna3dTextureEXT() : nullptr;
+                FNA3D_VerifySampler(device_, 1, cubeNative, &samplerStates_[1]);
+                boundPixelTextures_[1] = cubeNative;
                 break;
             }
 

@@ -29,7 +29,8 @@ namespace Microsoft::Xna::Framework::Graphics
          *                    Apply() never validates against since it is only ever compared when
          *                    owner is non-null and the effect has a real current technique.
          */
-        explicit EffectPass(Effect* owner, std::string name, std::uint64_t techniqueId = 0);
+        explicit EffectPass(Effect* owner, std::string name, std::uint64_t techniqueId = 0,
+                            std::uint32_t passIndex = 0);
 
         /**
          * @brief Gets the name of this pass.
@@ -71,5 +72,6 @@ namespace Microsoft::Xna::Framework::Graphics
         std::string name_;
         EffectAnnotationCollection annotations_;
         std::uint64_t techniqueId_;
+        std::uint32_t passIndex_ = 0;
     };
 }

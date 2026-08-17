@@ -81,3 +81,75 @@ how to run the comparison.
 
 Task 480 (the rest of this phase) documents how to regenerate this reference data — not yet
 started.
+
+## `--effects`: compiled Effect Framework reflection (plan_fx.md FX-005)
+
+`FnaReference.exe --effects <directory-of-fxb> [output.json]` emits FNA's own reflection of every
+`.fxb` in a directory. This is the FX-005 oracle: every other reflection check in the compiled
+effect suite compares CNA against the format or against CNA's own fixtures, which is
+self-consistency; this one compares it against reflection produced by *running* FNA.
+
+It does not need FNA's windowing or `Game` stack. FNA builds its public object graph in
+`Effect.INTERNAL_parseEffectStruct`, which reads only the parsed `MOJOSHADER_effect` and touches
+no `GraphicsDevice`, so the tool creates an FNA3D device itself through P/Invoke, asks FNA3D for
+the parsed effect, and then lets FNA's own method build `Parameters`/`Techniques` on an `Effect`
+that never ran its constructor.
+
+The native layer is deliberately the same one CNA links -- the FNA3D revision CNA pins, including
+CNA's managed MojoShader robustness patch. That is the point: the oracle is FNA's C# reflection
+mapping, not a second parser. A difference in this output is a difference in how CNA and FNA
+interpret an identical parse tree.
+
+### Regenerating
+
+FNA3D has to exist as a shared library for mono to P/Invoke (CNA links it statically), so build one
+from the revision CNA pins:
+
+```bash
+CNA_FNA3D_SRC=<cna-build-dir>/_deps/fna3d-src        # carries CNA's applied MojoShader patch
+SDLROOT=<cna>/.sdl-prebuilt-Linux-x86_64
+cmake -S "$CNA_FNA3D_SRC" -B /tmp/fna3d-shared -DCMAKE_BUILD_TYPE=Release \
+      -DBUILD_SHARED_LIBS=ON -DCMAKE_PREFIX_PATH="$SDLROOT/install"
+cmake --build /tmp/fna3d-shared -j3
+
+cd tools/fna-reference && xbuild FnaReference.csproj /p:Configuration=Debug && cd ../..
+SDL_VIDEODRIVER=offscreen \
+LD_LIBRARY_PATH=/tmp/fna3d-shared:$SDLROOT/SDL/build \
+MONO_PATH=/rv/data/library/github.com/FNA-XNA/FNA/bin/Debug \
+  mono tools/fna-reference/bin/Debug/FnaReference.exe --effects \
+    modules/renderers/fna3d/effects \
+    tests/fixtures/compiled-effects/fna-effect-reflection.json
+```
+
+`Fna3dCompiledEffectTest.StockFixtureReflectionMatchesTheFnaOracle` reads that checked-in JSON and
+compares CNA's reflection of the same six binaries against it, subtree by subtree.
+
+## `--effect-states`: what FNA installs when a pass is applied (plan_fx.md FX-005)
+
+`FnaReference.exe --effect-states <directory-of-fxb> [output.json]` is the state half of the same
+oracle. Where `--effects` compares the object graph CNA *reads*, this compares what CNA *does* with
+it.
+
+FNA's `Effect.INTERNAL_applyEffect` folds the state changes MojoShader reports through
+`PipelineCache` and assigns the results to the public `GraphicsDevice.BlendState`,
+`DepthStencilState`, `RasterizerState` and `SamplerStates` properties. CNA's
+`Effect::ApplyCompiledPassState` does the same, so those properties compare directly.
+
+This mode needs a real managed `GraphicsDevice`, because that is where `PipelineCache` and the
+property assignments live. It builds one straight from an SDL window rather than through FNA's
+`Game` stack, which keeps the tool free of windowing and content plumbing:
+
+```bash
+SDL_VIDEODRIVER=offscreen \
+LD_LIBRARY_PATH=/tmp/fna3d-shared:$SDLROOT/SDL/build \
+MONO_PATH=/rv/data/library/github.com/FNA-XNA/FNA/bin/Debug \
+  mono tools/fna-reference/bin/Debug/FnaReference.exe --effect-states \
+    modules/renderers/fna3d/effects \
+    tests/fixtures/compiled-effects/fna-effect-states.json
+```
+
+Every pass is applied from the same starting device state (`BlendState.Opaque`,
+`DepthStencilState.Default`, `RasterizerState.CullCounterClockwise`, `SamplerState.LinearWrap` on
+the first four slots), so a pass that assigns nothing is recorded as leaving that selection alone.
+"Unchanged" is as much a result as "replaced", and
+`Fna3dEffectStateOracleTest.EveryPassInstallsTheStateFnaInstalls` checks both.

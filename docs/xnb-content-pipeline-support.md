@@ -58,7 +58,7 @@ below) — both need their own explicit registration.
 | `AlphaTestEffectReader`, `BasicEffectReader`, `DualTextureEffectReader`, `EnvironmentMapEffectReader`, `SkinnedEffectReader` (the 5 stock effects) | ✅ Full | Each targets the common `shared_ptr<Effect>` base so `ModelReader`'s polymorphic `Effect` slot dispatches correctly regardless of which concrete stock effect a model references |
 | `VertexDeclarationReader`, `VertexBufferReader`, `IndexBufferReader` | ✅ Full | |
 | `ModelReader` | ✅ Full bone hierarchy, mesh/mesh-part, shared-resource (`VertexBuffer`/`IndexBuffer`/`Effect`) resolution | Verified against a real, externally-produced multi-bone fixture. This is a **different, real binary path** from the older `.model.json`-based `ModelTypeReader` — see the scope note above |
-| The general `EffectReader` (compiled platform shader bytecode) | ❌ Recognized, explicitly unsupported | Throws a precise "recognized but unsupported" error (`KnownUnsupportedContentTypeReader`) rather than a generic "unknown reader" error. Compiled shader bytecode is platform-specific machine code XNA's own tooling produced for a specific GPU API; CNA's own shader pipeline (`plan_graphics.md`) is the supported path for CNA-authored effects instead |
+| The general `EffectReader` (compiled XNA Effect Framework bytecode) | ✅ on FNA3D; explicit renderer rejection elsewhere | Reads a bounded signed length and exact payload, constructs the same reflected `Effect` as the byte-array constructor, and preserves asset context in failures. The payload is XNA/FNA D3D9 Effect Framework bytecode, not MGFX or `.fx` source. |
 | `ReflectiveReader<T>` (any custom `.xnb` type compiled *without* an explicit `ContentTypeWriter`/reader pair, relying on XNA's content-pipeline reflection fallback) | ❌ Not supported, by design | See "Custom readers" below |
 
 ### Generic collections
@@ -206,7 +206,7 @@ without changing either method's observable behavior for any valid input.
 | Area | Status |
 |---|---|
 | `ReflectiveReader<T>` (implicit custom readers) | ❌ Not supported, by design — see above |
-| General `EffectReader` (compiled shader bytecode) | ❌ Not supported, by design — see above |
+| General `EffectReader` on non-FNA3D renderers | ❌ `CompiledEffects` is false; loading fails with an asset-specific capability diagnostic rather than a silent shader fallback |
 | LZ4 compression | ❌ Not supported yet — deferred (`plan_xnb.md` XNB-30C) |
 | Generic collection readers for an unregistered `T` combination | ❌ Not supported — each closed combination needs its own explicit registration |
 | `Texture2D`/`Texture3D`/`TextureCube` formats beyond `Color`/`Dxt1`/`Dxt3`/`Dxt5` | ❌ Not supported yet |

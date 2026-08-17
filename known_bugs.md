@@ -228,6 +228,84 @@ not rename or absorb them:
 The original detailed entries remain below as evidence of discovery and prior experiments. Their
 old `OPEN` headings are historical where this disposition explicitly supersedes them.
 
+## Pinned MojoShader is not hardened against hostile compiled-effect content
+
+**Backend:** FNA3D (the defect is in MojoShader itself, so it reaches every backend that would use
+it -- SDL_GPU, OpenGL, D3D11 and the planned Vulkan/Metal adapters alike).
+
+**Status:** FIXED to a measured bound. Forty crash classes are fixed by
+`cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch` and one in CNA's own
+`Fna3dCompiledEffect.cpp`. The coverage-guided campaign is clean on both FNA3D drivers past the
+FX-051 bar -- over three million executions on OpenGL/GLSL and over two and a half million on
+SDL_GPU/SPIR-V, no new artifact. Not closed outright: the SPIR-V emitter still validates untrusted
+shader bytecode with `assert()` in about fifty places no campaign has yet reached.
+
+A compiled Effect Framework binary is untrusted binary input handed to a native parser that was
+written for compiler output, not for hostile content. The plan_fx.md FX-051 mutation campaign
+(`tools/graphics/compiled_effect_fuzzer.cpp --campaign`) found forty-one distinct ways it crashed the
+process -- dereferenced NULL parse results, asserts on parsed values, allocations sized before
+their own bounds check, register copies sized by a constant table rather than by the parsed
+storage, an unchecked shader-array selector, and a union member read without checking the object's
+type. Forty are upstream and are now ordinary parser errors; the fortieth was CNA's own
+sampler-texture map reading a parameter's value storage as sampler states on the strength of its
+type alone. `docs/fx-bytecode-fuzzing.md` lists them.
+
+What remains: nothing the campaign currently reaches. Both FNA3D drivers met the FX-051 bar on
+2026-08-15 -- 3,079,834 coverage-guided executions on OpenGL/GLSL and 2,669,555 on SDL_GPU/SPIR-V,
+under AddressSanitizer with asserts fatal, no new artifact. That is a measured bound, not a proof:
+the SPIR-V emitter still validates untrusted shader bytecode with `assert()` in roughly fifty
+places no campaign has yet reached.
+
+**Consequence for CNA's contract:** `docs/fx-compiled-effects.md` promises that malformed content
+fails explicitly and safely. That holds for CNA's own layer and, to the bound above, for the parser
+paths a coverage-guided campaign reaches -- but it is not a guarantee for arbitrary hostile
+content, and the porter guide says so. Treat a compiled effect like any other natively-parsed
+asset: ship your own; treat a user-supplied one as untrusted input that has been made much harder
+to weaponise, not as safe.
+
+**Fix direction:** keep running the campaign as the surface changes, extending the managed patch. Upstream
+MojoShader would be the better long-term home for these fixes.
+
+## FNA3D resource renderers that outlive their device free through a dangling FNA3D_Device
+
+**Backend:** FNA3D (found on the SDL_GPU/Vulkan driver; the ownership bug is driver-independent).
+
+**Status:** OPEN. Found 2026-08-14 by the plan_fx.md FX-054 full-suite regression run; not caused
+by the compiled-effect work, which never touches these types.
+
+A `Fna3dRenderTargetCubeRenderer` (and, by the same pattern, the other `Fna3dResources.cpp`
+renderers) keeps a raw `FNA3D_Device*` and guards its destructor only with `device_ == nullptr`.
+When the resource outlives its `GraphicsDevice` -- which is exactly what
+`MetalResourceHealth.RenderTargetCubeRendererEscapesThroughTextureCubeBaseMove` deliberately
+arranges by moving a renderer out through the `TextureCube` base and holding the `shared_ptr` past
+device destruction -- that pointer is dangling rather than null, so the destructor calls
+`FNA3D_AddDisposeTexture` on freed memory.
+
+Effect: running the whole `CnaTests` binary under the FNA3D renderer ends in a segmentation fault
+after the last test, so the run produces no gtest summary even though every test passed. The suite
+passes when run standalone, which is why it went unnoticed.
+
+AddressSanitizer, from a full-suite run of `cmake-build-fna3d-asan`:
+
+```
+ERROR: AddressSanitizer: heap-use-after-free
+    #0 FNA3D_AddDisposeTexture FNA3D.c:754
+    #1 Fna3dRenderTargetCubeRenderer::~Fna3dRenderTargetCubeRenderer Fna3dResources.cpp:452
+   ...
+    #10 MetalResourceHealth_RenderTargetCubeRendererEscapesThroughTextureCubeBaseMove_Test::TestBody
+        MetalResourceHealthTests.cpp:240
+freed by:
+    #1 SDLGPU_DestroyDevice FNA3D_Driver_SDL.c:4263
+    #2 FNA3D_DestroyDevice FNA3D.c:247
+    #3 Fna3dRenderer::~Fna3dRenderer Fna3dRenderer.cpp:428
+```
+
+**Fix direction:** give the FNA3D renderer a shared liveness token that its destructor
+invalidates, and have every `Fna3dResources.cpp` renderer hold a weak reference to it and skip
+native disposal once the device is gone -- the discipline several other renderers already apply,
+and the discipline the neighbouring `MetalResourceHealth.*RejectAfterDeviceDeath` cases exist to
+enforce.
+
 ## Multiple SpriteBatch Begin/End in one frame discards all but the last
 
 **Backend:** Vulkan (confirmed), others unknown.

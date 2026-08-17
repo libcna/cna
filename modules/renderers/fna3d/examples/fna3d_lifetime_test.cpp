@@ -34,6 +34,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
@@ -196,6 +197,8 @@ private:
         // Custom effects: structural, because FNA3D compiles no shader source.
         Check(fna3d->CreateEffectRenderer(std::string(), std::string()) == nullptr,
               "CreateEffectRenderer returns null, matching CustomEffects=false");
+        Check(device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects),
+              "compiled Effect Framework bytecode is a separate supported capability");
 
         // A compressed cube is refused by name (FNA3D-19's boundary), and the message says why.
         const bool cubeRefused = Threw(
@@ -238,9 +241,8 @@ private:
             [&] { (void) fna3d->CreateTextureCube(8, false, 9999); }, message);
         Check(ordinalRefused, "an out-of-contract SurfaceFormat ordinal is refused");
 
-        // Instancing: reported false, and the draw route says so rather than stacking instances.
-        Check(!fna3d->SupportsCapability(CNA::GraphicsCapability::Instancing),
-              "Instancing is reported false");
+        // Stock effects still cannot consume an instance stream even on a driver with native
+        // instancing. Compiled custom effects opt into that path with their own input semantics.
     }
 
     // ---- Check F --------------------------------------------------------------------------

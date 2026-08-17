@@ -1,0 +1,1668 @@
+diff --git a/mojoshader.c b/mojoshader.c
+index 486d7e0..6f7ddb7 100644
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -2259,7 +2259,12 @@ static int parse_ctab_typeinfo(Context *ctx, const uint8 *start,
+     } // else
+ 
+     unsigned int i;
+-    const uint32 *member = (const uint32 *) (start + typeptr[6]);
++    // The member table's own offset is read from the constant table and was never bounded, so a
++    // struct in untrusted bytecode could point its member list anywhere. -CNA
++    const uint32 memberpos = (uint32) SWAP16(typeptr[6]);
++    if ((memberpos >= bytes) || ((bytes - memberpos) < (member_count * 8)))
++        return 0;  // corrupt CTAB.
++    const uint32 *member = (const uint32 *) (start + memberpos);
+     for (i = 0; i < member_count; i++)
+     {
+         MOJOSHADER_symbolStructMember *mbr = &info->members[i];
+@@ -2450,7 +2455,14 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+ #else
+     uint32 i;
+ 
+-    assert(ctx->have_preshader == 0);  // !!! FIXME: can you have more than one?
++    // How many preshaders a shader declares is content, and upstream's own question above is
++    // still open -- but a second one would overwrite the first and leak it, so refuse rather
++    // than assert on untrusted bytecode. -CNA
++    if (ctx->have_preshader)
++    {
++        fail(ctx, "Shader declares more than one preshader.");
++        return;
++    } // if
+     ctx->have_preshader = 1;
+ 
+     // !!! FIXME: I don't know what specific versions signify, but we need to
+@@ -2625,21 +2637,24 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+     // The FXLC block has the actual instructions...
+     uint32 opcode_count = SWAP32(fxlc.tokens[1]);
+ 
+-    const size_t len = sizeof (MOJOSHADER_preshaderInstruction) * opcode_count;
+-    preshader->instruction_count = (unsigned int) opcode_count;
+-    preshader->instructions = (MOJOSHADER_preshaderInstruction *) Malloc(ctx, len);
+-    if (preshader->instructions == NULL)
+-        return;
+-    memset(preshader->instructions, '\0', len);
+-
+     fxlc.tokens += 2;
+     fxlc.tokcount -= 2;
++    // Bound the instruction count against the block that has to contain it *before* allocating
++    // for it. Upstream ran this same check after the allocation, so untrusted tokens chose the
++    // size of a buffer that was then zeroed.
+     if (opcode_count > (fxlc.tokcount / 2))
+     {
+         fail(ctx, "Bogus preshader FXLC block.");
+         return;
+     } // if
+ 
++    const size_t len = sizeof (MOJOSHADER_preshaderInstruction) * opcode_count;
++    preshader->instruction_count = (unsigned int) opcode_count;
++    preshader->instructions = (MOJOSHADER_preshaderInstruction *) Malloc(ctx, len);
++    if (preshader->instructions == NULL)
++        return;
++    memset(preshader->instructions, '\0', len);
++
+     MOJOSHADER_preshaderInstruction *inst = preshader->instructions;
+     while (opcode_count--)
+     {
+@@ -2686,6 +2701,14 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+ 
+         uint32 operand_count = SWAP32(fxlc.tokens[1]) + 1;  // +1 for dest.
+ 
++        // The operand array is a fixed four entries, so an operand count taken straight from
++        // untrusted tokens has to be rejected before it walks past the end of the instruction.
++        if (operand_count > STATICARRAYLEN(inst->operands))
++        {
++            fail(ctx, "Bogus preshader instruction operand count.");
++            return;
++        } // if
++
+         inst->opcode = opcode;
+         inst->element_count = (unsigned int) (opcodetok & 0xFF);
+         inst->operand_count = (unsigned int) operand_count;
+@@ -2726,7 +2749,13 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+                     {
+                         const uint32 base = sym->register_index * 4;
+                         const uint32 count = sym->register_count * 4;
+-                        assert(sym->register_set==MOJOSHADER_SYMREGSET_FLOAT4);
++                        // A constant table is untrusted content, so a symbol in the wrong
++                        // register set is a parse error rather than a programming mistake.
++                        if (sym->register_set != MOJOSHADER_SYMREGSET_FLOAT4)
++                        {
++                            fail(ctx, "Bogus preshader input register set.");
++                            return;
++                        } // if
+                         if ( (base <= item) && ((base + count) > item) )
+                             break;
+                     } // for
+@@ -2738,13 +2767,25 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+                     operand->type = MOJOSHADER_PRESHADEROPERAND_INPUT;
+                     if (numarrays > 0)
+                     {
++                        // Upstream's own FIXME: the array count comes straight from untrusted
++                        // tokens, and each entry both reads a token four ahead and consumes two,
++                        // so it has to fit in what is left of the block before anything is
++                        // allocated for it.
++                        // Division rather than multiplication: numarrays is a 32-bit value from
++                        // the file, so (numarrays * 2) wraps and lets an absurd count through.
++                        if ((fxlc.tokcount < 5) || (numarrays > ((fxlc.tokcount - 5) / 2)))
++                        {
++                            fail(ctx, "Bogus preshader array register count.");
++                            return;
++                        } // if
+                         // malloc the array symbol name array
+                         const uint32 siz = numarrays * sizeof (uint32);
+                         operand->array_register_count = numarrays;
+                         operand->array_registers = (uint32 *) Malloc(ctx, siz);
++                        if (operand->array_registers == NULL)
++                            return;
+                         memset(operand->array_registers, '\0', siz);
+                         // Get each register base, indicating the arrays used.
+-                        // !!! FIXME: fail if fxlc.tokcount*2 > numarrays ?
+                         for (i = 0; i < numarrays; i++)
+                         {
+                             const uint32 jmp = SWAP32(fxlc.tokens[4]);
+@@ -2782,14 +2823,26 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+                 case 7:
+                 {
+                     operand->type = MOJOSHADER_PRESHADEROPERAND_TEMP;
++                    // The temp count is grown from operand indices, and run_preshader alloca()s
++                    // one double per temp. A structural bound keeps a made-up index from asking
++                    // for a stack frame the process does not have: each instruction can introduce
++                    // at most one temp of four components. -CNA
++                    if (item >= ((preshader->instruction_count * 4) + 4))
++                    {
++                        fail(ctx, "Bogus preshader temp register.");
++                        return;
++                    } // if
+                     if (item >= preshader->temp_count)
+                         preshader->temp_count = item + 1;
+                     break;
+                 } // case
+ 
+                 default:
+-                    assert(0 && "Unhandled fxlc.tokens[1] in parse_preshader!");
+-                    break;
++                    // Untrusted content reaches this, so it is a parse error rather than a
++                    // programming mistake: asserting kills a debug build and a release build
++                    // would carry on with an operand type that was never assigned.
++                    fail(ctx, "Unknown preshader operand type.");
++                    return;
+             } // switch
+ 
+             operand->index = item;
+diff --git a/mojoshader_common.c b/mojoshader_common.c
+index 39cb5c0..1b7b303 100644
+--- a/mojoshader_common.c
++++ b/mojoshader_common.c
+@@ -976,6 +976,12 @@ size_t MOJOSHADER_printFloat(char *text, size_t maxlen, float arg)
+     size_t len;
+     size_t left = maxlen;
+     char *textstart = text;
++    /* The cursor is deliberately advanced past the end so the return value stays the length the
++     * caller would have needed -- that is how callers detect a too-small buffer. Once it is past,
++     * nothing may be written through it, so each formatting step below asks snprintf for the
++     * needed length instead of writing. -CNA
++     */
++    const char *textend = text + maxlen;
+ 
+     int precision = 9;
+ 
+@@ -1013,7 +1019,8 @@ size_t MOJOSHADER_printFloat(char *text, size_t maxlen, float arg)
+             arg = -arg;
+         } // if
+         value = (unsigned long) arg;
+-        len = snprintf(text, left, "%lu", value);
++        len = (text < textend) ? (size_t) snprintf(text, left, "%lu", value)
++                               : (size_t) snprintf(NULL, 0, "%lu", value);
+         text += len;
+         if (len >= left)
+             left = (left < 1) ? left : 1;
+@@ -1031,7 +1038,8 @@ size_t MOJOSHADER_printFloat(char *text, size_t maxlen, float arg)
+         while (precision-- > 0)
+         {
+             value = (unsigned long) (arg * mult);
+-            len = snprintf(text, left, "%lu", value);
++            len = (text < textend) ? (size_t) snprintf(text, left, "%lu", value)
++                                   : (size_t) snprintf(NULL, 0, "%lu", value);
+             text += len;
+             if (len >= left)
+                 left = (left < 1) ? left : 1;
+diff --git a/mojoshader_effects.c b/mojoshader_effects.c
+index 036f18d..793cfcc 100644
+--- a/mojoshader_effects.c
++++ b/mojoshader_effects.c
+@@ -16,16 +16,35 @@
+ #include <math.h>
+ #endif /* MOJOSHADER_USE_SDL_STDLIB */
+ 
++/* Every MojoShader backend sizes its register files with these same limits (MAX_REG_FILE_* in
++ * mojoshader_opengl.c, mojoshader_d3d11.c and mojoshader_sdlgpu.c). The effect layer writes into
++ * those files through register indices taken from parsed content, so it needs the same ceiling
++ * to bound them against. -CNA
++ */
++#define MOJOSHADER_EFFECT_MAX_REG_FILE_F 8192
++#define MOJOSHADER_EFFECT_MAX_REG_FILE_I 2047
++#define MOJOSHADER_EFFECT_MAX_REG_FILE_B 2047
++
+ static void run_preshader(const MOJOSHADER_preshader *preshader,
+-                          float *outregs)
++                          float *outregs,
++                          unsigned int outregs_count)
+ {
+     const float *inregs = preshader->registers;
++    // preshader->register_count is in vec4-register units (matches copy_parameter_data's "wanted"
++    // computation below); inregs is indexed in floats, so the bound needs the same <<2 conversion
++    // outregs_count already gets from its caller, or any struct/array preshader input past the
++    // first register is rejected as out-of-bounds and the whole preshader silently aborts. -CNA
++    const unsigned int inregs_count = preshader->register_count << 2;
+ 
+     // this is fairly straightforward, as there aren't any branching
+     //  opcodes in the preshader instruction set (at the moment, at least).
+     const int scalarstart = (int) MOJOSHADER_PRESHADEROP_SCALAR_OPS;
+ 
+     double *temps = NULL;
++    // The parser bounds this too; this is the second line of defence, because the cost of being
++    // wrong here is the process stack rather than a bad pixel. -CNA
++    if (preshader->temp_count > 8192)
++        return;
+     if (preshader->temp_count > 0)
+     {
+         temps = (double *) alloca(sizeof (double) * preshader->temp_count);
+@@ -59,8 +78,11 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
+         const int elemsbytes = sizeof (double) * elems;
+         const int isscalarop = (inst->opcode >= scalarstart);
+ 
+-        assert(elems >= 0);
+-        assert(elems <= 4);
++        // Instruction fields come from parsed content, so an out-of-range element count skips
++        // the instruction instead of tripping an assert or indexing a four-wide operand. -CNA
++        if ((elems < 0) || (elems > 4)) continue;
++        if ((inst->operand_count < 1) ||
++            (inst->operand_count > STATICARRAYLEN(inst->operands))) continue;
+ 
+         // load up our operands...
+         int opiter, elemiter;
+@@ -72,11 +94,15 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
+             {
+                 case MOJOSHADER_PRESHADEROPERAND_LITERAL:
+                 {
++                    // Every operand index below is parsed content, so it is bounded against the
++                    // array it addresses rather than asserted. -CNA
++                    const unsigned int want = isscalar ? 1u : (unsigned int) elems;
++                    // Subtraction rather than addition: an index near UINT_MAX would make
++                    // (index + want) wrap and pass an addition-based check. -CNA
++                    if ((index >= preshader->literal_count) ||
++                        ((preshader->literal_count - index) < want)) return;
+                     if (!isscalar)
+-                    {
+-                        assert((index + elems) <= preshader->literal_count);
+                         memcpy(&src[opiter][0], &preshader->literals[index], elemsbytes);
+-                    } // if
+                     else
+                     {
+                         for (elemiter = 0; elemiter < elems; elemiter++)
+@@ -90,24 +116,38 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
+                     {
+                         int i;
+                         const int *regsi = (const int *) inregs;
+-                        int arrIndex = regsi[((index >> 4) * 4) + ((index >> 2) & 3)];
++                        const unsigned int base = ((index >> 4) * 4) + ((index >> 2) & 3);
++                        int arrIndex;
++                        if (base >= inregs_count) return;
++                        arrIndex = regsi[base];
+                         for (i = 0; i < operand->array_register_count; i++)
+                         {
+-                            arrIndex = regsi[operand->array_registers[i] + arrIndex];
++                            const int next = (int) operand->array_registers[i] + arrIndex;
++                            if ((next < 0) || ((unsigned int) next >= inregs_count)) return;
++                            arrIndex = regsi[next];
+                         }
+                         src[opiter][0] = arrIndex;
+                     } // if
+                     else if (isscalar)
++                    {
++                        if (index >= inregs_count) return;
+                         src[opiter][0] = inregs[index];
++                    } // else if
+                     else
+                     {
+                         int cpy;
++                        if ((index >= inregs_count) ||
++                            ((inregs_count - index) < (unsigned int) elems)) return;
+                         for (cpy = 0; cpy < elems; cpy++)
+                             src[opiter][cpy] = inregs[index+cpy];
+                     } // else
+                     break;
+ 
+                 case MOJOSHADER_PRESHADEROPERAND_OUTPUT:
++                {
++                    const unsigned int want = isscalar ? 1u : (unsigned int) elems;
++                    if ((outregs_count != 0) &&
++                        ((index >= outregs_count) || ((outregs_count - index) < want))) return;
+                     if (isscalar)
+                         src[opiter][0] = outregs[index];
+                     else
+@@ -117,10 +157,14 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
+                             src[opiter][cpy] = outregs[index+cpy];
+                     } // else
+                     break;
++                } // case
+ 
+                 case MOJOSHADER_PRESHADEROPERAND_TEMP:
+                     if (temps != NULL)
+                     {
++                        const unsigned int want = isscalar ? 1u : (unsigned int) elems;
++                        if ((index >= preshader->temp_count) ||
++                            ((preshader->temp_count - index) < want)) return;
+                         if (isscalar)
+                             src[opiter][0] = temps[index];
+                         else
+@@ -129,7 +173,7 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
+                     break;
+ 
+                 default:
+-                    assert(0 && "unexpected preshader operand type.");
++                    // Untrusted content can name an operand type the parser never assigned.
+                     return;
+             } // switch
+         } // for
+@@ -190,22 +234,35 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
+             } // case
+ 
+             default:
+-                assert(0 && "Unhandled preshader opcode!");
+-                break;
++                // The opcode came from parsed content; stop rather than assert. -CNA
++                return;
+         } // switch
+ 
+-        // Figure out where dst wants to be stored.
++        // Figure out where dst wants to be stored. The destination index is parsed content too,
++        // so it is bounded rather than asserted. -CNA
+         if (operand->type == MOJOSHADER_PRESHADEROPERAND_TEMP)
+         {
+-            assert(preshader->temp_count >=
+-                    operand->index + (elemsbytes / sizeof (double)));
++            if ((temps == NULL) || (operand->index >= preshader->temp_count) ||
++                ((preshader->temp_count - operand->index) < (unsigned int) elems))
++            {
++                return;
++            } // if
+             memcpy(temps + operand->index, dst, elemsbytes);
+         } // if
+-        else
++        else if (operand->type == MOJOSHADER_PRESHADEROPERAND_OUTPUT)
+         {
+-            assert(operand->type == MOJOSHADER_PRESHADEROPERAND_OUTPUT);
++            if ((outregs_count != 0) &&
++                ((operand->index >= outregs_count) ||
++                 ((outregs_count - operand->index) < (unsigned int) elems)))
++            {
++                return;
++            } // if
+             for (i = 0; i < elems; i++)
+                 outregs[operand->index + i] = (float) dst[i];
++        } // else if
++        else
++        {
++            return;
+         } // else
+     } // for
+ } // run_preshader
+@@ -266,40 +323,78 @@ static uint32 readui32(const uint8 **_ptr, uint32 *_len)
+     return retval;
+ } // readui32
+ 
++/* Upstream took a base pointer and an offset but no length, and left two FIXMEs about it:
++ * "sanity checks!" and "verify this doesn't go past EOF looking for a null." Both matter for
++ * untrusted content -- the length prefix chooses how much is copied, and the copy was not
++ * terminated, so a later strlen() ran off the end of the allocation. base_len is the number of
++ * bytes available from base; zero means the caller could not report one. -CNA
++ */
+ static char *readstring(const uint8 *base,
++                        const uint32 base_len,
+                         const uint32 offset,
+                         MOJOSHADER_malloc m,
+                         void *d)
+ {
+-    // !!! FIXME: sanity checks!
+-    // !!! FIXME: verify this doesn't go past EOF looking for a null.
+-    uint8 *pair = (uint8 *) (base + offset);
+-    const uint32 *lenptr = (const uint32 *) pair;
+-    char *strptr = (char *) (pair + sizeof(uint32));
+-
+-    const uint32 len = SWAP32(*lenptr);
++    uint8 *pair;
++    const uint32 *lenptr;
++    char *strptr;
++    uint32 len;
+     char *result = NULL;
+ 
++    if (base_len != 0)
++    {
++        if (offset > base_len) return NULL;
++        if ((base_len - offset) < sizeof (uint32)) return NULL;
++    } // if
++
++    pair = (uint8 *) (base + offset);
++    lenptr = (const uint32 *) pair;
++    strptr = (char *) (pair + sizeof(uint32));
++    len = SWAP32(*lenptr);
++
+     if (len == 0) return NULL; /* No length? No string. */
++    if (base_len != 0)
++    {
++        const uint32 available = base_len - offset - (uint32) sizeof (uint32);
++        if (len > available) len = available;
++        if (len == 0) return NULL;
++    } // if
+ 
+-    result = (char *) m(len, d);
++    result = (char *) m(len + 1, d);
++    if (result == NULL) return NULL;
+     memcpy(result, strptr, len);
++    result[len] = '\0';  /* the source is not guaranteed to carry its own terminator */
+     return result;
+ } // readstring
+ 
+ static int findparameter(const MOJOSHADER_effectParam *params,
+                          const uint32 param_count,
+-                         const char *name)
++                         const char *name,
++                         ErrorList *errors)
+ {
+     int i;
+     for (i = 0; i < param_count; i++)
+-        if (strcmp(name, params[i].value.name) == 0)
++        if ((name != NULL) && (params[i].value.name != NULL) &&
++            (strcmp(name, params[i].value.name) == 0))
+             return i;
+-    assert(0 && "Parameter not found!");
++    errorlist_add(errors, NULL, 0, "Shader parameter not found in effect.");
+     return -1;
+ }
+ 
++// readvalue and copyvalue decide a value's storage layout from its class first and its type
++// second: only an OBJECT of a sampler type is allocated as an array of MOJOSHADER_effectSamplerState.
++// Class and type are independent fields of the content, so anything that later reads valuesSS has
++// to ask that same two-part question. Asking about the type alone reinterprets, say, a small array
++// of floats as an array of much larger sampler-state structures. -CNA
++static int value_is_sampler(const MOJOSHADER_effectValue *value)
++{
++    return (value->type.parameter_class == MOJOSHADER_SYMCLASS_OBJECT)
++        && (value->type.parameter_type >= MOJOSHADER_SYMTYPE_SAMPLER)
++        && (value->type.parameter_type <= MOJOSHADER_SYMTYPE_SAMPLERCUBE);
++} // value_is_sampler
++
+ static void readvalue(const uint8 *base,
++                      const uint32 base_len,
+                       const uint32 typeoffset,
+                       const uint32 valoffset,
+                       MOJOSHADER_effectValue *value,
+@@ -319,8 +414,8 @@ static void readvalue(const uint8 *base,
+ 
+     value->type.parameter_type = (MOJOSHADER_symbolType) type;
+     value->type.parameter_class = (MOJOSHADER_symbolClass) valclass;
+-    value->name = readstring(base, name, m, d);
+-    value->semantic = readstring(base, semantic, m, d);
++    value->name = readstring(base, base_len, name, m, d);
++    value->semantic = readstring(base, base_len, semantic, m, d);
+     value->type.elements = numelements;
+ 
+     /* Class sanity check */
+@@ -380,7 +475,7 @@ static void readvalue(const uint8 *base,
+                 const uint32 statevaloffset = readui32(&valptr, &vallen);
+ 
+                 state->type = (MOJOSHADER_samplerStateType) stype;
+-                readvalue(base, statetypeoffset, statevaloffset,
++                readvalue(base, base_len, statetypeoffset, statevaloffset,
+                           &state->value, objects,
+                           m, d);
+                 if (stype == MOJOSHADER_SAMP_TEXTURE)
+@@ -413,8 +508,25 @@ static void readvalue(const uint8 *base,
+         uint32 siz;
+ 
+         value->type.member_count = readui32(&typeptr, &typelen);
++        // The member count is content. Without a bound the size multiplication below wraps and
++        // hands back a buffer smaller than the loop that fills it; without the zeroing, the
++        // nested-struct fields this loop never assigns (see the FIXME below) are read later as
++        // whatever the heap held -- a garbage member count pointing at a garbage member list.
++        // -CNA
++        if (value->type.member_count > (0xFFFFFFFFu / sizeof (MOJOSHADER_symbolStructMember)))
++        {
++            value->type.member_count = 0;
++            value->type.members = NULL;
++            return;
++        } // if
+         siz = value->type.member_count * sizeof (MOJOSHADER_symbolStructMember);
+         value->type.members = (MOJOSHADER_symbolStructMember *) m(siz, d);
++        if (value->type.members == NULL)
++        {
++            value->type.member_count = 0;
++            return;
++        } // if
++        memset(value->type.members, '\0', siz);
+ 
+         uint32 structsize = 0;
+         for (i = 0; i < value->type.member_count; i++)
+@@ -426,7 +538,7 @@ static void readvalue(const uint8 *base,
+ 
+             const uint32 memname = readui32(&typeptr, &typelen);
+             /*const uint32 memsemantic =*/ readui32(&typeptr, &typelen);
+-            mem->name = readstring(base, memname, m, d);
++            mem->name = readstring(base, base_len, memname, m, d);
+ 
+             mem->info.elements = readui32(&typeptr, &typelen);
+             mem->info.columns = readui32(&typeptr, &typelen);
+@@ -477,6 +589,7 @@ static void readvalue(const uint8 *base,
+ 
+ static void readannotations(const uint32 numannos,
+                             const uint8 *base,
++                            const uint32 base_len,
+                             const uint8 **ptr,
+                             uint32 *len,
+                             MOJOSHADER_effectAnnotation **annotations,
+@@ -498,7 +611,7 @@ static void readannotations(const uint32 numannos,
+         const uint32 typeoffset = readui32(ptr, len);
+         const uint32 valoffset = readui32(ptr, len);
+ 
+-        readvalue(base, typeoffset, valoffset,
++        readvalue(base, base_len, typeoffset, valoffset,
+                   anno, objects,
+                   m, d);
+     } // for
+@@ -506,6 +619,7 @@ static void readannotations(const uint32 numannos,
+ 
+ static void readparameters(const uint32 numparams,
+                            const uint8 *base,
++                            const uint32 base_len,
+                            const uint8 **ptr,
+                            uint32 *len,
+                            MOJOSHADER_effectParam **params,
+@@ -530,11 +644,11 @@ static void readparameters(const uint32 numparams,
+         const uint32 numannos = readui32(ptr, len);
+ 
+         param->annotation_count = numannos;
+-        readannotations(numannos, base, ptr, len,
++        readannotations(numannos, base, base_len, ptr, len,
+                         &param->annotations, objects,
+                         m, d);
+ 
+-        readvalue(base, typeoffset, valoffset,
++        readvalue(base, base_len, typeoffset, valoffset,
+                   &param->value, objects,
+                   m, d);
+     } // for
+@@ -542,6 +656,7 @@ static void readparameters(const uint32 numparams,
+ 
+ static void readstates(const uint32 numstates,
+                        const uint8 *base,
++                            const uint32 base_len,
+                        const uint8 **ptr,
+                        uint32 *len,
+                        MOJOSHADER_effectState **states,
+@@ -566,7 +681,7 @@ static void readstates(const uint32 numstates,
+         const uint32 valoffset = readui32(ptr, len);
+ 
+         state->type = (MOJOSHADER_renderStateType) type;
+-        readvalue(base, typeoffset, valoffset,
++        readvalue(base, base_len, typeoffset, valoffset,
+                   &state->value, objects,
+                   m, d);
+     } // for
+@@ -574,6 +689,7 @@ static void readstates(const uint32 numstates,
+ 
+ static void readpasses(const uint32 numpasses,
+                        const uint8 *base,
++                            const uint32 base_len,
+                        const uint8 **ptr,
+                        uint32 *len,
+                        MOJOSHADER_effectPass **passes,
+@@ -596,15 +712,15 @@ static void readpasses(const uint32 numpasses,
+         const uint32 numannos = readui32(ptr, len);
+         const uint32 numstates = readui32(ptr, len);
+ 
+-        pass->name = readstring(base, passnameoffset, m, d);
++        pass->name = readstring(base, base_len, passnameoffset, m, d);
+ 
+         pass->annotation_count = numannos;
+-        readannotations(numannos, base, ptr, len,
++        readannotations(numannos, base, base_len, ptr, len,
+                         &pass->annotations, objects,
+                         m, d);
+ 
+         pass->state_count = numstates;
+-        readstates(numstates, base, ptr, len,
++        readstates(numstates, base, base_len, ptr, len,
+                    &pass->states, objects,
+                    m, d);
+     } // for
+@@ -612,6 +728,7 @@ static void readpasses(const uint32 numpasses,
+ 
+ static void readtechniques(const uint32 numtechniques,
+                            const uint8 *base,
++                            const uint32 base_len,
+                            const uint8 **ptr,
+                            uint32 *len,
+                            MOJOSHADER_effectTechnique **techniques,
+@@ -634,15 +751,15 @@ static void readtechniques(const uint32 numtechniques,
+         const uint32 numannos = readui32(ptr, len);
+         const uint32 numpasses = readui32(ptr, len);
+ 
+-        technique->name = readstring(base, nameoffset, m, d);
++        technique->name = readstring(base, base_len, nameoffset, m, d);
+ 
+         technique->annotation_count = numannos;
+-        readannotations(numannos, base, ptr, len,
++        readannotations(numannos, base, base_len, ptr, len,
+                         &technique->annotations, objects,
+                         m, d);
+ 
+         technique->pass_count = numpasses;
+-        readpasses(numpasses, base, ptr, len,
++        readpasses(numpasses, base, base_len, ptr, len,
+                    &technique->passes, objects,
+                    m, d);
+     } // for
+@@ -670,6 +787,16 @@ static void readsmallobjects(const uint32 numsmallobjects,
+         const uint32 index = readui32(ptr, len);
+         const uint32 length = readui32(ptr, len);
+ 
++        // The block length is content, and everything below trusts it: strings are copied by it,
++        // shader bytecode is handed to the shader parser with it as the buffer size, and the
++        // stream is advanced by it. A length past the end of the payload therefore walks the
++        // shader parser off the buffer entirely. -CNA
++        if ((length > *len) || (index >= (uint32) effect->object_count))
++        {
++            errorlist_add(errors, NULL, 0, "Effect object block is out of range.");
++            return;
++        } // if
++
+         MOJOSHADER_effectObject *object = &effect->objects[index];
+         if (object->type == MOJOSHADER_SYMTYPE_STRING)
+         {
+@@ -702,6 +829,13 @@ static void readsmallobjects(const uint32 numsmallobjects,
+               || object->type == MOJOSHADER_SYMTYPE_VERTEXSHADER)
+         {
+             char mainfn[32];
++            // A zero-length program tells MOJOSHADER_parse the size is unknown, which makes it
++            // scan for an end token with no bound at all and walk off the payload. -CNA
++            if (length == 0)
++            {
++                errorlist_add(errors, NULL, 0, "Effect shader object is empty.");
++                return;
++            } // if
+             snprintf(mainfn, sizeof(mainfn), "ShaderFunction%u", (unsigned int) index);
+             object->shader.technique = -1;
+             object->shader.pass = -1;
+@@ -734,10 +868,23 @@ static void readsmallobjects(const uint32 numsmallobjects,
+             {
+                 int par = findparameter(effect->params,
+                                         effect->param_count,
+-                                        pd->symbols[j].name);
++                                        pd->symbols[j].name,
++                                        errors);
++                if (par < 0)
++                    return;
+                 object->shader.params[j] = par;
+                 if (pd->symbols[j].register_set == MOJOSHADER_SYMREGSET_SAMPLER)
+                 {
++                    // The shader's constant table matched this sampler symbol to an effect
++                    // parameter by name alone. If that parameter is not actually a sampler, its
++                    // value storage is not an array of sampler states, and reinterpreting it as
++                    // one reads far past the end. -CNA
++                    if (!value_is_sampler(&effect->params[par].value))
++                    {
++                        errorlist_add(errors, NULL, 0,
++                                      "Shader sampler names a parameter that is not a sampler.");
++                        return;
++                    } // if
+                     object->shader.samplers[curSampler].sampler_name = effect->params[par].value.name;
+                     object->shader.samplers[curSampler].sampler_register = pd->symbols[j].register_index;
+                     object->shader.samplers[curSampler].sampler_state_count = effect->params[par].value.value_count;
+@@ -751,9 +898,13 @@ static void readsmallobjects(const uint32 numsmallobjects,
+                 object->shader.preshader_params = (uint32 *) m(object->shader.preshader_param_count * sizeof (uint32), d);
+                 for (j = 0; j < pd->preshader->symbol_count; j++)
+                 {
+-                    object->shader.preshader_params[j] = findparameter(effect->params,
+-                                                                       effect->param_count,
+-                                                                       pd->preshader->symbols[j].name);
++                    int par = findparameter(effect->params,
++                                            effect->param_count,
++                                            pd->preshader->symbols[j].name,
++                                            errors);
++                    if (par < 0)
++                        return;
++                    object->shader.preshader_params[j] = par;
+                 } // for
+             } // if
+         } // else if
+@@ -798,11 +949,48 @@ static void readlargeobjects(const uint32 numlargeobjects,
+         const uint32 type = readui32(ptr, len);
+         const uint32 length = readui32(ptr, len);
+ 
++        // Same reasoning as readsmallobjects: an unbounded block length hands the shader parser
++        // a buffer size that outruns the payload. -CNA
++        if (length > *len)
++        {
++            errorlist_add(errors, NULL, 0, "Effect object block is out of range.");
++            return;
++        } // if
++
++        // Every index in this chain is content, and each one selects the array the next one
++        // indexes. The value the chain ends at also has to be the shape it is read as: a sampler
++        // state that carries at least one int. -CNA
+         uint32 objectIndex;
+         if (technique == -1)
++        {
++            if ((index >= (uint32) effect->param_count)
++             || (!value_is_sampler(&effect->params[index].value))
++             || (state >= (uint32) effect->params[index].value.value_count)
++             || (effect->params[index].value.valuesSS[state].value.value_count < 1))
++            {
++                errorlist_add(errors, NULL, 0, "Effect object names no sampler state.");
++                return;
++            } // if
+             objectIndex = effect->params[index].value.valuesSS[state].value.valuesI[0];
++        } // if
+         else
++        {
++            if ((technique >= (uint32) effect->technique_count)
++             || (index >= (uint32) effect->techniques[technique].pass_count)
++             || (state >= (uint32) effect->techniques[technique].passes[index].state_count)
++             || (effect->techniques[technique].passes[index].states[state].value.value_count < 1))
++            {
++                errorlist_add(errors, NULL, 0, "Effect object names no pass state.");
++                return;
++            } // if
+             objectIndex = effect->techniques[technique].passes[index].states[state].value.valuesI[0];
++        } // else
++
++        if (objectIndex >= (uint32) effect->object_count)
++        {
++            errorlist_add(errors, NULL, 0, "Effect object index is out of range.");
++            return;
++        } // if
+ 
+         MOJOSHADER_effectObject *object = &effect->objects[objectIndex];
+         if (object->type == MOJOSHADER_SYMTYPE_PIXELSHADER
+@@ -819,28 +1007,48 @@ static void readlargeobjects(const uint32 numlargeobjects,
+                  */
+                 object->shader.is_preshader = 1;
+                 const uint32 start = *((uint32 *) *ptr) + 4;
+-                const char *array = readstring(*ptr, 0, m, d);
++                const char *array = readstring(*ptr, length, 0, m, d);
+                 object->shader.param_count = 1;
+                 object->shader.params = (uint32 *) m(sizeof (uint32), d);
+-                object->shader.params[0] = findparameter(effect->params,
+-                                                         effect->param_count,
+-                                                         array);
++                int par = findparameter(effect->params,
++                                        effect->param_count,
++                                        array,
++                                        errors);
+                 f((void *) array, d);
++                if (par < 0)
++                    return;
++                object->shader.params[0] = par;
+                 object->shader.preshader = MOJOSHADER_parsePreshader(*ptr + start, length,
+                                                                      m, f, d);
+-                // !!! FIXME: check for errors.
++                if (object->shader.preshader == NULL)
++                {
++                    errorlist_add(errors, NULL, 0,
++                                  "Effect preshader could not be parsed.");
++                    return;
++                } // if
+                 object->shader.preshader_param_count = object->shader.preshader->symbol_count;
+                 object->shader.preshader_params = (uint32 *) m(object->shader.preshader_param_count * sizeof (uint32), d);
+                 for (j = 0; j < object->shader.preshader->symbol_count; j++)
+                 {
+-                    object->shader.preshader_params[j] = findparameter(effect->params,
+-                                                                       effect->param_count,
+-                                                                       object->shader.preshader->symbols[j].name);
++                    int par = findparameter(effect->params,
++                                            effect->param_count,
++                                            object->shader.preshader->symbols[j].name,
++                                            errors);
++                    if (par < 0)
++                        return;
++                    object->shader.preshader_params[j] = par;
+                 } // for
+             } // if
+             else
+             {
+                 char mainfn[32];
++                // Same as readsmallobjects: an empty program means "size unknown" to the shader
++                // parser, and it then reads past the effect payload looking for an end token.
++                if (length == 0)
++                {
++                    errorlist_add(errors, NULL, 0, "Effect shader object is empty.");
++                    return;
++                } // if
+                 snprintf(mainfn, sizeof (mainfn), "ShaderFunction%u", (unsigned int) objectIndex);
+                 object->shader.shader = effect->ctx.compileShader(effect->ctx.shaderContext,
+                                                                   mainfn, *ptr, length,
+@@ -871,10 +1079,26 @@ static void readlargeobjects(const uint32 numlargeobjects,
+                 {
+                     int par = findparameter(effect->params,
+                                             effect->param_count,
+-                                            pd->symbols[j].name);
++                                            pd->symbols[j].name,
++                                            errors);
++                    if (par < 0)
++                        return;
+                     object->shader.params[j] = par;
+                     if (pd->symbols[j].register_set == MOJOSHADER_SYMREGSET_SAMPLER)
+                     {
++                        // The shader's constant table matched this sampler symbol to an effect
++                        // parameter by name alone. If that parameter is not actually a sampler, its
++                        // value storage is not an array of sampler states, and reinterpreting it as
++                        // one reads far past the end. -CNA
++                        if ((effect->params[par].value.type.parameter_type <
++                             MOJOSHADER_SYMTYPE_SAMPLER) ||
++                            (effect->params[par].value.type.parameter_type >
++                             MOJOSHADER_SYMTYPE_SAMPLERCUBE))
++                        {
++                            errorlist_add(errors, NULL, 0,
++                                          "Shader sampler names a parameter that is not a sampler.");
++                            return;
++                        } // if
+                         object->shader.samplers[curSampler].sampler_name = effect->params[par].value.name;
+                         object->shader.samplers[curSampler].sampler_register = pd->symbols[j].register_index;
+                         object->shader.samplers[curSampler].sampler_state_count = effect->params[par].value.value_count;
+@@ -888,9 +1112,13 @@ static void readlargeobjects(const uint32 numlargeobjects,
+                     object->shader.preshader_params = (uint32 *) m(object->shader.preshader_param_count * sizeof (uint32), d);
+                     for (j = 0; j < pd->preshader->symbol_count; j++)
+                     {
+-                        object->shader.preshader_params[j] = findparameter(effect->params,
+-                                                                           effect->param_count,
+-                                                                           pd->preshader->symbols[j].name);
++                        int par = findparameter(effect->params,
++                                                effect->param_count,
++                                                pd->preshader->symbols[j].name,
++                                                errors);
++                        if (par < 0)
++                            return;
++                        object->shader.preshader_params[j] = par;
+                     } // for
+                 } // if
+             }
+@@ -977,6 +1205,7 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
+ 
+     /* Read in header magic, seek to initial offset */
+     const uint8 *base = NULL;
++    uint32 base_len = 0;
+     uint16 magic;
+     uint8 version_major;
+     uint8 version_minor;
+@@ -988,8 +1217,13 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
+          * -flibit
+          */
+         const uint32 skip = readui32(&ptr, &len) - 8;
++        // Skipping forward has to shorten what is left, not lengthen it. Adding here inflated the
++        // remaining-length counter every later bound in this parser is measured against -- and
++        // every real XNA4-wrapped effect takes this branch. -CNA
++        if (skip > len)
++            goto parseEffect_unexpectedEOF;
+         ptr += skip;
+-        len += skip;
++        len -= skip;
+         read_version_token(&ptr, &len, &magic, &version_major, &version_minor);
+     } // if
+     if (!((magic == 0xFEFF) && (version_major == 0x09) && (version_minor == 0x01)))
+@@ -1003,6 +1237,9 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
+         base = ptr;
+         if (offset > len)
+             goto parseEffect_unexpectedEOF;
++        // Every string in the file is addressed as an offset from base, so the parser needs to
++        // know how many bytes actually follow base to bound those reads. -CNA
++        base_len = len;
+         ptr += offset;
+         len -= offset;
+     } // else
+@@ -1016,6 +1253,17 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
+     /*const uint32 FIXME =*/ readui32(&ptr, &len);
+     const uint32 numobjects = readui32(&ptr, &len);
+ 
++    /* Every one of these counts is chosen by the file and is then used both to size an
++     * allocation and to bound a write loop. The smallest record any of them can describe is two
++     * 32-bit words, so a count larger than a quarter of what is left cannot be honest -- and
++     * without this check the size multiplications below overflow and hand back a buffer far
++     * smaller than the loops that fill it. -CNA
++     */
++    if ((numparams > (len / 8)) || (numtechniques > (len / 8)) || (numobjects > (len / 8)))
++        goto parseEffect_unexpectedEOF;
++    if (numobjects > (0xFFFFFFFFu / sizeof (MOJOSHADER_effectObject)))
++        goto parseEffect_unexpectedEOF;
++
+     /* Alloc structures now, so object types can be stored */
+     retval->object_count = numobjects;
+     const uint32 siz = sizeof (MOJOSHADER_effectObject) * numobjects;
+@@ -1026,13 +1274,13 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
+ 
+     /* Parse effect parameters */
+     retval->param_count = numparams;
+-    readparameters(numparams, base, &ptr, &len,
++    readparameters(numparams, base, base_len, &ptr, &len,
+                    &retval->params, retval->objects,
+                    m, d);
+ 
+     /* Parse effect techniques */
+     retval->technique_count = numtechniques;
+-    readtechniques(numtechniques, base, &ptr, &len,
++    readtechniques(numtechniques, base, base_len, &ptr, &len,
+                    &retval->techniques, retval->objects,
+                    m, d);
+ 
+@@ -1095,11 +1343,10 @@ void freevalue(MOJOSHADER_effectValue *value, MOJOSHADER_free f, void *d)
+     f((void *) value->name, d);
+     f((void *) value->semantic, d);
+     freetypeinfo(&value->type, f, d);
+-    if (value->type.parameter_type == MOJOSHADER_SYMTYPE_SAMPLER
+-     || value->type.parameter_type == MOJOSHADER_SYMTYPE_SAMPLER1D
+-     || value->type.parameter_type == MOJOSHADER_SYMTYPE_SAMPLER2D
+-     || value->type.parameter_type == MOJOSHADER_SYMTYPE_SAMPLER3D
+-     || value->type.parameter_type == MOJOSHADER_SYMTYPE_SAMPLERCUBE)
++    // This has to match how the storage was allocated, not just the type: a value whose class is
++    // not OBJECT never held sampler states, and walking it as if it did frees whatever the heap
++    // held past the end of a much smaller buffer. -CNA
++    if (value_is_sampler(value))
+         for (i = 0; i < value->value_count; i++)
+             freevalue(&value->valuesSS[i].value, f, d);
+     f(value->values, d);
+@@ -1221,6 +1468,14 @@ void copysymboltypeinfo(MOJOSHADER_symbolTypeInfo *dst,
+     {
+         siz = dst->member_count * sizeof (MOJOSHADER_symbolStructMember);
+         dst->members = (MOJOSHADER_symbolStructMember *) m(siz, d);
++        if (dst->members == NULL)
++        {
++            dst->member_count = 0;
++            return;
++        } // if
++        // COPY_STRING assigns nothing when the source string is NULL, which a member name
++        // legitimately is, so without this the copy keeps whatever the heap held there. -CNA
++        memset(dst->members, '\0', siz);
+         for (i = 0; i < dst->member_count; i++)
+         {
+             COPY_STRING(members[i].name)
+@@ -1420,13 +1675,20 @@ MOJOSHADER_effect *MOJOSHADER_cloneEffect(const MOJOSHADER_effect *effect)
+     /* Copy ctx */
+     memcpy(&clone->ctx, &effect->ctx, sizeof(MOJOSHADER_effectShaderContext));
+ 
++    /* Unlike the file's other COPY_STRING (see above), this one dereferenced without a NULL
++     * check -- and readstring() returns NULL for a zero-length string, which is ordinary content,
++     * not just hostile content. -CNA
++     */
+     #define COPY_STRING(location) \
++        if (effect->location != NULL) \
++        { \
+         siz = strlen(effect->location) + 1; \
+         stringcopy = (char *) m(siz, d); \
+         if (stringcopy == NULL) \
+             goto cloneEffect_outOfMemory; \
+         strcpy(stringcopy, effect->location); \
+         clone->location = stringcopy; \
++        } \
+ 
+     /* Copy errors */
+     siz = sizeof (MOJOSHADER_error) * effect->error_count;
+@@ -1587,13 +1849,22 @@ MOJOSHADER_effect *MOJOSHADER_cloneEffect(const MOJOSHADER_effect *effect)
+             if (clone->objects[i].shader.samplers == NULL)
+                 goto cloneEffect_outOfMemory;
+             curSampler = 0;
++            // A shader object whose program failed to compile has no parse data, and the symbol
++            // and parameter tables it indexes are both sized by the file being cloned. -CNA
++            if ((pd == NULL) || (clone->objects[i].shader.params == NULL))
++                continue;
+             for (j = 0; j < pd->symbol_count; j++)
+                 if (pd->symbols[j].register_set == MOJOSHADER_SYMREGSET_SAMPLER)
+                 {
+-                    clone->objects[i].shader.samplers[curSampler].sampler_name = clone->params[clone->objects[i].shader.params[j]].value.name;
++                    uint32 par;
++                    if (curSampler >= clone->objects[i].shader.sampler_count) break;
++                    if (j >= (int) clone->objects[i].shader.param_count) break;
++                    par = clone->objects[i].shader.params[j];
++                    if (par >= (uint32) clone->param_count) break;
++                    clone->objects[i].shader.samplers[curSampler].sampler_name = clone->params[par].value.name;
+                     clone->objects[i].shader.samplers[curSampler].sampler_register = pd->symbols[j].register_index;
+-                    clone->objects[i].shader.samplers[curSampler].sampler_state_count = clone->params[clone->objects[i].shader.params[j]].value.value_count;
+-                    clone->objects[i].shader.samplers[curSampler].sampler_states = clone->params[clone->objects[i].shader.params[j]].value.valuesSS;
++                    clone->objects[i].shader.samplers[curSampler].sampler_state_count = clone->params[par].value.value_count;
++                    clone->objects[i].shader.samplers[curSampler].sampler_states = clone->params[par].value.valuesSS;
+                     curSampler++;
+                 } // if
+         } // if
+@@ -1734,22 +2005,42 @@ void MOJOSHADER_effectBeginPass(MOJOSHADER_effect *effect,
+     for (i = 0; i < curPass->state_count; i++)
+     {
+         state = &curPass->states[i];
+-        if (state->type == MOJOSHADER_RS_VERTEXSHADER)
++        if ((state->type == MOJOSHADER_RS_VERTEXSHADER) ||
++            (state->type == MOJOSHADER_RS_PIXELSHADER))
+         {
+-            rawVert = &effect->objects[*state->value.valuesI].shader;
+-            if (rawVert->is_preshader)
+-                has_preshader = 1;
++            // The object index is parsed content, and MOJOSHADER_effectObject is a union: an
++            // index that is out of range, or that names an object which is not a shader at all,
++            // would make every field read below garbage rather than merely wrong. -CNA
++            const int object_index =
++                (state->value.values != NULL && state->value.value_count > 0)
++                    ? *state->value.valuesI : -1;
++            MOJOSHADER_effectObject *object;
++            if ((object_index < 0) || (object_index >= effect->object_count))
++                continue;
++            object = &effect->objects[object_index];
++            if ((object->type != MOJOSHADER_SYMTYPE_VERTEXSHADER) &&
++                (object->type != MOJOSHADER_SYMTYPE_PIXELSHADER))
++            {
++                continue;
++            } // if
++
++            if (state->type == MOJOSHADER_RS_VERTEXSHADER)
++            {
++                rawVert = &object->shader;
++                if (rawVert->is_preshader)
++                    has_preshader = 1;
++                else
++                    effect->current_vert = rawVert->shader;
++            } // if
+             else
+-                effect->current_vert = rawVert->shader;
++            {
++                rawPixl = &object->shader;
++                if (rawPixl->is_preshader)
++                    has_preshader = 1;
++                else
++                    effect->current_pixl = rawPixl->shader;
++            } // else
+         } // if
+-        else if (state->type == MOJOSHADER_RS_PIXELSHADER)
+-        {
+-            rawPixl = &effect->objects[*state->value.valuesI].shader;
+-            if (rawPixl->is_preshader)
+-                has_preshader = 1;
+-            else
+-                effect->current_pixl = rawPixl->shader;
+-        }
+     } // for
+ 
+     effect->state_changes->render_state_changes = curPass->states;
+@@ -1787,7 +2078,10 @@ static inline void copy_parameter_data(MOJOSHADER_effectParam *params,
+                                        unsigned int *param_loc,
+                                        MOJOSHADER_symbol *symbols,
+                                        unsigned int symbol_count,
+-                                       float *regf, int *regi, uint8 *regb)
++                                       float *regf, int *regi, uint8 *regb,
++                                       unsigned int regf_count,
++                                       unsigned int regi_count,
++                                       unsigned int regb_count)
+ {
+     int i, j, r, c;
+ 
+@@ -1800,45 +2094,84 @@ static inline void copy_parameter_data(MOJOSHADER_effectParam *params,
+         // float/int registers are vec4, so they have 4 elements each
+         const uint32 start = sym->register_index << 2;
+ 
++        // A shader's constant table and the effect parameter it names can disagree in untrusted
++        // content, so every copy is bounded by the value storage that was actually parsed rather
++        // than by the register count the constant table claims.
++        const uint32 wanted = sym->register_count << 2;
++        uint32 cells = (wanted < param->value_count) ? wanted : param->value_count;
++
++        // The destination is bounded too: a register index comes from the shader's own constant
++        // table, which is parsed content, so it can address well past the file it writes into.
++        // A zero count means the caller could not report a size. -CNA
++        {
++            // A preshader's register file is floats only, so its caller passes NULL for the int
++            // and bool files; a symbol that claims one of those must be skipped, not written
++            // through a null pointer. -CNA
++            const int wants_float = (param->type.parameter_type == MOJOSHADER_SYMTYPE_FLOAT) ||
++                                    (sym->register_set == MOJOSHADER_SYMREGSET_FLOAT4);
++            const void *dst_ptr = wants_float ? (const void *) regf :
++                (sym->register_set == MOJOSHADER_SYMREGSET_INT4) ? (const void *) regi :
++                (sym->register_set == MOJOSHADER_SYMREGSET_BOOL) ? (const void *) regb : NULL;
++            const uint32 dst_count = wants_float ? regf_count :
++                (sym->register_set == MOJOSHADER_SYMREGSET_INT4) ? regi_count :
++                (sym->register_set == MOJOSHADER_SYMREGSET_BOOL) ? regb_count : regf_count;
++            if (dst_ptr == NULL) continue;
++            const uint32 dst_start =
++                (sym->register_set == MOJOSHADER_SYMREGSET_BOOL) ? (start >> 2) : start;
++            if (dst_count != 0)
++            {
++                if (dst_start >= dst_count) continue;
++                if ((dst_start + cells) > dst_count) cells = dst_count - dst_start;
++            } // if
++        }
++
+         if (param->type.parameter_type == MOJOSHADER_SYMTYPE_FLOAT)
+-            memcpy(regf + start, param->valuesF, sym->register_count << 4);
++            memcpy(regf + start, param->valuesF, cells << 2);
+         else if (sym->register_set == MOJOSHADER_SYMREGSET_FLOAT4)
+         {
+             // Structs are a whole different world...
+             if (param->type.parameter_class == MOJOSHADER_SYMCLASS_STRUCT)
+-                memcpy(regf + start, param->valuesF, sym->register_count << 4);
++                memcpy(regf + start, param->valuesF, cells << 2);
+             else
+             {
+                 // Sometimes int/bool parameters get thrown into float registers...
+                 j = 0;
+-                do
++                while (j < sym->register_count)
+                 {
+                     c = 0;
+-                    do
++                    while (c < (int) param->type.columns)
+                     {
++                        if ((uint32) ((j << 2) + c) >= cells) break;
++                        if ((uint32) ((j << 2) + c) >= param->value_count) break;
+                         regf[start + (j << 2) + c] = (float) param->valuesI[(j << 2) + c];
+-                    } while (++c < param->type.columns);
+-                } while (++j < sym->register_count);
++                        c++;
++                    } // while
++                    if (c == 0) break;
++                    j++;
++                } // while
+             } // else
+         } // else if
+         else if (sym->register_set == MOJOSHADER_SYMREGSET_INT4)
+-            memcpy(regi + start, param->valuesI, sym->register_count << 4);
++            memcpy(regi + start, param->valuesI, cells << 2);
+         else if (sym->register_set == MOJOSHADER_SYMREGSET_BOOL)
+         {
+             j = 0;
+             r = 0;
+-            do
++            while ((r < sym->register_count) && ((uint32) r < cells))
+             {
+                 c = 0;
+-                do
++                while ((c < (int) param->type.columns) && ((r + c) < (int) sym->register_count) &&
++                       ((uint32) (r + c) < cells))
+                 {
++                    if ((uint32) ((j << 2) + c) >= param->value_count) break;
+                     // regb is not a vec4, enjoy that 'start' bitshift! -flibit
+                     regb[(start >> 2) + r + c] = param->valuesI[(j << 2) + c];
+                     c++;
+-                } while (c < param->type.columns && ((r + c) < sym->register_count));
++                } // while
++                if (c == 0) break;
+                 r += c;
+                 j++;
+-            } while (r < sym->register_count);
++            } // while
+         } // else if
+     } // for
+ } // copy_parameter_data
+@@ -1856,6 +2189,7 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
+     float selector;
+     int shader_object;
+     int selector_ran = 0;
++    int break_preshader = 0;
+ 
+     float *vs_reg_file_f, *ps_reg_file_f;
+     int *vs_reg_file_i, *ps_reg_file_i;
+@@ -1866,27 +2200,74 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
+      * -flibit
+      */
+     // !!! FIXME: We're just running the preshaders every time. Blech. -flibit
++    /* Every index and span below comes from parsed content, so each one is bounded against the
++     * storage it addresses: a shader-array selector is chosen by a preshader the effect itself
++     * supplied, and the parameter, register and object tables it reaches through are all sized by
++     * the same untrusted file. -CNA
++     */
+     #define SELECT_SHADER_FROM_PRESHADER(raw, gls) \
+-        if (raw != NULL && raw->is_preshader) \
++        if (raw != NULL && raw->is_preshader && raw->preshader != NULL && \
++            raw->preshader_param_count > 0 && raw->param_count > 0 && \
++            raw->preshader_params != NULL && raw->params != NULL && \
++            raw->preshader->symbols != NULL && raw->preshader->registers != NULL) \
+         { \
+-            i = 0; \
+-            do \
++            const unsigned int symcount = \
++                (raw->preshader->symbol_count < raw->preshader_param_count) \
++                    ? raw->preshader->symbol_count : raw->preshader_param_count; \
++            for (i = 0; i < symcount; i++) \
+             { \
++                const unsigned int reg_index = raw->preshader->symbols[i].register_index; \
++                unsigned int cells; \
++                if (raw->preshader_params[i] >= (uint32) effect->param_count) continue; \
+                 param = &effect->params[raw->preshader_params[i]].value; \
+-                for (j = 0; j < (param->value_count >> 2); j++) \
+-                    memcpy(raw->preshader->registers + raw->preshader->symbols[i].register_index + j, \
++                cells = param->value_count >> 2; \
++                for (j = 0; j < cells; j++) \
++                { \
++                    const unsigned int columns = \
++                        (param->type.columns < 4) ? param->type.columns : 4; \
++                    if ((reg_index >= raw->preshader->register_count) || \
++                        ((raw->preshader->register_count - reg_index) < (j + columns))) break; \
++                    if (((j << 2) + columns) > param->value_count) break; \
++                    memcpy(raw->preshader->registers + reg_index + j, \
+                            param->valuesI + (j << 2), \
+-                           param->type.columns << 2); \
+-            } while (++i < raw->preshader->symbol_count); \
+-            run_preshader(raw->preshader, &selector); \
+-            shader_object = effect->params[raw->params[0]].value.valuesI[(int) selector]; \
+-            raw = &effect->objects[shader_object].shader; \
+-            gls = raw->shader; \
+-            selector_ran = 1; \
++                           columns << 2); \
++                } \
++            } \
++            run_preshader(raw->preshader, &selector, 1); \
++            if (raw->params[0] >= (uint32) effect->param_count) break_preshader = 1; \
++            else { \
++            param = &effect->params[raw->params[0]].value; \
++            /* The selector is whatever the preshader computed, so it is range-checked as a \
++             * float before any conversion: casting an out-of-range float to an integer type is \
++             * undefined, and on x86 it yields INT_MIN, which then indexes far below the array. \
++             * The comparison also rejects NaN. -CNA */ \
++            if (!(selector >= 0.0f) || !(selector < (float) param->value_count)) \
++                break_preshader = 1; \
++            else \
++            { \
++                shader_object = param->valuesI[(int) selector]; \
++                if ((shader_object < 0) || (shader_object >= effect->object_count) || \
++                    ((effect->objects[shader_object].type != MOJOSHADER_SYMTYPE_VERTEXSHADER) && \
++                     (effect->objects[shader_object].type != MOJOSHADER_SYMTYPE_PIXELSHADER))) \
++                    break_preshader = 1; \
++                else \
++                { \
++                    raw = &effect->objects[shader_object].shader; \
++                    gls = raw->shader; \
++                    selector_ran = 1; \
++                } \
++            } \
++            } \
+         }
+     SELECT_SHADER_FROM_PRESHADER(rawVert, effect->current_vert)
+     SELECT_SHADER_FROM_PRESHADER(rawPixl, effect->current_pixl)
+     #undef SELECT_SHADER_FROM_PRESHADER
++    if (break_preshader)
++    {
++        // A selector that does not address a real shader object leaves the previously bound
++        // shaders in place rather than binding whatever the index happened to land on. -CNA
++        return;
++    } // if
+     if (selector_ran)
+     {
+         effect->ctx.bindShaders(effect->ctx.shaderContext,
+@@ -1921,7 +2302,10 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
+                                 pd->symbol_count, \
+                                 stage##_reg_file_f, \
+                                 stage##_reg_file_i, \
+-                                stage##_reg_file_b); \
++                                stage##_reg_file_b, \
++                                MOJOSHADER_EFFECT_MAX_REG_FILE_F * 4, \
++                                MOJOSHADER_EFFECT_MAX_REG_FILE_I * 4, \
++                                MOJOSHADER_EFFECT_MAX_REG_FILE_B); \
+             if (pd->preshader) \
+             { \
+                 copy_parameter_data(effect->params, raw->preshader_params, \
+@@ -1929,8 +2313,10 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
+                                     pd->preshader->symbol_count, \
+                                     pd->preshader->registers, \
+                                     NULL, \
+-                                    NULL); \
+-                run_preshader(pd->preshader, stage##_reg_file_f); \
++                                    NULL, \
++                                    pd->preshader->register_count << 2, 0, 0); \
++                run_preshader(pd->preshader, stage##_reg_file_f, \
++                              MOJOSHADER_EFFECT_MAX_REG_FILE_F * 4); \
+             } \
+         }
+     effect->ctx.mapUniformBufferMemory(effect->ctx.shaderContext,
+diff --git a/profiles/mojoshader_profile_common.c b/profiles/mojoshader_profile_common.c
+index e456c07..b8cc5bc 100644
+--- a/profiles/mojoshader_profile_common.c
++++ b/profiles/mojoshader_profile_common.c
+@@ -68,7 +68,14 @@ int set_output(Context *ctx, Buffer **section)
+ 
+ void push_output(Context *ctx, Buffer **section)
+ {
+-    assert(ctx->output_stack_len < (int) (STATICARRAYLEN(ctx->output_stack)));
++    // How many times an emitter pushes depends on the shader it is translating, so untrusted
++    // bytecode can drive this past the fixed stack. Failing the context here stops emission; the
++    // asserts caught nothing in a release build. -CNA
++    if (ctx->output_stack_len >= (int) (STATICARRAYLEN(ctx->output_stack)))
++    {
++        fail(ctx, "Shader output nesting is too deep.");
++        return;
++    } // if
+     ctx->output_stack[ctx->output_stack_len] = ctx->output;
+     ctx->indent_stack[ctx->output_stack_len] = ctx->indent;
+     ctx->output_stack_len++;
+@@ -79,7 +86,11 @@ void push_output(Context *ctx, Buffer **section)
+ 
+ void pop_output(Context *ctx)
+ {
+-    assert(ctx->output_stack_len > 0);
++    if (ctx->output_stack_len <= 0)
++    {
++        fail(ctx, "Shader output nesting is unbalanced.");
++        return;
++    } // if
+     ctx->output_stack_len--;
+     ctx->output = ctx->output_stack[ctx->output_stack_len];
+     ctx->indent = ctx->indent_stack[ctx->output_stack_len];
+diff --git a/profiles/mojoshader_profile_spirv.c b/profiles/mojoshader_profile_spirv.c
+index 5d5999b..ee6a50f 100644
+--- a/profiles/mojoshader_profile_spirv.c
++++ b/profiles/mojoshader_profile_spirv.c
+@@ -274,6 +274,12 @@ static uint32 spv_output_location(Context *ctx, uint32 id, uint32 loc)
+ static void spv_output_color_location(Context *ctx, uint32 id, uint32 index)
+ {
+     SpirvPatchTable* table = &ctx->spirv.patch_table;
++    // The register number comes from parsed bytecode and indexes a fixed table. -CNA
++    if (index >= STATICARRAYLEN(table->output_offsets))
++    {
++        fail(ctx, "Colour output register is out of range.");
++        return;
++    } // if
+     push_output(ctx, &ctx->helpers);
+     spv_emit(ctx, 4, SpvOpDecorate, id, SpvDecorationLocation, index);
+     pop_output(ctx);
+@@ -284,6 +290,13 @@ static void spv_output_attrib_location(Context *ctx, uint32 id,
+                                        MOJOSHADER_usage usage, uint32 index)
+ {
+     SpirvPatchTable* table = &ctx->spirv.patch_table;
++    // Both the usage and the register number come from parsed bytecode. -CNA
++    if (((unsigned int) usage >= STATICARRAYLEN(table->attrib_offsets)) ||
++        (index >= STATICARRAYLEN(table->attrib_offsets[0])))
++    {
++        fail(ctx, "Vertex attribute usage or register is out of range.");
++        return;
++    } // if
+     push_output(ctx, &ctx->helpers);
+     spv_emit(ctx, 4, SpvOpDecorate, id, SpvDecorationLocation, 0xDEADBEEF);
+     pop_output(ctx);
+@@ -584,18 +597,35 @@ static uint32 spv_vectorbroadcast(Context *ctx, uint32 tid, uint32 value)
+     return result;
+ } // spv_vectorbroadcast
+ 
++/* The branch and loop stacks are driven by the shader's own control-flow instructions, so
++ * untrusted bytecode can overflow them with nesting or underflow them with an ELSE, ENDIF or
++ * ENDLOOP that never had a matching opener. Asserts caught neither in a release build. -CNA
++ */
+ static void spv_branch_push(Context *ctx, uint32 id_merge, uint32 patch_offset)
+ {
+-    assert(((size_t)ctx->branch_labels_stack_index) < STATICARRAYLEN(ctx->branch_labels_stack));
+-    int pos = ctx->branch_labels_stack_index++;
++    int pos;
++    if (((size_t) ctx->branch_labels_stack_index) >=
++        STATICARRAYLEN(ctx->branch_labels_stack))
++    {
++        fail(ctx, "Shader branch nesting is too deep.");
++        return;
++    } // if
++    pos = ctx->branch_labels_stack_index++;
+     ctx->branch_labels_stack[pos] = id_merge;
+     ctx->branch_labels_patch_stack[pos] = patch_offset;
+ } // spv_branch_push
+ 
+ static void spv_branch_get(Context *ctx, uint32* out_id_merge, uint32* out_patch_offset)
+ {
+-    assert(ctx->branch_labels_stack_index > 0);
+-    int pos = ctx->branch_labels_stack_index - 1;
++    int pos;
++    *out_id_merge = 0;
++    *out_patch_offset = 0;
++    if (ctx->branch_labels_stack_index <= 0)
++    {
++        fail(ctx, "Shader closes a branch that was never opened.");
++        return;
++    } // if
++    pos = ctx->branch_labels_stack_index - 1;
+     *out_id_merge = ctx->branch_labels_stack[pos];
+     *out_patch_offset = ctx->branch_labels_patch_stack[pos];
+ } // spv_branch_get
+@@ -603,27 +633,40 @@ static void spv_branch_get(Context *ctx, uint32* out_id_merge, uint32* out_patch
+ static void spv_branch_pop(Context *ctx, uint32* out_id_merge, uint32* out_patch_offset)
+ {
+     spv_branch_get(ctx, out_id_merge, out_patch_offset);
+-    ctx->branch_labels_stack_index--;
++    if (ctx->branch_labels_stack_index > 0)
++        ctx->branch_labels_stack_index--;
+ } // spv_branch_pop
+ 
+ static void spv_loop_push(Context *ctx, const SpirvLoopInfo *loop)
+ {
+-    assert(((size_t)ctx->spirv.loop_stack_idx) < STATICARRAYLEN(ctx->spirv.loop_stack));
+-    int pos = ctx->spirv.loop_stack_idx++;
++    int pos;
++    if (((size_t) ctx->spirv.loop_stack_idx) >= STATICARRAYLEN(ctx->spirv.loop_stack))
++    {
++        fail(ctx, "Shader loop nesting is too deep.");
++        return;
++    } // if
++    pos = ctx->spirv.loop_stack_idx++;
+     ctx->spirv.loop_stack[pos] = *loop;
+ } // spv_loop_push
+ 
+ static void spv_loop_get(Context *ctx, SpirvLoopInfo *loop)
+ {
+-    assert(ctx->spirv.loop_stack_idx > 0);
+-    int pos = ctx->spirv.loop_stack_idx - 1;
++    int pos;
++    if (ctx->spirv.loop_stack_idx <= 0)
++    {
++        memset(loop, '\0', sizeof (*loop));
++        fail(ctx, "Shader closes a loop that was never opened.");
++        return;
++    } // if
++    pos = ctx->spirv.loop_stack_idx - 1;
+     *loop = ctx->spirv.loop_stack[pos];
+ } // spv_loop_get
+ 
+ static void spv_loop_pop(Context *ctx, SpirvLoopInfo *loop)
+ {
+     spv_loop_get(ctx, loop);
+-    ctx->spirv.loop_stack_idx--;
++    if (ctx->spirv.loop_stack_idx > 0)
++        ctx->spirv.loop_stack_idx--;
+ } // spv_loop_pop
+ 
+ static uint32 spv_loop_get_aL(Context *ctx)
+@@ -668,8 +711,14 @@ static void spv_check_read_reg_id(Context *ctx, RegisterList *r)
+ {
+     if (r->spirv.iddecl == 0)
+     {
+-        assert(r->regtype != REG_TYPE_SAMPLER || (shader_is_pixel(ctx) && !shader_version_atleast(ctx, 1, 4)));
+-        assert(r->regtype != REG_TYPE_TEXTURE || (shader_is_pixel(ctx) && !shader_version_atleast(ctx, 1, 4)));
++        // Register types come from parsed shader bytecode, so a sampler or texture register in a
++        // shader model that cannot declare one is a parse error, not a programming mistake. -CNA
++        if (((r->regtype == REG_TYPE_SAMPLER) || (r->regtype == REG_TYPE_TEXTURE)) &&
++            !(shader_is_pixel(ctx) && !shader_version_atleast(ctx, 1, 4)))
++        {
++            fail(ctx, "Register type is not declarable in this shader model.");
++            return;
++        } // if
+         switch (r->regtype)
+         {
+             case REG_TYPE_SAMPLER: // s# (only ps_1_1)
+@@ -790,7 +839,11 @@ static void spv_add_attrib_fixup(Context *ctx, RegisterList *r, unsigned int typ
+     uint32* next_types;
+     uint32* next_opcodes;
+ 
+-    assert(r != NULL);
++    if (r == NULL)
++    {
++        fail(ctx, "Shader attribute fixup has no matching attribute register.");
++        return;
++    } // if
+     #define TYPE_LOAD_OFFSET ctx->spirv.patch_table.attrib_type_load_offsets[r->usage][r->index]
+ 
+     next_types = (uint32*) Malloc(ctx, sizeof(uint32) * (TYPE_LOAD_OFFSET.num_loads + 1));
+@@ -821,9 +874,17 @@ static SpirvResult spv_loadreg(Context *ctx, RegisterList *r)
+ 
+     uint32 id_src = r->spirv.iddecl;
+     SpirvResult result;
++    result.tid = 0;
++    result.id = 0;
+     if (regtype == REG_TYPE_SAMPLER)
+     {
++        // Untrusted bytecode can read a sampler register the shader never declared. -CNA
+         RegisterList *sreg = reglist_find(&ctx->samplers, REG_TYPE_SAMPLER, r->regnum);
++        if (sreg == NULL)
++        {
++            fail(ctx, "Shader reads an undeclared sampler register.");
++            return result;
++        } // if
+         result.tid = spv_image_from_texturetype(ctx, (TextureType)sreg->index);
+     } // if
+     else if (regtype == REG_TYPE_CONSTBOOL)
+@@ -862,7 +923,13 @@ static SpirvResult spv_loadreg(Context *ctx, RegisterList *r)
+         return result;
+     } // if
+ 
+-    assert(id_src);
++    if (id_src == 0)
++    {
++        // No declaration id means the register was never declared, or its declaration was
++        // already refused; either way there is nothing to load from. -CNA
++        fail(ctx, "Shader reads a register that was never declared.");
++        return result;
++    } // if
+     result.id = spv_bumpid(ctx);
+ 
+     push_output(ctx, &ctx->mainline);
+@@ -928,12 +995,18 @@ SpirvResult spv_swizzle(Context *ctx, SpirvResult arg, const int swizzle, const
+     if (no_swizzle(swizzle) && writemask_xyzw(writemask))
+         return arg;
+ 
+-    assert(arg.tid != 0);
+-    assert(writemask == 1
+-        || writemask == 3
+-        || writemask == 7
+-        || writemask == 15
+-    );
++    // Every one of these came from parsed shader bytecode: a load that was already refused
++    // leaves tid zero, and a write mask is whatever the destination token said. -CNA
++    if (arg.tid == 0)
++    {
++        fail(ctx, "Swizzle of a value that could not be loaded.");
++        return arg;
++    } // if
++    if ((writemask != 1) && (writemask != 3) && (writemask != 7) && (writemask != 15))
++    {
++        fail(ctx, "Unsupported write mask in swizzle.");
++        return arg;
++    } // if
+ 
+     SpirvTypeIdx sti_arg = STI_VOID;
+     for (i = STI_CORE_START_; i < STI_CORE_END_; i++)
+@@ -944,7 +1017,11 @@ SpirvResult spv_swizzle(Context *ctx, SpirvResult arg, const int swizzle, const
+             break;
+         } // if
+     } // for
+-    assert(sti_arg != STI_VOID);
++    if (sti_arg == STI_VOID)
++    {
++        fail(ctx, "Swizzle of a value with an unknown type.");
++        return arg;
++    } // if
+ 
+     // We should not leave any value undefined, as it may end up used (eg. dot
+     // product), which will make everything relying on it's result undefined.
+@@ -969,9 +1046,8 @@ SpirvResult spv_swizzle(Context *ctx, SpirvResult arg, const int swizzle, const
+             break;
+ 
+         default:
+-            failf(ctx, "Unexpected write mask in swizzle: 0x%X");
+-            assert(0);
+-            break;
++            failf(ctx, "Unexpected write mask in swizzle: 0x%X", writemask);
++            return arg;
+     } // switch
+ 
+     SpirvTypeIdx sti_result = spv_change_base_type_vec_dim(sti_arg, resdim);
+@@ -1875,9 +1951,13 @@ static void spv_texbem(Context* ctx, int luminanceCorrection)
+ 
+         SpirvResult l_x = spv_swizzle(ctx, l, 0x0, 0x1);
+         SpirvResult l_y = spv_swizzle(ctx, l, 0x1, 0x1);
+-        assert(tid_float == l_x.tid);
+-        assert(tid_float == l_y.tid);
+-        assert(tid_float == src0_z.tid);
++        // A source whose load was refused comes back with a zero type. -CNA
++        if ((tid_float != l_x.tid) || (tid_float != l_y.tid) ||
++            (tid_float != src0_z.tid))
++        {
++            fail(ctx, "Operand types do not match for this instruction.");
++            return;
++        } // if
+ 
+         uint32 id_e = spv_bumpid(ctx);
+         uint32 id_f = spv_bumpid(ctx);
+@@ -2178,7 +2258,21 @@ void emit_SPIRV_sampler(Context *ctx, int stage, TextureType ttype, int texbem)
+     else
+         sampler_reg = spv_getreg(ctx, REG_TYPE_SAMPLER, stage);
+ 
+-    uint32 result = sampler_reg->spirv.iddecl;
++    uint32 result;
++    // The stage comes from the shader's own sampler declaration, and a sampler used without being
++    // declared has no register at all. -CNA
++    if (sampler_reg == NULL)
++    {
++        fail(ctx, "Shader uses a sampler stage it never declared.");
++        return;
++    } // if
++    if ((stage < 0) ||
++        (((size_t) stage) >= STATICARRAYLEN(ctx->spirv.sampler_extras)))
++    {
++        fail(ctx, "Sampler stage is out of range.");
++        return;
++    } // if
++    result = sampler_reg->spirv.iddecl;
+ 
+     push_output(ctx, &ctx->mainline_intro);
+     spv_emit(ctx, 4, SpvOpVariable, type, result, SpvStorageClassUniformConstant);
+@@ -2216,6 +2310,14 @@ void emit_SPIRV_attribute(Context *ctx, RegisterType regtype, int regnum,
+     uint32 tid;
+     RegisterList *r = spv_getreg(ctx, regtype, regnum);
+ 
++    // The register this attribute declares can be one the shader never actually used, in which
++    // case there is no register list entry to name. -CNA
++    if (r == NULL)
++    {
++        fail(ctx, "Shader declares an attribute for a register it never used.");
++        return;
++    } // if
++
+     ctx->spirv.inoutcount += 1;
+ 
+     spv_output_regname(ctx, r->spirv.iddecl, regtype, regnum);
+@@ -2867,7 +2969,13 @@ static void emit_SPIRV_dotproduct(Context *ctx, SpirvResult src0, SpirvResult sr
+ {
+     SpirvResult result;
+ 
+-    assert(src0.tid == src1.tid);
++    // Operand types come from parsed bytecode, and either source may already have been refused,
++    // which leaves its type id zero. -CNA
++    if ((src0.tid == 0) || (src0.tid != src1.tid))
++    {
++        fail(ctx, "Dot product operands do not share a type.");
++        return;
++    } // if
+ 
+     result.tid = spv_get_type(ctx, STI_FLOAT);
+     result.id = spv_bumpid(ctx);
+@@ -3141,8 +3249,11 @@ void emit_SPIRV_MAD(Context *ctx)
+     SpirvResult src0 = spv_load_srcarg_full(ctx, 0);
+     SpirvResult src1 = spv_load_srcarg_full(ctx, 1);
+     SpirvResult src2 = spv_load_srcarg_full(ctx, 2);
+-    assert(src0.tid == src1.tid);
+-    assert(src0.tid == src2.tid);
++    if ((src0.tid == 0) || (src0.tid != src1.tid) || (src0.tid != src2.tid))
++    {
++        fail(ctx, "MAD operand types do not match.");
++        return;
++    } // if
+     uint32 mul_result = spv_bumpid(ctx);
+     SpirvResult result;
+     result.tid = src0.tid;
+@@ -3424,7 +3535,11 @@ void emit_SPIRV_SINCOS(Context *ctx)
+ void emit_SPIRV_MOVA(Context *ctx)
+ {
+     SpirvResult src = spv_load_srcarg_full(ctx, 0);
+-    assert(src.tid == spv_get_type(ctx, STI_VEC4));
++    if (src.tid != spv_get_type(ctx, STI_VEC4))
++    {
++        fail(ctx, "MOVA source is not a four-component vector.");
++        return;
++    } // if
+ 
+     uint32 id_rounded = spv_bumpid(ctx);
+ 
+@@ -3510,7 +3625,11 @@ void emit_SPIRV_LRP(Context *ctx)
+     SpirvResult a = spv_load_srcarg_full(ctx, 0); // 'scale'
+     SpirvResult y = spv_load_srcarg_full(ctx, 1); // 'end'
+     SpirvResult x = spv_load_srcarg_full(ctx, 2); // 'start'
+-    assert(x.tid == y.tid);
++    if ((x.tid == 0) || (x.tid != y.tid))
++    {
++        fail(ctx, "LRP operand types do not match.");
++        return;
++    } // if
+     SpirvResult result;
+     result.id = spv_bumpid(ctx);
+     result.tid = x.tid;
+@@ -3526,8 +3645,12 @@ static void spv_emit_vecXmatrix(Context *ctx, int rows, int writemask)
+ {
+     int i;
+ 
+-    assert(rows <= 4);
+-    assert(writemask == 0x7 || writemask == 0xF);
++    // Both come from the instruction's own destination token. -CNA
++    if ((rows > 4) || ((writemask != 0x7) && (writemask != 0xF)))
++    {
++        fail(ctx, "Unsupported matrix instruction shape.");
++        return;
++    } // if
+ 
+     uint32 src0 = spv_load_srcarg(ctx, 0, writemask).id;
+     uint32 tid_float = spv_get_type(ctx, STI_FLOAT);

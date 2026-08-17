@@ -30,6 +30,7 @@
 #include <vector>
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Renderers/Common/ICompiledEffectRuntime.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics { class Effect; }
 namespace CNA::Platform
@@ -1024,6 +1025,10 @@ namespace CNA::Internal::Renderers
         /// safely ignore it, matching the established accepted-and-ignored pattern for other
         /// not-yet-renderer-supported `GpuDrawParams` fields.
         IEffectRenderer* customEffectRenderer = nullptr;
+        /// Runtime for a compiled XNA/FNA Effect Framework pass. This is deliberately separate
+        /// from customEffectRenderer: ShaderEffect is a source pair, while a compiled effect owns
+        /// reflection, techniques, passes, samplers, and state assignments.
+        ICompiledEffectRuntime* compiledEffectRuntime = nullptr;
         /// True whenever the active effect is ShaderEffect, even when this renderer returned no
         /// IEffectRenderer. Backends without custom shaders use this to refuse the draw instead of
         /// mistaking a null renderer for an ordinary fixed-function stock effect.
@@ -1754,6 +1759,21 @@ namespace CNA::Internal::Renderers
                                                                       const std::string& fragSrc)
         { return nullptr; }
 
+        /// Parses and compiles a Direct3D 9 Effect Framework binary for this renderer/device.
+        /// The default is an explicit unsupported result; callers must pair this with the
+        /// CompiledEffects capability and never silently substitute a stock shader.
+        virtual std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* /*effectCode*/, std::size_t /*effectCodeBytes*/)
+        {
+            return nullptr;
+        }
+
+        /// Dedicated opt-in for compiled XNA effects. This separate false-by-default gate is
+        /// intentional: legacy renderer SupportsCapability switches often return true for enum
+        /// values added after they were written. GraphicsDevice consults this method for
+        /// CompiledEffects so an old catch-all cannot accidentally advertise a native runtime.
+        [[nodiscard]] virtual bool SupportsCompiledEffects() const { return false; }
+
         /// Activates a specific face of a cube-map render target for rendering.
         /// Pass nullptr to restore the default back buffer.
         virtual void SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face)
@@ -1818,6 +1838,15 @@ namespace CNA::Internal::Renderers
         /// Applies sampler controls not represented by filter/address mode. Defaults to no-op
         /// so existing renderers can adopt each field independently and explicitly.
         virtual void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) {}
+
+        /// Applies the third addressing axis of a SamplerState. Separate from ApplySamplerState
+        /// for the same reason as the mip controls above: it is observable only where a renderer
+        /// samples a volume texture, so each renderer adopts it explicitly. A renderer that does
+        /// not override this must not invent a W mode of its own -- an effect's assigned ADDRESSW
+        /// is then the one that stands. Default: no-op.
+        /// @param slot     Texture unit index (0-15).
+        /// @param addressW Raw TextureAddressMode int value for W.
+        virtual void ApplySamplerAddressW(int slot, int addressW) {}
 
         /// Sets the constant blend color used with the BlendFactor blend mode.
         /// Maps to glBlendColor on GL renderers. Default: no-op.
@@ -2085,7 +2114,8 @@ namespace CNA::Internal::Renderers
 
         /// Returns whether this renderer (and, for device-dependent entries, the current runtime
         /// device/driver) supports the given CNA::GraphicsCapability. Default implementation
-        /// returns true except for multi-stream input. Every renderer with a narrower contract --
+        /// returns true except for multi-stream input and compiled effects, both of which require
+        /// explicit renderer opt-in. Every renderer with a narrower contract --
         /// including no-renderer, 2D-only, fixed-function, experimental, or device-dependent
         /// capability gaps -- must override the applicable entries truthfully.
         [[nodiscard]] virtual bool SupportsCapability(CNA::GraphicsCapability capability) const
@@ -2098,6 +2128,11 @@ namespace CNA::Internal::Renderers
             // would make a renderer that silently renders from stream 0 alone claim otherwise.
             if (capability == CNA::GraphicsCapability::MultiStreamVertexInput)
                 return false;
+            // A bytecode parser alone is insufficient: the backend must own the native shaders,
+            // reflection/value lifecycle, exact passes and state/sampler application before it
+            // can opt in. The corresponding creation default above returns nullptr.
+            if (capability == CNA::GraphicsCapability::CompiledEffects)
+                return SupportsCompiledEffects();
             return true;
         }
 

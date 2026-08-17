@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
-// Task 351: Effect base class audit — constructors, parameters, techniques,
-// Apply()/OnApply() dispatch, GetTypeName(), and disposal, against FNA's
-// Graphics/Effect/Effect.cs. CNA's Effect has no MojoShader/.fx-bytecode
-// pipeline (OnApply() is pure virtual), so these tests exercise the
-// construction-time single-"Default"-technique contract CNA actually uses,
-// not FNA's byte[]-blob constructor (that policy is Task 352's scope).
+// Effect base class coverage for the stock-derived path plus format/capability checks shared by
+// the compiled XNA Effect Framework path. Native bytecode integration lives with each backend.
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <memory>
 
 #include "CNA/GraphicsCapability.hpp"
@@ -23,7 +23,8 @@
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
-#include "System/NotImplementedException.hpp"
+#include "System/NotSupportedException.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
@@ -43,8 +44,31 @@ using Microsoft::Xna::Framework::Vector3;
 
 namespace
 {
-    // Minimal concrete Effect: OnApply() is pure virtual in CNA (no base-class
-    // bytecode/MojoShader pipeline exists), so every test needs a subclass.
+    std::uint32_t ReadUInt32LittleEndian(const std::vector<SharpRuntime::bytecs>& bytes,
+                                         std::size_t offset)
+    {
+        return static_cast<std::uint32_t>(bytes[offset]) |
+            (static_cast<std::uint32_t>(bytes[offset + 1]) << 8) |
+            (static_cast<std::uint32_t>(bytes[offset + 2]) << 16) |
+            (static_cast<std::uint32_t>(bytes[offset + 3]) << 24);
+    }
+
+    void WriteUInt32LittleEndian(std::vector<SharpRuntime::bytecs>& bytes,
+                                 std::size_t offset, std::uint32_t value)
+    {
+        for (std::size_t i = 0; i < 4; ++i)
+            bytes[offset + i] = static_cast<SharpRuntime::bytecs>(value >> (i * 8));
+    }
+
+    std::vector<SharpRuntime::bytecs> LoadValidCompiledEffectFixture()
+    {
+        const std::filesystem::path path = std::filesystem::path(__FILE__).parent_path() /
+            "../../../../../../renderers/fna3d/effects/BasicEffect.fxb";
+        std::ifstream input(path, std::ios::binary);
+        return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    }
+
+    // Minimal derived Effect used to observe OnApply dispatch on the stock-style path.
     class TestEffect : public Effect
     {
     public:
@@ -111,21 +135,19 @@ TEST(EffectTest, GraphicsDeviceInternalReturnsOwningDevice)
 }
 
 // -----------------------------------------------------------------------
-// Task 353: interim safety net — the bytecode constructor exists (matching
-// FNA's public API surface) but must throw until Phase 74's real MojoShader-
-// equivalent bytecode pipeline lands, rather than silently building a
-// broken/fake Effect.
+// Compiled bytecode is an explicit renderer capability. A renderer without a
+// D3D9 Effect Framework runtime must reject it before attempting to parse it.
 // -----------------------------------------------------------------------
 
-TEST(EffectTest, BytecodeConstructorThrowsNotImplementedException)
+TEST(EffectTest, BytecodeConstructorUsesExplicitRendererCapability)
 {
     GraphicsDevice gd;
     const std::vector<SharpRuntime::bytecs> fakeBytecode{ 1, 2, 3, 4 };
 
-    EXPECT_THROW(TestEffect(gd, fakeBytecode), System::NotImplementedException);
+    EXPECT_THROW(TestEffect(gd, fakeBytecode), System::ArgumentException);
 }
 
-TEST(EffectTest, BytecodeConstructorMessageMentionsPhase74Roadmap)
+TEST(EffectTest, BytecodeConstructorFailureIsActionable)
 {
     GraphicsDevice gd;
     const std::vector<SharpRuntime::bytecs> fakeBytecode{ 1, 2, 3, 4 };
@@ -133,12 +155,116 @@ TEST(EffectTest, BytecodeConstructorMessageMentionsPhase74Roadmap)
     try
     {
         TestEffect fx(gd, fakeBytecode);
-        FAIL() << "Expected System::NotImplementedException";
+        FAIL() << "Expected invalid or unsupported bytecode to throw";
     }
-    catch (const System::NotImplementedException& e)
+    catch (const System::ArgumentException& e)
     {
-        EXPECT_NE(std::string(e.what()).find("Phase 74"), std::string::npos);
+        EXPECT_NE(std::string(e.what()).find("effect bytecode"), std::string::npos);
     }
+}
+
+TEST(EffectTest, MgfxIsRejectedAsADistinctUnsupportedFormat)
+{
+    GraphicsDevice gd;
+    const std::vector<SharpRuntime::bytecs> mgfx{
+        'M', 'G', 'F', 'X', 1, 0, 0, 0
+    };
+
+    EXPECT_THROW(TestEffect(gd, mgfx), System::NotSupportedException);
+}
+
+TEST(EffectTest, StructurallyValidFxReachesRendererCapabilityGate)
+{
+    GraphicsDevice gd;
+    const auto validEffect = LoadValidCompiledEffectFixture();
+    ASSERT_FALSE(validEffect.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        EXPECT_THROW(TestEffect(gd, validEffect), System::NotSupportedException);
+    }
+    else
+    {
+        EXPECT_NO_THROW(TestEffect(gd, validEffect));
+    }
+}
+
+TEST(EffectTest, RejectsUnsafeXna4WrapperOffsetBeforeNativeParser)
+{
+    GraphicsDevice gd;
+    const std::vector<SharpRuntime::bytecs> malformedWrapper{
+        0xCF, 0x0B, 0xF0, 0xBC, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    };
+    EXPECT_THROW(TestEffect(gd, malformedWrapper), System::ArgumentException);
+}
+
+TEST(EffectTest, RejectsExcessiveTopLevelReflectionCountBeforeNativeParser)
+{
+    GraphicsDevice gd;
+    auto bytes = LoadValidCompiledEffectFixture();
+    ASSERT_GE(bytes.size(), 24u);
+    const std::size_t structure = 8u + ReadUInt32LittleEndian(bytes, 4);
+    ASSERT_LE(structure + 16u, bytes.size());
+    WriteUInt32LittleEndian(bytes, structure, 0xFFFFFFFFu);
+
+    EXPECT_THROW(TestEffect(gd, bytes), System::ArgumentException);
+}
+
+TEST(EffectTest, RejectsOutOfRangeValueOffsetsBeforeNativeParser)
+{
+    GraphicsDevice gd;
+    auto bytes = LoadValidCompiledEffectFixture();
+    ASSERT_GE(bytes.size(), 24u);
+    const std::size_t structure = 8u + ReadUInt32LittleEndian(bytes, 4);
+    ASSERT_LE(structure + 24u, bytes.size());
+
+    auto invalidType = bytes;
+    WriteUInt32LittleEndian(invalidType, structure + 16, 0xFFFFFFFFu);
+    EXPECT_THROW(TestEffect(gd, invalidType), System::ArgumentException);
+
+    auto invalidValue = bytes;
+    WriteUInt32LittleEndian(invalidValue, structure + 20, 0xFFFFFFFFu);
+    EXPECT_THROW(TestEffect(gd, invalidValue), System::ArgumentException);
+}
+
+TEST(EffectTest, RejectsUnterminatedReflectionStringsBeforeNativeParser)
+{
+    GraphicsDevice gd;
+    auto bytes = LoadValidCompiledEffectFixture();
+    ASSERT_GE(bytes.size(), 24u);
+    const std::size_t base = 8;
+    const std::size_t structure = base + ReadUInt32LittleEndian(bytes, 4);
+    ASSERT_LE(structure + 20u, bytes.size());
+    const std::size_t parameterType =
+        base + ReadUInt32LittleEndian(bytes, structure + 16);
+    ASSERT_LE(parameterType + 12u, bytes.size());
+    const std::size_t parameterName =
+        base + ReadUInt32LittleEndian(bytes, parameterType + 8);
+    ASSERT_LE(parameterName + 4u, bytes.size());
+    const std::uint32_t stringLength = ReadUInt32LittleEndian(bytes, parameterName);
+    ASSERT_GT(stringLength, 0u);
+    ASSERT_LE(parameterName + 4u + stringLength, bytes.size());
+    bytes[parameterName + 4u + stringLength - 1] = 'X';
+
+    EXPECT_THROW(TestEffect(gd, bytes), System::ArgumentException);
+}
+
+TEST(EffectTest, RejectsOutOfRangeObjectReferencesBeforeNativeParser)
+{
+    GraphicsDevice gd;
+    auto bytes = LoadValidCompiledEffectFixture();
+    ASSERT_GE(bytes.size(), 24u);
+    const std::size_t base = 8;
+    const std::size_t structure = base + ReadUInt32LittleEndian(bytes, 4);
+    ASSERT_LE(structure + 24u, bytes.size());
+    const std::size_t parameterValue =
+        base + ReadUInt32LittleEndian(bytes, structure + 20);
+    ASSERT_LE(parameterValue + 4u, bytes.size());
+    WriteUInt32LittleEndian(bytes, parameterValue, 0xFFFFFFFFu);
+
+    EXPECT_THROW(TestEffect(gd, bytes), System::ArgumentException);
 }
 
 // -----------------------------------------------------------------------
