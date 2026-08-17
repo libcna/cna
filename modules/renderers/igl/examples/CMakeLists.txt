@@ -88,4 +88,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
     cna_register_renderer_test(NAME Igl_Mrt COMMAND cna_test_igl_mrt
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # IGL-15/IGL-55: real MSAA resolved into a RenderTarget2D.
+    cna_igl_test(cna_test_igl_msaa igl_msaa_test.cpp)
+    cna_register_renderer_test(NAME Igl_Msaa COMMAND cna_test_igl_msaa
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

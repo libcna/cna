@@ -499,6 +499,33 @@ namespace CNA::Internal::Renderers::Igl
         const igl::TextureRangeDesc range = igl::TextureRangeDesc::new2D(
             static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y),
             static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h));
+
+        if (multisampleColor_)
+        {
+            // IGL's OpenGL Framebuffer::copyBytesColorAttachment() reads colorAttachments[0]'s own
+            // texture with glReadPixels rather than checking for a resolve texture the way its
+            // Vulkan counterpart does -- attempting that against framebuffer_ here (whose slot 0 is
+            // the MULTISAMPLE texture) fails with GL_INVALID_OPERATION, since OpenGL refuses to
+            // read pixels from a multisample-attached framebuffer at all. The end-of-pass store
+            // action (igl::StoreAction::MsaaResolve, see IglRenderer::BeginPass) already resolves
+            // the multisample content into color_ by the time FlushPendingFrameEXT() above returns,
+            // so read that single-sample texture back through a small ad-hoc framebuffer instead of
+            // relying on the (for OpenGL, MSAA-unaware) copy path on framebuffer_ itself.
+            igl::FramebufferDesc resolvedDesc;
+            resolvedDesc.colorAttachments[0].texture = color_;
+            resolvedDesc.debugName = "CNA RenderTarget2D MSAA readback";
+
+            igl::Result result;
+            const std::shared_ptr<igl::IFramebuffer> resolvedFramebuffer =
+                owner_->GetDevice().createFramebuffer(resolvedDesc, &result);
+            if (!resolvedFramebuffer || !result.isOk())
+                return false;
+
+            resolvedFramebuffer->copyBytesColorAttachment(owner_->GetCommandQueue(), 0, data, range,
+                                                          0);
+            return true;
+        }
+
         framebuffer_->copyBytesColorAttachment(owner_->GetCommandQueue(), 0, data, range, 0);
         return true;
     }
