@@ -167,6 +167,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a string.
          *
          * @return The cached string value.
+         * @throws System::InvalidCastException If this is a compiled effect's parameter whose
+         *         reflected EffectParameterType is not String, matching XNA 4.0.
          */
         [[nodiscard]] std::string GetValueString() const;
 
@@ -329,6 +331,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a string.
          *
          * @param value The string value to store.
+         * @throws System::InvalidCastException If this is a compiled effect's parameter whose
+         *         reflected EffectParameterType is not String, matching XNA 4.0.
          */
         void SetValue(const std::string& value);
 
@@ -459,6 +463,8 @@ namespace Microsoft::Xna::Framework::Graphics
                         EffectParameterClass paramClass, EffectParameterType paramType,
                         std::shared_ptr<CompiledStorage> storage,
                         std::size_t byteOffset, std::size_t byteSize);
+
+        void RequireStringParameter(const char* operation) const;
 
         [[nodiscard]] bool IsCompiledInternal() const noexcept;
         [[nodiscard]] const void* GetRawValueInternal() const noexcept;

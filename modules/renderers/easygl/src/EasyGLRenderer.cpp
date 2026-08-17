@@ -30,7 +30,11 @@ namespace CNA::Internal::Renderers::EasyGL
 #include "CNA/Platform/PlatformException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "System/NotSupportedException.hpp"
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -2885,6 +2889,18 @@ if (ProfileUsesGlslEs100())
     {
         if (pending_vertices_.empty()) return;
 
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        // plan_fx.md FX-080: a compiled XNA Effect gets its own route. Before this branch existed
+        // the code below silently kept the stock sprite program for one -- GetEffectRendererPtr()
+        // returns null for a compiled effect, so `prog` stayed `&program_` -- and rendered the
+        // batch with a shader the game never asked for, reporting nothing.
+        if (customEffect_ != nullptr && customEffect_->GetCompiledRuntimePtr() != nullptr)
+        {
+            FlushBatchWithCompiledEffect();
+            return;
+        }
+#endif
+
         // Determine which GL program to use: built-in or custom Effect.
         // Task 1077 fix: bind the SAME compiled program the Effect itself owns
         // (Effect::GetEffectRendererPtr(), overridden by ShaderEffect) instead of recompiling a
@@ -2996,6 +3012,97 @@ if (ProfileUsesGlslEs100())
         pending_indices_.clear();
         current_texture_ = nullptr;
     }
+
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+    void EasyGLSpriteBatchRenderer::FlushBatchWithCompiledEffect()
+    {
+        // plan_fx.md FX-080. Sprite vertices reach a custom effect in the target's own pixel
+        // space, exactly as in FNA: `SpriteBatch` sets `MatrixTransform` on the STOCK sprite
+        // effect only (`PrepRenderState`), never on a custom one, so a ported XNA sprite effect
+        // carries its own projection parameter and the game assigns it. Nothing is invented here.
+        ICompiledEffectRuntime* runtime = customEffect_->GetCompiledRuntimePtr();
+        if (graphicsRenderer_ == nullptr || runtime == nullptr || current_texture_ == nullptr)
+        {
+            pending_vertices_.clear();
+            pending_indices_.clear();
+            current_texture_ = nullptr;
+            return;
+        }
+
+        // The sprite vertex is the one this renderer builds above: two floats of position, two of
+        // texture coordinate and four of colour, tightly packed.
+        static const VertexDeclaration kSpriteDeclaration(
+            static_cast<int>(sizeof(Vertex)),
+            {
+                VertexElement(static_cast<int>(offsetof(Vertex, x)),
+                              VertexElementFormat::Vector2, VertexElementUsage::Position, 0),
+                VertexElement(static_cast<int>(offsetof(Vertex, u)),
+                              VertexElementFormat::Vector2,
+                              VertexElementUsage::TextureCoordinate, 0),
+                VertexElement(static_cast<int>(offsetof(Vertex, r)),
+                              VertexElementFormat::Vector4, VertexElementUsage::Color, 0),
+            });
+
+        const int vertexCount = static_cast<int>(pending_vertices_.size());
+        const int indexCount = static_cast<int>(pending_indices_.size());
+        auto vertexBuffer = graphicsRenderer_->CreateVertexBuffer(vertexCount);
+        vertexBuffer->SetVertexDeclaration(kSpriteDeclaration);
+        vertexBuffer->SetData(pending_vertices_.data(), vertexCount, sizeof(Vertex));
+        auto indexBuffer = graphicsRenderer_->CreateIndexBuffer16(indexCount);
+        indexBuffer->SetData16(pending_indices_.data(), indexCount);
+        auto* easyVertexBuffer =
+            static_cast<EasyGLVertexBufferRenderer*>(vertexBuffer.get());
+        auto* easyIndexBuffer = static_cast<EasyGLIndexBufferRenderer*>(indexBuffer.get());
+
+        // The viewport is still this renderer's own business: a batch drawn into a RenderTarget2D
+        // rasterizes at the target's size, not the window's, whatever shader runs.
+        int rtW = 0, rtH = 0;
+        if (graphicsRenderer_->GetCurrentRenderTarget2DSize(rtW, rtH) && rtW > 0 && rtH > 0)
+        {
+            device_.set_viewport(0, 0, rtW, rtH);
+        }
+        else
+        {
+            int physW = 0, physH = 0;
+            graphicsRenderer_->getPhysicalSize(physW, physH);
+            if (physW > 0 && physH > 0) device_.set_viewport(0, 0, physW, physH);
+        }
+        graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_,
+                                             pendingAddressV_, 1);
+
+        EasyGLRenderer::CompiledEffectStreamEXT stream;
+        stream.buffer = easyVertexBuffer;
+        stream.stride = sizeof(Vertex);
+
+        // FNA draws the batch once per pass of the effect's current technique, applying each pass
+        // and then overwriting Textures[0] with the drawn texture. Both are reproduced here.
+        EffectTechnique* technique = customEffect_->getCurrentTechniqueProperty();
+        const int passCount =
+            technique != nullptr ? technique->getPassesProperty().getCountProperty() : 0;
+        if (passCount == 0)
+        {
+            throw System::InvalidOperationException(
+                "CNA EasyGL: a compiled Effect used with SpriteBatch must have a current "
+                "technique with at least one pass.");
+        }
+        ::easygl::VertexArray& vao = graphicsRenderer_->EnsureCompiledEffectVaoEXT();
+        for (int pass = 0; pass < passCount; ++pass)
+        {
+            technique->getPassesProperty()[pass].Apply();
+            vao.bind();
+            graphicsRenderer_->BindCompiledEffectForDrawEXT(&stream, 1, *runtime,
+                                                            current_texture_);
+            easyIndexBuffer->ibo.bind(::easygl::BufferTarget::ElementArray);
+            device_.draw_elements(::easygl::PrimitiveType::Triangles, indexCount,
+                                  ::easygl::DataType::UnsignedShort, nullptr);
+            vao.unbind();
+        }
+
+        pending_vertices_.clear();
+        pending_indices_.clear();
+        current_texture_ = nullptr;
+    }
+#endif  // CNA_EASYGL_COMPILED_EFFECTS
 
     void EasyGLSpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {
@@ -4478,6 +4585,41 @@ else
                << " minUsesMipChain=" << (GlMinFilterUsesMipChain(gotMin) ? 1 : 0);
             SamplerTrace("apply-sampler", os.str());
         }
+}
+    }
+
+    void EasyGLRenderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
+    {
+        if (metagl::IsContextLost()) return;
+        if (slot < 0 || slot >= kMaxSamplerSlots) return;
+if (ProfileIsEs2ApiGeneration())
+{
+        // GLES 2.0 / WebGL 1 have neither sampler objects nor GL_TEXTURE_MIN_LOD, so neither of
+        // these two states is representable. Documented in docs/sampler-state-support.md rather
+        // than approximated: silently applying a nearby state would be worse than not applying it.
+        (void) maxMipLevel;
+        (void) lodBias;
+        return;
+}
+else
+{
+        ::easygl::Sampler& s = samplers_[slot];
+        if (!s.is_created()) s.create();
+        // XNA's MaxMipLevel is the most detailed level the sampler may use, which is a lower bound
+        // on the computed level of detail -- GL_TEXTURE_MIN_LOD, the same mapping FNA3D's SDL_GPU
+        // driver makes with min_lod.
+        s.set_parameter(::easygl::SamplerParameter::MinLod,
+                        static_cast<float>(std::max(maxMipLevel, 0)));
+        if (ProfileIsDesktopCore())
+        {
+            // Desktop-only: GL_TEXTURE_LOD_BIAS (0x8501) does not exist in OpenGL ES at all, which
+            // is why FNA3D's own GL driver guards the identical write with !renderer->useES3. It
+            // is spelled as its numeric token because the ES headers an ES-profile build compiles
+            // against do not declare the name, and this one translation unit serves both.
+            constexpr unsigned int kGlTextureLodBias = 0x8501u;
+            s.set_parameter(static_cast<::easygl::SamplerParameter>(kGlTextureLodBias), lodBias);
+        }
+        s.bind(static_cast<unsigned int>(slot));
 }
     }
 
@@ -7667,6 +7809,67 @@ else
             renderer.SetUniformMat4("View", viewCM);
             renderer.SetUniformMat4("Projection", projCM);
         }
+
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        /// plan_fx.md FX-082: the streams a compiled-effect draw reads its attributes from, in
+        /// public binding-slot order. The internal staged routes (`DrawUser*`, SpriteBatch,
+        /// `DrawColoredPrimitives`) bind no public `VertexBufferBinding` and leave
+        /// `vertexStreamCount` at 0; they contribute the one buffer the draw named, at its own
+        /// stride. A per-instance stream keeps its `InstanceFrequency` so the divisor can be set
+        /// after the program is ready.
+        std::vector<EasyGLRenderer::CompiledEffectStreamEXT> CollectCompiledEffectStreams(
+            const EasyGLVertexBufferRenderer& primary, const GpuDrawParams& params)
+        {
+            std::vector<EasyGLRenderer::CompiledEffectStreamEXT> streams;
+            streams.reserve(static_cast<std::size_t>(std::max(params.vertexStreamCount, 1)));
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const GpuVertexStreamBinding& stream =
+                    params.vertexStreams[static_cast<std::size_t>(i)];
+                const auto* buffer =
+                    static_cast<const EasyGLVertexBufferRenderer*>(stream.buffer);
+                if (buffer == nullptr) continue;
+                const std::size_t stride = stream.strideInBytes > 0
+                    ? static_cast<std::size_t>(stream.strideInBytes)
+                    : buffer->GetStride();
+                EasyGLRenderer::CompiledEffectStreamEXT entry;
+                entry.buffer = buffer;
+                entry.stride = stride;
+                entry.baseByteOffset =
+                    static_cast<std::size_t>(std::max(stream.vertexOffset, 0)) * stride;
+                entry.instanceFrequency = stream.instanceFrequency > 0
+                    ? static_cast<unsigned int>(stream.instanceFrequency) : 0u;
+                streams.push_back(entry);
+            }
+            if (streams.empty())
+            {
+                EasyGLRenderer::CompiledEffectStreamEXT entry;
+                entry.buffer = &primary;
+                entry.stride = primary.GetStride();
+                streams.push_back(entry);
+            }
+            return streams;
+        }
+
+        /// A compiled effect's vertex shader declares arbitrary semantics, so a stride alone
+        /// cannot describe its input. Every bound stream must therefore carry a real declaration.
+        void RequireCompiledEffectDeclarations(
+            const std::vector<EasyGLRenderer::CompiledEffectStreamEXT>& streams)
+        {
+            for (const auto& stream : streams)
+            {
+                if (stream.buffer != nullptr &&
+                    !stream.buffer->GetDeclarationElements().empty())
+                {
+                    continue;
+                }
+                throw System::NotSupportedException(
+                    "CNA EasyGL: a compiled-effect draw needs every bound vertex buffer's own "
+                    "VertexDeclaration; this renderer does not infer one from stride for this "
+                    "route.");
+            }
+        }
+#endif
     }
 
     void EasyGLRenderer::DrawPrimitivesEx(const IVertexBufferRenderer& vb_in,
@@ -7686,21 +7889,17 @@ else
         if (params.compiledEffectRuntime != nullptr)
         {
             const auto& compiledVb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
-            const auto& declaredElements = compiledVb.GetDeclarationElements();
-            if (declaredElements.empty())
-            {
-                throw System::NotSupportedException(
-                    "CNA EasyGL: a compiled-effect draw needs the vertex buffer's own "
-                    "VertexDeclaration; this renderer does not infer one from stride for this "
-                    "route.");
-            }
-            const std::size_t stride = CombinedVertexStrideOr(params, compiledVb.GetStride());
-            compiledVb.vao.bind();
-            compiledVb.vbo.bind(::easygl::BufferTarget::Array);
-            BindCompiledEffectForDrawEXT(declaredElements, stride, *params.compiledEffectRuntime);
+            const auto compiledStreams = CollectCompiledEffectStreams(compiledVb, params);
+            RequireCompiledEffectDeclarations(compiledStreams);
+            ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
+            compiledVao.bind();
+            BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
+                                         *params.compiledEffectRuntime);
             const int compiledVertexCount = VertexCountForPrimitives(primitive, primitiveCount);
+            // glDrawArrays' `first` advances every bound stream by that many of its own records,
+            // which is the same rule the stock multi-stream route relies on.
             device.draw_arrays(ToEasyGl(primitive), params.vertexStart, compiledVertexCount);
-            compiledVb.vao.unbind();
+            compiledVao.unbind();
             return;
         }
 #endif
@@ -7781,18 +7980,12 @@ else
         {
             const auto& compiledVb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
             const auto& compiledIb = static_cast<const EasyGLIndexBufferRenderer&>(ib_in);
-            const auto& declaredElements = compiledVb.GetDeclarationElements();
-            if (declaredElements.empty())
-            {
-                throw System::NotSupportedException(
-                    "CNA EasyGL: a compiled-effect draw needs the vertex buffer's own "
-                    "VertexDeclaration; this renderer does not infer one from stride for this "
-                    "route.");
-            }
-            const std::size_t stride = CombinedVertexStrideOr(params, compiledVb.GetStride());
-            compiledVb.vao.bind();
-            compiledVb.vbo.bind(::easygl::BufferTarget::Array);
-            BindCompiledEffectForDrawEXT(declaredElements, stride, *params.compiledEffectRuntime);
+            const auto compiledStreams = CollectCompiledEffectStreams(compiledVb, params);
+            RequireCompiledEffectDeclarations(compiledStreams);
+            ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
+            compiledVao.bind();
+            BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
+                                         *params.compiledEffectRuntime);
             compiledIb.ibo.bind(::easygl::BufferTarget::ElementArray);
             const int compiledIndexCount = VertexCountForPrimitives(primitive, primitiveCount);
             const auto compiledIdxType = compiledIb.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
@@ -7819,7 +8012,7 @@ else
                                                    params.baseVertex);
 #endif
             }
-            compiledVb.vao.unbind();
+            compiledVao.unbind();
             return;
         }
 #endif
@@ -7952,6 +8145,47 @@ if (ProfileIsEs2ApiGeneration())
 }
 else
 {
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        // plan_fx.md FX-082: an instanced draw recognizes a compiled effect exactly as the other
+        // two routes do. Before this branch existed the compiled runtime was ignored here and the
+        // draw silently fell through to SelectProgram() -- a stock shader rendering geometry the
+        // game had asked a compiled Effect to render. The per-instance streams keep their real
+        // InstanceFrequency: BindCompiledEffectForDrawEXT sets each matched attribute's divisor
+        // from the stream it was bound from.
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            const auto& compiledVb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
+            const auto& compiledIb = static_cast<const EasyGLIndexBufferRenderer&>(ib_in);
+            const auto compiledStreams = CollectCompiledEffectStreams(compiledVb, params);
+            RequireCompiledEffectDeclarations(compiledStreams);
+            ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
+            compiledVao.bind();
+            BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
+                                         *params.compiledEffectRuntime);
+            compiledIb.ibo.bind(::easygl::BufferTarget::ElementArray);
+            const int compiledIndexCount = VertexCountForPrimitives(primitive, primitiveCount);
+            const auto compiledIdxType = compiledIb.thirtyTwoBit
+                ? ::easygl::DataType::UnsignedInt : ::easygl::DataType::UnsignedShort;
+            const int compiledIndexSize = compiledIb.thirtyTwoBit ? 4 : 2;
+            const void* compiledIndexOffset = reinterpret_cast<const void*>(
+                static_cast<std::uintptr_t>(params.startIndex) *
+                static_cast<std::uintptr_t>(compiledIndexSize));
+            if (params.baseVertex == 0)
+            {
+                device.draw_elements_instanced(ToEasyGl(primitive), compiledIndexCount,
+                                               compiledIdxType, compiledIndexOffset,
+                                               instanceCount);
+            }
+            else
+            {
+                ::metagl::glDrawElementsInstancedBaseVertex(
+                    ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
+                    compiledIndexOffset, instanceCount, params.baseVertex);
+            }
+            compiledVao.unbind();
+            return;
+        }
+#endif
         // REMED-GFX-DECL-GUARD (REMED-GFX-218): before the VAO is touched, before a program is
         // selected and before any draw is issued. A custom ShaderEffect owns its own
         // element-index attribute convention and is deliberately untouched.

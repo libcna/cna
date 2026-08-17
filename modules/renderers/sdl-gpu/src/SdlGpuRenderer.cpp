@@ -6,6 +6,8 @@
 #include "CNA/LogCategory.hpp"
 #include "shaders/spirv_shaders.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -226,13 +228,22 @@ namespace CNA::Internal::Renderers::SdlGpu
         // with `filterIndex = filter == 0 ? 0 : 1`, an 18-entry array that collapsed all eight
         // non-Linear ordinals onto ONE entry -- so even a corrected descriptor would have been
         // handed the first non-Linear sampler ever built for that address-mode pair.
-        [[nodiscard]] std::uint32_t SamplerCacheKey(int filter, int addressU, int addressV,
-                                                    int maxAnisotropy)
+        [[nodiscard]] std::uint64_t SamplerCacheKey(int filter, int addressU, int addressV,
+                                                    int maxAnisotropy, int maxMipLevel,
+                                                    float lodBias)
         {
-            return (static_cast<std::uint32_t>(filter) & 0xFFu)
-                 | ((static_cast<std::uint32_t>(addressU) & 0xFFu) << 8)
-                 | ((static_cast<std::uint32_t>(addressV) & 0xFFu) << 16)
-                 | ((static_cast<std::uint32_t>(maxAnisotropy) & 0xFFu) << 24);
+            // plan_fx.md FX-083: the LOD clamp and bias are part of the sampler's identity now, so
+            // two slots asking for different ones cannot be served one cached object. The bias is
+            // keyed by its exact bit pattern, since it is a float the caller chose.
+            std::uint32_t lodBiasBits = 0;
+            static_assert(sizeof(lodBiasBits) == sizeof(lodBias));
+            std::memcpy(&lodBiasBits, &lodBias, sizeof(lodBiasBits));
+            return (static_cast<std::uint64_t>(filter) & 0xFFu)
+                 | ((static_cast<std::uint64_t>(addressU) & 0xFFu) << 8)
+                 | ((static_cast<std::uint64_t>(addressV) & 0xFFu) << 16)
+                 | ((static_cast<std::uint64_t>(maxAnisotropy) & 0xFFu) << 24)
+                 | ((static_cast<std::uint64_t>(maxMipLevel) & 0xFFu) << 32)
+                 | (static_cast<std::uint64_t>(lodBiasBits) << 40);
         }
 
         [[nodiscard]] SDL_GPUSamplerAddressMode ToAddressMode(int mode)
@@ -279,6 +290,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             createInfo.address_mode_v = ToAddressMode(addressV);
             createInfo.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
             createInfo.max_lod = 32.0f;
+            createInfo.min_lod = 0.0f;
+            createInfo.mip_lod_bias = 0.0f;
             // Only TextureFilter::Anisotropic names anisotropic filtering; every other ordinal
             // must leave it off, or a Point ordinal would silently become a filtered fetch. The
             // Vulkan driver under SDL_GPU rejects a maxAnisotropy above its own device limit, so
@@ -2666,6 +2679,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         samplerSlots_[slot].maxAnisotropy = maxAnisotropy;
     }
 
+    void SdlGpuRenderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
+    {
+        if (slot < 0 || slot >= static_cast<int>(samplerSlots_.size()))
+            return;
+        samplerSlots_[slot].maxMipLevel = maxMipLevel;
+        samplerSlots_[slot].lodBias = lodBias;
+    }
+
     void SdlGpuRenderer::ApplyScissorForRef(SDL_GPURenderPass* pass, const QueuedDrawRef& ref,
                                                    int targetWidth, int targetHeight) const
     {
@@ -3016,15 +3037,24 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     SDL_GPUSampler* SdlGpuRenderer::GetOrCreateSampler(int textureFilter, int addressU,
                                                               int addressV, int maxAnisotropy,
-                                                              const char* family)
+                                                              const char* family,
+                                                              int maxMipLevel, float lodBias)
     {
         const int clampedAniso = std::clamp(maxAnisotropy, 1, 16);
-        const std::uint32_t key = SamplerCacheKey(textureFilter, addressU, addressV, clampedAniso);
+        // plan_fx.md FX-083: XNA's MaxMipLevel is the most detailed level the sampler may use,
+        // i.e. a lower bound on the computed level of detail -- SDL_GPU's min_lod. That is the
+        // same translation FNA3D's own SDL_GPU driver makes.
+        const float minLod = static_cast<float>(std::max(maxMipLevel, 0));
+        const std::uint64_t key = SamplerCacheKey(textureFilter, addressU, addressV, clampedAniso,
+                                                  maxMipLevel, lodBias);
         const auto it = samplerCache_.find(key);
         const bool hit = it != samplerCache_.end();
 
         SDL_GPUSamplerCreateInfo createInfo{};
         FillSdlGpuSamplerCreateInfo(createInfo, textureFilter, addressU, addressV, clampedAniso);
+        createInfo.min_lod = minLod;
+        createInfo.max_lod = std::max(createInfo.max_lod, minLod);
+        createInfo.mip_lod_bias = lodBias;
 
         SDL_GPUSampler* sampler = nullptr;
         if (hit)
@@ -3047,7 +3077,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             std::fprintf(stderr,
                          "[cna-sdlgpu-sampler] family=%s filter=%d(%s) mag=%s min=%s mip=%s "
-                         "aniso=%s/%.1f addrU=%s addrV=%s key=0x%08x sampler=%p %s\n",
+                         "aniso=%s/%.1f addrU=%s addrV=%s minLod=%.1f bias=%.2f key=0x%012llx "
+                         "sampler=%p %s\n",
                          family, textureFilter, TextureFilterName(textureFilter),
                          SdlFilterName(createInfo.mag_filter),
                          SdlFilterName(createInfo.min_filter),
@@ -3056,7 +3087,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                          static_cast<double>(createInfo.max_anisotropy),
                          SdlAddressModeName(createInfo.address_mode_u),
                          SdlAddressModeName(createInfo.address_mode_v),
-                         static_cast<unsigned>(key), static_cast<void*>(sampler),
+                         static_cast<double>(createInfo.min_lod),
+                         static_cast<double>(createInfo.mip_lod_bias),
+                         static_cast<unsigned long long>(key), static_cast<void*>(sampler),
                          hit ? "HIT" : "CREATE");
         }
         return sampler;
@@ -5086,7 +5119,9 @@ namespace CNA::Internal::Renderers::SdlGpu
 
             Texture* boundTexture = nullptr;
             Microsoft::Xna::Framework::Graphics::SamplerState samplerState;
-            effect.GetBoundSamplerEXT(slot, /*vertexStage=*/false, boundTexture, samplerState);
+            bool samplerAssigned = false;
+            effect.GetBoundSamplerEXT(slot, /*vertexStage=*/false, boundTexture, samplerState,
+                                      &samplerAssigned);
             if (boundTexture == nullptr)
             {
                 const char* name = reflectedSampler->name != nullptr ? reflectedSampler->name
@@ -5106,10 +5141,30 @@ namespace CNA::Internal::Renderers::SdlGpu
 
             samplerBinding.texture = ResolveSampledTextureEXT(&texture2D->GetRenderer(),
                                                               "CompiledEffect.Sampler");
-            samplerBinding.filter = static_cast<int>(samplerState.getFilterProperty());
-            samplerBinding.addressU = static_cast<int>(samplerState.getAddressUProperty());
-            samplerBinding.addressV = static_cast<int>(samplerState.getAddressVProperty());
-            samplerBinding.maxAnisotropy = samplerState.getMaxAnisotropyProperty();
+            if (samplerAssigned)
+            {
+                // plan_fx.md FX-083: the pass's own sampler_state block, LOD clamp and bias
+                // included -- SDL_GPU expresses both exactly.
+                samplerBinding.filter = static_cast<int>(samplerState.getFilterProperty());
+                samplerBinding.addressU = static_cast<int>(samplerState.getAddressUProperty());
+                samplerBinding.addressV = static_cast<int>(samplerState.getAddressVProperty());
+                samplerBinding.maxAnisotropy = samplerState.getMaxAnisotropyProperty();
+                samplerBinding.maxMipLevel = samplerState.getMaxMipLevelProperty();
+                samplerBinding.lodBias = samplerState.getMipMapLevelOfDetailBiasProperty();
+            }
+            else if (slot < samplerSlots_.size())
+            {
+                // No pass has assigned this slot, so what the game selected on the device stands --
+                // GraphicsDevice.SamplerStates[slot], recorded here by ApplySamplerState /
+                // ApplySamplerMipState. Filling in defaults instead would silently override it.
+                const SamplerSlotState& deviceSlot = samplerSlots_[slot];
+                samplerBinding.filter = deviceSlot.filter;
+                samplerBinding.addressU = deviceSlot.addressU;
+                samplerBinding.addressV = deviceSlot.addressV;
+                samplerBinding.maxAnisotropy = deviceSlot.maxAnisotropy;
+                samplerBinding.maxMipLevel = deviceSlot.maxMipLevel;
+                samplerBinding.lodBias = deviceSlot.lodBias;
+            }
         }
 
         binding.vertexDummySamplerCount = MOJOSHADER_sdlGetSamplerSlots(vertexShaderData);
@@ -5134,6 +5189,13 @@ namespace CNA::Internal::Renderers::SdlGpu
             throw std::runtime_error(
                 "CNA SDL_GPU: the applied compiled effect was not created by this renderer.");
         }
+
+        // plan_fx.md FX-082: this renderer binds exactly one vertex stream, and reports
+        // MultiStreamVertexInput false so GraphicsDevice refuses a wider binding set before it
+        // ever reaches here. Draw*PrimitivesEx is still a public interface method a harness can
+        // call with a hand-built GpuDrawParams, and a truncated binding list looks exactly like a
+        // correct draw of the wrong data -- so it is refused by name rather than silently reduced.
+        RejectUnsupportedStreamCombination(params, "CNA SDL_GPU compiled-effect drawing");
 
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         const auto& declaration = sdlGpuVb.Declaration();
@@ -5232,7 +5294,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                 gpuSamplerBinding.texture = samplerBinding.texture.texture;
                 gpuSamplerBinding.sampler = GetOrCreateSampler(
                     samplerBinding.filter, samplerBinding.addressU, samplerBinding.addressV,
-                    samplerBinding.maxAnisotropy, "CompiledEffect");
+                    samplerBinding.maxAnisotropy, "CompiledEffect",
+                    samplerBinding.maxMipLevel, samplerBinding.lodBias);
                 samplerBindings.push_back(gpuSamplerBinding);
             }
             SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings.data(),
@@ -7810,6 +7873,36 @@ namespace CNA::Internal::Renderers::SdlGpu
         // null for a ShaderEffect and GetEffectRendererPtr() returns null for a compiled effect.
         ICompiledEffectRuntime* compiledEffectRuntime =
             customEffect_ ? customEffect_->GetCompiledRuntimePtr() : nullptr;
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        if (compiledEffectRuntime != nullptr)
+        {
+            // plan_fx.md FX-080: SpriteBatch applies the effect's passes itself, exactly as FNA's
+            // SpriteBatch.DrawPrimitives does -- once per pass of the current technique, drawing
+            // the sprite again for each. Before this the route silently relied on the caller
+            // having applied a pass already, so a game using only the public
+            // SpriteBatch.Begin(..., effect) API queued a sprite whose binding was captured from
+            // whatever pass happened to be applied last, or from none at all.
+            Microsoft::Xna::Framework::Graphics::EffectTechnique* technique =
+                customEffect_->getCurrentTechniqueProperty();
+            const int passCount =
+                technique != nullptr ? technique->getPassesProperty().getCountProperty() : 0;
+            if (passCount == 0)
+            {
+                throw std::logic_error(
+                    "CNA SDL_GPU: a compiled Effect used with SpriteBatch must have a current "
+                    "technique with at least one pass.");
+            }
+            for (int pass = 0; pass < passCount; ++pass)
+            {
+                technique->getPassesProperty()[pass].Apply();
+                owner_->QueueSprite(texture, nativeTexture, destinationRectangle, sourceRectangle,
+                                    color, rotation, origin, effects, layerDepth, transform_,
+                                    textureFilter_, addressU_, addressV_, customEffectRenderer,
+                                    compiledEffectRuntime);
+            }
+            return;
+        }
+#endif
         owner_->QueueSprite(texture, nativeTexture, destinationRectangle, sourceRectangle, color, rotation,
                             origin, effects, layerDepth, transform_, textureFilter_, addressU_, addressV_,
                             customEffectRenderer, compiledEffectRuntime);

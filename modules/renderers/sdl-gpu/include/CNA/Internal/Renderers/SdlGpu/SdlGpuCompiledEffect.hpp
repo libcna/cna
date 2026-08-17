@@ -171,9 +171,10 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @param sampler Receives the bound sampler state; only meaningful when @p texture is
          *        non-null.
          */
-        CNAEXT void GetBoundSamplerEXT(std::uint32_t slot, bool vertexStage,
-                                       Texture*& texture,
-                                       Microsoft::Xna::Framework::Graphics::SamplerState& sampler) const;
+        CNAEXT void GetBoundSamplerEXT(
+            std::uint32_t slot, bool vertexStage, Texture*& texture,
+            Microsoft::Xna::Framework::Graphics::SamplerState& sampler,
+            bool* samplerAssigned = nullptr) const;
 
         /**
          * @brief CNAEXT. Links the currently applied pass's shader pair and returns the native
@@ -226,6 +227,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::array<Microsoft::Xna::Framework::Graphics::SamplerState,
                    Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
             boundVertexSamplers_{};
+        // plan_fx.md FX-083: which of those slots an applied pass has actually assigned. A
+        // default-constructed SamplerState is a legitimate value, so "assigned" cannot be inferred
+        // from the value -- and an unassigned slot must keep whatever the game selected on the
+        // device instead of being overwritten with defaults.
+        std::array<bool, Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
+            samplerAssigned_{};
+        std::array<bool, Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
+            vertexSamplerAssigned_{};
     };
 }
 

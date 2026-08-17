@@ -1277,7 +1277,16 @@ namespace Microsoft::Xna::Framework::Graphics
             packed[i] = CNA::Internal::Graphics::Pack(vertices[i]);
 
         // Upload to a temporary vertex buffer and draw.
+        //
+        // plan_fx.md FX-081: the staged buffer carries the vertex type's own canonical
+        // VertexDeclaration, exactly as FNA's DrawUserPrimitives<T> uses VertexDeclarationCache<T>.
+        // Without it a renderer has only the byte stride to work from, which is enough for the
+        // stock shader families but not for a compiled Effect, whose vertex shader declares
+        // arbitrary semantics and must be matched against a real declaration. It is set here, in
+        // the renderer-neutral layer, so every backend sees the same layout instead of each
+        // reinventing a stride-to-layout guess.
         auto tmpVb = renderer_->CreateVertexBuffer(totalVerts);
+        tmpVb->SetVertexDeclaration(VertexPositionColor::getVertexDeclarationStatic());
         tmpVb->SetData(packed.data(), totalVerts, sizeof(GpuVertex));
 
         Matrix world, view, proj;
@@ -1337,6 +1346,7 @@ namespace Microsoft::Xna::Framework::Graphics
             indexCopy[i] = indices[i];
 
         auto tmpVb = renderer_->CreateVertexBuffer(numVertices);
+        tmpVb->SetVertexDeclaration(VertexPositionColor::getVertexDeclarationStatic());
         tmpVb->SetData(packed.data(), numVertices, sizeof(GpuVertex));
 
         auto tmpIb = renderer_->CreateIndexBuffer16(indexCount);
@@ -1497,6 +1507,7 @@ namespace Microsoft::Xna::Framework::Graphics
             packed[i] = CNA::Internal::Graphics::Pack(data[offset + i]);
         }
         auto vb = renderer_->CreateVertexBuffer(n);
+        vb->SetVertexDeclaration(VertexPositionColor::getVertexDeclarationStatic());
         vb->SetData(packed, n, sizeof(GpuVPC));
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
@@ -1521,6 +1532,7 @@ namespace Microsoft::Xna::Framework::Graphics
             packed[i] = CNA::Internal::Graphics::Pack(data[offset + i]);
         }
         auto vb = renderer_->CreateVertexBuffer(n);
+        vb->SetVertexDeclaration(VertexPositionTexture::getVertexDeclarationStatic());
         vb->SetData(packed, n, sizeof(GpuVPT));
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
@@ -1545,6 +1557,7 @@ namespace Microsoft::Xna::Framework::Graphics
             packed[i] = CNA::Internal::Graphics::Pack(data[offset + i]);
         }
         auto vb = renderer_->CreateVertexBuffer(n);
+        vb->SetVertexDeclaration(VertexPositionColorTexture::getVertexDeclarationStatic());
         vb->SetData(packed, n, sizeof(GpuVPCT));
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
@@ -1569,6 +1582,7 @@ namespace Microsoft::Xna::Framework::Graphics
             packed[i] = CNA::Internal::Graphics::Pack(data[offset + i]);
         }
         auto vb = renderer_->CreateVertexBuffer(n);
+        vb->SetVertexDeclaration(VertexPositionNormalTexture::getVertexDeclarationStatic());
         vb->SetData(packed, n, sizeof(GpuVPNT));
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
@@ -1717,6 +1731,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
         auto vb = renderer_->CreateVertexBuffer(numVerts);
+        vb->SetVertexDeclaration(VertexPositionColor::getVertexDeclarationStatic());
         vb->SetData(packed, numVerts, sizeof(GpuVPC));
         auto ib = renderer_->CreateIndexBuffer16(ic);
         ib->SetData16(idx, ic);
@@ -1745,6 +1760,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
         auto vb = renderer_->CreateVertexBuffer(numVerts);
+        vb->SetVertexDeclaration(VertexPositionTexture::getVertexDeclarationStatic());
         vb->SetData(packed, numVerts, sizeof(GpuVPT));
         auto ib = renderer_->CreateIndexBuffer16(ic);
         ib->SetData16(idx, ic);
@@ -1773,6 +1789,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
         auto vb = renderer_->CreateVertexBuffer(numVerts);
+        vb->SetVertexDeclaration(VertexPositionColorTexture::getVertexDeclarationStatic());
         vb->SetData(packed, numVerts, sizeof(GpuVPCT));
         auto ib = renderer_->CreateIndexBuffer16(ic);
         ib->SetData16(idx, ic);
@@ -1801,6 +1818,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
         auto vb = renderer_->CreateVertexBuffer(numVerts);
+        vb->SetVertexDeclaration(VertexPositionNormalTexture::getVertexDeclarationStatic());
         vb->SetData(packed, numVerts, sizeof(GpuVPNT));
         auto ib = renderer_->CreateIndexBuffer16(ic);
         ib->SetData16(idx, ic);
@@ -1831,6 +1849,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
         auto vb = renderer_->CreateVertexBuffer(numVerts);
+        vb->SetVertexDeclaration(VertexPositionColor::getVertexDeclarationStatic());
         vb->SetData(packed, numVerts, sizeof(GpuVPC));
         auto ib = renderer_->CreateIndexBuffer32(ic);
         ib->SetData32(idx, ic);
@@ -1859,6 +1878,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
         auto vb = renderer_->CreateVertexBuffer(numVerts);
+        vb->SetVertexDeclaration(VertexPositionTexture::getVertexDeclarationStatic());
         vb->SetData(packed, numVerts, sizeof(GpuVPT));
         auto ib = renderer_->CreateIndexBuffer32(ic);
         ib->SetData32(idx, ic);
@@ -1887,6 +1907,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
         auto vb = renderer_->CreateVertexBuffer(numVerts);
+        vb->SetVertexDeclaration(VertexPositionColorTexture::getVertexDeclarationStatic());
         vb->SetData(packed, numVerts, sizeof(GpuVPCT));
         auto ib = renderer_->CreateIndexBuffer32(ic);
         ib->SetData32(idx, ic);
@@ -1915,6 +1936,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
         auto vb = renderer_->CreateVertexBuffer(numVerts);
+        vb->SetVertexDeclaration(VertexPositionNormalTexture::getVertexDeclarationStatic());
         vb->SetData(packed, numVerts, sizeof(GpuVPNT));
         auto ib = renderer_->CreateIndexBuffer32(ic);
         ib->SetData32(idx, ic);

@@ -1127,6 +1127,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             int addressU = 0;
             int addressV = 0;
             int maxAnisotropy = 4;
+            /// plan_fx.md FX-083: XNA's SamplerState.MaxMipLevel and MipMapLevelOfDetailBias,
+            /// recorded by ApplySamplerMipState. Consumed by the compiled-effect draw route, which
+            /// is where an Effect's own `sampler_state` block lands.
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
         };
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
@@ -1138,6 +1143,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             int addressU = 0;
             int addressV = 0;
             int maxAnisotropy = 4;
+            /// plan_fx.md FX-083: the effect's own MaxMipLevel/MipMapLevelOfDetailBias, which
+            /// SDL_GPU expresses exactly (min_lod and mip_lod_bias). Before this they were
+            /// published on GraphicsDevice.SamplerStates and then dropped on the way to the GPU.
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
         };
 
         /**
@@ -1606,11 +1616,18 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         /**
          * @brief True: this renderer executes compiled XNA Effect Framework bytecode
-         * (plan_fx.md FX-071). Ordinary 3D draws and SpriteBatch both have a working compiled-
-         * effect route, verified by a real (not simulated) golden-pixel test and the FX-060 shared
-         * conformance suite. Still refused explicitly rather than silently mishandled: a compiled
-         * effect's vertex shader sampling a texture, a 3D/cube (not 2D) sampler binding, and more
-         * than one vertex stream.
+         * (plan_fx.md FX-071, FX-080/FX-083).
+         *
+         * Ordinary and indexed 3D draws and SpriteBatch all have a working compiled-effect route,
+         * verified by a real (not simulated) golden-pixel test and by the FX-060 shared
+         * conformance suite's own read-back pixel checks. The pass's declared `sampler_state`
+         * block reaches the GPU, LOD clamp and bias included.
+         *
+         * Still refused explicitly rather than silently mishandled: a compiled effect's vertex
+         * shader sampling a texture, and a 3D/cube (not 2D) sampler binding. Multi-stream and
+         * instanced draws are refused one level up -- this renderer reports neither
+         * `MultiStreamVertexInput` nor implements `DrawInstancedPrimitivesEx`, so `GraphicsDevice`
+         * rejects them before submission, for compiled and stock effects alike.
          * @return true.
          */
         [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
@@ -1771,6 +1788,21 @@ namespace CNA::Internal::Renderers::SdlGpu
          * enables it), and it participates in the sampler cache key.
          */
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
+        /**
+         * @brief Records XNA's `SamplerState.MaxMipLevel`/`MipMapLevelOfDetailBias` for a slot.
+         *
+         * plan_fx.md FX-083. SDL_GPU expresses both exactly -- `min_lod` and `mip_lod_bias` on
+         * `SDL_GPUSamplerCreateInfo`, the same mapping FNA3D's own SDL_GPU driver makes -- and
+         * both now participate in the sampler cache key so two slots asking for different LOD
+         * clamps do not share one sampler object. The compiled-effect draw route consumes them.
+         * The stock 3D draw families still capture only filter/addressing/anisotropy into their
+         * own command structs; that pre-existing gap is recorded in docs/sampler-state-support.md.
+         *
+         * @param slot Sampler slot.
+         * @param maxMipLevel Most detailed mip level the sampler may use.
+         * @param lodBias Level-of-detail bias.
+         */
+        void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
 
         std::unique_ptr<IVertexBufferRenderer> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int index_capacity) override;
@@ -1979,11 +2011,16 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @param maxAnisotropy Public `SamplerState.MaxAnisotropy`, clamped to 1..16; applied only
          *        for `TextureFilter::Anisotropic`, but always part of the cache key.
          * @param family Public draw family, for `CNA_SDLGPU_SAMPLER_TRACE` only.
+         * @param maxMipLevel Public `SamplerState.MaxMipLevel`; becomes `min_lod` (plan_fx.md
+         *        FX-074), the same mapping FNA3D's own SDL_GPU driver makes.
+         * @param lodBias Public `SamplerState.MipMapLevelOfDetailBias`; becomes `mip_lod_bias`.
          * @return The cached or newly created native sampler; never null.
          */
         [[nodiscard]] SDL_GPUSampler* GetOrCreateSampler(int textureFilter, int addressU,
                                                          int addressV, int maxAnisotropy,
-                                                         const char* family);
+                                                         const char* family,
+                                                         int maxMipLevel = 0,
+                                                         float lodBias = 0.0f);
         // Uploads all queued sprite vertex data (copy pass) -- must run BEFORE
         // BeginGPURenderPass; SDL_gpu forbids a copy pass nested inside a render pass.
         void UploadSpriteVertexData(SDL_GPUCommandBuffer* cmd);
@@ -2410,7 +2447,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> spritePipelines_;
         /// REMED-GFX-170: keyed on the complete sampler description (filter | addressU | addressV |
         /// maxAnisotropy), so two states that differ in ANY component get their own native sampler.
-        std::unordered_map<std::uint32_t, SDL_GPUSampler*> samplerCache_;
+        std::unordered_map<std::uint64_t, SDL_GPUSampler*> samplerCache_;
         SDL_GPUBuffer* spriteVertexBuffer_ = nullptr;
         Uint32 spriteVertexCapacityBytes_ = 0;
         std::vector<SpriteCommand> spriteCommands_;

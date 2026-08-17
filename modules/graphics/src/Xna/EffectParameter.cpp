@@ -5,7 +5,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
-#include "System/NotImplementedException.hpp"
+#include "System/InvalidCastException.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -214,7 +214,25 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     std::string EffectParameter::GetValueString() const
     {
-        return compiledStorage_ ? compiledStorage_->stringValue : stringData_;
+        // XNA's own D3DX-backed getter rejects a parameter whose reflected type is not String
+        // (InvalidCastException) rather than returning an empty string. That check is only
+        // meaningful where the type came from real reflection, so it applies to a compiled
+        // effect's parameters; a CNA-constructed stock/CNAEXT parameter keeps the lenient
+        // behaviour it has always had.
+        if (compiledStorage_)
+        {
+            RequireStringParameter("GetValueString");
+            return compiledStorage_->stringValue;
+        }
+        return stringData_;
+    }
+
+    void EffectParameter::RequireStringParameter(const char* operation) const
+    {
+        if (paramType_ == EffectParameterType::String) return;
+        throw System::InvalidCastException(
+            std::string("EffectParameter::") + operation + " requires a String parameter; '" +
+            name_ + "' is not one.");
     }
 
     Matrix EffectParameter::GetValueMatrix() const
@@ -522,9 +540,17 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (compiledStorage_)
         {
-            throw System::NotImplementedException(
-                "Compiled Effect string parameters are reflected read-only; changing them "
-                "requires rebuilding MojoShader's effect object table.");
+            // XNA 4.0 semantics (Microsoft.Xna.Framework.Graphics.EffectParameter.SetValue(string)):
+            // reject a non-String parameter with InvalidCastException, otherwise store the value
+            // so GetValueString() reads it back. A compiled effect's string objects are pure CPU
+            // reflection data -- no shader stage consumes one -- so CNA owns them per instance
+            // instead of mutating MojoShader's shared object table. FNA leaves this unimplemented
+            // (`throw new NotImplementedException("effect->objects[?]")`); CNA follows XNA here,
+            // which is the specification FNA is itself approximating.
+            RequireStringParameter("SetValue");
+            compiledStorage_->stringValue = v;
+            compiledStorage_->dirty = true;
+            return;
         }
         stringData_ = v;
     }

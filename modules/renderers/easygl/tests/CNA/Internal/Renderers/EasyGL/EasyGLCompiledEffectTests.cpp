@@ -361,13 +361,66 @@ TEST(EasyGLCompiledEffectDrawTest, RendersTheAppliedPassesExpectedPixelsIntoARen
 TEST(EasyGLCompiledEffectTest, SharedBackendConformanceContract)
 {
     // plan_fx.md FX-060/FX-062: the same cross-renderer contract FNA3D's and SDL_GPU's own
-    // SharedBackendConformanceContract tests run -- format, reflection, techniques/passes, render
-    // state, state policy, samplers, texture binding, clone and lifetime -- now through the public
-    // Effect/GraphicsDevice API, since SupportsCompiledEffects() is true.
+    // SharedBackendConformanceContract tests run -- format, reflection, parameter API,
+    // techniques/passes, render state, state policy, samplers, texture binding, clone and
+    // lifetime -- through the public Effect/GraphicsDevice API, since SupportsCompiledEffects()
+    // is true.
     GraphicsDevice device;
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectContract(device);
+}
+
+// plan_fx.md FX-084/FX-077: the shared draw matrix. Each of these renders the compiled effect's
+// own Tint parameter into a render target and reads it back, so a draw that silently used a stock
+// shader -- or bound an attribute from the wrong stream -- fails instead of passing quietly.
+
+TEST(EasyGLCompiledEffectDrawTest, SharedDrawMatrixContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectDrawContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedMultiStreamDrawContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectMultiStreamDrawContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedInstancingDrawContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectInstancingDrawContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedSpriteBatchContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedOrientationContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectOrientationContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedEffectSwitchingContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSwitchingContract(device);
 }
 
 #endif  // CNA_EASYGL_COMPILED_EFFECTS

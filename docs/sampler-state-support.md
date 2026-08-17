@@ -109,6 +109,34 @@ clamping automatic LOD selection to level 0 regardless of filter) — all fixes 
 Vulkan `Texture2D` mips to work at all. The confounded Vulkan test variant was un-registered rather
 than left misleadingly failing for the wrong reason.
 
+## 6b. `MaxMipLevel` and `MipMapLevelOfDetailBias` (plan_fx.md FX-074, 2026-08-17)
+
+`IGraphicsRenderer::ApplySamplerMipState(slot, maxMipLevel, lodBias)` carries XNA's two LOD states
+across the renderer-neutral boundary. It has a default no-op body, so a renderer that has not
+adopted it accepts the state, publishes it on `GraphicsDevice.SamplerStates[slot]`, and does not
+change what the GPU samples. That was true of **every** renderer except FNA3D until FX-074.
+
+| Renderer | `MaxMipLevel` | `MipMapLevelOfDetailBias` |
+|---|---|---|
+| FNA3D | `GL_TEXTURE_BASE_LEVEL` / SDL_GPU `min_lod`, whichever driver is active | desktop GL only; FNA3D's own GL driver skips it under ES |
+| SDL_GPU | **implemented** — `SDL_GPUSamplerCreateInfo::min_lod`, and part of the sampler cache key | **implemented** — `mip_lod_bias` |
+| EasyGL, ES 3 profiles (`OPENGLES3`, `WEBGL2`) | **implemented** — sampler-object `GL_TEXTURE_MIN_LOD` | **not representable**: OpenGL ES has no `GL_TEXTURE_LOD_BIAS` at all |
+| EasyGL, `OPENGL33` | **implemented** — `GL_TEXTURE_MIN_LOD` | **implemented** — `GL_TEXTURE_LOD_BIAS` |
+| EasyGL, ES 2 profiles (`OPENGLES2`, `WEBGL1`) | **not representable**: no sampler objects and no `GL_TEXTURE_MIN_LOD` | not representable |
+| every other renderer | default no-op | default no-op |
+
+Why `GL_TEXTURE_MIN_LOD` rather than FNA3D's `GL_TEXTURE_BASE_LEVEL`: base level is texture-object
+state, and CNA's contract is per **slot**. Two slots sampling one texture with different
+`MaxMipLevel` values would fight over a single base level, whereas `min_lod` on a sampler object is
+exactly "never resolve a level more detailed than this" and is per slot. It is also the mapping
+FNA3D's own SDL_GPU driver makes (`samplerCreateInfo.min_lod = samplerState->maxMipLevel`).
+
+**Known remaining gap.** On SDL_GPU the two states reach the GPU through the **compiled-effect**
+draw route. The stock 3D draw families capture only filter/addressing/anisotropy into their own
+deferred command structs, so a game assigning `GraphicsDevice.SamplerStates[0].MaxMipLevel` and
+then drawing with `BasicEffect` still gets `min_lod = 0`. Closing that means adding the two fields
+to each family's command struct; it is a stock-draw sampler task, not a compiled-effect one.
+
 ## 7. Anisotropic filtering (Task 299, EasyGL row updated 2026-07-11 per Task 918)
 
 | Renderer | Status |

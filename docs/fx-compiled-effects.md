@@ -115,6 +115,16 @@ per-frame `Apply()` that changes nothing costs no upload.
 `SetValueTranspose` exists for the XNA row/column-major distinction, and array-element and
 structure-member views write into their parent's storage rather than into a copy.
 
+**String parameters** follow XNA 4.0 rather than FNA. `EffectParameter::SetValue(const
+std::string&)` and `GetValueString()` both reject a parameter whose reflected
+`EffectParameterType` is not `String` with `System::InvalidCastException`, which is exactly what
+`Microsoft.Xna.Framework.Graphics.EffectParameter` does; on a genuine string parameter the value is
+stored and reads back. FNA leaves the setter unimplemented (`throw new
+NotImplementedException("effect->objects[?]")`), so this is one of the few places CNA follows the
+specification FNA is itself approximating. Nothing is written into MojoShader's shared object
+table: an Effect Framework string is CPU-side reflection data that no shader stage reads, so CNA
+owns the current value per `Effect` instance and a clone gets its own copy.
+
 ## 6. Techniques and passes
 
 ```cpp
@@ -172,14 +182,33 @@ Rules worth knowing when porting:
 `Border` and `MirrorOnce` addressing have no XNA 4.0 `SamplerState` representation and are
 rejected by name.
 
-**Known limitation — `AddressW`.** A pass that assigns `ADDRESSW` is translated and published, so
-`device.getSamplerStatesProperty()[slot].getAddressWProperty()` reports it correctly. CNA's shared
-renderer interface, however, carries no W addressing at all: `IGraphicsRenderer::ApplySamplerState`
-takes only U and V, and the FNA3D renderer mirrors U into W. The next draw that re-applies sampler
-state from the device therefore overwrites the effect's W mode with its U mode. This is a
-pre-existing gap in the renderer-neutral sampler contract rather than a compiled-effect one -- it
-affects `SamplerState.AddressW` set directly by a game in exactly the same way -- and it only
-matters for volume textures. `plan_fx.md` FX-026 tracks closing it.
+### Sampler state that reaches the GPU
+
+Publishing a pass's sampler state on `GraphicsDevice.SamplerStates` is only half the job; the other
+half is that the state actually filters the sampled texture. What each backend can express:
+
+| State | FNA3D | SDL_GPU | EasyGL / OpenGL ES 3 | EasyGL / OpenGL 3.3 |
+|---|---|---|---|---|
+| `Filter` | yes | yes | yes | yes |
+| `AddressU` / `AddressV` | yes | yes | yes | yes |
+| `AddressW` | yes | no (clamped) | no | no |
+| `MaxAnisotropy` | yes | yes | yes | yes |
+| `MaxMipLevel` | yes (`GL_TEXTURE_BASE_LEVEL`) | yes (`min_lod`) | yes (`GL_TEXTURE_MIN_LOD`) | yes (`GL_TEXTURE_MIN_LOD`) |
+| `MipMapLevelOfDetailBias` | desktop GL only | yes (`mip_lod_bias`) | **no** | yes (`GL_TEXTURE_LOD_BIAS`) |
+
+`MipMapLevelOfDetailBias` has no OpenGL ES equivalent at all -- `GL_TEXTURE_LOD_BIAS` is a desktop
+GL parameter -- which is why FNA3D's own OpenGL driver skips it under ES too. CNA does not
+approximate it there; it is accepted, published on the device state object, and documented as
+unrepresentable rather than mapped onto a nearby state.
+
+`AddressW` is carried through the renderer-neutral contract by
+`IGraphicsRenderer::ApplySamplerAddressW` (`plan_fx.md` FX-026). FNA3D consumes it; a renderer that
+has not adopted it leaves W at its own default instead of inventing one from U, so an effect's
+assigned `ADDRESSW` is inert rather than wrong. It only matters for volume textures.
+
+A slot no pass has assigned keeps whatever the game selected. The compiled-effect draw routes read
+`GraphicsDevice.SamplerStates[slot]` for those, so `SpriteBatch.Begin`'s own sampler state, for
+example, is not overwritten with defaults by an effect that never mentions slot 0.
 
 ## 8. Cloning
 
@@ -204,18 +233,57 @@ shared.
 
 ## 10. Renderer support matrix
 
-| Renderer | `CompiledEffects` | Why |
-|---|---|---|
-| `FNA3D` | **true** | Owns the MojoShader Effect Framework runtime and passes the full conformance suite |
-| every other renderer identity | false | No compiled-effect runtime yet, or no programmable shader target at all |
+| Renderer | `CompiledEffects` | Build option | Why |
+|---|---|---|---|
+| `FNA3D` | **true** | always on | Owns the MojoShader Effect Framework runtime; passes the full shared contract including the draw matrix |
+| `SDL_GPU` | **true** | `CNA_SDL_GPU_COMPILED_EFFECTS` (off by default) | MojoShader's SDL_GPU adapter; passes the shared contract, multi-stream and instanced draws excepted -- it advertises neither capability, so `GraphicsDevice` refuses them before submission |
+| EasyGL family (`OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`) | **true** | `CNA_EASYGL_COMPILED_EFFECTS` (off by default) | MojoShader's OpenGL adapter; passes the full shared contract, including multi-stream and instanced draws |
+| every other renderer identity | false | — | No compiled-effect runtime yet, or no programmable shader target at all |
+
+The two opt-in options exist because MojoShader is a fetched dependency those renderers do not
+otherwise need. With the option off the renderer reports `CompiledEffects == false` and refuses a
+compiled `Effect` exactly like any unsupported backend -- the capability never claims more than the
+build actually contains.
 
 An unsupported renderer refuses construction with a `NotSupportedException` naming the capability.
 It never accepts the bytecode and quietly draws with a stock shader — a silent fallback would make
-a porting bug look like an art bug.
+a porting bug look like an art bug. That rule holds per draw route as well, not only per renderer:
+a route a backend has not implemented (a compiled effect's vertex shader sampling a texture, a
+3D/cube sampler binding, a stream set the renderer cannot bind) throws by name at draw time.
 
-`SDL_GPU`, the EasyGL/OpenGL family, DirectX 11, Vulkan and Metal are the planned next waves; each
-becomes true only after it passes the same shared suite. Fixed-function, 2D-only and CPU renderers
-stay intentionally unsupported. `plan_fx.md` Phase G tracks the rollout.
+DirectX 11, Vulkan, Metal and DirectX 9 are the planned next waves; each becomes true only after it
+passes the same shared suite. Fixed-function, 2D-only and CPU renderers stay intentionally
+unsupported. `plan_fx.md` Phase G tracks the rollout, and section 10.3 there classifies every
+renderer identity.
+
+### What "passes the shared contract" means
+
+`tests/support/CNA/TestSupport/CompiledEffectConformance.hpp` is the whole gate. A backend adds one
+test file that builds its device and calls the contract sections; nothing in them is
+renderer-specific. They are:
+
+| Section | What it proves |
+|---|---|
+| format | empty, MGFX, noise and every truncation boundary are rejected distinctly |
+| reflection | order, names, semantics, classes, dimensions, arrays, structures, annotations |
+| parameter API | every getter/setter round-trips: scalars, vectors, matrices and transposes, arrays, element and member views, string semantics |
+| techniques/passes | first technique selected, exact pass identity, technique switching |
+| render state | every supported Direct3D 9 render-state token lands on the device's own state objects |
+| state policy | an unassigned group survives; an unknown token is refused by name |
+| samplers | addressing, LOD, anisotropy, the full filter-collapse table, exact register targeting |
+| texture binding | a sampler's texture comes from its reflected texture parameter |
+| clone | values, textures and technique copied; independent mutation and disposal |
+| lifecycle | repeated create/apply/dispose, disposed-effect rejection, idempotent disposal |
+| **draw matrix** | buffered and user draws, indexed and not, non-zero `baseVertex`/`startIndex`/`vertexStart`, and canonical built-in vertex types with no explicit declaration -- each reading back the effect's own `Tint` from a render target |
+| **multi-stream** | a shader consuming attributes from two bound buffers renders differently when the second stream's contents change |
+| **instancing** | a per-instance stream advances per instance |
+| **SpriteBatch** | `SpriteBatch.Begin(..., effect)` either runs the compiled shader or refuses by name |
+| **orientation** | compiled geometry lands in the same half of a render target as a stock effect's |
+| **effect switching** | two effects and a clone drawing alternately each render their own parameter values |
+
+The draw sections all read a pixel back and compare it against the effect's own parameter. That is
+deliberate: a draw that silently fell back to a stock shader, or bound an attribute from the wrong
+stream, produces a different pixel instead of passing quietly.
 
 ## 11. Error guide
 

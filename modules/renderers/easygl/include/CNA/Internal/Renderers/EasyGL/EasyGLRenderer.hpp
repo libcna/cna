@@ -543,6 +543,13 @@ namespace CNA::Internal::Renderers::EasyGL
     private:
         void InitializeResources();
         void FlushBatch();
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        /// plan_fx.md FX-080: the compiled-Effect half of FlushBatch(). Separate because it shares
+        /// nothing with the stock/ShaderEffect route -- different program, different vertex array,
+        /// no projection uniform of this renderer's own -- and because keeping it out of the
+        /// common path leaves that path byte-for-byte unchanged when no compiled effect is set.
+        void FlushBatchWithCompiledEffect();
+#endif
     };
 
     /**
@@ -642,6 +649,10 @@ namespace CNA::Internal::Renderers::EasyGL
         // lazily on first CreateCompiledEffect() call (see GetMojoShaderContextEXT() in
         // EasyGLCompiledEffect.cpp).
         MOJOSHADER_glContext* mojoShaderContext_ = nullptr;
+        // plan_fx.md FX-082: see EnsureCompiledEffectVaoEXT(). One array object, shared by every
+        // compiled-effect draw (ordinary, indexed, instanced and SpriteBatch alike).
+        ::easygl::VertexArray compiledEffectVao_;
+        bool compiledEffectVaoCreated_ = false;
 #endif
         EasyGLSurfaceState surfaceState_;
         ::easygl::Device device;
@@ -895,12 +906,18 @@ namespace CNA::Internal::Renderers::EasyGL
 
         /**
          * @brief True: this renderer executes compiled XNA Effect Framework bytecode
-         * (plan_fx.md FX-062). Ordinary 3D draws have a working compiled-effect route, verified by
-         * a real golden-pixel test and the FX-060 shared conformance suite. Still refused
-         * explicitly rather than silently mishandled: a compiled effect's vertex shader sampling a
-         * texture, a 3D/cube (not 2D) sampler binding, sampler state translation (a bound texture's
-         * own GL creation-time filter/wrap parameters apply instead of the effect's declared
-         * sampler_state block), and instanced/multi-stream compiled-effect draws.
+         * (plan_fx.md FX-062, FX-080/FX-082/FX-083).
+         *
+         * Every draw route recognises a compiled effect: ordinary, indexed, instanced,
+         * multi-stream and SpriteBatch, each verified by the FX-060 shared conformance suite's own
+         * read-back pixel checks plus this renderer's golden-pixel test. The pass's declared
+         * `sampler_state` block reaches the GPU.
+         *
+         * Still refused explicitly rather than silently mishandled: a compiled effect's vertex
+         * shader sampling a texture, and a 3D/cube (not 2D) sampler binding. Accepted but inert:
+         * `AddressW` (this renderer has not adopted `ApplySamplerAddressW`) and
+         * `MipMapLevelOfDetailBias` on the OpenGL ES profiles, which have no such GL state --
+         * see docs/sampler-state-support.md.
          * @return true.
          */
         [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
@@ -926,26 +943,70 @@ namespace CNA::Internal::Renderers::EasyGL
         CNAEXT [[nodiscard]] CNA::Platform::GlProcAddressLoader GetProcAddressLoaderEXT() const;
 
         /**
+         * @brief CNAEXT. One vertex stream a compiled-effect draw may read attributes from.
+         *
+         * plan_fx.md FX-082: a compiled effect's vertex shader declares arbitrary semantics, and
+         * XNA lets any of them come from any bound `VertexBufferBinding`. Each stream therefore
+         * carries its own buffer, its own stride, its own `VertexOffset` in bytes and its own
+         * instance frequency -- never the combined-layout stride the stock programs dispatch on.
+         */
+        struct CompiledEffectStreamEXT
+        {
+            /** @brief Buffer holding this stream's records; its declaration names the semantics. */
+            const EasyGLVertexBufferRenderer* buffer = nullptr;
+            /** @brief Bytes between consecutive records inside this buffer. */
+            std::size_t stride = 0;
+            /** @brief `VertexOffset * stride`, the byte offset of this stream's first record. */
+            std::size_t baseByteOffset = 0;
+            /** @brief `InstanceFrequency`; 0 means the stream advances once per vertex. */
+            unsigned int instanceFrequency = 0;
+        };
+
+        /**
          * @brief CNAEXT. Binds a compiled effect's currently-applied-pass shader program, vertex
-         * attributes and pixel-stage sampler textures, and pushes its uniforms -- everything a
-         * compiled-effect draw needs immediately before issuing the actual GL draw call.
+         * attributes, pixel-stage sampler textures and sampler state, and pushes its uniforms --
+         * everything a compiled-effect draw needs immediately before issuing the GL draw call.
          *
-         * plan_fx.md FX-062: EasyGL draws immediately (no `Present()`-deferred queue), so this is
-         * called directly from `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`'s own compiled-effect
-         * branch rather than captured for later replay the way SDL_GPU's draw route has to.
+         * plan_fx.md FX-062/FX-073: EasyGL draws immediately (no `Present()`-deferred queue), so
+         * this is called directly from the `Draw*PrimitivesEx` compiled-effect branches rather
+         * than captured for later replay the way SDL_GPU's draw route has to. Every shader input
+         * is resolved against the whole bound stream set, so a shader consuming attributes from
+         * several buffers binds each from its own buffer at its own stride and offset.
          *
-         * @param declaredElements The caller's `VertexDeclaration` elements for this draw.
-         * @param stride The vertex buffer's byte stride (`glVertexAttribPointer`'s own stride).
+         * The caller must have bound `EnsureCompiledEffectVaoEXT()` first: MojoShader's OpenGL
+         * adapter tracks which attribute arrays are enabled in process-global state, so every
+         * compiled-effect draw has to go through one and the same vertex array object or that
+         * belief stops matching GL.
+         *
+         * @param streams Bound streams, in public binding-slot order.
+         * @param streamCount Number of entries in @p streams; must be at least one.
          * @param runtime The applied compiled effect.
+         * @param spriteBatchSlotZeroTexture When non-null, the texture that takes sampler slot 0
+         *        regardless of what the effect assigned -- SpriteBatch's own rule (FNA sets
+         *        `GraphicsDevice.Textures[0]` after the pass applies). Null for ordinary draws.
          * @throws std::runtime_error if the applied pass bound no shader pair, or @p runtime was
          *         not created by this renderer.
-         * @throws System::NotSupportedException if @p declaredElements does not supply an input
-         *         the vertex shader consumes, the vertex shader itself samples a texture, or a
-         *         reflected pixel-stage sampler has no texture bound.
+         * @throws System::NotSupportedException if no stream supplies an input the vertex shader
+         *         consumes, the vertex shader itself samples a texture, or a reflected pixel-stage
+         *         sampler has no 2D texture bound.
          */
         CNAEXT void BindCompiledEffectForDrawEXT(
-            const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
-            std::size_t stride, ICompiledEffectRuntime& runtime);
+            const CompiledEffectStreamEXT* streams, std::size_t streamCount,
+            ICompiledEffectRuntime& runtime,
+            const ITextureRenderer* spriteBatchSlotZeroTexture = nullptr);
+
+        /**
+         * @brief CNAEXT. The one vertex array object every compiled-effect draw binds.
+         *
+         * plan_fx.md FX-082: MojoShader's OpenGL adapter remembers which attribute arrays it has
+         * enabled in its own context state, not per VAO, so routing compiled draws through each
+         * vertex buffer's own VAO both desynchronised that belief and overwrote the stock
+         * attribute pointers `ApplyLayout()` had installed there. A dedicated array object keeps
+         * both problems away.
+         *
+         * @return The compiled-effect vertex array, created on first use.
+         */
+        CNAEXT [[nodiscard]] ::easygl::VertexArray& EnsureCompiledEffectVaoEXT();
 #endif
         // AnisotropicFiltering/MultiSampleAntiAliasing re-query the same live GL state the
         // startup capability dump (EnsureGL()) already prints, since they're cheap, idempotent GL
@@ -1017,6 +1078,25 @@ namespace CNA::Internal::Renderers::EasyGL
                                   float depthBias, float slopeScaleDepthBias) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV,
                                int maxAnisotropy) override;
+        /**
+         * @brief Applies XNA's `SamplerState.MaxMipLevel`/`MipMapLevelOfDetailBias` to a slot.
+         *
+         * plan_fx.md FX-083. `MaxMipLevel` becomes the sampler object's `GL_TEXTURE_MIN_LOD`, the
+         * sampler-object expression of "never sample a level more detailed than this" -- the same
+         * mapping FNA3D's SDL_GPU driver makes (`min_lod = maxMipLevel`). FNA3D's own OpenGL
+         * driver instead writes `GL_TEXTURE_BASE_LEVEL` on the texture object, which is not
+         * reachable from a per-slot sampler and would leak between two slots sampling one texture.
+         *
+         * `MipMapLevelOfDetailBias` has no OpenGL ES equivalent at all -- `GL_TEXTURE_LOD_BIAS` is
+         * desktop-GL only, which is exactly why FNA3D's GL driver skips it under `useES3` -- so it
+         * is applied on the desktop profiles and documented as unrepresentable on the ES ones
+         * rather than silently approximated.
+         *
+         * @param slot Sampler slot.
+         * @param maxMipLevel Most detailed mip level the sampler may use.
+         * @param lodBias Level-of-detail bias.
+         */
+        void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
         void SetScissorRect(int x, int y, int w, int h) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
