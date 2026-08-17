@@ -301,8 +301,17 @@ def main() -> int:
             )
             for output_text in (run_1["output"], run_2["output"]):
                 for line in output_text.splitlines():
-                    if line.startswith(renderer_output_prefix):
-                        renderers.add(line.removeprefix(renderer_output_prefix))
+                    # plan_gltf.md GLTF-467: matched ANYWHERE in the line, not only at its start.
+                    # CNA's own logger prefixes its output with a severity/category tag
+                    # ("[INFO][RENDER] CNA: graphics renderer: SOFTWARE"), and the SOFTWARE and
+                    # DIRECTX11 markers go through that logger while EasyGL's and Vulkan's are
+                    # printed raw -- so a startswith() test made those two policies structurally
+                    # unrunnable the moment the tag was introduced, which is why this harness had
+                    # not been executed for them since. The check itself is unchanged in strength:
+                    # exactly one identity must be observed across both processes.
+                    marker = line.find(renderer_output_prefix)
+                    if marker >= 0:
+                        renderers.add(line[marker + len(renderer_output_prefix):].strip())
                     dxvk = re.match(r"^info:\s+DXVK:\s+(v?[0-9]+\.[0-9.]+)\s*$", line)
                     if dxvk:
                         translation_layers.add(f"DXVK {dxvk.group(1)}")
