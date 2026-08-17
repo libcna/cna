@@ -626,9 +626,15 @@ namespace CNA::Internal::Renderers::Igl
 
         owner_->FlushPendingFrameEXT();
 
-        const igl::TextureRangeDesc range = igl::TextureRangeDesc::new2D(
+        // Every face's framebuffer attaches the SAME shared cube colour image (design decision 6),
+        // so unlike RenderTarget2D's own GetData() there is no per-framebuffer distinction telling
+        // the read which face to sample -- that has to come from the range itself, exactly as
+        // SetData() above already does with newCubeFace(). A plain new2D() range silently defaults
+        // to face 0 (PositiveX) regardless of which face's framebuffer this call was made through.
+        const igl::TextureRangeDesc range = igl::TextureRangeDesc::newCubeFace(
             static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y),
-            static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h));
+            static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h),
+            static_cast<std::uint32_t>(face));
         framebuffer->copyBytesColorAttachment(owner_->GetCommandQueue(), 0, data, range, 0);
         return true;
     }

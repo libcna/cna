@@ -118,7 +118,7 @@ Legend: ✅ done and verified · ✍️ code written, not yet compiled · 🔶 p
 | IGL-18 | Vertex / index buffers | ✍️ | lazily created, grown on demand, re-upload flushes the pending frame first |
 | IGL-19 | Dynamic buffer pool | ✍️ | 3-frame ring for `SpriteBatch`/`DrawUser*`/uniforms |
 | IGL-20 | `RenderTarget2D` | 🔶 | colour + optional depth/stencil, real MSAA with an IGL resolve attachment, mip regeneration after each pass, `GetData` via `copyBytesColorAttachment`. Colour+depth path verified by `Igl_RenderTarget`; the real-MSAA path was verified this session by `igl_msaa_test.cpp` (`Igl_Msaa`) -- and found a genuine bug on the way (see IGL-15's note). Mip regeneration remains ✍️ |
-| IGL-21 | `RenderTargetCube` | ✍️ | one shared cube image + one shared depth buffer (FNA's own shape), six per-face framebuffers |
+| IGL-21 | `RenderTargetCube` | 🔶 | one shared cube image + one shared depth buffer (FNA's own shape), six per-face framebuffers. Verified this session (`Igl_RenderTargetCube`) and found a real bug on the way: `IglRenderTargetCubeRenderer::GetData()` built its `igl::TextureRangeDesc` with the plain `new2D(x, y, w, h)` constructor, which carries no face index -- unlike `SetData()`, which already used the face-aware `newCubeFace(...)`. Since every face's framebuffer attaches the SAME shared cube colour image (there is nothing per-framebuffer to distinguish which face a read means), every `GetData()` call silently read face 0 (PositiveX) regardless of which face was actually requested -- a real test with two differently-cleared faces (magenta on PositiveX, cyan on PositiveY) read PositiveX's colour back for BOTH faces. Fixed by switching to `newCubeFace(x, y, w, h, face)`, matching `SetData()`'s own already-correct pattern |
 | IGL-22 | MRT | 🔶 | 2–4 `RenderTarget2D` slots; a cube face in a multi-target set is refused by name. `igl_mrt_test.cpp` (`Igl_Mrt`) verified the 2-slot case: a single `BasicEffect` draw with 2 `RenderTarget2D`s bound genuinely reaches both simultaneously (not just the first slot), and releasing the set restores the back buffer untouched -- 3/4 slots and the refuse-a-cube-face path remain ✍️ |
 | IGL-23 | Back-buffer readback | ✍️ | `ReadBackbuffer` through the swap framebuffer, presentation-rect aware, nearest-sampled |
 | IGL-24 | Render-target orientation | ✍️ | design decision 6; `igl_rendertarget_test.cpp` is the discriminating test |
@@ -235,7 +235,7 @@ modules/renderers/igl/
     examples/{CMakeLists.txt,igl_smoke_test.cpp,igl_2d_test.cpp,igl_3d_test.cpp,igl_rendertarget_test.cpp,
         igl_alphatesteffect_test.cpp,igl_dualtextureeffect_test.cpp,igl_fog_test.cpp,igl_stencil_test.cpp,
         igl_mrt_test.cpp,igl_msaa_test.cpp,igl_environmentmapeffect_test.cpp,igl_skinnedeffect_test.cpp,
-        igl_pbreffect_test.cpp}
+        igl_pbreffect_test.cpp,igl_rendertargetcube_test.cpp}
     tests/CNA/Internal/Renderers/Igl/IglRendererSelectionTests.cpp
 docs/igl-renderer.md
 plan_igl.md
