@@ -33,6 +33,7 @@ do not reconstruct the layer's state from the general `NEXT.md`.
 | ✅ | Phase 6 — `FxaaPass`, wired after tonemapping (`MOD-600`–`606`) |
 | ✅ | Phase 5 — `SsaoPass` and its pipeline wiring (`MOD-505`/`506`/`515`–`524`, `MOD-711`); depth and normals are caller-supplied |
 | ✅ | **Phase 8 — directional shadows, complete end to end** (`MOD-800`–`861`, all but `MOD-854`) |
+| ✅ | **Phase 9 — cascaded shadow maps, complete** (`MOD-900`–`917`, 18/18) |
 
 **The HDR spine is complete and verified end to end.** A game can wrap its draw calls in
 `RenderPipeline::begin`/`end`, enable HDR, bloom, a tonemapping operator and FXAA, and get them --
@@ -64,7 +65,24 @@ through a shared 3x3/5x5 PCF snippet. `RenderPipeline::setShadowScene` runs the 
   with one identity bone proves the shader path, not self-shadowing, which needs a real animated
   mesh from the glTF fixtures.
 
-Next: Phase 9 (cascaded shadow maps), then Phase 11/12 (skybox and IBL) and Phase 14
+**Cascades work too.** `CascadedShadowMap` splits the camera frustum 2-4 ways, fits each slice
+sphere-based (rotation-stable) and texel-snapped (translation-stable), stores them in **one atlas**
+rather than a texture array, and the same shared shader path samples them. `applyToReceiver` hands
+an effect everything at once, because these values are only meaningful together. Facts worth
+keeping:
+
+- **XNA projection matrices are the Direct3D ones, so NDC z runs 0..1**, not -1..1. Assuming GL
+  there put the "near" frustum corners half way to the camera.
+- A cascade atlas must be allocated `RenderTargetUsage::PreserveContents`. With the default,
+  binding it for cascade 1 discards cascade 0, and the finished atlas holds only the last cascade.
+- Per-cascade frustum corners scale the **near** corners by `depth/near`. Scaling the far corners
+  applies that ratio twice and fits each cascade to a volume tens of times too large -- every
+  cascade then comes out covered edge to edge by the first caster.
+- The PCF texel step is a **vec2**: an atlas is N times wider than tall.
+- **Cost** (`cnaext_csm_test --benchmark`, 6 casting triangles, Mesa llvmpipe): single Medium map
+  0.12 ms, 2 cascades 0.20, 3 cascades 0.49, 4 cascades 0.43 per frame.
+
+Next: Phase 10 (point and spot shadows), then Phase 11/12 (skybox and IBL) and Phase 14
 (instancing/LOD helpers, independent of all of it).
 
 Smaller open rows: `MOD-203` (restore-on-exception around a pass), `MOD-209`/`MOD-210`,
@@ -132,6 +150,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-17 | `cmake-build-cnaext`, with SSAO added | same | 7640 ran · 7576 pass · 64 skip · **0 fail** |
 | 2026-08-17 | same, with shadow generation and reception | same | 7659 ran · 7595 pass · 64 skip · **0 fail** |
 | 2026-08-17 | same, with all of Phase 8 (visible shadows, skinned casters, pipeline integration) | same | 7679 ran · 7615 pass · 64 skip · **0 fail** |
+| 2026-08-17 | same, with all of Phase 9 (cascaded shadow maps) | same | 7708 ran · 7644 pass · 64 skip · **0 fail** |
 
 The `CNA_CNAEXT=OFF` row is the one that answers "can this break what already works". It configures,
 builds and passes with the whole engine layer compiled out. Its lower test count is expected and not
