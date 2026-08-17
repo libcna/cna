@@ -230,7 +230,7 @@ namespace CNA::Internal::Renderers::PixiJs
         QueueOrDraw(texture,
                     Rectangle(static_cast<int>(x), static_cast<int>(y), texture.GetWidth(), texture.GetHeight()),
                     Rectangle(0, 0, texture.GetWidth(), texture.GetHeight()),
-                    Color::White, 0.0f, Vector2::getZeroProperty(), SpriteEffects::None);
+                    Color::White, 0.0f, Vector2::Zero, SpriteEffects::None);
     }
 
     void PixiJsSpriteBatchRenderer::Draw(const ITextureRenderer& texture,
@@ -239,7 +239,7 @@ namespace CNA::Internal::Renderers::PixiJs
                                          const Color& color)
     {
         QueueOrDraw(texture, destinationRectangle, sourceRectangle, color,
-                    0.0f, Vector2::getZeroProperty(), SpriteEffects::None);
+                    0.0f, Vector2::Zero, SpriteEffects::None);
     }
 
     void PixiJsSpriteBatchRenderer::Draw(const ITextureRenderer& texture,
