@@ -20,6 +20,7 @@
 #include <igl/Texture.h>
 #include <igl/VertexInputState.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
@@ -358,6 +359,44 @@ namespace CNA::Internal::Renderers::Igl
         {
             float* r = m + row * 4;
             r[2] = 2.0f * r[2] - r[3];
+        }
+    }
+
+    /**
+     * @brief Swaps the red and blue bytes of every RGBA8-sized pixel in `data`, if `format` is
+     * one IGL reports as a B-first byte order.
+     *
+     * `igl::IFramebuffer::copyBytesColorAttachment()` (both backends) copies the attachment's raw
+     * physical bytes with no channel reordering -- its own `format` parameter is accepted but
+     * unused on the Vulkan backend. Every texture CNA itself creates (`RenderTarget2D`,
+     * `RenderTargetCube`, `Texture2D`, ...) requests an R-first format explicitly and needs no
+     * correction, but the Vulkan back buffer's physical format is whatever the platform's window
+     * system surface natively offers -- on this renderer's Linux/X11/Mesa target that is
+     * `BGRA_UNorm8`, not `RGBA_UNorm8`, so every read through XNA's RGBA-ordered `Color` without
+     * this correction silently swaps red and blue (verified: a pure-red clear (255,0,0) reads back
+     * as pure blue (0,0,255); a pure-green clear is unaffected since G is unaffected by an R/B swap
+     * and both channels happen to already be zero, which is what made this bug easy to miss when a
+     * single pixel check happened to be reused across colours). Checking the ACTUAL texture format (not
+     * hardcoding "swap when Vulkan and it's the back buffer") keeps this correct if a future
+     * platform's WSI surface ever natively offers RGBA instead.
+     *
+     * @param data        RGBA8 pixel bytes to correct in place, `pixelCount * 4` bytes long.
+     * @param pixelCount  Number of 4-byte pixels in `data`.
+     * @param format      The texture's real IGL format, as reported by `ITexture::getFormat()`.
+     */
+    inline void SwapRedBlueIfBgrOrdered(std::uint8_t* data, const std::size_t pixelCount,
+                                        const igl::TextureFormat format)
+    {
+        // Only the plain byte-order variant is corrected here -- it is the one this renderer's
+        // own Vulkan back buffer actually reports (see this function's own doc comment); the
+        // packed `_Rev` variant's byte layout has not been verified against a real surface this
+        // renderer has ever chosen, so it is deliberately left alone rather than guessed at.
+        if (format != igl::TextureFormat::BGRA_UNorm8)
+            return;
+        for (std::size_t i = 0; i < pixelCount; ++i)
+        {
+            std::uint8_t* pixel = data + i * 4;
+            std::swap(pixel[0], pixel[2]);
         }
     }
 }

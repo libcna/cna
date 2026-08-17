@@ -169,4 +169,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
     cna_register_renderer_test(NAME Igl_MrtCubeRefuse COMMAND cna_test_igl_mrt_cube_refuse
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # IGL-60: the Vulkan back buffer's real BGRA byte order must not silently swap red and blue on
+    # readback. Forced onto the Vulkan backend specifically (every other test here runs whatever
+    # CNA_IGL_BACKEND the environment provides, which defaults to OpenGL) -- see RunPixelTest's own
+    # VK_ERROR_SURFACE_LOST_KHR handling for the skip-if-no-Vulkan-WSI safety net this relies on.
+    cna_igl_test(cna_test_igl_vulkan_backbuffer_bgr igl_vulkan_backbuffer_bgr_test.cpp)
+    cna_register_renderer_test(NAME Igl_VulkanBackBufferBgr
+        COMMAND cna_test_igl_vulkan_backbuffer_bgr
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
 endif()

@@ -1086,6 +1086,17 @@ namespace CNA::Internal::Renderers::Igl
             static_cast<std::uint32_t>(physicalWidth),
             static_cast<std::uint32_t>(physicalHeight));
         framebuffer->copyBytesColorAttachment(GetCommandQueue(), 0, block.data(), range, 0);
+        // The back buffer's physical format is whatever the platform surface natively offers
+        // (BGRA on this renderer's Linux/X11/Mesa target), not necessarily the RGBA byte order
+        // every other CNA-created texture uses -- see SwapRedBlueIfBgrOrdered's own doc comment.
+        const std::shared_ptr<igl::ITexture> colorAttachment = framebuffer->getColorAttachment(0);
+        if (colorAttachment)
+        {
+            SwapRedBlueIfBgrOrdered(block.data(),
+                                    static_cast<std::size_t>(physicalWidth) *
+                                        static_cast<std::size_t>(physicalHeight),
+                                    colorAttachment->getFormat());
+        }
 
         // Nearest-neighbour down to the requested logical size, sampling each logical pixel's centre
         // so every value handed back is a colour the frame genuinely contained.
