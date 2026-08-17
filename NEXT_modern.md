@@ -31,6 +31,7 @@ do not reconstruct the layer's state from the general `NEXT.md`.
 | ✅ | Phase 7 core — `RenderPipeline`, the consumer `RenderPipelineSettings` never had (`MOD-700`–`737`) |
 | ✅ | Phase 4 — `BloomPass`, wired ahead of tonemapping (`MOD-400`–`418`) |
 | ✅ | Phase 6 — `FxaaPass`, wired after tonemapping (`MOD-600`–`606`) |
+| ✅ | Phase 8 (part) — `ShadowMap` generation and `IShadowReceiverEXT` on the four lit effects (`MOD-800`–`811`, `820`–`826`, `850`/`851`) |
 | ✅ | Phase 5 — `SsaoPass` and its pipeline wiring (`MOD-505`/`506`/`515`–`524`, `MOD-711`); depth and normals are caller-supplied |
 
 **The HDR spine is complete and verified end to end.** A game can wrap its draw calls in
@@ -41,11 +42,13 @@ what it would have rendered without a pipeline.
 **Every post-process subsystem in the plan now exists and is wired into the pipeline**: SSAO,
 bloom, tonemapping and FXAA, in that fixed order, each with a reason for its position.
 
-**Next up:** Phase 8 (shadow maps, `MOD-800`–`MOD-863`) — the first subsystem that is not a
-fullscreen pass. It needs an engine-layer light type, depth-only rendering, and a receiving side on
-the four lit effects, which reaches into the XNA layer and the renderer rather than staying inside
-`graphics-ext`. Then Phase 11/12 (skybox and IBL) and Phase 14 (instancing/LOD helpers, which are
-independent of all of it).
+**Shadows: both ends of the seam exist, the middle does not yet.** `ShadowMap` renders the caster
+pass and the four lit effects carry the map, the light matrix, the toggle and the bias into
+`GpuDrawParams`. What is missing is the EasyGL half — a shadow-sampling variant of each lit
+fragment shader, plus binding the map — so shadows are not yet *visible*. That is `MOD-835`–`842`
+and is the next task; the shared layer already carries everything those shaders need.
+
+Then Phase 11/12 (skybox and IBL) and Phase 14 (instancing/LOD helpers, independent of all of it).
 
 Smaller open rows: `MOD-203` (restore-on-exception around a pass), `MOD-209`/`MOD-210`,
 `MOD-405`/`407`/`409`/`413`/`415`–`417` (bloom quality presets, perf, goldens),
@@ -110,6 +113,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-17 | same, through Phases 2/3/4/6/7 (tonemap, bloom, FXAA, pipeline) | same | 7630 ran · 7566 pass · 64 skip · **0 fail** |
 | 2026-08-17 | `cmake-build-debug` — the same branch with **`CNA_CNAEXT=OFF`** (the default) | same | 7544 ran · 7480 pass · 64 skip · **0 fail** |
 | 2026-08-17 | `cmake-build-cnaext`, with SSAO added | same | 7640 ran · 7576 pass · 64 skip · **0 fail** |
+| 2026-08-17 | same, with shadow generation and reception | same | 7659 ran · 7595 pass · 64 skip · **0 fail** |
 
 The `CNA_CNAEXT=OFF` row is the one that answers "can this break what already works". It configures,
 builds and passes with the whole engine layer compiled out. Its lower test count is expected and not
