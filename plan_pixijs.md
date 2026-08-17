@@ -315,16 +315,45 @@ documented reason (not overlooked):
    this plan comes from headless Chromium driven by Playwright, a real browser but not the full manual
    matrix other renderers' docs describe.
 
-**Two good, well-scoped follow-up tasks for a future session** (not blockers, just not done):
-- Turn the native `g++` workaround for `PixiJsRendererTests.cpp` into a real, lightweight CMake
-  target, so this coverage runs automatically instead of via a manual invocation. Non-trivial because
-  the `pixijs` module is currently only entered by CMake via
-  `add_subdirectory(${CNA_SELECTED_RENDERER})` in `modules/renderers/CMakeLists.txt` — i.e. only when
-  PIXIJS is the actively selected renderer — so a native-only test target needs its own path into the
-  build graph.
+**Follow-up tasks** — the first is now done, the second is still open:
+
+- ~~Turn the native `g++` workaround for `PixiJsRendererTests.cpp` into a real, lightweight CMake
+  target~~ — **done 2026-08-17** as part of `plan_platform.md`'s post-merge re-audit.
+  `CNA_BUILD_PIXIJS_HOST_TESTS=ON` builds `cna_test_pixijs_host` and registers the
+  `PixiJsHostContracts` ctest. The "own path into the build graph" problem the note describes was
+  already solved for this renderer's three browser-only siblings: `modules/renderers/CMakeLists.txt`
+  registers `cna_test_canvas_host`, `cna_test_htmldom_host` and `cna_test_svgdom_host` *outside*
+  selected-renderer dispatch, compiling the family's sources directly with the EM_JS bodies excluded
+  by their own `#if defined(__EMSCRIPTEN__)`. PIXIJS now has the same target, and the suite passes
+  **18/18** natively.
 - A distinct `NonPremultiplied` code path (not just a test proving it's wired, which frame 13 now
   provides) — currently identical to `AlphaBlend` in every way, which is only correct by coincidence
   for straight-alpha content (see item 1 above).
+
+### Post-merge migration onto the platform abstraction — 2026-08-17
+
+This renderer was authored on a branch that predated `next`'s platform-abstraction and
+runtime-renderer-selection work, and merging the two left it holding a creation contract that no
+longer existed. It did not compile in the merged tree at all, and the four SDL references its
+sources still carried were absorbed by *raising* `plan_platform.md`'s ratchet budget from 0/0 to
+4 files / 14 references rather than by fixing the coupling. Repaired as part of
+`plan_platform.md`'s own re-audit:
+
+- `PixiJsRenderer` takes `const GraphicsRendererCreateArgs&` and reads the platform-neutral
+  `RendererSurfaceInfo` (window id, drawable size, display scale), exactly like `CanvasRenderer`.
+  `<SDL3/SDL.h>`, the `SDL_Window*` member and all four `SDL_GetWindowSize` calls are gone; sizes
+  come from the snapshot, and `OnSurfaceChanged()` adopts resizes.
+- `GetWindowInternal()`, `GetRendererInternal()` and both `GetNativeTexture()` overrides were
+  removed. They were `override`s of methods PLAT-59/PLAT-60 had already deleted from
+  `IGraphicsRenderer`, which is the specific reason the family could not compile.
+- `PixiJsRendererDescriptor.cpp` supplies the family's `GetDescriptor()` and its namespace-scoped
+  `CreateGraphicsRenderer`; `PIXIJS` is registered in `cmake/RendererRegistry.cmake`'s identity map,
+  without which configuring `-DCNA_GRAPHICS_RENDERER=PIXIJS` was a hard CMake error.
+- The renderer target and the smoke-test executable no longer link SDL3 at all, and the
+  ratchet is back at its 0/0 floor.
+
+The v1 scope, the EM_JS draw path and the browser-verified behaviour recorded above are unchanged
+by this: it is a creation-contract migration, not a rendering change.
 
 <details>
 <summary>Completed work, in the order it was tackled (click to expand)</summary>

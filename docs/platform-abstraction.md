@@ -23,6 +23,8 @@ frame API, not a drawing API. Audio selection is orthogonal and uses `CNA_AUDIO_
 
 ```sh
 cmake -S . -B build -DCNA_PLATFORM=SDL3
+cmake -S . -B build-sdl2 \
+  -DCNA_PLATFORM=SDL2 -DCNA_AUDIO_PLATFORM=SDL2 -DCNA_GRAPHICS_RENDERER=OPENGLES3
 cmake -S . -B build-headless \
   -DCNA_PLATFORM=HEADLESS -DCNA_GRAPHICS_RENDERER=HEADLESS
 cmake -S . -B build-terminal \
@@ -32,6 +34,20 @@ cmake -S . -B build-terminal \
 Headless is compiled in every build. Terminal is also compiled on POSIX. This lets the conformance
 suite exercise multiple implementations in one process; the selected value determines the
 default, not necessarily the only factory name present in the binary.
+
+`SDL2` is an independent backend written against SDL 2.30's own API, never `sdl2-compat` over
+SDL3, and it advertises a deliberately narrow capability profile. Its boundary, the renderers it
+can and cannot back, and its supported build/test commands are
+[`docs/platform-sdl2.md`](platform-sdl2.md).
+
+**Two implementations of the same native library cannot share a process.** SDL2 and SDL3 export
+identically named entry points (`SDL_Init`, `SDL_GetError`, `SDL_PollEvent` and many more), so a
+binary linking both leaves one backend's calls bound to whichever library the loader reached
+first — and a conformance run over such a binary tests neither while reporting success.
+`cmake/Sdl2OnlyConfiguration.cmake` therefore publishes `CNA_SDL2_ONLY_CONFIGURATION` when
+`CNA_PLATFORM` and `CNA_AUDIO_PLATFORM` are both SDL2, and the test and harness targets consult it
+before adding an SDL3 link input. A future backend that wraps a library another backend also wraps
+needs the same treatment; one that wraps a distinct library does not.
 
 ## Contract rules
 
