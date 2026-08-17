@@ -76,4 +76,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
     cna_register_renderer_test(NAME Igl_Fog COMMAND cna_test_igl_fog
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # IGL-39/IGL-55: DepthStencilState's stencil test wired into the real 3D pipeline.
+    cna_igl_test(cna_test_igl_stencil igl_stencil_test.cpp)
+    cna_register_renderer_test(NAME Igl_Stencil COMMAND cna_test_igl_stencil
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
