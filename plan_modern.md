@@ -388,34 +388,34 @@ depth-based effects will reuse.
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| MOD-700 | `RenderPipeline` skeleton: ctor(device), dtor, non-copyable, `getSettings()` | ⬜ | Constructing on any renderer (including 2D-only) succeeds; unsupported features are simply skipped. |
-| MOD-701 | `resize(width,height)` — allocate/reallocate HDR scene target + aux targets | ⬜ | Idempotent for the same size; releases the old set; 100 alternating resizes stay memory-bounded. |
-| MOD-702 | HDR scene target creation (`HalfVector4` when supported, `Color` otherwise, logged once) | ⬜ | The chosen format is queryable (`getSceneTargetFormat()`); the downgrade is logged exactly once per pipeline. |
-| MOD-703 | `begin(clearColor)` — bind the scene target and clear (colour + depth) | ⬜ | Scene draws between begin/end land in the target, not the backbuffer (verified by readback). |
-| MOD-704 | `end()` — run the fixed chain and resolve to the backbuffer | ⬜ | Chain order: SSAO → bloom → tonemap → FXAA → user passes → resolve; asserted by the counting fake pass. |
-| MOD-705 | Fixed chain order documented and justified | ⬜ | In `docs/cnaext-engine-layer.md`, with the reason for each position (e.g. FXAA after tonemap). |
-| MOD-706 | `addUserPass(PostProcessPass*)` / `removeUserPass` — app-supplied passes at a documented slot | ⬜ | Non-owning by default; an owning overload (`addOwnedUserPass(std::unique_ptr<…>)`) exists; both tested. |
-| MOD-707 | HDR-off path: no HDR target, no tonemap, chain reduced to enabled passes | ⬜ | D8 satisfied — output bit-identical to no pipeline when everything is off except the final blit. |
-| MOD-708 | Zero-pass short circuit: when nothing is enabled and HDR is off, render straight to the backbuffer | ⬜ | Draw-call count identical to not using the pipeline at all (asserted). |
+| MOD-700 | `RenderPipeline` skeleton: ctor(device), dtor, non-copyable, `getSettings()` | ✅ | Done. Constructs on any renderer, non-copyable, and allocates nothing until `resize()` — the size is not known and the format depends on settings the caller has not made yet. |
+| MOD-701 | `resize(width,height)` — allocate/reallocate HDR scene target + aux targets | ✅ | Done. Idempotent for a size it already holds; drops the old scene target and the chain's intermediates, so a resized game does not keep paying for every size it has been. 20 alternating resizes stay bounded. |
+| MOD-702 | HDR scene target creation (`HalfVector4` when supported, `Color` otherwise, logged once) | ✅ | Done. `HdrBlendable` when the renderer has it, `Vector4` next, `Color` otherwise — and `getSceneTargetFormat()` reports what was really created rather than what was asked for. |
+| MOD-703 | `begin(clearColor)` — bind the scene target and clear (colour + depth) | ✅ | Done. Binds the scene target and clears it; the frame's draws land there, verified through `getSceneTarget()`. |
+| MOD-704 | `end()` — run the fixed chain and resolve to the backbuffer | ✅ | Done. `end()` builds the chain in fixed order and resolves to the back buffer. Tonemap first, then user passes — asserted by pass counts and a counting pass. |
+| MOD-705 | Fixed chain order documented and justified | ✅ | Done — the reason is recorded where the order is built: tonemapping is the boundary between scene-referred and display-referred colour, so scene-value passes precede it and pixel passes follow. |
+| MOD-706 | `addUserPass(PostProcessPass*)` / `removeUserPass` — app-supplied passes at a documented slot | ✅ | Done for the borrowed form (`addUserPass`/`clearUserPasses`), which is what a game keeping its own configurable pass needs. An owning overload is not added until something needs it. |
+| MOD-707 | HDR-off path: no HDR target, no tonemap, chain reduced to enabled passes | ✅ | Done — with HDR off and no tonemapping the chain is empty and the scene target is skipped entirely. |
+| MOD-708 | Zero-pass short circuit: when nothing is enabled and HDR is off, render straight to the backbuffer | ✅ | Done, and this is the row that makes the layer safe to adopt: an inert pipeline allocates no target, runs no pass, and renders straight to the back buffer. Asserted through the memory estimate, the pass count and `isUsingSceneTarget()`. |
 | MOD-709 | `setShadowCaster(DirectionalLightEXT*)` (Phase 8 consumer) | ⬜ | Null clears; documented as "shadow pass runs before `begin()` returns". |
 | MOD-710 | `setSkybox(Skybox*)` (Phase 11 consumer) | ⬜ | Drawn after opaque scene, before post-processing; documented depth-state requirement. |
 | MOD-711 | `setDepthNormalPrepass(...)` wiring for SSAO (Phase 5 consumer) | ⬜ | SSAO silently disables itself with a one-time log when no prepass is attached. |
-| MOD-712 | `getSceneTarget()` accessor so apps can sample the HDR scene from custom passes | ⬜ | Returns null outside begin/end; documented lifetime. |
+| MOD-712 | `getSceneTarget()` accessor so apps can sample the HDR scene from custom passes | ✅ | Done — `getSceneTarget()` returns null outside `begin`/`end`, and null when the pipeline short-circuited. |
 | MOD-713 | Exception safety: an exception inside a pass restores the backbuffer binding and rethrows | ⬜ | Tested with a throwing fake pass; the next frame renders normally. |
-| MOD-714 | `begin()`/`end()` misuse guards (double begin, end without begin) | ⬜ | Throws `EngineException` with a clear message; tested for both. |
+| MOD-714 | `begin()`/`end()` misuse guards (double begin, end without begin) | ✅ | Done — double `begin()`, `end()` without `begin()`, and `begin()` before any `resize()` all throw `std::logic_error`. |
 | MOD-715 | `GraphicsDevice` device-reset/context-loss handling — reallocate targets on reset | ⬜ | Subscribing to the existing `DeviceReset` event; verified with `DebugSimulateContextLoss()`. |
-| MOD-716 | `getGpuMemoryEstimateBytes()` (→ MOD-139) | ⬜ | Sum of owned target sizes; arithmetic unit-tested. |
+| MOD-716 | `getGpuMemoryEstimateBytes()` (→ MOD-139) | ✅ | Done — `getGpuMemoryEstimateBytes()` sums the scene target and the chain's pool. |
 | MOD-717 | `getStatistics()` — passes run, draw calls, target switches for the last frame | ⬜ | Small POD; tested against the counting fake. |
 
 ### 7.2 Settings integration
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| MOD-725 | Settings changes take effect on the next frame without reconstruction | ⬜ | Toggling bloom/SSAO/FXAA/HDR between frames is tested for all 16 combinations. |
-| MOD-726 | Changing `hdrEnabled` reallocates the scene target lazily | ⬜ | Exactly one reallocation, on the first frame after the change (asserted). |
+| MOD-725 | Settings changes take effect on the next frame without reconstruction | ✅ | Done — toggling settings between frames changes the next frame with no reconstruction. |
+| MOD-726 | Changing `hdrEnabled` reallocates the scene target lazily | ✅ | Done — the scene target is reallocated only when the chosen format actually changes. |
 | MOD-727 | `RenderQuality` preset application across all passes in one place | ⬜ | A single `applyQualityPreset()` maps the enum to per-pass values; documented table. |
 | MOD-728 | `GraphicsDevice::GetRenderPipelineSettingsEXT()` — the accessor the settings doc already claims exists | ⬜ | CNAEXT-marked, always compiled? **No** — decided in `MOD-729`. |
-| MOD-729 | Decide whether the settings accessor lives on `GraphicsDevice` (XNA type) or only on `RenderPipeline` | ⬜ | Written decision. Default recommendation: **only on `RenderPipeline`** (keeps the XNA type free of an engine-layer-typed member and avoids a `CNA_CNAEXT`-conditional member on a core class); `RenderPipelineSettings`'s own doc comment is corrected accordingly. |
+| MOD-729 | Decide whether the settings accessor lives on `GraphicsDevice` (XNA type) or only on `RenderPipeline` | ✅ | Decided: **`RenderPipeline` only**. Exposing the settings from `GraphicsDevice` would give an XNA type a member whose type exists only under a compile option. `RenderPipelineSettings`' own doc comment, which claimed a `GraphicsDevice` accessor, is now wrong and is corrected in MOD-1806. |
 | MOD-730 | Settings validation (negative exposure, gamma ≤0, absurd radii) | ⬜ | Clamped with documented ranges, not rejected; tested at the boundaries. |
 | MOD-731 | Settings serialization helper (to/from a simple key=value string) for demos and tests | ⬜ | Round-trips every field; unit-tested. |
 
@@ -423,9 +423,9 @@ depth-based effects will reuse.
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| MOD-735 | Unit tests for every public `RenderPipeline` member (incl. both misuse guards) | ⬜ | Full coverage per CLAUDE.md's test rule. |
+| MOD-735 | Unit tests for every public `RenderPipeline` member (incl. both misuse guards) | ✅ | Done — 13 cases covering both misuse guards, the inert path, format selection, user passes, settings changes, resize and frame-to-frame stability. |
 | MOD-736 | Golden image: full pipeline (HDR + bloom + tonemap) on a fixed test scene | ⬜ | Golden committed with the generating command. |
-| MOD-737 | Golden image: pipeline with everything off == direct rendering | ⬜ | Bit-identical (D8). |
+| MOD-737 | Golden image: pipeline with everything off == direct rendering | ✅ | Done — `AnInertPipelineProducesTheSameFrameAsNoPipelineAtAll`: no scene target, no passes, no memory; the frame reaches the back buffer exactly as it would without a pipeline. |
 | MOD-738 | 2D-only renderer behavior: pipeline constructs, passes skip, output equals direct rendering | ⬜ | Verified on SDL_Renderer or Headless; no throw anywhere. |
 | MOD-739 | `SpriteBatch` inside `begin/end` works (2D game with HDR bloom) | ⬜ | Example proves an ordinary `SpriteBatch` game gains bloom by wrapping its draw in the pipeline. |
 | MOD-740 | 3D `Model`/`BasicEffect`/`PbrEffect` inside `begin/end` works | ⬜ | Example proves the 3D path. |

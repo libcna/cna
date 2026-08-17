@@ -32,6 +32,7 @@
 #include "CNA/Graphics/PostProcessChain.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
+#include "CNA/Graphics/RenderPipeline.hpp"
 #include "CNA/Graphics/RenderTargetPool.hpp"
 #include "CNA/Graphics/TonemapPass.hpp"
 

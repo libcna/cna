@@ -1,0 +1,276 @@
+// SPDX-License-Identifier: MS-PL
+// plan_modern.md MOD-700..MOD-745: the orchestrator.
+//
+// Two properties matter more than the rest and are tested first: a pipeline with nothing enabled
+// must produce the frame the game would have produced without it (D8), and it must not pay for an
+// off-screen target it has no use for (MOD-708). Everything else in this layer is optional; those
+// two are what make it safe to wrap an existing game in.
+
+#ifdef CNA_CNAEXT
+
+#include <gtest/gtest.h>
+
+#include "CNA/Graphics/BlitPass.hpp"
+#include "CNA/Graphics/PostProcessContext.hpp"
+#include "CNA/Graphics/PostProcessPass.hpp"
+#include "CNA/Graphics/RenderPipeline.hpp"
+#include "CNA/Graphics/TonemappingMode.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+namespace {
+
+using CNA::Graphics::PostProcessContext;
+using CNA::Graphics::PostProcessPass;
+using CNA::Graphics::RenderPipeline;
+using CNA::Graphics::TonemappingMode;
+using Microsoft::Xna::Framework::Color;
+using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+constexpr int kWidth  = 32;
+constexpr int kHeight = 16;
+
+/// Counts invocations without touching the GPU.
+class CountingPass final : public PostProcessPass
+{
+public:
+    void apply(const PostProcessContext&) override { ++applyCount; }
+
+    [[nodiscard]] const std::string& getName() const override
+    {
+        static const std::string name = "Counting";
+        return name;
+    }
+
+    [[nodiscard]] bool isSupported(GraphicsDevice&) const override { return true; }
+
+    int applyCount = 0;
+};
+
+TEST(RenderPipelineTest, AnInertPipelineNeverAllocatesASceneTarget)
+{
+    // MOD-708. With nothing enabled there is nothing an off-screen target would enable, so the
+    // frame goes straight to the back buffer -- and the memory estimate proves no target was made.
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+
+    pipeline.begin(Color::CornflowerBlue);
+    EXPECT_FALSE(pipeline.isUsingSceneTarget());
+    EXPECT_EQ(pipeline.getSceneTarget(), nullptr);
+    pipeline.end();
+
+    EXPECT_EQ(pipeline.getLastFramePassCount(), 0);
+    EXPECT_EQ(pipeline.getGpuMemoryEstimateBytes(), 0u);
+}
+
+TEST(RenderPipelineTest, EnablingAnythingSwitchesToTheSceneTarget)
+{
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+    pipeline.getSettings().setTonemappingMode(TonemappingMode::Aces);
+
+    pipeline.begin(Color::Black);
+    EXPECT_TRUE(pipeline.isUsingSceneTarget());
+    EXPECT_NE(pipeline.getSceneTarget(), nullptr);
+    pipeline.end();
+
+    EXPECT_EQ(pipeline.getLastFramePassCount(), 1);
+    EXPECT_GT(pipeline.getGpuMemoryEstimateBytes(), 0u);
+}
+
+TEST(RenderPipelineTest, HdrPicksTheBestSceneFormatTheRendererActuallyHas)
+{
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+    pipeline.getSettings().setHDREnabled(true);
+
+    pipeline.begin(Color::Black);
+    const SurfaceFormat format = pipeline.getSceneTargetFormat();
+    pipeline.end();
+
+    if (gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable))
+        EXPECT_EQ(format, SurfaceFormat::HdrBlendable);
+    else if (gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4))
+        EXPECT_EQ(format, SurfaceFormat::Vector4);
+    else
+        EXPECT_EQ(format, SurfaceFormat::Color);   // reported honestly rather than refused
+}
+
+TEST(RenderPipelineTest, TheSceneTargetIsNotVisibleOutsideAFrame)
+{
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+    pipeline.getSettings().setHDREnabled(true);
+
+    EXPECT_EQ(pipeline.getSceneTarget(), nullptr);
+    pipeline.begin(Color::Black);
+    EXPECT_NE(pipeline.getSceneTarget(), nullptr);
+    pipeline.end();
+    EXPECT_EQ(pipeline.getSceneTarget(), nullptr);
+}
+
+TEST(RenderPipelineTest, UserPassesRunAfterTheBuiltInOnes)
+{
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+    pipeline.getSettings().setTonemappingMode(TonemappingMode::Reinhard);
+
+    CountingPass user;
+    pipeline.addUserPass(&user);
+    pipeline.addUserPass(nullptr);   // ignored rather than crashing
+
+    pipeline.begin(Color::Black);
+    pipeline.end();
+
+    EXPECT_EQ(user.applyCount, 1);
+    EXPECT_EQ(pipeline.getLastFramePassCount(), 2);   // tonemap + user
+}
+
+TEST(RenderPipelineTest, AUserPassAloneIsEnoughToRunAFrameThroughTheChain)
+{
+    // A game that wants only its own effect should not have to enable HDR to get one.
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+
+    CountingPass user;
+    pipeline.addUserPass(&user);
+
+    pipeline.begin(Color::Black);
+    EXPECT_TRUE(pipeline.isUsingSceneTarget());
+    pipeline.end();
+
+    EXPECT_EQ(user.applyCount, 1);
+    EXPECT_EQ(pipeline.getLastFramePassCount(), 1);
+}
+
+TEST(RenderPipelineTest, ClearingUserPassesReturnsThePipelineToInert)
+{
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+
+    CountingPass user;
+    pipeline.addUserPass(&user);
+    pipeline.clearUserPasses();
+
+    pipeline.begin(Color::Black);
+    EXPECT_FALSE(pipeline.isUsingSceneTarget());
+    pipeline.end();
+
+    EXPECT_EQ(user.applyCount, 0);
+}
+
+TEST(RenderPipelineTest, SettingsChangesTakeEffectOnTheNextFrame)
+{
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+
+    pipeline.begin(Color::Black);
+    pipeline.end();
+    EXPECT_EQ(pipeline.getLastFramePassCount(), 0);
+
+    pipeline.getSettings().setTonemappingMode(TonemappingMode::Filmic);
+
+    pipeline.begin(Color::Black);
+    pipeline.end();
+    EXPECT_EQ(pipeline.getLastFramePassCount(), 1);
+}
+
+TEST(RenderPipelineTest, BothMisusesAreRejected)
+{
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+
+    // begin() before any size is known.
+    EXPECT_THROW(pipeline.begin(Color::Black), std::logic_error);
+
+    pipeline.resize(kWidth, kHeight);
+    EXPECT_THROW(pipeline.end(), std::logic_error);          // end without begin
+
+    pipeline.begin(Color::Black);
+    EXPECT_THROW(pipeline.begin(Color::Black), std::logic_error);   // double begin
+    pipeline.end();
+}
+
+TEST(RenderPipelineTest, ANonPositiveSizeIsRejected)
+{
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+
+    EXPECT_THROW(pipeline.resize(0, kHeight), std::invalid_argument);
+    EXPECT_THROW(pipeline.resize(kWidth, -4), std::invalid_argument);
+}
+
+TEST(RenderPipelineTest, RepeatedResizesStayBounded)
+{
+    // A resized game must not keep paying for every size it has ever been.
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+    pipeline.getSettings().setHDREnabled(true);
+
+    for (int i = 0; i < 20; ++i)
+    {
+        pipeline.resize(kWidth + (i % 2) * 8, kHeight + (i % 2) * 8);
+        pipeline.begin(Color::Black);
+        pipeline.end();
+    }
+
+    const std::size_t oneTarget = static_cast<std::size_t>(kWidth + 8) * (kHeight + 8) * 16u;
+    EXPECT_LE(pipeline.getGpuMemoryEstimateBytes(), oneTarget * 3u);
+}
+
+TEST(RenderPipelineTest, ManyFramesDoNotAccumulateTargets)
+{
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+    pipeline.getSettings().setHDREnabled(true);
+    pipeline.getSettings().setTonemappingMode(TonemappingMode::Aces);
+
+    pipeline.begin(Color::Black);
+    pipeline.end();
+    const std::size_t afterFirstFrame = pipeline.getGpuMemoryEstimateBytes();
+
+    for (int frame = 0; frame < 50; ++frame)
+    {
+        pipeline.begin(Color::Black);
+        pipeline.end();
+    }
+
+    EXPECT_EQ(pipeline.getGpuMemoryEstimateBytes(), afterFirstFrame);
+}
+
+TEST(RenderPipelineTest, AnInertPipelineProducesTheSameFrameAsNoPipelineAtAll)
+{
+    // D8, and the reason the short circuit exists: wrapping a game in an unconfigured pipeline
+    // must not change one pixel of its output.
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+
+    pipeline.begin(Color(70, 130, 180, 255));
+    pipeline.end();
+
+    // The frame went to the back buffer, which is what a game without a pipeline clears; there is
+    // no scene target standing between the game and the screen.
+    EXPECT_FALSE(pipeline.isUsingSceneTarget());
+    EXPECT_EQ(pipeline.getLastFramePassCount(), 0);
+    EXPECT_EQ(pipeline.getGpuMemoryEstimateBytes(), 0u);
+}
+
+} // namespace
+
+#endif // CNA_CNAEXT
