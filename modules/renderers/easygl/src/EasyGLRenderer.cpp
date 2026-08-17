@@ -184,30 +184,104 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 // Returns 1 where the surface is lit and 0 where a caster is fully in front of it, with the
 // fraction in between coming from the kernel: a single tap gives a hard, stair-stepped edge at
 // every shadow-map resolution.
+// Cascades (MOD-905/906/909/910) share the same code path: a single map is simply the case where
+// uCascadeCount is 0, and everything below it is skipped. Two shapes of restriction shape the
+// code more than taste does -- the ES 1.00 form these shaders are also compiled in forbids
+// dynamically indexing a uniform array in a fragment shader, so the cascade's matrix is selected
+// by four constant-index comparisons rather than by uCascadeMatrices[index]; and the cascades
+// share one atlas, so every lookup is clamped to its own slice or a PCF tap at the seam would
+// read the neighbouring cascade's texels.
+//
+// The cross-fade near a split (MOD-906) is not cosmetic either: without it the two cascades
+// disagree about where an edge is, and the disagreement draws a straight line across the ground at
+// the split distance -- more obviously wrong than the resolution change it is hiding.
 #define CNA_GL_SHADOW_DECL \
 "uniform sampler2D uShadowMap;\n" \
 "uniform mat4 uLightViewProj;\n" \
 "uniform float uShadowsEnabled;\n" \
 "uniform float uShadowBias;\n" \
-"uniform float uShadowTexel;\n" \
+"uniform vec2 uShadowTexel;\n" \
 "uniform float uShadowPcfRadius;\n" \
-"float cnaShadowFactor(vec3 worldPos){\n" \
-"    if(uShadowsEnabled<0.5) return 1.0;\n" \
-"    vec4 lightSpace=uLightViewProj*vec4(worldPos,1.0);\n" \
-"    vec3 uv=lightSpace.xyz/lightSpace.w*0.5+0.5;\n" \
-"    if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0||uv.z>1.0) return 1.0;\n" \
+"uniform float uCascadeCount;\n" \
+"uniform mat4 uCascadeMatrices[4];\n" \
+"uniform vec4 uCascadeSplits;\n" \
+"uniform vec4 uCascadeViewZ;\n" \
+"uniform float uCascadeBlend;\n" \
+"uniform float uCascadeDebug;\n" \
+"float cnaShadowTap(vec3 uv,vec2 uvMin,vec2 uvMax){\n" \
+"    if(uv.z>1.0) return 1.0;\n" \
 "    float lit=0.0;\n" \
 "    float taps=0.0;\n" \
 "    for(int y=-2;y<=2;++y){\n" \
 "        for(int x=-2;x<=2;++x){\n" \
 "            float ring=max(abs(float(x)),abs(float(y)));\n" \
 "            if(ring>uShadowPcfRadius+0.5) continue;\n" \
-"            float occluder=texture(uShadowMap,uv.xy+vec2(float(x),float(y))*uShadowTexel).r;\n" \
+"            vec2 at=clamp(uv.xy+vec2(float(x),float(y))*uShadowTexel,uvMin,uvMax);\n" \
+"            float occluder=texture(uShadowMap,at).r;\n" \
 "            lit+=(uv.z-uShadowBias<=occluder)?1.0:0.0;\n" \
 "            taps+=1.0;\n" \
 "        }\n" \
 "    }\n" \
 "    return lit/max(taps,1.0);\n" \
+"}\n" \
+"mat4 cnaCascadeMatrix(int index){\n" \
+"    mat4 m=uCascadeMatrices[0];\n" \
+"    if(index==1) m=uCascadeMatrices[1];\n" \
+"    if(index==2) m=uCascadeMatrices[2];\n" \
+"    if(index==3) m=uCascadeMatrices[3];\n" \
+"    return m;\n" \
+"}\n" \
+"float cnaCascadeSplit(int index){\n" \
+"    float s=uCascadeSplits.x;\n" \
+"    if(index==1) s=uCascadeSplits.y;\n" \
+"    if(index==2) s=uCascadeSplits.z;\n" \
+"    if(index==3) s=uCascadeSplits.w;\n" \
+"    return s;\n" \
+"}\n" \
+"float cnaCascadeLookup(vec3 worldPos,int index,float count){\n" \
+"    vec4 atlas=cnaCascadeMatrix(index)*vec4(worldPos,1.0);\n" \
+"    vec3 uv=atlas.xyz/atlas.w;\n" \
+"    float slice=1.0/count;\n" \
+"    float x0=float(index)*slice;\n" \
+"    if(uv.x<x0||uv.x>x0+slice||uv.y<0.0||uv.y>1.0) return 1.0;\n" \
+"    vec2 uvMin=vec2(x0+uShadowTexel.x,uShadowTexel.y);\n" \
+"    vec2 uvMax=vec2(x0+slice-uShadowTexel.x,1.0-uShadowTexel.y);\n" \
+"    return cnaShadowTap(uv,uvMin,uvMax);\n" \
+"}\n" \
+"int cnaSelectCascade(float viewDepth,float count){\n" \
+"    int chosen=int(count)-1;\n" \
+"    for(int i=0;i<4;++i){\n" \
+"        if(float(i)>=count) break;\n" \
+"        if(viewDepth<=cnaCascadeSplit(i)){ chosen=i; break; }\n" \
+"    }\n" \
+"    return chosen;\n" \
+"}\n" \
+"float cnaShadowFactor(vec3 worldPos){\n" \
+"    if(uShadowsEnabled<0.5) return 1.0;\n" \
+"    if(uCascadeCount<0.5){\n" \
+"        vec4 lightSpace=uLightViewProj*vec4(worldPos,1.0);\n" \
+"        vec3 uv=lightSpace.xyz/lightSpace.w*0.5+0.5;\n" \
+"        if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0) return 1.0;\n" \
+"        return cnaShadowTap(uv,vec2(0.0),vec2(1.0));\n" \
+"    }\n" \
+"    float viewDepth=-dot(vec4(worldPos,1.0),uCascadeViewZ);\n" \
+"    int index=cnaSelectCascade(viewDepth,uCascadeCount);\n" \
+"    float factor=cnaCascadeLookup(worldPos,index,uCascadeCount);\n" \
+"    float split=cnaCascadeSplit(index);\n" \
+"    if(uCascadeBlend>0.0&&float(index+1)<uCascadeCount&&viewDepth>split-uCascadeBlend){\n" \
+"        float t=clamp((viewDepth-(split-uCascadeBlend))/uCascadeBlend,0.0,1.0);\n" \
+"        factor=mix(factor,cnaCascadeLookup(worldPos,index+1,uCascadeCount),t);\n" \
+"    }\n" \
+"    return factor;\n" \
+"}\n" \
+"vec3 cnaCascadeDebugTint(vec3 worldPos){\n" \
+"    if(uCascadeDebug<0.5||uShadowsEnabled<0.5||uCascadeCount<0.5) return vec3(1.0);\n" \
+"    float viewDepth=-dot(vec4(worldPos,1.0),uCascadeViewZ);\n" \
+"    int index=cnaSelectCascade(viewDepth,uCascadeCount);\n" \
+"    if(index==0) return vec3(1.0,0.6,0.6);\n" \
+"    if(index==1) return vec3(0.6,1.0,0.6);\n" \
+"    if(index==2) return vec3(0.6,0.6,1.0);\n" \
+"    return vec3(1.0,1.0,0.6);\n" \
 "}\n"
 
 namespace CNA::Internal::Renderers::EasyGL
@@ -5791,6 +5865,7 @@ CNA_GL_SHADOW_DECL
 "        specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor*shadow;\n"
 "    }\n"
 "    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*vec4(litRGB,uDiffuseColor.a);\n"
+"    FragColor.rgb*=cnaCascadeDebugTint(vWorldPos);\n"
 "    FragColor.rgb+=specularRGB*FragColor.a;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
@@ -6339,6 +6414,7 @@ CNA_GL_SHADOW_DECL
 "    vec4 texColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
 "    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
 "    FragColor=vec4(litRGB*texColor.rgb,uDiffuseColor.a*texColor.a*vc.a);\n"
+"    FragColor.rgb*=cnaCascadeDebugTint(vWorldPos);\n"
 "    FragColor.rgb+=specularRGB*FragColor.a;\n"
 // Vertex color modulates the whole combined diffuse+specular output, not just diffuse -- applied
 // after the specular add so VertexColorEnabled=true with a black vertex color genuinely zeroes
@@ -6745,6 +6821,7 @@ CNA_GL_SHADOW_DECL
 // KHR_materials_emissive_strength, which is a second reason never to transfer it.
 "    vec3 emissive=uEmissiveColor*mix(emissiveTex,cnaSrgbToLinear(emissiveTex),uSrgb.y);\n"
 "    FragColor=vec4(ambient+Lo+emissive,alpha);\n"
+"    FragColor.rgb*=cnaCascadeDebugTint(vWorldPos);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 // Fog is mixed in LINEAR space, so uFogColor -- an ordinary application-supplied sRGB
@@ -7010,6 +7087,7 @@ CNA_GL_SHADOW_DECL
 // KHR_materials_emissive_strength, which is a second reason never to transfer it.
 "    vec3 emissive=uEmissiveColor*mix(emissiveTex,cnaSrgbToLinear(emissiveTex),uSrgb.y);\n"
 "    FragColor=vec4(ambient+Lo+emissive,alpha);\n"
+"    FragColor.rgb*=cnaCascadeDebugTint(vWorldPos);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 // Fog is mixed in LINEAR space, so uFogColor -- an ordinary application-supplied sRGB
@@ -7306,6 +7384,12 @@ CNA_GL_SHADOW_DECL
         p.loc_shadow_bias    = p.prog.uniform_location("uShadowBias");
         p.loc_shadow_texel   = p.prog.uniform_location("uShadowTexel");
         p.loc_shadow_pcf     = p.prog.uniform_location("uShadowPcfRadius");
+        p.loc_cascade_count  = p.prog.uniform_location("uCascadeCount");
+        p.loc_cascade_mats   = p.prog.uniform_location("uCascadeMatrices[0]");
+        p.loc_cascade_splits = p.prog.uniform_location("uCascadeSplits");
+        p.loc_cascade_viewz  = p.prog.uniform_location("uCascadeViewZ");
+        p.loc_cascade_blend  = p.prog.uniform_location("uCascadeBlend");
+        p.loc_cascade_debug  = p.prog.uniform_location("uCascadeDebug");
     }
 
     void EasyGLRenderer::BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
@@ -7714,11 +7798,39 @@ if (ProfileIsEs2ApiGeneration())
             }
             if (p.loc_shadow_texel >= 0)
             {
-                // 1/size, because textureSize() does not exist in the ES 1.00 form these shaders
-                // are also compiled in. A square map is assumed, which is what ShadowMap allocates.
-                const int size = haveShadow ? params.shadowMap->GetWidth() : 1;
-                p.prog.set_uniform(p.loc_shadow_texel, size > 0 ? 1.0f / static_cast<float>(size)
-                                                                : 0.0f);
+                // 1/size per axis, because textureSize() does not exist in the ES 1.00 form these
+                // shaders are also compiled in. Two components rather than one because a cascade
+                // atlas is N times wider than it is tall, and a single scalar would step the PCF
+                // taps N times too far in X and smear each cascade into its neighbour.
+                const int width  = haveShadow ? params.shadowMap->GetWidth() : 1;
+                const int height = haveShadow ? params.shadowMap->GetHeight() : 1;
+                p.prog.set_uniform(p.loc_shadow_texel,
+                                   width > 0 ? 1.0f / static_cast<float>(width) : 0.0f,
+                                   height > 0 ? 1.0f / static_cast<float>(height) : 0.0f);
+            }
+            // Cascades (MOD-908). Count 0 is the single-map path, and every draw that has never
+            // heard of cascades takes it -- which is what keeps this addition free.
+            if (p.loc_cascade_count >= 0)
+            {
+                const int count = (haveShadow && params.cascadeCount > 0)
+                                      ? (params.cascadeCount > 4 ? 4 : params.cascadeCount)
+                                      : 0;
+                p.prog.set_uniform(p.loc_cascade_count, static_cast<float>(count));
+                if (p.loc_cascade_mats >= 0)
+                    ::metagl::glUniformMatrix4fv(::metagl::UniformLocation{p.loc_cascade_mats}, 4,
+                                                 0, params.cascadeMatricesColMajor);
+                if (p.loc_cascade_splits >= 0)
+                    p.prog.set_uniform(p.loc_cascade_splits, params.cascadeSplits[0],
+                                       params.cascadeSplits[1], params.cascadeSplits[2],
+                                       params.cascadeSplits[3]);
+                if (p.loc_cascade_viewz >= 0)
+                    p.prog.set_uniform(p.loc_cascade_viewz, params.cascadeViewZRow[0],
+                                       params.cascadeViewZRow[1], params.cascadeViewZRow[2],
+                                       params.cascadeViewZRow[3]);
+                if (p.loc_cascade_blend >= 0)
+                    p.prog.set_uniform(p.loc_cascade_blend, params.cascadeBlendBand);
+                if (p.loc_cascade_debug >= 0)
+                    p.prog.set_uniform(p.loc_cascade_debug, params.cascadeDebugTint ? 1.0f : 0.0f);
             }
             if (p.loc_shadowmap >= 0)
             {

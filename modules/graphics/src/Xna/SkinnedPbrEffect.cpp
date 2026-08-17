@@ -493,6 +493,27 @@ namespace Microsoft::Xna::Framework::Graphics
         p.shadowsEnabled  = shadowsEnabledEXT_ && shadowMapEXT_ != nullptr;
         p.shadowDepthBias = shadowDepthBiasEXT_;
         p.shadowPcfRadius = shadowFilterRadiusEXT_;
+        if (p.shadowsEnabled && shadowCascadesEXT_.Count > 0)
+        {
+            // MOD-908: the cascade matrices replace the single light matrix rather than joining
+            // it -- a receiver reads one or the other, never both, so leaving a stale
+            // lightViewProjColMajor behind would be harmless but misleading to anyone reading it.
+            p.cascadeCount = shadowCascadesEXT_.Count;
+            for (int c = 0; c < shadowCascadesEXT_.Count; ++c)
+            {
+                const float* m = &shadowCascadesEXT_.WorldToAtlas[c].M11;
+                for (int i = 0; i < 16; ++i) p.cascadeMatricesColMajor[c * 16 + i] = m[i];
+                p.cascadeSplits[c] = shadowCascadesEXT_.SplitDistance[c];
+            }
+            // The view matrix's third column: dotting a world position with it gives view-space Z,
+            // whose negation is the depth the splits are expressed in.
+            p.cascadeViewZRow[0] = shadowCascadesEXT_.CameraView.M13;
+            p.cascadeViewZRow[1] = shadowCascadesEXT_.CameraView.M23;
+            p.cascadeViewZRow[2] = shadowCascadesEXT_.CameraView.M33;
+            p.cascadeViewZRow[3] = shadowCascadesEXT_.CameraView.M43;
+            p.cascadeBlendBand = shadowCascadesEXT_.BlendBand;
+            p.cascadeDebugTint = shadowCascadesEXT_.DebugTint;
+        }
         if (p.shadowsEnabled)
         {
             p.shadowMap = &shadowMapEXT_->GetRenderer();
@@ -693,4 +714,14 @@ namespace Microsoft::Xna::Framework::Graphics
     void SkinnedPbrEffect::setShadowFilterRadiusEXT(int radius) { shadowFilterRadiusEXT_ = radius; }
 
     int SkinnedPbrEffect::getShadowFilterRadiusEXT() const { return shadowFilterRadiusEXT_; }
+
+    void SkinnedPbrEffect::setShadowCascadesEXT(const ShadowCascadeStateEXT& state)
+    {
+        shadowCascadesEXT_ = state;
+    }
+
+    const ShadowCascadeStateEXT& SkinnedPbrEffect::getShadowCascadesEXT() const
+    {
+        return shadowCascadesEXT_;
+    }
 }

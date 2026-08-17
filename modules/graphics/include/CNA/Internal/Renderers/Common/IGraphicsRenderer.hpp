@@ -918,6 +918,24 @@ namespace CNA::Internal::Renderers
         /// 3x3 neighbourhood, 2 a 5x5 one. Expressed as a radius rather than a kernel size because
         /// that is what a shader loop bound needs, and clamped by the renderer rather than trusted.
         int   shadowPcfRadius = 1;
+        /// plan_modern.md MOD-908: cascaded shadows. Zero means "one map", and everything below is
+        /// ignored -- which is what keeps every existing draw, and every renderer with no cascade
+        /// shader, exactly as it was. When it is non-zero `shadowMap` is the cascade atlas rather
+        /// than a single map, `cascadeMatricesColMajor` holds one world-to-atlas matrix per cascade
+        /// (the atlas sub-rectangle already baked in) and `lightViewProjColMajor` is unused.
+        int   cascadeCount = 0;
+        float cascadeMatricesColMajor[4 * 16] = {};
+        /// View-space depth at which each cascade stops being used, ascending.
+        float cascadeSplits[4] = {0, 0, 0, 0};
+        /// The view matrix's third column, so the shader can compute a fragment's view depth
+        /// without being given the whole matrix a second time.
+        float cascadeViewZRow[4] = {0, 0, -1, 0};
+        /// Width of the cross-fade between neighbouring cascades, in view-depth units. Zero is a
+        /// hard switch, which is visible as a line across the ground wherever the two cascades
+        /// disagree about an edge.
+        float cascadeBlendBand = 0.0f;
+        /// Tints each cascade a different colour. A debugging aid, off by default.
+        bool  cascadeDebugTint = false;
         /// BasicEffect: DirectionalLight0/1/2's SpecularColor, zeroed when that light is disabled
         /// (mirrors the light*Diffuse zeroing — FNA's DirectionalLight.Enabled setter zeroes both).
         float light0Specular[3] = {0,0,0};

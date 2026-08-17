@@ -9,7 +9,10 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IShadowReceiverEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShadowCascadeStateEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
@@ -27,6 +30,7 @@ namespace CNA::Graphics {
     using Microsoft::Xna::Framework::Graphics::DepthFormat;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
     using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+    using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
     using Microsoft::Xna::Framework::Graphics::ShaderEffect;
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
     using Microsoft::Xna::Framework::Graphics::Texture2D;
@@ -205,9 +209,14 @@ void main() {
                 ? SurfaceFormat::Single
                 : SurfaceFormat::Color;
 
+        // PreserveContents, not the default. Each cascade is a separate pass that binds the same
+        // target, and DiscardContents means exactly what it says: binding it for cascade 1 throws
+        // away cascade 0. The symptom is an atlas holding only whichever cascade was drawn last,
+        // which still renders and still looks like a shadow map.
         atlas_ = std::make_unique<RenderTarget2D>(device, cascadeSize_ * cascadeCount_,
                                                    cascadeSize_, false, format,
-                                                   DepthFormat::Depth24);
+                                                   DepthFormat::Depth24, 0,
+                                                   RenderTargetUsage::PreserveContents);
 
         const bool canRaster  = device.SupportsCapability(CNA::GraphicsCapability::ThreeD);
         const bool canCompile = device.SupportsCapability(CNA::GraphicsCapability::CustomEffects);
@@ -241,6 +250,41 @@ void main() {
     ShaderEffect* CascadedShadowMap::getCasterEffect() const
     {
         return supported_ ? casterEffect_.get() : nullptr;
+    }
+
+    float CascadedShadowMap::getBlendBand() const { return blendBand_; }
+
+    void CascadedShadowMap::setBlendBand(const float band)
+    {
+        blendBand_ = std::max(0.0f, band);
+    }
+
+    bool CascadedShadowMap::isDebugTintEnabled() const { return debugTint_; }
+
+    void CascadedShadowMap::setDebugTintEnabled(const bool enabled) { debugTint_ = enabled; }
+
+    void CascadedShadowMap::applyToReceiver(
+        Microsoft::Xna::Framework::Graphics::IShadowReceiverEXT& receiver) const
+    {
+        if (!updated_)
+            throw std::logic_error(
+                "CNA::Graphics::CascadedShadowMap::applyToReceiver: update() must run first -- "
+                "there are no cascade matrices to give");
+
+        Microsoft::Xna::Framework::Graphics::ShadowCascadeStateEXT state;
+        state.Count      = cascadeCount_;
+        state.CameraView = cameraView_;
+        state.BlendBand  = blendBand_;
+        state.DebugTint  = debugTint_;
+        for (int i = 0; i < cascadeCount_; ++i)
+        {
+            state.WorldToAtlas[i]  = cascades_[static_cast<std::size_t>(i)].matrix;
+            state.SplitDistance[i] = cascades_[static_cast<std::size_t>(i)].splitDistance;
+        }
+
+        receiver.setShadowMapEXT(atlas_.get());
+        receiver.setShadowCascadesEXT(state);
+        receiver.setShadowFilterRadiusEXT(ShadowMap::filterRadiusForQuality(quality_));
     }
 
     int CascadedShadowMap::selectCascade(const float viewDepth) const
@@ -315,10 +359,14 @@ void main() {
             std::array<Vector3, 8> corners{};
             for (int c = 0; c < 8; ++c)
             {
-                const Vector3& source = viewCorners[static_cast<std::size_t>(c)];
+                // Always one of the four NEAR corners, even for the far four: each corner's X and
+                // Y scale linearly with distance under a perspective projection, so the corner at
+                // `depth` is a near corner scaled by depth/near. Taking the far corners as the
+                // basis for the far four would apply that ratio twice and fit each cascade to a
+                // volume tens of times too large -- which still renders, with every cascade
+                // covered edge to edge by the first caster drawn into it.
+                const Vector3& source = viewCorners[static_cast<std::size_t>(c % 4)];
                 const float depth = (c < 4) ? previousSplit : thisSplit;
-                // Each corner's X and Y scale linearly with distance under a perspective
-                // projection, so the corner at `depth` is the near corner scaled by the ratio.
                 const float scale = depth / std::max(nearPlane, 1e-6f);
                 const Vector3 inView(source.X * scale, source.Y * scale, -depth);
                 corners[static_cast<std::size_t>(c)] = TransformCoordinate(inView, inverseView);
@@ -357,6 +405,7 @@ void main() {
             previousSplit = thisSplit;
         }
 
+        cameraView_   = cameraView;
         updated_      = true;
         atlasCleared_ = false;
     }

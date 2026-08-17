@@ -3,6 +3,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShadowCascadeStateEXT.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics {
 
@@ -92,6 +93,23 @@ namespace Microsoft::Xna::Framework::Graphics {
 
         /** @brief Returns the percentage-closer-filtering radius, in shadow-map texels. */
         CNAEXT [[nodiscard]] virtual int getShadowFilterRadiusEXT() const = 0;
+
+        /**
+         * @brief Supplies a cascaded shadow set, replacing the single-map light matrix.
+         *
+         * The shadow map itself still arrives through @ref setShadowMapEXT -- a cascade atlas is
+         * an ordinary texture. What changes is how a fragment finds its place in it: instead of
+         * one light matrix there is one per cascade, chosen by view depth.
+         *
+         * `Count == 0` restores the single-map behaviour, which is also the default, so an effect
+         * that never hears about cascades behaves exactly as it did before they existed.
+         *
+         * @param state The cascade set, as one value; see `ShadowCascadeStateEXT` for why.
+         */
+        CNAEXT virtual void setShadowCascadesEXT(const ShadowCascadeStateEXT& state) = 0;
+
+        /** @brief Returns the cascade set currently in use; `Count == 0` means a single map. */
+        CNAEXT [[nodiscard]] virtual const ShadowCascadeStateEXT& getShadowCascadesEXT() const = 0;
     };
 
 } // namespace Microsoft::Xna::Framework::Graphics

@@ -492,6 +492,10 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void setShadowFilterRadiusEXT(int radius) override;
         /** @brief Returns the PCF radius in shadow-map texels. */
         CNAEXT [[nodiscard]] int getShadowFilterRadiusEXT() const override;
+        /** @brief Supplies a cascaded shadow set. @param state The cascades. */
+        CNAEXT void setShadowCascadesEXT(const ShadowCascadeStateEXT& state) override;
+        /** @brief Returns the cascade set in use; `Count == 0` means a single map. */
+        CNAEXT [[nodiscard]] const ShadowCascadeStateEXT& getShadowCascadesEXT() const override;
 
     private:
 
@@ -501,6 +505,7 @@ namespace Microsoft::Xna::Framework::Graphics
         bool  shadowsEnabledEXT_ = false;
         float shadowDepthBiasEXT_ = 0.0015f;
         int   shadowFilterRadiusEXT_ = 1;   // 3x3, the default ShadowQuality::Medium asks for
+        ShadowCascadeStateEXT shadowCascadesEXT_{};
         explicit PbrEffect(const PbrEffect& cloneSource);
 
         void CacheEffectParameters();

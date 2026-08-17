@@ -14,6 +14,7 @@
 
 namespace Microsoft::Xna::Framework::Graphics {
     class GraphicsDevice;
+    class IShadowReceiverEXT;
     class RenderTarget2D;
     class ShaderEffect;
     class Texture2D;
@@ -155,6 +156,38 @@ namespace CNA::Graphics {
         [[nodiscard]] float getSplitDistance(int cascadeIndex) const;
 
         /**
+         * @brief Configures a lit effect to receive these cascades.
+         *
+         * Everything the receiver needs, set together: the atlas, the per-cascade matrices and
+         * splits, the camera the cascades were fitted to, the blend band and the filter radius.
+         * Set individually they can be set inconsistently -- a matrix from this frame beside a
+         * split from the last one puts fragments in the wrong cascade, which reads as a
+         * resolution artefact rather than as the torn update it is.
+         *
+         * @param receiver The effect to configure.
+         * @throws std::logic_error If `update` has never run, since there would be nothing to give.
+         */
+        void applyToReceiver(Microsoft::Xna::Framework::Graphics::IShadowReceiverEXT& receiver) const;
+
+        /**
+         * @brief Returns the cross-fade width between neighbouring cascades, in view-depth units.
+         *
+         * Defaults to zero. A hard switch is visually worse than the resolution change it hides:
+         * the two cascades disagree about where a shadow edge is, and the disagreement draws a
+         * straight line across the ground at the split distance.
+         */
+        [[nodiscard]] float getBlendBand() const;
+
+        /** @brief Sets the cross-fade width, in view-depth units; negative values become zero. */
+        void setBlendBand(float band);
+
+        /** @brief Returns whether each cascade is tinted a distinct colour for debugging. */
+        [[nodiscard]] bool isDebugTintEnabled() const;
+
+        /** @brief Enables or disables the per-cascade debug tint. Off by default. */
+        void setDebugTintEnabled(bool enabled);
+
+        /**
          * @brief Returns the cascade that covers a view-space depth.
          *
          * The same rule the receiver shader applies, kept here so it can be tested against
@@ -258,6 +291,9 @@ namespace CNA::Graphics {
         bool atlasCleared_ = false;
         int  openCascade_  = -1;
         float splitLambda_ = 0.75f;
+        float blendBand_   = 0.0f;
+        bool  debugTint_   = false;
+        Microsoft::Xna::Framework::Matrix cameraView_{};
 
         std::array<Cascade, kMaxCascades> cascades_{};
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D> atlas_;

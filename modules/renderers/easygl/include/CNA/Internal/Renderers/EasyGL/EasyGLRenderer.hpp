@@ -726,8 +726,16 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_lightviewproj  = -1;  ///< mat4 world -> shadow-map space
             int loc_shadows_on     = -1;  ///< float 0/1
             int loc_shadow_bias    = -1;  ///< float
-            int loc_shadow_texel   = -1;  ///< float 1/size (textureSize() is ES 3.00 only)
+            int loc_shadow_texel   = -1;  ///< vec2 1/size (textureSize() is ES 3.00 only)
             int loc_shadow_pcf     = -1;  ///< float PCF radius in texels, 0..2
+            /// plan_modern.md MOD-908: cascades. uCascadeCount 0 means a single map and the rest
+            /// are left alone, which is why an existing draw is byte-for-byte unchanged.
+            int loc_cascade_count  = -1;  ///< float, 0 = single map
+            int loc_cascade_mats   = -1;  ///< mat4[4], world -> atlas, sub-rectangle baked in
+            int loc_cascade_splits = -1;  ///< vec4 of view-depth boundaries
+            int loc_cascade_viewz  = -1;  ///< vec4, the view matrix's third column
+            int loc_cascade_blend  = -1;  ///< float cross-fade width in view-depth units
+            int loc_cascade_debug  = -1;  ///< float 0/1
             int loc_envmap        = -1;  ///< samplerCube (EnvironmentMapEffect only)
             int loc_envmap_amount = -1;  ///< float blend [0,1]
             int loc_envmap_spec   = -1;  ///< vec3 specular tint
