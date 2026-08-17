@@ -7,10 +7,11 @@ namespace CNA::Internal::Renderers::PixiJs
     /**
      * @brief Texture backed by a synchronous, buffer-uploaded PIXI.Texture (Design decision 8).
      *
-     * Each instance owns one JS-side PIXI.BaseTexture/PIXI.Texture pair, registered under a unique
-     * integer id in `Module['cnaPixiTextures']` (see PixiJsRenderer.cpp's EM_JS functions and
-     * PixiJsSpriteBatchRenderer.cpp's Draw() path, which sources pooled PIXI.Sprite.texture
-     * assignments from it via that id).
+     * Each instance owns one JS-side PIXI.Texture (and, through it, its PIXI.BaseTexture and the
+     * cache of per-source-rectangle views onto it), registered under a unique integer id in
+     * `Module['cnaPixi'].textures` -- see PixiJsRenderer.cpp's EM_JS functions and
+     * PixiJsSpriteBatchRenderer.cpp's flush, which resolves the sampled texture from that registry
+     * by id.
      */
     class PixiJsTextureRenderer : public ITextureRenderer
     {
