@@ -82,3 +82,8 @@ tools/fna-reference/obj/
 *.dxvk-cache
 
 
+
+# CTest scratch (Testing/Temporary/LastTest.log, CTestCostData.txt), written into whatever
+# directory ctest was invoked from -- including the repo root when a build dir is passed with -C
+# or the invocation misses. Runtime artifact, not source.
+Testing/
