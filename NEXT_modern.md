@@ -27,12 +27,22 @@ do not reconstruct the layer's state from the general `NEXT.md`.
 | ✅ | `MOD-118`–`MOD-123`, `MOD-125` — completeness diagnostic, depth/MSAA/mip/MRT on float targets, half-float filtering query |
 | ✅ | `MOD-21`/`MOD-22` — `Uncharted2` and the settings fields the passes read |
 | ✅ | Phase 2 core — `PostProcessContext`, `FullscreenPass`, `PostProcessPass`, `RenderTargetPool`, `BlitPass`, `PostProcessChain` (`MOD-16`, `19`, `200`–`208`, `225`–`228`) |
+| ✅ | Phase 3 — `TonemapPass`, all five operators, shader verified against a CPU reference (`MOD-300`–`313`, `317`) |
+| ✅ | Phase 7 core — `RenderPipeline`, the consumer `RenderPipelineSettings` never had (`MOD-700`–`737`) |
+| ✅ | Phase 4 — `BloomPass`, wired ahead of tonemapping (`MOD-400`–`418`) |
+| ✅ | Phase 6 — `FxaaPass`, wired after tonemapping (`MOD-600`–`606`) |
 
-**Next up (critical path to a first HDR frame):** `MOD-300`–`MOD-305` (`TonemapPass` and its five
-operators) → `MOD-700`–`MOD-712` (`RenderPipeline`). Then Phase 4 (bloom) reuses the same
-infrastructure. Still open behind that: `MOD-203` (restore-on-exception around a pass),
-`MOD-209`/`MOD-210` (settings-driven skipping, shader cache), `MOD-5`, and Phase 1's remaining
-verification/documentation rows `MOD-130`–`MOD-141`.
+**The HDR spine is complete and verified end to end.** A game can wrap its draw calls in
+`RenderPipeline::begin`/`end`, enable HDR, bloom, a tonemapping operator and FXAA, and get them --
+on EasyGL, in software, under Xvfb. With everything off it allocates nothing and renders exactly
+what it would have rendered without a pipeline.
+
+**Next up:** Phase 5 (depth/normal prepass + SSAO, `MOD-500`–`MOD-529`) is the last post-process
+subsystem and the one that needs new scene-side plumbing rather than another fullscreen pass. Then
+Phase 8 (shadow maps). Smaller open rows behind those: `MOD-203` (restore-on-exception around a
+pass), `MOD-209`/`MOD-210`, `MOD-405`/`407`/`409`/`413`/`415`–`417` (bloom quality/perf/goldens),
+`MOD-314`–`316`/`318`–`320` (tonemap goldens, example, docs), `MOD-5`, and Phase 1's
+`MOD-130`–`MOD-141`.
 
 **Owner decisions in force** (asked 2026-08-17): start with the HDR spine; EasyGL is the
 reference renderer with Vulkan and D3D11 as the committed follow-ups and the rest opportunistic;
@@ -88,6 +98,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-17 | `cmake-build-cnaext` (OPENGLES3, `CNA_CNAEXT=ON`, Debug), base `origin/next` @ `05a9eab0` | full `CnaTests`, from the repo root, under Xvfb (`MOD-1710`) | **7548 ran · 7484 pass · 64 skip · 0 fail** |
 | 2026-08-17 | same, with `MOD-105`/`108`/`124`/`131` applied | same | 7565 ran · 7501 pass · 64 skip · **0 fail** |
 | 2026-08-17 | same, with `MOD-107` applied | same | 7567 ran · 7503 pass · 64 skip · **0 fail** |
+| 2026-08-17 | same, through Phases 2/3/4/6/7 (tonemap, bloom, FXAA, pipeline) | same | 7630 ran · 7566 pass · 64 skip · **0 fail** |
 
 That is a clean run, and it is new. Measuring the first baseline on this branch turned up eight
 failures and a segfault at ~7300 tests, all of them pre-existing on `next` (verified by rebuilding
