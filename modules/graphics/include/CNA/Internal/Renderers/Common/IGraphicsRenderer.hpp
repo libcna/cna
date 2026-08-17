@@ -2412,13 +2412,21 @@ namespace CNA::Internal::Renderers
         std::function<void(RendererDeviceEvent)> deviceEventCallback;
     };
 
-    // plan_runtimerenderer.md design decision 4: the factory used to be declared here, once, and
-    // defined once per renderer family with an identical signature -- which is exactly why two
-    // renderer archives could never link into the same binary. Each family now declares and
-    // defines CNA::Internal::Renderers::<Family>::CreateGraphicsRenderer instead, and
+    // plan_runtimerenderer.md design decision 4: the renderer factory is NOT declared here.
+    //
+    // It used to be -- declared once in this header and defined once per renderer family with an
+    // identical signature, which is exactly why two renderer archives could never link into the
+    // same binary. Each family now declares and defines
+    // CNA::Internal::Renderers::<Family>::CreateGraphicsRenderer in its own namespace, and
     // GraphicsRendererRegistry reaches it through GraphicsRendererDescriptor::create.
-    // Factory function to be implemented by each renderer. The creation contract deliberately
-    // contains only platform value types; renderer-family-specific native API work starts behind
-    // this boundary.
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args);
+    //
+    // The declaration outlived the change and was removed only later, because a leftover
+    // declaration is not inert: it is a name any family's own factory call has to be qualified
+    // against (EasyGL's own suite carried a comment about the resulting ambiguity), and it is a
+    // standing invitation for a newly added family to define the colliding symbol and appear to
+    // work -- which PIXIJS did, undetected until a build tried to link it beside another
+    // renderer. scripts/check_runtime_renderer_discipline.py now fails on such a definition.
+    //
+    // The creation contract itself (GraphicsRendererCreateArgs above) deliberately contains only
+    // platform value types; renderer-family-specific native API work starts behind that boundary.
 }

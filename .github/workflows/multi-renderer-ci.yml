@@ -68,6 +68,7 @@ jobs:
           python3 scripts/check_renderer_identities.py
           python3 scripts/check_renderer_combinations.py
           python3 scripts/check_runtime_renderer_discipline.py
+          python3 scripts/check_renderer_target_discipline.py
 
       - name: Configure and build (multi-renderer)
         run: |
@@ -95,6 +96,16 @@ jobs:
           actual=$(CNA_GRAPHICS_RENDERER=SOFTWARE ./build-multi/cna_demo_renderer_selection \
                    | sed -n 's/^Active renderer: //p')
           [ "${actual}" = "SOFTWARE" ] || { echo "FAIL: env var ignored, got '${actual}'" >&2; exit 1; }
+
+      # plan_runtimerenderer.md RTR-P6-1. The interesting case is the REJECT one: an invalid default
+      # used to be replaced by the list's first entry with only a STATUS line, so a build asking for
+      # one default and getting another succeeded and then answered every later renderer question
+      # about a renderer nobody asked for. A CI job that only ever configures VALID sets cannot
+      # notice that, which is why the refusal is asserted rather than assumed.
+      - name: The default renderer must be a member of the compiled-in set
+        run: |
+          set -euo pipefail
+          ctest --test-dir build-multi -R '^CnaRendererDefaultSelection_' --output-on-failure
 
       - name: Multi-renderer test suite
         run: |
