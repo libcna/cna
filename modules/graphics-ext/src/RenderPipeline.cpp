@@ -5,6 +5,7 @@
 
 #include "CNA/Graphics/BloomPass.hpp"
 #include "CNA/Graphics/FxaaPass.hpp"
+#include "CNA/Graphics/SsaoPass.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
 #include "CNA/Graphics/TonemapPass.hpp"
@@ -27,7 +28,8 @@ namespace CNA::Graphics {
     RenderPipeline::RenderPipeline(GraphicsDevice& device)
         : device_(device), chain_(device), bloomPass_(std::make_unique<BloomPass>(device)),
           tonemapPass_(std::make_unique<TonemapPass>(device)),
-          fxaaPass_(std::make_unique<FxaaPass>(device))
+          fxaaPass_(std::make_unique<FxaaPass>(device)),
+          ssaoPass_(std::make_unique<SsaoPass>(device))
     {
     }
 
@@ -79,6 +81,7 @@ namespace CNA::Graphics {
         sceneTarget_.reset();
         chain_.resetTargets();
         bloomPass_->resetTargets();
+        ssaoPass_->resetTargets();
     }
 
     void RenderPipeline::begin(const Color& clearColor)
@@ -131,6 +134,10 @@ namespace CNA::Graphics {
         // everything that reasons about displayed pixels runs after. User passes come last, where
         // they see the frame as it will be shown.
         chain_.clear();
+        // SSAO first: it multiplies an occlusion term into the scene, and everything after it --
+        // bloom's threshold above all -- should see the shaded result rather than the unshaded one.
+        if (settings_.isSSAOEnabled())
+            chain_.addPass(ssaoPass_.get());
         // Bloom reads scene-referred values -- its threshold separates genuinely bright pixels
         // from merely white ones -- so it runs before the tonemapper compresses that range away.
         if (settings_.isBloomEnabled())
@@ -150,7 +157,9 @@ namespace CNA::Graphics {
         context.destination = nullptr;   // the back buffer
         context.width       = width_;
         context.height      = height_;
-        context.settings    = &settings_;
+        context.settings      = &settings_;
+        context.sourceDepth   = sceneDepth_;
+        context.sourceNormals = sceneNormals_;
 
         chain_.apply(context);
         lastFramePassCount_ = static_cast<int>(chain_.getPassCount());
@@ -160,6 +169,14 @@ namespace CNA::Graphics {
     {
         if (pass != nullptr)
             userPasses_.push_back(pass);
+    }
+
+    void RenderPipeline::setDepthNormalInputs(
+        Microsoft::Xna::Framework::Graphics::Texture2D* depth,
+        Microsoft::Xna::Framework::Graphics::Texture2D* normals)
+    {
+        sceneDepth_   = depth;
+        sceneNormals_ = normals;
     }
 
     void RenderPipeline::clearUserPasses()

@@ -17,6 +17,7 @@ namespace Microsoft::Xna::Framework {
 namespace Microsoft::Xna::Framework::Graphics {
     class GraphicsDevice;
     class RenderTarget2D;
+    class Texture2D;
 }
 
 namespace CNA::Graphics {
@@ -25,6 +26,7 @@ namespace CNA::Graphics {
     class BloomPass;
     class FxaaPass;
     class PostProcessPass;
+    class SsaoPass;
     class TonemapPass;
 
     /**
@@ -119,6 +121,19 @@ namespace CNA::Graphics {
         void clearUserPasses();
 
         /**
+         * @brief Supplies the scene depth and view-space normals SSAO needs.
+         *
+         * The pipeline does not render these itself: producing them means drawing the game's own
+         * geometry a second time with a different effect, which only the game can do. Where they
+         * are absent, SSAO reports it once and renders an unoccluded frame rather than failing.
+         *
+         * @param depth   Linear scene depth, or null to clear.
+         * @param normals View-space normals encoded as `n * 0.5 + 0.5`, or null to clear.
+         */
+        void setDepthNormalInputs(Microsoft::Xna::Framework::Graphics::Texture2D* depth,
+                                  Microsoft::Xna::Framework::Graphics::Texture2D* normals);
+
+        /**
          * @brief Returns the scene target the frame is being rendered into.
          *
          * Null outside `begin`/`end`, and null when the pipeline is rendering straight to the back
@@ -176,6 +191,9 @@ namespace CNA::Graphics {
         std::unique_ptr<BloomPass> bloomPass_;
         std::unique_ptr<TonemapPass> tonemapPass_;
         std::unique_ptr<FxaaPass> fxaaPass_;
+        std::unique_ptr<SsaoPass> ssaoPass_;
+        Microsoft::Xna::Framework::Graphics::Texture2D* sceneDepth_   = nullptr;
+        Microsoft::Xna::Framework::Graphics::Texture2D* sceneNormals_ = nullptr;
         std::vector<PostProcessPass*> userPasses_;
 
         int  width_  = 0;

@@ -14,6 +14,7 @@
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
 #include "CNA/Graphics/RenderPipeline.hpp"
+#include "CNA/Graphics/RenderPipelineSettings.hpp"
 #include "CNA/Graphics/TonemappingMode.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -269,6 +270,48 @@ TEST(RenderPipelineTest, AnInertPipelineProducesTheSameFrameAsNoPipelineAtAll)
     EXPECT_FALSE(pipeline.isUsingSceneTarget());
     EXPECT_EQ(pipeline.getLastFramePassCount(), 0);
     EXPECT_EQ(pipeline.getGpuMemoryEstimateBytes(), 0u);
+}
+
+TEST(RenderPipelineTest, SsaoRunsOnlyWhenItsInputsAreSupplied)
+{
+    // The pipeline cannot produce depth and normals itself -- that means drawing the game's
+    // geometry a second time with a different effect, which only the game can do. Enabling SSAO
+    // without them is a misconfiguration that must still render a frame.
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+    pipeline.getSettings().setSSAOEnabled(true);
+
+    pipeline.begin(Color::Black);
+    pipeline.end();
+
+    EXPECT_TRUE(pipeline.isUsingSceneTarget());
+    EXPECT_EQ(pipeline.getLastFramePassCount(), 1);   // SSAO ran, and passed the frame through
+}
+
+TEST(RenderPipelineTest, TheFixedPassOrderIsSsaoThenBloomThenTonemapThenFxaa)
+{
+    // Each position is a decision with a reason: SSAO shades the scene before anything measures
+    // its brightness, bloom's threshold reads scene-referred values, tonemapping is the boundary
+    // to display-referred colour, and FXAA finds edges in displayed pixels.
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+
+    auto& settings = pipeline.getSettings();
+    settings.setSSAOEnabled(true);
+    settings.setBloomEnabled(true);
+    settings.setTonemappingMode(TonemappingMode::Aces);
+    settings.setFXAAEnabled(true);
+
+    CountingPass user;
+    pipeline.addUserPass(&user);
+
+    pipeline.begin(Color::Black);
+    pipeline.end();
+
+    EXPECT_EQ(pipeline.getLastFramePassCount(), 5);   // ssao, bloom, tonemap, fxaa, user
+    EXPECT_EQ(user.applyCount, 1);
 }
 
 } // namespace

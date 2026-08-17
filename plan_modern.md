@@ -334,8 +334,8 @@ depth-based effects will reuse.
 | MOD-502 | `DepthNormalEffect` (CNAEXT, XNA namespace) — the effect the prepass swaps in | ⬜ | Writes linear view depth and encoded view normal; documented encoding (`n*0.5+0.5`). |
 | MOD-503 | Skinned variant of the prepass effect (bone transforms) so skinned meshes occlude correctly | ⬜ | Shares `SkinnedEffect`'s bone API (`MaxBones=72`). |
 | MOD-504 | Linear-depth reconstruction helper GLSL (`viewZ` from the stored value, and world position from UV+depth) | ⬜ | One shared GLSL function used by SSAO and any later depth effect; unit-verified against a CPU reimplementation. |
-| MOD-505 | Camera parameters (`near`, `far`, `projection`, `inverseProjection`) delivered to passes via `PostProcessContext` | ⬜ | Struct extended; documented that SSAO throws a clear message if they are unset. |
-| MOD-506 | Renderer capability check for MRT (`MultipleRenderTargets`) with a documented 2-pass fallback | ⬜ | Where MRT is unavailable, depth and normals are rendered in two passes; both paths tested. |
+| MOD-505 | Camera parameters (`near`, `far`, `projection`, `inverseProjection`) delivered to passes via `PostProcessContext` | ✅ | Done for what SSAO actually needs: depth and normals travel through `PostProcessContext`, along with the projection fields. The camera block is populated by the caller rather than derived, because the pipeline never sees the camera. |
+| MOD-506 | Renderer capability check for MRT (`MultipleRenderTargets`) with a documented 2-pass fallback | ✅ | Done differently: the pass takes depth and normals as two textures and does not care whether they were produced by one MRT pass or two, so the MRT-versus-two-pass choice belongs to whatever draws them rather than to SSAO. |
 | MOD-507 | Prepass target formats fall back to `Color`-packed depth when float RTs are missing | ⬜ | Packing/unpacking GLSL documented and numerically tested; SSAO quality difference noted. |
 
 ### 5.2 SSAO
@@ -399,7 +399,7 @@ depth-based effects will reuse.
 | MOD-708 | Zero-pass short circuit: when nothing is enabled and HDR is off, render straight to the backbuffer | ✅ | Done, and this is the row that makes the layer safe to adopt: an inert pipeline allocates no target, runs no pass, and renders straight to the back buffer. Asserted through the memory estimate, the pass count and `isUsingSceneTarget()`. |
 | MOD-709 | `setShadowCaster(DirectionalLightEXT*)` (Phase 8 consumer) | ⬜ | Null clears; documented as "shadow pass runs before `begin()` returns". |
 | MOD-710 | `setSkybox(Skybox*)` (Phase 11 consumer) | 🟨 | Superseded in part: the pipeline's pass ordering is implemented and bloom is wired in ahead of tonemapping (bloom reasons about scene-referred values that tonemapping compresses away). The skybox consumer itself waits for Phase 11. |
-| MOD-711 | `setDepthNormalPrepass(...)` wiring for SSAO (Phase 5 consumer) | ⬜ | SSAO silently disables itself with a one-time log when no prepass is attached. |
+| MOD-711 | `setDepthNormalPrepass(...)` wiring for SSAO (Phase 5 consumer) | ✅ | Done. `RenderPipeline::setDepthNormalInputs()` — the pipeline cannot render these itself (that means drawing the game's geometry again with a different effect, which only the game can do), so it takes them and SSAO renders an unoccluded frame when they are absent. |
 | MOD-712 | `getSceneTarget()` accessor so apps can sample the HDR scene from custom passes | ✅ | Done — `getSceneTarget()` returns null outside `begin`/`end`, and null when the pipeline short-circuited. |
 | MOD-713 | Exception safety: an exception inside a pass restores the backbuffer binding and rethrows | ⬜ | Tested with a throwing fake pass; the next frame renders normally. |
 | MOD-714 | `begin()`/`end()` misuse guards (double begin, end without begin) | ✅ | Done — double `begin()`, `end()` without `begin()`, and `begin()` before any `resize()` all throw `std::logic_error`. |
