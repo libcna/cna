@@ -354,6 +354,23 @@ if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
     target_link_libraries(cna_mojoshader_sdlgpu_probe PRIVATE cna_mojoshader SDL3::SDL3)
 endif()
 
+# plan_fx.md FX-062 existence gate: proves the pinned MojoShader's OpenGL adapter (mojoshader_
+# opengl.c) links and renders a committed effect's shader pair against a real GLES3 context this
+# machine can create, linking only MojoShader and SDL3 -- no CNA, no EasyGL. EasyGL is the shared
+# implementation behind OPENGLES2/OPENGLES3/OPENGL33/OPENGL4/WEBGL1/WEBGL2, and its own stock
+# shaders are authored once in GLSL ES 3.00, but that string-rewriting pipeline is irrelevant to
+# MojoShader-compiled shaders: MojoShader emits already-correct-dialect GLSL for whichever profile
+# its own MOJOSHADER_glCreateContext is asked for, entirely in parallel to EasyGL's own shaders.
+#
+# Not registered with ctest: it needs a working GL-capable display, which a headless CI runner may
+# not have, and a missing display is not a CNA regression. Does not require CNA_EASYGL_COMPILED_
+# EFFECTS or even the EasyGL renderer to be selected -- only cna_mojoshader (any renderer that
+# enables its own compiled-effects option publishes that target) and SDL3's GL context support.
+if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
+    add_executable(cna_mojoshader_gl_probe tools/graphics/mojoshader_gl_probe.cpp)
+    target_link_libraries(cna_mojoshader_gl_probe PRIVATE cna_mojoshader SDL3::SDL3)
+endif()
+
 # --- plan_platform.md PLAT-131: terminal restoration harness ---
 # A tiny standalone (non-GTest) executable that takes the terminal over with a TerminalSession and
 # then dies in a chosen way: normally, by SIGINT/SIGTERM/SIGHUP, by abort(), or by letting an
