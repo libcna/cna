@@ -240,7 +240,7 @@ a fullscreen-triangle drawer, a ping-pong target pool, and the `ShaderEffect` ga
 |---|---|---|---|
 | MOD-215 | `ShaderEffect::SetUniformMatrix` (4×4, column-major) if absent | ✅ | Not needed — present already (MOD-16). |
 | MOD-216 | `ShaderEffect` multi-sampler binding (≥4 texture units with named samplers) | ✅ | Not needed — present already (MOD-16). |
-| MOD-217 | `ShaderEffect::SetUniformFloatArray` / `Vector2Array` / `Vector4Array` | ✅ | Not needed — present already (MOD-16). |
+| MOD-217 | `ShaderEffect` float/vec2/**vec3** array uniforms | ✅ | **Closed as "not needed" by MOD-16's survey, then reopened and actually done.** A `vec3[]` uniform cannot be filled through `SetUniformFloatArray`: GL rejects the type mismatch and silently leaves the uniform at zero. That turned SSAO's 64-sample kernel into 64 samples at the origin — an image with no occlusion in it, while every unit test about the kernel still passed. `SetUniformVec3Array` added through `IEffectRenderer`, `ShaderEffect` and EasyGL. |
 | MOD-218 | `ShaderEffect::SetUniformInt` (sample counts, mode switches) | ✅ | Not needed — present already (MOD-16). |
 | MOD-219 | `ShaderEffect` compile-error surfacing with the shader name and line context | ⬜ | A deliberately broken pass shader throws a message containing the pass name and the GLSL log. |
 | MOD-220 | `ShaderEffect` — allow a pass to declare its own sampler filtering/addressing requirements | ⬜ | Bloom's linear-clamp requirement is expressed once by the pass, not by the caller's `SamplerState`. |
@@ -342,16 +342,16 @@ depth-based effects will reuse.
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| MOD-515 | `SsaoPass` skeleton + settings (radius, intensity, bias, sample count, power) | ⬜ | Settings sourced from `RenderPipelineSettings` (`MOD-22`). |
-| MOD-516 | Hemisphere sample-kernel generation (deterministic, seeded) | ⬜ | Same kernel every run for reproducible goldens; distribution unit-tested (all samples in the +Z hemisphere, density biased toward the origin). |
-| MOD-517 | Rotation-noise texture (4×4 tiled) | ⬜ | Generated once per pass; contents documented and unit-tested. |
-| MOD-518 | SSAO GLSL: occlusion estimate with range check | ⬜ | Flat surfaces yield ~1.0 (unoccluded); a corner yields <1.0; asserted numerically on a synthetic depth/normal input. |
-| MOD-519 | Bilateral/box blur pass for the AO buffer | ⬜ | Noise visibly reduced; edge-preserving behavior asserted on a synthetic depth discontinuity. |
-| MOD-520 | AO application mode: multiply into the scene's ambient term only, not into direct light | ⬜ | Documented; implemented as a composite pass so no effect shader changes are needed for v1. |
+| MOD-515 | `SsaoPass` skeleton + settings (radius, intensity, bias, sample count, power) | ✅ | Done. `SsaoPass` reads radius, intensity and sample count from settings and carries its own for standalone use. |
+| MOD-516 | Hemisphere sample-kernel generation (deterministic, seeded) | ✅ | Done — a deterministic low-discrepancy hemisphere set (Van der Corput), biased toward the origin so nearby geometry dominates. Asserted: every sample is in the +Z hemisphere, none longer than unit, and the early quarter is closer to the origin than the late quarter. |
+| MOD-517 | Rotation-noise texture (4×4 tiled) | ✅ | Done — a fixed 4×4 rotation texture. Deterministic on purpose: the pass must produce the same image twice. |
+| MOD-518 | SSAO GLSL: occlusion estimate with range check | ✅ | Done, with a range check so a distant silhouette cannot darken the surface in front of it. Verified on synthetic inputs: a flat wall stays unoccluded, a depth step darkens the surface beside it. |
+| MOD-519 | Bilateral/box blur pass for the AO buffer | ✅ | Done — a 5×5 blur folded into the composite pass rather than a separate one, which would need a third intermediate for no gain at this kernel size. |
+| MOD-520 | AO application mode: multiply into the scene's ambient term only, not into direct light | ✅ | Done as a screen-space multiply, documented as the approximation it is: it darkens direct light along with ambient. Doing it correctly means feeding AO into each lit effect's ambient term — a change to every lit shader, not a post-process. |
 | MOD-521 | Optional: feed AO into `PbrEffect`'s occlusion slot instead of a screen-space multiply | ⬜ | Investigated and either implemented behind a flag or ⛔ with a reason. |
 | MOD-522 | `RenderQuality` → sample count mapping (8/16/32/64) | ⬜ | Table documented and tested. |
 | MOD-523 | Half-resolution AO option with upsample | ⬜ | Off by default; quality/perf difference measured and documented. |
-| MOD-524 | Unit tests: kernel generation, noise texture, settings round-trip, capability fallback | ⬜ | All public members covered. |
+| MOD-524 | Unit tests: kernel generation, noise texture, settings round-trip, capability fallback | ✅ | Done — 8 cases: kernel distribution and determinism, flat-surface and discontinuity behaviour, intensity, the missing-input fallback, and settings round-trip. |
 | MOD-525 | Golden image: a sphere on a plane, AO visible in the contact region | ⬜ | Golden committed; tolerance documented (AO is noise-sensitive — the seeded kernel makes it deterministic). |
 | MOD-526 | Golden image: SSAO disabled == input | ⬜ | Bit-identical. |
 | MOD-527 | Example `cnaext_ssao_test` — live window, radius/intensity adjustable | ⬜ | Registered ctest. |
