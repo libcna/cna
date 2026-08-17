@@ -470,7 +470,7 @@ depth-based effects will reuse.
 | MOD-824 | `PbrEffect` implements `IShadowReceiverEXT` | ✅ | Done — `PbrEffect`. |
 | MOD-825 | `SkinnedPbrEffect` implements `IShadowReceiverEXT` | ✅ | Done — `SkinnedPbrEffect`. |
 | MOD-826 | Document the "accepted and ignored on renderers without the shader" convention for these fields | ✅ | Done — documented on the interface itself, next to the reason the generating half lives elsewhere. |
-| MOD-827 | Decide whether shadow reception needs a shader-variant explosion or a uniform branch | ⬜ | Written decision (recommendation: one extra variant per lit shader, keyed by `shadowsEnabled`, to avoid a runtime branch on mobile GPUs). |
+| MOD-827 | Decide whether shadow reception needs a shader-variant explosion or a uniform branch | ✅ | Decided: one uniform branch, not a variant explosion. `cnaShadowFactor` returns 1.0 immediately when `uShadowsEnabled` is 0, so an unshadowed draw pays one uniform compare and no texture fetch, and the four lit programs stay four programs rather than eight. The recommendation in this row assumed a per-fragment cost that the early-out removes; doubling the program count would also double compile time on every renderer that builds its shaders at run time, which EasyGL does. |
 
 ### 8.3 EasyGL reference shaders
 
@@ -478,11 +478,11 @@ depth-based effects will reuse.
 |---|---|---|---|
 | MOD-835 | EasyGL: shadow-map generation path (depth-only draw into the shadow target) | ✅ | Done — the caster path lands the silhouette in the map and a receiving draw reads it back: `ShadowVisibilityTest.TheCastersShadowIsVisibleOnTheGround` renders a floating quad into the map, then renders the ground plane and finds the centre at the ambient floor (38/255) against a fully lit corner (255/255). |
 | MOD-836 | EasyGL: `BasicEffect` shadow-receiving variant with 3×3 PCF | ✅ | Done — `uShadowMap`/`uLightViewProj`/`uShadowsEnabled`/`uShadowBias` on the per-pixel lit program, 3x3 PCF over the map's own texel size, bound at unit 7. Shadow multiplies direct diffuse and specular only, so a fully shadowed surface keeps its ambient rather than going black (asserted). An effect with no map attached renders the frame it rendered before this existed. |
-| MOD-837 | EasyGL: `SkinnedEffect` shadow-receiving variant | ⬜ | Same, animated. |
-| MOD-838 | EasyGL: `PbrEffect` shadow-receiving variant | ⬜ | Shadow attenuates direct light only (not ambient/IBL) — documented and asserted. |
-| MOD-839 | EasyGL: `SkinnedPbrEffect` shadow-receiving variant | ⬜ | Same. |
-| MOD-840 | PCF kernel size from `ShadowQuality` (1/3×3/5×5/poisson) | ⬜ | Documented table; each kernel visually verified. |
-| MOD-841 | Shadow-map border handling (outside the light frustum = lit, never shadowed) | ⬜ | Clamp-to-border or an explicit range check; a golden proves no dark halo outside the map. |
+| MOD-837 | EasyGL: `SkinnedEffect` shadow-receiving variant | ✅ | Done — the skinned program. It has no ambient uniform of its own (ambient is folded into emissive before the shader sees it), so the shadow multiplies `lightSum` and the specular sum only. `ShadowVisibilityTest.SkinnedEffectReceivesTheShadow` renders it with one identity bone. |
+| MOD-838 | EasyGL: `PbrEffect` shadow-receiving variant | ✅ | Done — both PBR programs, which share one fragment source. `Lo`, the direct-lighting accumulation, is multiplied by the shadow; the ambient/occlusion term is not, because it stands for light arriving from the rest of the environment, which one occluder between the surface and one light does not block. Asserted: the shadowed centre is darker than the corner and still above zero. |
+| MOD-839 | EasyGL: `SkinnedPbrEffect` shadow-receiving variant | ✅ | Done — same shared source, plus its own test at stride 68 (`SkinnedPbrEffectReceivesTheShadow`), which is what catches the two PBR copies drifting apart. |
+| MOD-840 | PCF kernel size from `ShadowQuality` (1/3×3/5×5/poisson) | ✅ | Done — `ShadowMap::filterRadiusForQuality` (Disabled/Low 0, Medium 1, High/Ultra 2), carried by `IShadowReceiverEXT::setShadowFilterRadiusEXT` and `GpuDrawParams::shadowPcfRadius`. The kernel is a fixed 5x5 loop with the radius deciding how many taps count, because GLSL ES 1.00 needs a statically countable loop. Deviation from this row: no Poisson disc. Past 5x5 a box filter blurs a shadow rather than resolving it, so Ultra buys quality from resolution instead. Verified by counting partially-shadowed pixels: radius 0 produces exactly zero, radius 2 produces many. |
+| MOD-841 | Shadow-map border handling (outside the light frustum = lit, never shadowed) | ✅ | Done — an explicit range check, not a clamp-to-border sampler mode: a sampler clamped to the edge texel would smear the caster silhouette outward as four dark bands. `ShadowVisibilityTest.NothingOutsideTheLightVolumeIsShadowed` fits the light to the caster alone and asserts every pixel of the frame border is fully lit while the centre is shadowed. |
 | MOD-842 | Cross-check against the existing `easygl_shadowmapping_*` examples | ⬜ | Library output matches the example's output within tolerance. |
 
 ### 8.4 Verification

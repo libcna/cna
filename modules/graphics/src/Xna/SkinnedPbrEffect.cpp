@@ -492,6 +492,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // like the PBR fields beside them.
         p.shadowsEnabled  = shadowsEnabledEXT_ && shadowMapEXT_ != nullptr;
         p.shadowDepthBias = shadowDepthBiasEXT_;
+        p.shadowPcfRadius = shadowFilterRadiusEXT_;
         if (p.shadowsEnabled)
         {
             p.shadowMap = &shadowMapEXT_->GetRenderer();
@@ -688,4 +689,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void SkinnedPbrEffect::setShadowDepthBiasEXT(float bias) { shadowDepthBiasEXT_ = bias; }
 
     float SkinnedPbrEffect::getShadowDepthBiasEXT() const { return shadowDepthBiasEXT_; }
+
+    void SkinnedPbrEffect::setShadowFilterRadiusEXT(int radius) { shadowFilterRadiusEXT_ = radius; }
+
+    int SkinnedPbrEffect::getShadowFilterRadiusEXT() const { return shadowFilterRadiusEXT_; }
 }

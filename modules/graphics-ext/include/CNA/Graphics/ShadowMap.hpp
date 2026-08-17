@@ -155,6 +155,33 @@ namespace CNA::Graphics {
          */
         [[nodiscard]] static int sizeForQuality(ShadowQuality quality);
 
+        /**
+         * @brief Returns the PCF filter radius, in map texels, that a quality level implies.
+         *
+         * plan_modern.md MOD-840. The radius is what a receiving effect wants
+         * (`IShadowReceiverEXT::setShadowFilterRadiusEXT`), so the mapping lives here rather than
+         * inside a renderer: two renderers reading the same quality must reach the same kernel.
+         *
+         * | Quality  | Size | Radius | Kernel |
+         * |----------|------|--------|--------|
+         * | Disabled | 512  | 0      | 1 tap  |
+         * | Low      | 512  | 0      | 1 tap  |
+         * | Medium   | 1024 | 1      | 3x3    |
+         * | High     | 2048 | 2      | 5x5    |
+         * | Ultra    | 4096 | 2      | 5x5    |
+         *
+         * Ultra buys its quality from resolution rather than from a wider kernel: past 5x5 a
+         * box filter blurs the shadow instead of resolving it, which is what a Poisson disc
+         * would be for -- not implemented here, and named as absent rather than implied.
+         *
+         * @param quality The quality level.
+         * @return The radius in texels, 0 to 2.
+         */
+        [[nodiscard]] static int filterRadiusForQuality(ShadowQuality quality);
+
+        /** @brief Returns the PCF filter radius implied by this map's own quality level. */
+        [[nodiscard]] int getFilterRadius() const;
+
     private:
         Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
         ShadowQuality quality_;

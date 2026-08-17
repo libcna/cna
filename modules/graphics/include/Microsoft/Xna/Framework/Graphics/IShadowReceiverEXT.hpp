@@ -76,6 +76,22 @@ namespace Microsoft::Xna::Framework::Graphics {
 
         /** @brief Returns the depth bias used when comparing against the map. */
         CNAEXT [[nodiscard]] virtual float getShadowDepthBiasEXT() const = 0;
+
+        /**
+         * @brief Sets the percentage-closer-filtering radius, in shadow-map texels.
+         *
+         * 0 takes a single sample and gives a hard, stair-stepped edge; 1 averages a 3x3
+         * neighbourhood and 2 a 5x5 one. A plain integer rather than a `ShadowQuality`, because
+         * that enumeration belongs to the engine layer, which is compiled out by default -- an
+         * effect's public surface must not change with a build flag. `CNA::Graphics::ShadowMap`
+         * maps its quality onto this.
+         *
+         * @param radius Radius in texels; renderers clamp values outside 0..2.
+         */
+        CNAEXT virtual void setShadowFilterRadiusEXT(int radius) = 0;
+
+        /** @brief Returns the percentage-closer-filtering radius, in shadow-map texels. */
+        CNAEXT [[nodiscard]] virtual int getShadowFilterRadiusEXT() const = 0;
     };
 
 } // namespace Microsoft::Xna::Framework::Graphics

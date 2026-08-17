@@ -56,6 +56,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // the same accepted-and-ignored convention the PBR fields use.
         p.shadowsEnabled  = shadowsEnabledEXT_ && shadowMapEXT_ != nullptr;
         p.shadowDepthBias = shadowDepthBiasEXT_;
+        p.shadowPcfRadius = shadowFilterRadiusEXT_;
         if (p.shadowsEnabled)
         {
             p.shadowMap = &shadowMapEXT_->GetRenderer();
@@ -259,4 +260,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void BasicEffect::setShadowDepthBiasEXT(float bias) { shadowDepthBiasEXT_ = bias; }
 
     float BasicEffect::getShadowDepthBiasEXT() const { return shadowDepthBiasEXT_; }
+
+    void BasicEffect::setShadowFilterRadiusEXT(int radius) { shadowFilterRadiusEXT_ = radius; }
+
+    int BasicEffect::getShadowFilterRadiusEXT() const { return shadowFilterRadiusEXT_; }
 }

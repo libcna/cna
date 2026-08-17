@@ -907,6 +907,10 @@ namespace CNA::Internal::Renderers
             1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
         bool  shadowsEnabled = false;
         float shadowDepthBias = 0.0015f;
+        /// plan_modern.md MOD-840: PCF kernel radius in shadow-map texels. 0 is a single tap, 1 a
+        /// 3x3 neighbourhood, 2 a 5x5 one. Expressed as a radius rather than a kernel size because
+        /// that is what a shader loop bound needs, and clamped by the renderer rather than trusted.
+        int   shadowPcfRadius = 1;
         /// BasicEffect: DirectionalLight0/1/2's SpecularColor, zeroed when that light is disabled
         /// (mirrors the light*Diffuse zeroing — FNA's DirectionalLight.Enabled setter zeroes both).
         float light0Specular[3] = {0,0,0};

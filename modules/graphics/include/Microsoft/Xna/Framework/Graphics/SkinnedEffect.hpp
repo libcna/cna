@@ -392,6 +392,10 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void setShadowDepthBiasEXT(float bias) override;
         /** @brief Returns the shadow comparison bias. */
         CNAEXT [[nodiscard]] float getShadowDepthBiasEXT() const override;
+        /** @brief Sets the PCF radius in shadow-map texels. @param radius 0, 1 or 2. */
+        CNAEXT void setShadowFilterRadiusEXT(int radius) override;
+        /** @brief Returns the PCF radius in shadow-map texels. */
+        CNAEXT [[nodiscard]] int getShadowFilterRadiusEXT() const override;
 
     private:
 
@@ -400,6 +404,7 @@ namespace Microsoft::Xna::Framework::Graphics
         Matrix lightViewProjectionEXT_{};
         bool  shadowsEnabledEXT_ = false;
         float shadowDepthBiasEXT_ = 0.0015f;
+        int   shadowFilterRadiusEXT_ = 1;   // 3x3, the default ShadowQuality::Medium asks for
         explicit SkinnedEffect(const SkinnedEffect& cloneSource);
 
         void CacheEffectParameters();

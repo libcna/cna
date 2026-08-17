@@ -42,6 +42,9 @@ void ExpectShadowStateRoundTrips(GraphicsDevice& gd)
     EXPECT_EQ(receiver.getShadowMapEXT(), nullptr);
     EXPECT_FALSE(receiver.isShadowsEnabledEXT());
     EXPECT_GT(receiver.getShadowDepthBiasEXT(), 0.0f);
+    // 3x3, which is what ShadowQuality::Medium asks for -- the default a game gets without
+    // choosing, and the one the quality table has to agree with.
+    EXPECT_EQ(receiver.getShadowFilterRadiusEXT(), 1);
 
     RenderTarget2D shadowMap(gd, 8, 8);
     Matrix lightViewProjection = Matrix::getIdentityProperty();
@@ -51,10 +54,12 @@ void ExpectShadowStateRoundTrips(GraphicsDevice& gd)
     receiver.setLightViewProjectionEXT(lightViewProjection);
     receiver.setShadowsEnabledEXT(true);
     receiver.setShadowDepthBiasEXT(0.01f);
+    receiver.setShadowFilterRadiusEXT(2);
 
     EXPECT_EQ(receiver.getShadowMapEXT(), &shadowMap);
     EXPECT_TRUE(receiver.isShadowsEnabledEXT());
     EXPECT_FLOAT_EQ(receiver.getShadowDepthBiasEXT(), 0.01f);
+    EXPECT_EQ(receiver.getShadowFilterRadiusEXT(), 2);
     EXPECT_FLOAT_EQ(receiver.getLightViewProjectionEXT().M41, 7.0f);
 
     receiver.setShadowMapEXT(nullptr);
@@ -98,6 +103,7 @@ TEST(ShadowReceiverTest, TheDefaultsAreInertInGpuDrawParams)
     EXPECT_EQ(params.shadowMap, nullptr);
     EXPECT_FLOAT_EQ(params.lightViewProjColMajor[0], 1.0f);   // still identity
     EXPECT_FLOAT_EQ(params.lightViewProjColMajor[12], 0.0f);
+    EXPECT_EQ(params.shadowPcfRadius, 1);
 }
 
 TEST(ShadowReceiverTest, EnabledShadowStateReachesGpuDrawParams)
@@ -113,6 +119,7 @@ TEST(ShadowReceiverTest, EnabledShadowStateReachesGpuDrawParams)
     effect.setLightViewProjectionEXT(lightViewProjection);
     effect.setShadowsEnabledEXT(true);
     effect.setShadowDepthBiasEXT(0.02f);
+    effect.setShadowFilterRadiusEXT(0);
 
     GpuDrawParams params;
     effect.FillGpuDrawParams(params);
@@ -120,6 +127,7 @@ TEST(ShadowReceiverTest, EnabledShadowStateReachesGpuDrawParams)
     EXPECT_TRUE(params.shadowsEnabled);
     EXPECT_NE(params.shadowMap, nullptr);
     EXPECT_FLOAT_EQ(params.shadowDepthBias, 0.02f);
+    EXPECT_EQ(params.shadowPcfRadius, 0);
     EXPECT_FLOAT_EQ(params.lightViewProjColMajor[12], 3.0f);
 }
 

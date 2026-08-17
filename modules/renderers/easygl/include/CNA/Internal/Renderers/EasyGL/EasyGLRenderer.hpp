@@ -725,6 +725,8 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_lightviewproj  = -1;  ///< mat4 world -> shadow-map space
             int loc_shadows_on     = -1;  ///< float 0/1
             int loc_shadow_bias    = -1;  ///< float
+            int loc_shadow_texel   = -1;  ///< float 1/size (textureSize() is ES 3.00 only)
+            int loc_shadow_pcf     = -1;  ///< float PCF radius in texels, 0..2
             int loc_envmap        = -1;  ///< samplerCube (EnvironmentMapEffect only)
             int loc_envmap_amount = -1;  ///< float blend [0,1]
             int loc_envmap_spec   = -1;  ///< vec3 specular tint
@@ -882,6 +884,10 @@ namespace CNA::Internal::Renderers::EasyGL
                             const Matrix& projection, const GpuDrawParams& params);
         /// REMED-GFX-147: resolves uRtFlipV/uRtFlipVHi for a freshly linked stock 3D program.
         static void ResolveRenderTargetOrientationUniforms(Prog3D& p);
+        /// plan_modern.md MOD-836..MOD-839: resolves CNA_GL_SHADOW_DECL's uniforms for a freshly
+        /// linked lit program. Every other program leaves them at -1, and BindDrawParams skips
+        /// them exactly as it skips the other optional locations.
+        static void ResolveShadowUniforms(Prog3D& p);
 
     public:
         /**

@@ -168,6 +168,48 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 "vec4 cnaInstancePosition(vec4 p){return (uCnaInstanced>0.5)?cnaInstanceMatrix()*p:p;}\n" \
 "vec3 cnaInstanceDirection(vec3 d){return (uCnaInstanced>0.5)?mat3(cnaInstanceMatrix())*d:d;}\n"
 
+// plan_modern.md MOD-836..MOD-841: shadow reception, shared by every lit fragment shader so the
+// four of them cannot drift into four subtly different shadows.
+//
+// The map holds light-space distance rather than a depth buffer: CNA cannot sample a depth
+// attachment as a texture on every renderer, so CNA::Graphics::ShadowMap writes distance into an
+// ordinary colour target and this reads it back like any other texture.
+//
+// uShadowTexel carries 1/size rather than the shader calling textureSize(): that function is GLSL
+// ES 3.00 only, and these shaders are also transformed to ES 1.00 for the WebGL1/GLES2 profiles
+// (TransformGlslEs300BodyToEs100), which would reject it. The loop bounds are literal for the same
+// reason -- ES 1.00 requires a statically countable loop -- so the kernel is always 5x5 and
+// uShadowPcfRadius decides how much of it counts. Radius 0 is a single tap.
+//
+// Returns 1 where the surface is lit and 0 where a caster is fully in front of it, with the
+// fraction in between coming from the kernel: a single tap gives a hard, stair-stepped edge at
+// every shadow-map resolution.
+#define CNA_GL_SHADOW_DECL \
+"uniform sampler2D uShadowMap;\n" \
+"uniform mat4 uLightViewProj;\n" \
+"uniform float uShadowsEnabled;\n" \
+"uniform float uShadowBias;\n" \
+"uniform float uShadowTexel;\n" \
+"uniform float uShadowPcfRadius;\n" \
+"float cnaShadowFactor(vec3 worldPos){\n" \
+"    if(uShadowsEnabled<0.5) return 1.0;\n" \
+"    vec4 lightSpace=uLightViewProj*vec4(worldPos,1.0);\n" \
+"    vec3 uv=lightSpace.xyz/lightSpace.w*0.5+0.5;\n" \
+"    if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0||uv.z>1.0) return 1.0;\n" \
+"    float lit=0.0;\n" \
+"    float taps=0.0;\n" \
+"    for(int y=-2;y<=2;++y){\n" \
+"        for(int x=-2;x<=2;++x){\n" \
+"            float ring=max(abs(float(x)),abs(float(y)));\n" \
+"            if(ring>uShadowPcfRadius+0.5) continue;\n" \
+"            float occluder=texture(uShadowMap,uv.xy+vec2(float(x),float(y))*uShadowTexel).r;\n" \
+"            lit+=(uv.z-uShadowBias<=occluder)?1.0:0.0;\n" \
+"            taps+=1.0;\n" \
+"        }\n" \
+"    }\n" \
+"    return lit/max(taps,1.0);\n" \
+"}\n"
+
 namespace CNA::Internal::Renderers::EasyGL
 {
     using namespace Microsoft::Xna::Framework;
@@ -5710,35 +5752,9 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform vec3 uEmissiveColor;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
-"uniform sampler2D uShadowMap;\n"
-"uniform mat4 uLightViewProj;\n"
-"uniform float uShadowsEnabled;\n"
-"uniform float uShadowBias;\n"
 "out vec4 FragColor;\n"
 CNA_GL_RT_SAMPLE_UV_DECL
-// MOD-835: the map holds light-space distance rather than a depth buffer -- CNA cannot sample a
-// depth attachment as a texture, so CNA::Graphics::ShadowMap writes distance into colour and this
-// samples it like any other texture. Returns 1 where the surface is lit, 0 where a caster is in
-// front of it, and a fraction in between: a single tap gives a hard, stair-stepped edge at every
-// shadow-map resolution, so the lookup averages a 3x3 neighbourhood (PCF).
-"float cnaShadowFactor(vec3 worldPos){\n"
-"    if(uShadowsEnabled<0.5) return 1.0;\n"
-"    vec4 lightSpace=uLightViewProj*vec4(worldPos,1.0);\n"
-"    vec3 ndc=lightSpace.xyz/lightSpace.w;\n"
-"    vec3 uv=ndc*0.5+0.5;\n"
-// Beyond the light's own volume nothing was rendered into the map, so nothing there can be
-// occluding: returning 0 would put everything outside the map's reach into shadow.
-"    if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0||uv.z>1.0) return 1.0;\n"
-"    float texel=1.0/float(textureSize(uShadowMap,0).x);\n"
-"    float lit=0.0;\n"
-"    for(int y=-1;y<=1;++y){\n"
-"        for(int x=-1;x<=1;++x){\n"
-"            float occluder=texture(uShadowMap,uv.xy+vec2(float(x),float(y))*texel).r;\n"
-"            lit+=(uv.z-uShadowBias<=occluder)?1.0:0.0;\n"
-"        }\n"
-"    }\n"
-"    return lit/9.0;\n"
-"}\n"
+CNA_GL_SHADOW_DECL
 "void main(){\n"
 // XNA uses a separate unlit shader variant. Do not merely zero the light colours and continue
 // through the lit math here: an unlit vertex at the default eye position makes normalize(0)
@@ -5770,10 +5786,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 
         CompileAndLink(prog_lit_textured_.prog, vsrc, fsrc, "lit+textured");
         ResolveRenderTargetOrientationUniforms(prog_lit_textured_);
-        prog_lit_textured_.loc_shadowmap     = prog_lit_textured_.prog.uniform_location("uShadowMap");
-        prog_lit_textured_.loc_lightviewproj = prog_lit_textured_.prog.uniform_location("uLightViewProj");
-        prog_lit_textured_.loc_shadows_on    = prog_lit_textured_.prog.uniform_location("uShadowsEnabled");
-        prog_lit_textured_.loc_shadow_bias   = prog_lit_textured_.prog.uniform_location("uShadowBias");
+        ResolveShadowUniforms(prog_lit_textured_);
         prog_lit_textured_.loc_wvp         = prog_lit_textured_.prog.uniform_location("uWVP");
         prog_lit_textured_.loc_world       = prog_lit_textured_.prog.uniform_location("uWorld");
         prog_lit_textured_.loc_normalmat   = prog_lit_textured_.prog.uniform_location("uNormalMatrix");
@@ -6281,13 +6294,18 @@ CNA_GL_SKIN_NORMAL_DECL
 "uniform float uVertexColorEnabled;\n"
 "out vec4 FragColor;\n"
 CNA_GL_RT_SAMPLE_UV_DECL
+CNA_GL_SHADOW_DECL
 "void main(){\n"
 "    vec3 N=normalize(vNormal);\n"
 "    vec3 E=normalize(uEyePosition-vWorldPos);\n"
 "    float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
 "    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
 "    float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
-"    vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
+// MOD-837: direct light only. This shader has no uAmbientColor of its own -- FillGpuDrawParams
+// folds ambient into uEmissiveColor, which is added below and therefore already outside the
+// attenuated term.
+"    float cnaShadow=cnaShadowFactor(vWorldPos);\n"
+"    vec3 lightSum=(uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2)*cnaShadow;\n"
 // audit_net.md remediation (2026-07-18, fourth round): EmissiveColor is ADDED after the
 // diffuse multiply, never multiplied by it - matches FNA's own Lighting.fxh ComputeLights()
 // verbatim (`mul(diffuse, lightDiffuse) * DiffuseColor.rgb + EmissiveColor`), and matches what
@@ -6304,7 +6322,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
 "    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
 "    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
-"    vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
+"    vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor*cnaShadow;\n"
 "    vec4 texColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
 "    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
 "    FragColor=vec4(litRGB*texColor.rgb,uDiffuseColor.a*texColor.a*vc.a);\n"
@@ -6320,6 +6338,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 
         CompileAndLink(prog_skinned_.prog, vsrc, fsrc, "skinned");
         ResolveRenderTargetOrientationUniforms(prog_skinned_);
+        ResolveShadowUniforms(prog_skinned_);
         auto& p = prog_skinned_;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
@@ -6657,6 +6676,7 @@ CNA_GL_SRGB_TRANSFER_DECL
 "}\n"
 CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
+CNA_GL_SHADOW_DECL
 + (dualUv ? "vec2 cnaPbrUV(float setIndex){return setIndex<0.5?vUV:vUV1;}\n" : "") +
 "vec2 cnaPbrTransformUV(vec2 uv,int slot){\n"
 "    vec3 value=vec3(uv,1.0);\n"
@@ -6697,6 +6717,10 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);\n"
+// plan_modern.md MOD-838/MOD-839: Lo is the direct-lighting term and the only one a shadow may
+// touch. The ambient/occlusion term below stands for light arriving from the rest of the
+// environment, which an occluder between the surface and this one light does not block.
+"    Lo*=cnaShadowFactor(vWorldPos);\n"
 "    float occlusion=texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(" + occlusionUv + ",4),uRtFlipVHi.x)).r;\n"
 // §3.9.3's own formula: 1 + strength * (sampled - 1). At strength 0 this is 1 whatever the map
 // holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
@@ -6722,6 +6746,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
         CompileAndLink(program.prog, vsrc.c_str(), fsrc.c_str(),
                        dualUv ? "pbr_dual_uv" : "pbr");
         ResolveRenderTargetOrientationUniforms(program);
+        ResolveShadowUniforms(program);
         auto& p = program;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
@@ -6916,6 +6941,7 @@ CNA_GL_SRGB_TRANSFER_DECL
 "}\n"
 CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
+CNA_GL_SHADOW_DECL
 + (dualUv ? "vec2 cnaPbrUV(float setIndex){return setIndex<0.5?vUV:vUV1;}\n" : "") +
 "vec2 cnaPbrTransformUV(vec2 uv,int slot){\n"
 "    vec3 value=vec3(uv,1.0);\n"
@@ -6956,6 +6982,10 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);\n"
+// plan_modern.md MOD-838/MOD-839: Lo is the direct-lighting term and the only one a shadow may
+// touch. The ambient/occlusion term below stands for light arriving from the rest of the
+// environment, which an occluder between the surface and this one light does not block.
+"    Lo*=cnaShadowFactor(vWorldPos);\n"
 "    float occlusion=texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(" + occlusionUv + ",4),uRtFlipVHi.x)).r;\n"
 // §3.9.3's own formula: 1 + strength * (sampled - 1). At strength 0 this is 1 whatever the map
 // holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
@@ -6981,6 +7011,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
         CompileAndLink(program.prog, vsrc.c_str(), fsrc.c_str(),
                        dualUv ? "pbr_skinned_dual_uv" : "pbr_skinned");
         ResolveRenderTargetOrientationUniforms(program);
+        ResolveShadowUniforms(program);
         auto& p = program;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
@@ -7252,6 +7283,16 @@ CNA_GL_RT_SAMPLE_UV_DECL
         p.loc_rt_flip_v    = p.prog.uniform_location("uRtFlipV");
         p.loc_rt_flip_v_hi = p.prog.uniform_location("uRtFlipVHi");
         p.loc_instanced    = p.prog.uniform_location("uCnaInstanced");
+    }
+
+    void EasyGLRenderer::ResolveShadowUniforms(Prog3D& p)
+    {
+        p.loc_shadowmap      = p.prog.uniform_location("uShadowMap");
+        p.loc_lightviewproj  = p.prog.uniform_location("uLightViewProj");
+        p.loc_shadows_on     = p.prog.uniform_location("uShadowsEnabled");
+        p.loc_shadow_bias    = p.prog.uniform_location("uShadowBias");
+        p.loc_shadow_texel   = p.prog.uniform_location("uShadowTexel");
+        p.loc_shadow_pcf     = p.prog.uniform_location("uShadowPcfRadius");
     }
 
     void EasyGLRenderer::BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
@@ -7652,6 +7693,20 @@ if (ProfileIsEs2ApiGeneration())
                 p.prog.set_uniform(p.loc_shadow_bias, params.shadowDepthBias);
             if (p.loc_lightviewproj >= 0)
                 p.prog.set_uniform_matrix4(p.loc_lightviewproj, params.lightViewProjColMajor);
+            if (p.loc_shadow_pcf >= 0)
+            {
+                const int radius = params.shadowPcfRadius < 0 ? 0
+                                 : (params.shadowPcfRadius > 2 ? 2 : params.shadowPcfRadius);
+                p.prog.set_uniform(p.loc_shadow_pcf, static_cast<float>(radius));
+            }
+            if (p.loc_shadow_texel >= 0)
+            {
+                // 1/size, because textureSize() does not exist in the ES 1.00 form these shaders
+                // are also compiled in. A square map is assumed, which is what ShadowMap allocates.
+                const int size = haveShadow ? params.shadowMap->GetWidth() : 1;
+                p.prog.set_uniform(p.loc_shadow_texel, size > 0 ? 1.0f / static_cast<float>(size)
+                                                                : 0.0f);
+            }
             if (p.loc_shadowmap >= 0)
             {
                 p.prog.set_uniform(p.loc_shadowmap, 7);

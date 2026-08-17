@@ -86,6 +86,24 @@ void main() {
         }
     }
 
+    int ShadowMap::filterRadiusForQuality(const ShadowQuality quality)
+    {
+        switch (quality)
+        {
+        case ShadowQuality::Ultra:
+        case ShadowQuality::High:   return 2;
+        case ShadowQuality::Medium: return 1;
+        case ShadowQuality::Low:
+        case ShadowQuality::Disabled:
+        default:                    return 0;
+        }
+    }
+
+    int ShadowMap::getFilterRadius() const
+    {
+        return filterRadiusForQuality(quality_);
+    }
+
     ShadowMap::ShadowMap(GraphicsDevice& device, const ShadowQuality quality)
         : device_(device), quality_(quality), size_(sizeForQuality(quality))
     {
