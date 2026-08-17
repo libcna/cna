@@ -52,6 +52,7 @@ orchestration that pulls in extra render targets and GPU memory lives in the gat
 | `SsaoPass`, `BloomPass`, `TonemapPass`, `FxaaPass`, `BlitPass` | same directory | The built-in passes, in pipeline order. |
 | `FullscreenPass`, `RenderTargetPool` | same directory | The screen-covering draw and the intermediate-target cache every pass shares. |
 | `ShadowMap`, `DirectionalLightEXT` | `CNA/Graphics/ShadowMap.hpp` | Directional shadow-map generation: fits the light's volume to the scene, opens a pass the app draws its casters into. |
+| `CascadedShadowMap` | `CNA/Graphics/CascadedShadowMap.hpp` | The same, split into 2-4 depth ranges so a large scene keeps resolution near the camera. |
 | `CNAEXT.hpp` | `CNA/Graphics/CNAEXT.hpp` | Master include — pulls in every public type above. |
 
 ## Conventions for this layer
@@ -89,6 +90,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Float/HDR render targets | ✅ RGBA16F + RGBA32F, runtime-probed | ⬜ | ⬜ | ⬜ — each reports `false` and `RenderTarget2D` refuses the format rather than substituting `Color` |
 | `RenderPipeline` + post-process passes | ✅ | ⬜ | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
 | Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ⬜ | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
+| Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ⬜ | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Skybox + IBL | ⬜ | ⬜ | ⬜ | ⬜ |
 | Compute / storage buffers | ⬜ | ⬜ | ⬜ | ⬜ |
 
@@ -172,6 +174,53 @@ Three things about it are worth knowing before the first frame looks wrong:
 
 Outside the light's fitted volume nothing is shadowed, by an explicit range check rather than a
 clamped sampler — clamping would smear the caster's silhouette outward to the edges of the world.
+
+### Cascades, and what the second contract costs
+
+One map stretched over an outdoor view spends most of its texels on ground nobody looks at closely.
+`CascadedShadowMap` splits the camera frustum by distance and fits a map to each slice.
+
+**The app-side contract grows: the casting geometry is drawn once per cascade** — a two-cascade set
+draws it twice, a four-cascade set four times, on top of the camera pass. That is inherent to
+cascaded shadow mapping and is the reason the cascade count is a quality setting rather than
+something the library picks.
+
+```cpp
+CNA::Graphics::CascadedShadowMap cascades(device, ShadowQuality::High, 3);
+cascades.setBlendBand(4.0f);                 // cross-fade width, in view-depth units
+
+// Per frame:
+cascades.update(sun, cameraView, cameraProjection);
+for (int i = 0; i < cascades.getCascadeCount(); ++i)
+{
+    cascades.begin(i);
+    drawCastersFor(i);                       // geometry only; cull to this cascade if you like
+    cascades.end();
+}
+cascades.applyToReceiver(effect);            // atlas, matrices, splits, camera, band — together
+effect.setShadowsEnabledEXT(true);
+```
+
+`applyToReceiver` sets everything at once on purpose. These values are only meaningful together: a
+matrix from this frame beside a split from the last one puts fragments in the wrong cascade, which
+reads as a resolution artefact rather than as the torn update it is.
+
+Worth knowing:
+
+- **Each cascade is a full-resolution map**, not a share of one. `High` with four cascades is four
+  times the memory of `High` with one — never a quarter of the resolution.
+- **Storage is an atlas**, one `RenderTarget2D` with the cascades side by side, because CNA's
+  renderer interface has no array-texture concept. Each cascade's slice is baked into its own
+  matrix, so there is no separate UV offset to apply to the wrong cascade.
+- **The fit is sphere-based and texel-snapped**, which is what stops shadow edges shimmering as the
+  camera turns and crawling as it walks. Both are asserted numerically, because both look correct
+  in any single frame.
+- **`setDebugTintEnabled(true)`** tints each cascade a distinct colour. It is the fastest way to
+  see whether the splits are where the scene wants them.
+- **Cost** (`cnaext_csm_test --benchmark`, 6 casting triangles, Mesa llvmpipe): a single Medium map
+  0.12 ms, two cascades 0.20 ms, three 0.49 ms, four 0.43 ms per frame. Software-rasterizer
+  figures, so a recording rather than a budget — the shape, roughly linear in cascade count with
+  the per-pass overhead dominating at this triangle count, is what transfers.
 
 Legend: ✅ implemented and verified · 🟨 partial · ⬜ not implemented · ⛔ deliberately unsupported.
 
