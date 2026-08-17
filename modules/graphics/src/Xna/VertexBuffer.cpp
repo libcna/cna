@@ -636,10 +636,7 @@ namespace Microsoft::Xna::Framework::Graphics
             packed[i].u  = data[i].TextureCoordinate.X;
             packed[i].v  = data[i].TextureCoordinate.Y;
         }
-        renderer_->SetData(packed.data(), count, sizeof(GpuVertex));
-
-        cpuShadow_.resize(packed.size() * sizeof(GpuVertex));
-        std::memcpy(cpuShadow_.data(), packed.data(), cpuShadow_.size());
+        UploadValidatedData(packed.data(), count, sizeof(GpuVertex), SetDataOptions::None, false);
     }
 
     void VertexBuffer::SetData(const VertexPositionNormalTangentTexture* data, int startIndex, int elementCount)
@@ -720,10 +717,7 @@ namespace Microsoft::Xna::Framework::Graphics
             packed[i].i2 = data[i].BlendIndices[2];
             packed[i].i3 = data[i].BlendIndices[3];
         }
-        renderer_->SetData(packed.data(), count, sizeof(GpuVertex));
-
-        cpuShadow_.resize(packed.size() * sizeof(GpuVertex));
-        std::memcpy(cpuShadow_.data(), packed.data(), cpuShadow_.size());
+        UploadValidatedData(packed.data(), count, sizeof(GpuVertex), SetDataOptions::None, false);
     }
 
     void VertexBuffer::SetData(const VertexPositionNormalTangentTextureSkinned* data, int startIndex, int elementCount)

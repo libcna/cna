@@ -106,4 +106,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
     cna_register_renderer_test(NAME Igl_SkinnedEffect COMMAND cna_test_igl_skinnedeffect
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # IGL-37/IGL-55: PbrEffect's GGX metallic-roughness BRDF, hand-derived expected value.
+    cna_igl_test(cna_test_igl_pbreffect igl_pbreffect_test.cpp)
+    cna_register_renderer_test(NAME Igl_PbrEffect COMMAND cna_test_igl_pbreffect
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
