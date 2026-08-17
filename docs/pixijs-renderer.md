@@ -3,11 +3,12 @@
 ## Status
 
 `PIXIJS` was authored on **2026-08-16** per direct task instruction and is CNA's newest, most
-experimental renderer -- it has **never been configured, built, or run**, on any toolchain, in any
-session to date. See `plan_pixijs.md` for the full task breakdown, design decisions, and this
-renderer's own honest status legend. This document mirrors `docs/webgpu-renderer.md`'s structure,
-but every section below reflects that zero-verification starting point rather than a real measured
-result.
+experimental renderer. On **2026-08-17** a real Emscripten toolchain build was performed for the
+first time: `cna_renderer_pixijs` and the `cna_test_pixijs_smoke` example both compile and link
+successfully under real `emcc`/`em++` (emsdk, pinned PixiJS v7.4.2 UMD build). See `plan_pixijs.md`
+for the full task breakdown, design decisions, and this renderer's own honest, continuously-updated
+status legend -- what follows here is the real, current verification picture, not the original
+zero-verification starting point.
 
 Select it with (Emscripten only -- see "Important limitations"):
 
@@ -15,48 +16,58 @@ Select it with (Emscripten only -- see "Important limitations"):
 source $EMSDK/emsdk_env.sh
 emcmake cmake -S . -B cmake-build-pixijs \
   -DCNA_GRAPHICS_RENDERER=PIXIJS \
+  -DCNA_PIXIJS_ROOT=/absolute/path/to/pixi.min.js \
   -DCMAKE_BUILD_TYPE=Debug
-cmake --build cmake-build-pixijs -j4
+cmake --build cmake-build-pixijs -j4 --target cna_renderer_pixijs cna_test_pixijs_smoke
 ```
 
 CNA vendors a pinned **PixiJS v7.4.2** UMD build (`plan_pixijs.md` Design decisions 3-4,
-`cmake/ThirdPartyPixiJS.cmake`). By default `CNA_PIXIJS_AUTO_DOWNLOAD=ON` would download and
-checksum-verify it -- but **the checksum has never actually been pinned** (no session to date has
-performed the download), so a fresh configure with the default options fails loudly at
-`cna_configure_pixijs()` rather than silently accepting an unverified file. Until a real session
-fills in `CNA_PIXIJS_SHA256` in `cmake/ThirdPartyPixiJS.cmake`, configure with a manually obtained,
-locally verified `pixi.min.js` instead:
-
-```bash
-emcmake cmake -S . -B cmake-build-pixijs \
-  -DCNA_GRAPHICS_RENDERER=PIXIJS \
-  -DCNA_PIXIJS_ROOT=/absolute/path/to/pixi.min.js \
-  -DCMAKE_BUILD_TYPE=Debug
-```
+`cmake/ThirdPartyPixiJS.cmake`). `CNA_PIXIJS_SHA256` is now populated (computed from the real
+`pixi.js@7.4.2` npm package's `dist/pixi.min.js`), so `-DCNA_PIXIJS_AUTO_DOWNLOAD=ON` (the default)
+should work wherever `cdn.jsdelivr.net` is reachable -- it was not reachable from the sandbox that
+performed this verification (outbound proxy policy), so `CNA_PIXIJS_ROOT` pointing at a manually
+obtained copy (e.g. via `npm pack pixi.js@7.4.2`) was used instead; both paths are supported and
+`CNA_PIXIJS_ROOT` is recommended whenever you already have a local copy.
 
 ## What has actually been verified
 
-**Nothing.** This session had no `emcc`/`em++`/`emcmake` on `PATH` and no `emsdk` checkout anywhere
-on the machine -- not even the lesser bar `plan_canvas.md`'s own session cleared (a working `emcc`
-to structurally build and run under `node`, without a real browser). What exists today:
-
 - A Python identity-registry check (`scripts/check_renderer_identities.py`) passes with `PIXIJS`
   added as the 47th public identity.
-- The renderer's C++ source compiles conditionally behind `#if defined(__EMSCRIPTEN__)` for every
-  `EM_JS` block, so the pure-C++ logic (blend-state mapping, the 2D-only `ThrowNo3D` surface) is at
-  least *structured* to be host-buildable and unit-testable the way `CanvasRendererTests.cpp`
-  already proves out for its own renderer -- but this has not actually been compiled even natively
-  in this session (no vendored SDL3/googletest submodules were initialized long enough to finish a
-  build before this document was written; see `plan_pixijs.md`'s own status block).
-- A native (`SDL_RENDERER`) CMake configure was used to confirm the shared registry edits
-  (`GraphicsRendererType.hpp`, `GraphicsBackendCategory.hpp`, `GraphicsBackendMaturity.hpp`, the
-  physical-source-partition validator in `modules/CMakeLists.txt`, the various renderer-identity
-  compile-definition/count tests) did not break configuration for every *other* renderer -- this is
-  real, but it says nothing about whether `PIXIJS` itself actually builds.
+- **A real `emcmake cmake -DCNA_GRAPHICS_RENDERER=PIXIJS` configure succeeds.**
+- **`cna_renderer_pixijs` compiles and links cleanly under real Emscripten** (emsdk 6.0.6). One real
+  bug was found and fixed in the process: `Vector2::getZeroProperty()` doesn't exist (`Vector2::Zero`
+  is the real accessor) -- everything else compiled on the first attempt.
+- **`cna_test_pixijs_smoke` compiles and links into a real, runnable `.js`/`.wasm`.** Running it
+  under plain `node` reproduces `CANVAS-15`'s own documented finding exactly: `SDL_Init` throws
+  `ReferenceError: window is not defined` before any renderer-specific code runs, because Node has
+  no real DOM. This is the expected, already-known boundary (needs a real browser via `emrun`), not
+  a new PixiJS-specific failure.
+- **Not yet verified**: anything that requires the shared `CnaTests` target (built with
+  `-sASYNCIFY=1`) to link -- that link step currently crashes inside Binaryen's `wasm-opt --asyncify`
+  under a newer emsdk (6.0.6); `plan_canvas.md`'s own session used an older 6.0.2 and linked fine.
+  This blocks `PixiJsRendererTests.cpp`'s structural GTest coverage from running under `node`, and
+  is an emsdk-version/toolchain issue, not a bug in this renderer's own code. See `plan_pixijs.md`'s
+  2026-08-17 update for the full account, including the (unrelated) workaround needed for
+  Emscripten's own blocked `zlib` port fetch in a network-restricted sandbox.
+- **Not yet verified, and still the real headline gap**: nothing has been proven to draw a single
+  correct pixel. `cna_test_pixijs_smoke` has never run to completion in a real browser. Everything
+  below "What has actually been verified" is still exactly as provisional as it reads.
+
+The renderer's C++ source compiles conditionally behind `#if defined(__EMSCRIPTEN__)` for every
+`EM_JS` block, so the pure-C++ logic (blend-state mapping, the 2D-only `ThrowNo3D` surface) is
+*structured* to be host-buildable and unit-testable the way `CanvasRendererTests.cpp` already proves
+out for its own renderer, once `CnaTests` itself can be linked under Emscripten (see above). A
+native (`SDL_RENDERER`) CMake configure and full `CnaTests` build were also run and passed,
+confirming the shared registry edits (`GraphicsRendererType.hpp`, `GraphicsBackendCategory.hpp`,
+`GraphicsBackendMaturity.hpp`, the physical-source-partition validator in `modules/CMakeLists.txt`,
+the various renderer-identity compile-definition/count tests) did not break configuration or
+compilation for every *other* renderer, including `GraphicsRendererTypeTest`'s 7/7 pass covering all
+47 identities.
 
 Do not read any ✅ mark in `plan_pixijs.md` as carrying the same confidence level a ✅ in
-`plan_canvas.md`/`plan_webgpu.md` does. Almost everything here is "written and reviewed against the
-FNA/PixiJS API surface, zero automated verification of any kind performed."
+`plan_canvas.md`/`plan_webgpu.md` does. Most of the actual PixiJS draw-path code is still "written
+and reviewed against the FNA/PixiJS API surface, zero automated (and no browser) verification of any
+kind performed" -- the exceptions are the compile/link results called out above.
 
 ## Implemented baseline (unverified)
 
@@ -79,8 +90,11 @@ FNA/PixiJS API surface, zero automated verification of any kind performed."
 Everything below is tracked with its own `PIXIJS-N` task in `plan_pixijs.md`; none of it should be
 described as complete until that task actually closes with real verification:
 
-- **No automated verification of any kind** (see above) -- the single largest limitation, and the
-  reason every other item on this list is doubly uncertain.
+- **No pixel-level or browser verification of any kind** (see above) -- compile/link verification now
+  exists for `cna_renderer_pixijs`/`cna_test_pixijs_smoke`, but nothing has run in a real browser,
+  and the shared `CnaTests` GTest target can't yet link under Emscripten here (toolchain issue, not a
+  renderer bug) -- this remains the single largest limitation, and the reason every other item on
+  this list is doubly uncertain.
 - **`Present()`'s frame-timing relationship with PixiJS's own ticker** was a genuinely open design
   question (`PIXIJS-22`); this implementation pass resolved it by disabling PixiJS's own ticker
   (`autoStart:false`, `sharedTicker:false`) and calling `app.renderer.render()` explicitly from

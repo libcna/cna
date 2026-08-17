@@ -34,22 +34,69 @@
 > (no `emsdk` has ever been available here) — see "What remains" below for the concrete, ordered
 > list of what has to happen before any of that code can be trusted. Nothing in Phases P2-P8 should
 > be described as working; it is an unverified first draft, not a functioning renderer.
+>
+> **Update, 2026-08-17 (later the same day) — a real Emscripten toolchain build actually happened
+> (PIXIJS-84).** `emsdk` (`emscripten-core/emsdk` on GitHub) was cloned and installed in this
+> session, and PixiJS v7.4.2's real `dist/pixi.min.js` was fetched via `npm pack pixi.js@7.4.2`
+> (`cdn.jsdelivr.net` itself was blocked by this sandbox's outbound proxy policy, but
+> `registry.npmjs.org` was allowlisted) — its real SHA256 is now pinned in
+> `cmake/ThirdPartyPixiJS.cmake`. Concrete results, in order:
+> - `emcmake cmake -DCNA_GRAPHICS_RENDERER=PIXIJS -DCNA_PIXIJS_ROOT=<the fetched pixi.min.js> ...`
+>   **configured successfully**, printing `CNA: Using PIXIJS (pixijs.com WebGL scene graph) graphics
+>   renderer`.
+> - `cmake --build --target cna_renderer_pixijs` **failed on the first attempt** with a real bug:
+>   `Vector2::getZeroProperty()` does not exist (only `Point` has that accessor; `Vector2` exposes a
+>   `static const Zero` member instead) — fixed in `PixiJsSpriteBatchRenderer.cpp`'s two `Draw()`
+>   overloads. **After that one-line fix, `cna_renderer_pixijs` built cleanly** — the first genuine
+>   compiler verification any PixiJS-specific C++ in this renderer has ever received.
+> - `cna_test_pixijs_smoke` (the Phase P8 smoke-test executable) **compiled and linked successfully**
+>   into a real, runnable `cna_test_pixijs_smoke.js`/`.wasm` — a full, working Emscripten build of
+>   this renderer's own example code.
+> - Running it under plain `node` reproduces **exactly** `CANVAS-15`'s own documented finding:
+>   `SDL_Init(SDL_INIT_VIDEO)` throws `ReferenceError: window is not defined` before any
+>   renderer-specific code runs at all, because Node has no real DOM. This is not a PixiJS-specific
+>   bug — it is the same "needs a real browser (`emrun`), not `node`" boundary every browser-only CNA
+>   renderer hits, now empirically confirmed for `PIXIJS` too rather than assumed by analogy.
+> - The full `CnaTests` target (all renderers' tests in one binary, built with `-sASYNCIFY=1`)
+>   initially failed for an **unrelated, environment-level reason**: Emscripten's own port-fetch
+>   mechanism (`zlib`, needed by `sharp-runtime`'s `IO.Compression` module) tried to download
+>   `github.com/madler/zlib/archive/...tar.gz` directly, which this sandbox's proxy also blocks
+>   (`git clone` over the git protocol works fine here; raw `https://github.com/.../archive/...`
+>   requests do not) — worked around by `git clone`-ing zlib v1.3.2 and manually seeding
+>   Emscripten's ports cache directory in the expected layout. After that, **all C++ compiled
+>   successfully** (every renderer's tests, `PixiJsRendererTests.cpp` included), but the final
+>   **link step crashed inside `wasm-opt --asyncify`** (`UNREACHABLE executed at .../Flatten.cpp:231`)
+>   under the `emsdk` `latest` alias, which resolved to **6.0.6** — noticeably newer than the
+>   **6.0.2** `plan_canvas.md`'s own session used to successfully link `CnaTests.js`. Re-tried after
+>   `emsdk install 6.0.2 && emsdk activate 6.0.2` (re-seeding the zlib port cache, since switching
+>   SDK versions replaces the whole `upstream/emscripten` tree) — see the next update for the outcome
+>   of that retry, or check `plan_pixijs.md`'s own git history / the session transcript if this
+>   paragraph was not yet updated with a result.
+>
+> **Bottom line so far**: `PIXIJS` genuinely builds and links under a real Emscripten toolchain
+> (`cna_renderer_pixijs` and `cna_test_pixijs_smoke` both proven), fixing one real bug along the way.
+> The remaining open item to get automated (non-browser) GTest coverage running is specific to the
+> shared `CnaTests` target's `-sASYNCIFY=1` flag interacting badly with a newer Binaryen, not to
+> anything in this renderer's own code — track it as an emsdk-version pin, not a `PixiJsRenderer.cpp`
+> bug, if it recurs.
 
 ### What remains (in dependency order)
 
-1. **PIXIJS-1** — actually perform the pinned PixiJS v7.4.2 UMD download and fill in
-   `CNA_PIXIJS_SHA256` in `cmake/ThirdPartyPixiJS.cmake` (currently deliberately blank — a
-   `-DCNA_GRAPHICS_RENDERER=PIXIJS` configure fails fast rather than trust an unpinned file), or
-   obtain a local `pixi.min.js` and pass `-DCNA_PIXIJS_ROOT`.
-2. **PIXIJS-84** — the actual blocker: get a real Emscripten toolchain (`emsdk`) into a session and
-   run `emcmake cmake -DCNA_GRAPHICS_RENDERER=PIXIJS ...` followed by a real build. This is the
-   first point any `EM_JS` code in this renderer has ever been compiled.
-3. Fix whatever the first real Emscripten build surfaces in `PixiJsRenderer.cpp`/
-   `PixiJsTextureRenderer.cpp`/`PixiJsRenderTargetRenderer.cpp`/`PixiJsSpriteBatchRenderer.cpp` —
-   expect real bugs; none of this JS has ever executed even once.
-4. Run `cna_test_pixijs_smoke` in a real browser (`emrun`) and get it to genuinely PASS — the first
-   real pixel-level evidence this renderer draws anything at all.
-5. Once basic drawing works, close the still-open design/implementation gaps, roughly in this order:
+1. ~~**PIXIJS-1** — pin the real PixiJS v7.4.2 SHA256.~~ **Done** (2026-08-17, via `npm pack`).
+2. ~~**PIXIJS-84** — get a real Emscripten toolchain and build.~~ **Done** (2026-08-17): `emsdk`
+   installed, `cna_renderer_pixijs` and `cna_test_pixijs_smoke` both compile and link cleanly.
+3. ~~Fix whatever the first real Emscripten build surfaces.~~ **One real bug found and fixed**:
+   `Vector2::getZeroProperty()` doesn't exist (`Vector2::Zero` does). No further compile errors
+   remain in `cna_renderer_pixijs`/`cna_test_pixijs_smoke` as of this update.
+4. **Still open**: get the shared `CnaTests` target (needed for `PixiJsRendererTests.cpp`'s
+   structural GTest coverage, and for `PixiJsBlendStateMapping`/`PixiJsRendererThrowNo3D` to
+   actually run under `node`) to link — blocked on an `-sASYNCIFY=1`-vs-Binaryen toolchain issue
+   unrelated to this renderer's own code (see the update above); try an older/different emsdk pin,
+   or investigate the Binaryen crash directly.
+5. Run `cna_test_pixijs_smoke` in a real browser (`emrun`), not `node` (confirmed: `node` cannot get
+   past `SDL_Init`, same as `CANVAS-15`) — the first real pixel-level evidence this renderer draws
+   anything at all.
+6. Once basic drawing works, close the still-open design/implementation gaps, roughly in this order:
    - **PIXIJS-22** — verify the `Present()`/ticker design decision (`autoStart:false` +
      explicit `app.renderer.render()`) actually produces frames, not just compiles.
    - **PIXIJS-43/44** — verify the anchor/origin and `SpriteEffects` flip math against a real FNA
@@ -65,15 +112,16 @@
      (wrap/mirror/clamp), and `SetSamplerFilter` are all still no-op stubs or throws.
    - **PIXIJS-60** — confirm `SpriteFont`/`DrawString` actually falls out of the `SpriteBatch` path
      for free, the way it does on `CANVAS`/`HTML_DOM`.
-6. **PIXIJS-52** (stretch) — fully generic `BlendState` support via custom PixiJS blend-mode
+7. **PIXIJS-52** (stretch) — fully generic `BlendState` support via custom PixiJS blend-mode
    registration, once the 4-preset path above is real and verified.
-7. **PIXIJS-80/82** — real GTest execution under Emscripten/`node`, and a manual browser
-   verification checklist (mirroring `docs/canvas-backend.md`'s own 10-item checklist) once there is
-   something real to check.
+8. **PIXIJS-80/82** — real GTest execution under Emscripten/`node` (blocked on step 4 above), and a
+   manual browser verification checklist (mirroring `docs/canvas-backend.md`'s own 10-item
+   checklist) once there is something real to check.
 
-Until step 2 happens, every task below this point stays at its current 🟨/⬜ mark regardless of how
-much source code exists for it — code review is not the same as verification, and this plan
-deliberately does not conflate the two.
+Steps 1-3 are now done. Every task from step 5 onward still stays at its current 🟨/⬜ mark
+regardless of how much source code exists for it — code review is not the same as verification, and
+this plan deliberately does not conflate the two, even now that real compiler/linker verification
+has started.
 
 ---
 
