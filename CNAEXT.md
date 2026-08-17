@@ -687,7 +687,7 @@ implementation precedes its per‑renderer follow‑ups.
 
 | # | Task | Status |
 |---|---|---|
-| N30 | `ShadowMap` (depth RT + PCF) + `IShadowReceiverEXT` hooks on the 4 lit effects, EasyGL shader | ⬜ |
+| N30 | `ShadowMap` (distance RT + PCF) + `IShadowReceiverEXT` hooks on the 4 lit effects, EasyGL shader | ✅ (the RT holds light-space distance, not depth — CNA cannot sample a depth attachment as a texture on every renderer; see `plan_modern.md` MOD-800..842) |
 | N31 | `CascadedShadowMap` (3–4 cascades) | ⬜ |
 | N32 | Point‑light cube shadow maps | ⬜ (long term) |
 | N33 | Shadow‑receiver shaders on the other 3D renderers | ⬜ |

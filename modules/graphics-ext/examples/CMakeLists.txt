@@ -114,6 +114,16 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT)
     endif()
 endif()
 
+# ---- Shadow mapping, end to end (plan_modern.md MOD-852/MOD-856) -------------------------------
+# Registered for every renderer, like the ASCII oracles above rather than like the GLSL demos:
+# nothing here is renderer-specific, and a renderer that cannot raster 3D or compile the caster's
+# shader SKIPs itself (exit 77) from inside, reporting which of the two it was.
+if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
+    cna_graphics_ext_test(cna_test_cnaext_shadowmap cnaext_shadowmap_test.cpp)
+    cna_register_renderer_test(NAME CNAEXT_ShadowMap COMMAND cna_test_cnaext_shadowmap
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+endif()
+
 # Module-local tests get the same headless-safe skip convention the root one-shot
 # gives root-registered tests (see cmake/TestHelpers.cmake).
 cna_apply_skip_convention()
