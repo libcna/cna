@@ -22,6 +22,7 @@
 
 #include "CNA/Platform/CannedMouse.hpp"
 #include "CNA/Platform/PlatformEvent.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 #include "CNA/Platform/PlatformTestDecorator.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -225,7 +226,23 @@ TEST_P(GameEventSemanticsGoldenTest, ObservableEventSemanticsMatchTheCapturedBas
     auto platform = std::make_unique<TranscriptPlatform>(
         Platform::PlatformFactory::Create(GetParam()));
     TranscriptPlatform* scriptedPlatform = platform.get();
-    TranscriptGame game(std::move(platform));
+
+    // This suite is parameterised over every platform compiled into the binary, but a Game also
+    // constructs a GraphicsDevice, and the renderer this build selected may need a service the
+    // platform under test does not offer -- an OpenGL context, most commonly. That pairing is a
+    // legitimate refusal, not an event-semantics difference, so there is nothing here to compare
+    // against the golden transcript.
+    std::unique_ptr<TranscriptGame> gameOwner;
+    try
+    {
+        gameOwner = std::make_unique<TranscriptGame>(std::move(platform));
+    }
+    catch (const Platform::PlatformException& refusal)
+    {
+        GTEST_SKIP() << "the " << GetParam()
+                     << " platform cannot back this build's renderer: " << refusal.what();
+    }
+    TranscriptGame& game = *gameOwner;
     GraphicsDeviceManager gdm(&game);
 
     // Settle construction and publish the scripted mouse's initial empty snapshot.
