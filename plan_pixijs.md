@@ -1,401 +1,177 @@
 # PixiJS Graphics Renderer — Implementation Plan
 
-> **Status: DRAFT, authored and implementation started 2026-08-16** per direct task instruction
-> ("vytvoř plan_pixijs.md pak podle toho v cna implementuj pixijs renderer" — create plan_pixijs.md,
-> then implement the PixiJS renderer in CNA according to it). Unlike `plan_canvas.md`/
-> `plan_html_dom.md`, this plan was not preceded by a live owner design conversation captured
-> verbatim — the design decisions below are this implementation pass's own proposal, made the same
-> way `plan_webgpu.md`'s early tasks were scoped, and are written down explicitly so they can be
-> revised by the owner rather than silently assumed correct.
->
-> **Status legend** (this project's own convention): ✅ implemented *and verified against its
-> stated acceptance criteria*; 🟨 code or documentation exists but has not met those criteria;
-> ⬜ not implemented.
->
-> **Environment constraint, stated up front and honestly**: this implementation session has **no
-> Emscripten SDK available at all** (`emcc`/`em++`/`emcmake` are not on `PATH`, no `emsdk` checkout
-> exists, no toolchain file was found). `plan_canvas.md`'s own session at least had a working
-> `emcc`/`em++` to structurally build and run under `node`; this one does not even have that. Every
-> task below that would normally be "🟨 configure/build verified, needs\_human for real pixels" is
-> instead **"code written and reviewed against the FNA/PixiJS API surface, zero automated
-> verification of any kind performed."** Treat every PIXIJS-N marked 🟨 in this plan as *more*
-> provisional than the same mark on `plan_canvas.md`/`plan_html_dom.md` until a real Emscripten
-> toolchain is available and Phase P8's build/test tasks actually run.
->
-> **Update, 2026-08-17 — current status summary.** Phases P0/P1 (CMake integration, the
-> `PixiJsRenderer` skeleton, and full public-identity registration — `PIXIJS` is now the 47th entry
-> in `GraphicsRendererType`, `scripts/check_renderer_identities.py`, `GraphicsBackendCategory.hpp`/
-> `GraphicsBackendMaturity.hpp`, `docs/renderer-registry.md`, and every identity-count/compile-
-> definition test) are genuinely complete and were validated by a full native
-> `-DCNA_GRAPHICS_RENDERER=SDL_RENDERER` `CnaTests` build (exit code 0) plus a passing
-> `GraphicsRendererTypeTest` run (7/7, covering all 47 identities). Phases P2-P7 (the actual PixiJS
-> draw path — `Clear`/`Present`, textures, render targets, `SpriteBatch`) exist as real, reviewed C++
-> and `EM_JS` source, but **have never been compiled or executed under Emscripten in any session**
-> (no `emsdk` has ever been available here) — see "What remains" below for the concrete, ordered
-> list of what has to happen before any of that code can be trusted. Nothing in Phases P2-P8 should
-> be described as working; it is an unverified first draft, not a functioning renderer.
->
-> **Update, 2026-08-17 (later the same day) — a real Emscripten toolchain build actually happened
-> (PIXIJS-84).** `emsdk` (`emscripten-core/emsdk` on GitHub) was cloned and installed in this
-> session, and PixiJS v7.4.2's real `dist/pixi.min.js` was fetched via `npm pack pixi.js@7.4.2`
-> (`cdn.jsdelivr.net` itself was blocked by this sandbox's outbound proxy policy, but
-> `registry.npmjs.org` was allowlisted) — its real SHA256 is now pinned in
-> `cmake/ThirdPartyPixiJS.cmake`. Concrete results, in order:
-> - `emcmake cmake -DCNA_GRAPHICS_RENDERER=PIXIJS -DCNA_PIXIJS_ROOT=<the fetched pixi.min.js> ...`
->   **configured successfully**, printing `CNA: Using PIXIJS (pixijs.com WebGL scene graph) graphics
->   renderer`.
-> - `cmake --build --target cna_renderer_pixijs` **failed on the first attempt** with a real bug:
->   `Vector2::getZeroProperty()` does not exist (only `Point` has that accessor; `Vector2` exposes a
->   `static const Zero` member instead) — fixed in `PixiJsSpriteBatchRenderer.cpp`'s two `Draw()`
->   overloads. **After that one-line fix, `cna_renderer_pixijs` built cleanly** — the first genuine
->   compiler verification any PixiJS-specific C++ in this renderer has ever received.
-> - `cna_test_pixijs_smoke` (the Phase P8 smoke-test executable) **compiled and linked successfully**
->   into a real, runnable `cna_test_pixijs_smoke.js`/`.wasm` — a full, working Emscripten build of
->   this renderer's own example code.
-> - Running it under plain `node` reproduces **exactly** `CANVAS-15`'s own documented finding:
->   `SDL_Init(SDL_INIT_VIDEO)` throws `ReferenceError: window is not defined` before any
->   renderer-specific code runs at all, because Node has no real DOM. This is not a PixiJS-specific
->   bug — it is the same "needs a real browser (`emrun`), not `node`" boundary every browser-only CNA
->   renderer hits, now empirically confirmed for `PIXIJS` too rather than assumed by analogy.
-> - The full `CnaTests` target (all renderers' tests in one binary, built with `-sASYNCIFY=1`)
->   initially failed for an **unrelated, environment-level reason**: Emscripten's own port-fetch
->   mechanism (`zlib`, needed by `sharp-runtime`'s `IO.Compression` module) tried to download
->   `github.com/madler/zlib/archive/...tar.gz` directly, which this sandbox's proxy also blocks
->   (`git clone` over the git protocol works fine here; raw `https://github.com/.../archive/...`
->   requests do not) — worked around by `git clone`-ing zlib v1.3.2 and manually seeding
->   Emscripten's ports cache directory in the expected layout. After that, **all C++ compiled
->   successfully** (every renderer's tests, `PixiJsRendererTests.cpp` included), but the final
->   **link step crashed inside `wasm-opt --asyncify`** (`UNREACHABLE executed at .../Flatten.cpp:231`,
->   preceded by `em++: warning: ASYNCIFY=1 is not compatible with -fwasm-exceptions. Parts of the
->   program that mix ASYNCIFY and exceptions will not compile.`) under the `emsdk` `latest` alias
->   (**6.0.6**). Re-tried after `emsdk install 6.0.2 && emsdk activate 6.0.2` (the exact version
->   `plan_canvas.md`'s own session used to successfully link `CnaTests.js`; re-seeded the `zlib` port
->   cache, since switching SDK versions replaces the whole `upstream/emscripten` tree) — **the
->   identical crash reproduced under 6.0.2 too**, same file/line. Since it reproduces across two
->   different emsdk point releases, this is not a toolchain-version drift issue — it is a real,
->   already-documented-by-emcc-itself incompatibility between `-sASYNCIFY=1` and `-fwasm-exceptions`,
->   both of which `CnaTests`' own CMake flags enable together (`ASYNCIFY` for the `SystemLink`
->   threading tests, per `cmake/UnitTests.cmake`'s own comment; `-fwasm-exceptions` presumably for
->   real C++ exception propagation, which this XNA-shaped codebase relies on constantly). Not chased
->   further per this plan's own "don't keep retrying toolchain versions indefinitely" guidance —
->   fixing it would mean changing `CnaTests`' shared Emscripten link flags (affecting every renderer,
->   not just `PIXIJS`) and is out of this plan's scope. Left as a genuine, real, cross-renderer
->   Emscripten build gap for a future session to pick up if it wants automated (non-browser) GTest
->   coverage for any renderer under Emscripten, not specifically a `PIXIJS` blocker.
->
-> **Bottom line**: `PIXIJS` genuinely builds and links under a real Emscripten toolchain
-> (`cna_renderer_pixijs` and `cna_test_pixijs_smoke` both proven, one real bug found and fixed along
-> the way). Automated (non-browser) GTest coverage for `PixiJsRendererTests.cpp` is blocked on a
-> real, reproduced, non-renderer-specific `CnaTests`/Emscripten toolchain gap
-> (`-sASYNCIFY=1` + `-fwasm-exceptions`), not on anything in this renderer's own code.
->
-> **Update, 2026-08-17 (later still) — real browser run (PIXIJS-84's actual completion): first
-> proof this renderer draws correct pixels.** `cna_test_pixijs_smoke`'s target got `SUFFIX ".html"`
-> added (mirroring `cna_demo_2d`), giving a real Emscripten HTML shell with the `<canvas>` element
-> this renderer's own `Module['canvas']` lookup expects. Served over a plain local HTTP server (WASM
-> must be `fetch()`ed, not opened via `file://`) and driven with a **real headless Chromium**
-> (`/opt/pw-browsers/chromium`, launched through the globally-installed `playwright` npm package with
-> `--use-gl=swiftshader`) — this is a genuine browser, not `node`, so `SDL_Init` succeeds and the
-> renderer runs past the point every previous update in this plan stopped at.
->
-> First run: **3/5 checks passed** -- window/renderer plumbing checks passed, but both pixel-value
-> checks (`GetBackBufferData` after a scaled `SpriteBatch::Draw`) failed. Diagnosed directly in the
-> live page via `page.evaluate()` (dumping `Module['cnaPixiTextures']`, the sprite pool, and a fresh
-> `extract.pixels()` call): the uploaded texture buffer, the pooled sprite's position/scale/anchor,
-> and a **manually forced** `app.renderer.render(app.stage)` followed by `extract.pixels()` all
-> showed the exactly correct colors at the exactly correct coordinates -- proving the upload, sprite
-> math, and readback mechanism were ALL already correct. The actual bug: **PixiJS is retained-mode**
-> -- `SpriteBatch::Draw()` only mutates pooled sprite properties (`CNA_PixiJs_FlushSprites`); nothing
-> is painted until `renderer.render()` actually runs. `Present()` was the only place that called
-> `render()` (Design decision/PIXIJS-22), but XNA's `GraphicsDevice::GetBackBufferData()` is legally
-> callable mid-frame, before the framework's own end-of-frame `Present()` -- exactly what this smoke
-> test does. So the readback was reading the *previous* frame's stale backbuffer (or a blank one on
-> frame 1), not what had just been drawn. **Fixed** (`REMED-PIXIJS-1`): both
-> `CNA_PixiJs_ReadCurrentPixels` (`PixiJsRenderer.cpp`) and `CNA_PixiJs_ReadTexturePixels`
-> (`PixiJsRenderTargetRenderer.cpp`) now force a render of the relevant container/target immediately
-> before extracting pixels, matching every other CNA renderer's "a draw call's effect is visible to
-> an immediate readback" contract.
->
-> **After the fix: `cna_test_pixijs_smoke` passes 5/5 in a real browser.** Concretely verified for
-> the first time: `PIXI.Application` construction on the reused SDL canvas (Design decision 2), real
-> synchronous buffer-backed texture upload (`PixiJsTextureRenderer`, Design decision 8) with exact
-> byte-for-byte correct sampled colors, a scaled `SpriteBatch::Draw(destRect, srcRect, White)` with
-> `anchor=(0,0)` producing the exact expected destination-rectangle pixels (top-left and
-> bottom-right texels both exact), and `extract.pixels()`-based readback (Design decision 9,
-> `GetBackBufferData`) now returning the real, current frame. **Not yet exercised by this test**:
-> rotation/origin away from (0,0), `SpriteEffects` flip, non-`Opaque` blend modes, render-target
-> bind/draw/readback, and `SpriteFont` -- those remain exactly as unverified as before this update.
->
-> **Update, 2026-08-17 (continued autonomous session) — the smoke test grew from 5 to 15 checks
-> across 8 draw frames, and every extension found and fixed a real bug via live-browser probing (not
-> guessed).** In order:
-> - **Rotation/origin** (frame 2: 180° rotation around a texture's exact center) and **`SpriteEffects`
->   flip** (frame 3: `FlipHorizontally`) were added. Rotation passed on the first try. Flip did
->   **not**: the original "negative `sprite.scale`" design visibly shifted the destination
->   rectangle's footprint (empirically probed against known RGBY texel data: `anchor=(0,0),
->   scale=(-4,4)` moved an 8x8 draw 8px off from where `destRect` said it should be). **Fixed**
->   (`REMED-PIXIJS-2`): flip now uses `PIXI.Texture`'s own GroupD8 `rotate` parameter instead of
->   negative scale (12=H-mirror, 8=V-mirror, 4=both — values confirmed empirically, not from
->   documentation, via a standalone probe before the fix was written). Result: 9/9.
-> - **Blend modes** (frames 4-6: `Additive`, `Opaque` with a half-alpha source, `AlphaBlend` with the
->   same source) surfaced two more real, independent bugs. First, `Opaque` was collapsed onto the
->   same `PIXI.BLEND_MODES.NORMAL` every other preset used — **fixed** (`REMED-PIXIJS-3`) by mapping
->   it to `PIXI.BLEND_MODES.NONE` (=20, unconditional overwrite, no `GL_BLEND`), with
->   `PixiBlendModeToPixiJsCode()` added as the single source of truth shared between
->   `PixiJsRenderer.cpp` and `PixiJsSpriteBatchRenderer.cpp` so the two mappings cannot drift apart
->   again. Second, even after that fix, `Opaque` still blended instead of overwriting — root cause:
->   `PIXI.ALPHA_MODES.UNPACK` is actually `PREMULTIPLY_ON_UPLOAD`, silently premultiplying every
->   texture at upload time. **Fixed** (`REMED-PIXIJS-4`): texture creation now uses
->   `PIXI.ALPHA_MODES.NPM` (straight, not premultiplied). `AlphaBlend`'s exact compositing math
->   ((178,74,118,255) for a 128-alpha red source over CornflowerBlue) was independently confirmed via
->   a standalone probe before being written into the smoke test as an assertion. Result: 12/12.
-> - **Render targets** (frame 7: bind a `RenderTarget2D`, `Clear()` it to a distinct color, unbind,
->   sample it back both as an ordinary texture and via `RenderTarget2D::GetData`) surfaced a third
->   independent bug class, found via **live `EM_JS console.log` tracing** (not `page.evaluate()` —
->   the C++-side `RenderTarget2D` is destroyed, deleting its JS registry entry, before any post-hoc
->   inspection could run). Two distinct issues: (1) `app.renderer.background` only affects the main
->   canvas, never an explicit `render(container, {renderTexture})` call, so `Clear()` on a render
->   target painted nothing — **fixed** (`REMED-PIXIJS-5`, part 1/2) by having `Clear()` paint a
->   reusable 1x1 white sprite, tinted and scaled to the target's size with `blendMode=NONE`, as a real
->   overwrite. (2) Even after that fix, `GetData()` still read back blank: the "force a render before
->   reading" fix from `REMED-PIXIJS-1` re-renders the target's own container, but that container is
->   typically empty at read time, and the render call's default `clear:true` behavior wiped out what
->   `Clear()` had just painted — **fixed** (`REMED-PIXIJS-5`, parts 3/4) by passing `clear:false` to
->   all three render-texture-target `render()` calls (`CNA_PixiJs_Render`,
->   `CNA_PixiJs_ReadCurrentPixels`, `CNA_PixiJs_ReadTexturePixels`), making them purely additive.
->   Result: 14/14.
-> - **`SetSamplerFilter`/`SetSamplerAddressMode`** (PIXIJS-46/PIXIJS-53) were implemented for real,
->   replacing the previous no-op stubs: `SetSamplerFilter` maps XNA's `TextureFilter` (using the same
->   magnification-dominant `{Linear,Anisotropic,LinearMipPoint,...}` grouping `CANVAS-42` already
->   established) to `PIXI.SCALE_MODES.LINEAR`/`.NEAREST`; `SetSamplerAddressMode` maps
->   `TextureAddressMode` to real WebGL `PIXI.WRAP_MODES` GL-enum values (`REPEAT`=10497,
->   `CLAMP`=33071, `MIRRORED_REPEAT`=33648 — confirmed live via a browser probe, not assumed from
->   small ordinal guesses). Both are applied to the sampled `baseTexture` at flush time. A new frame 8
->   check draws with an explicit `SamplerState` using `TextureFilter::Point` and checks a
->   texel-boundary pixel stays pure, unblended red — a value that is provably different from the
->   `LinearClamp` default's own blended result at that exact pixel (159,96,0 vs 255,0,0, both
->   confirmed via a standalone probe before the assertion was written), so the check can only pass if
->   `SetSamplerFilter` genuinely reached PixiJS's sampler state. **A real architectural boundary was
->   found and documented while implementing this**: PixiJS's `Texture` constructor throws
->   ("frame does not fit inside the base Texture dimensions") for any per-draw frame rectangle larger
->   than its base texture, which is exactly what XNA's classic "oversized source rect tiles under
->   `TextureAddressMode.Wrap`" trick needs — so wrap mode is genuinely wired to the real WebGL sampler
->   (confirmed: `baseTexture.wrapMode` really is set), but it can only ever affect the subtler
->   linear-filter edge-bleed case through this renderer's current per-draw-Texture-view architecture,
->   never large-scale visible tiling (that would need a `PIXI.TilingSprite`-based draw path, out of
->   this v1 scope). Result: **15/15**.
-> - **`SpriteFont`/`DrawString`** (PIXIJS-60, frame 9) was confirmed, not assumed: a one-glyph
->   `SpriteFont` (the same fixture `htmldom_smoke_test.cpp`'s own `HTMLDOM-38` uses) drawn via
->   `DrawString("A", ...)` produces the glyph's exact atlas color at the requested backbuffer
->   position, on the first try, with zero PixiJS-specific code — confirmed both by this real pixel
->   readback and by direct inspection of `SpriteBatch.cpp`: `DrawString`'s `pushSprite` funnels every
->   glyph through the same `Draw(destRect, srcRect, color, rotation, origin, effects, layerDepth)`
->   overload frames 1-8 already exercised. Result: **16/16**.
-> - **`SetTransformMatrix`** (PIXIJS-45, frame 10) was implemented for real, replacing the previous
->   throw: the batch's 2D affine transform (from `Matrix.M11/M12/M21/M22/M41/M42`) is composed with
->   each sprite's own local placement matrix (built the same way PixiJS's own
->   `updateLocalTransform` would from position/rotation/scale) and handed to
->   `PIXI.Transform.setFromMatrix` for decomposition back into position/scale/rotation/skew, matching
->   FNA's own contract that the transform applies *after* per-sprite local placement. The composition
->   math and `setFromMatrix`'s own decomposition were confirmed correct via a standalone browser probe
->   (identity, pure translation, and pure scale all landed at the exact expected pixel bounding box)
->   before any source change was written. A real `Matrix::CreateTranslation(16,16,0)` transform in the
->   smoke test (frame 10) correctly shifts an entire scaled draw, with the untransformed origin
->   confirmed back to plain background color (not a leftover copy). The identity-transform case keeps
->   the renderer's exact pre-existing code path, so none of the other 16 checks were put at risk.
->   Result: **19/19**.
-> - **`Texture2D::SetData` on a `RenderTarget2D`** (PIXIJS-32, frame 11) was implemented for real,
->   replacing the previous unconditional throw: a throwaway buffer-backed `PIXI.Texture` (same
->   `PIXI.BufferResource` + `ALPHA_MODES.NPM` pattern `PixiJsTextureRenderer` already uses) is painted
->   over the whole render-texture target with `PIXI.BLEND_MODES.NONE` (the exact unconditional-
->   overwrite trick `REMED-PIXIJS-5` already proved correct for `Clear()`), then destroyed
->   immediately. Verified on an unbound render target (no `SetRenderTarget` call at all), sampled back
->   as an ordinary texture afterward -- both the top-left and bottom-right texels of a 2x2 `SetData`
->   call landed exactly right. Result: **21/21**.
->
-> **Bottom line, this update**: `cna_test_pixijs_smoke` now exercises and passes 21/21 real,
-> pixel-verified checks in a real headless-Chromium browser, covering scaled draws, rotation, flip,
-> all 3 currently-mapped blend presets with correct compositing math, full render-target
-> bind/Clear/draw/readback round-tripping (both via `SpriteBatch` and via direct `SetData`), both
-> sampler-state entry points, `SpriteFont`, and a real `Begin(transformMatrix)` camera-style
-> transform. Five real, independent bugs (`REMED-PIXIJS-1` through `REMED-PIXIJS-5`) were found and
-> fixed this way, none of them guessed -- every fix (and the `SetTransformMatrix`/`SetData`
-> implementations themselves) was preceded by a standalone live-browser probe confirming the actual
-> PixiJS/WebGL behavior before the corresponding source change was written.
->
-> **PIXIJS-31's mip level>0 policy was also investigated for real this session** (not a code change,
-> a decision): a live probe of `PIXI.BufferResource`/`PIXI.BaseTexture`'s own prototypes confirmed
-> PixiJS exposes no public per-level CPU upload API at all -- mipmaps are GPU-auto-generated from
-> level 0 only. The throw for level>0 is unchanged, but is now a documented structural conclusion
-> (matching `CANVAS-21`'s own reasoning) rather than an open question.
->
-> **PIXIJS-51's `AlphaBlend`-vs-premultiplied-content gap was precisely characterized (not fixed)**:
-> a standalone probe confirmed `PIXI.ALPHA_MODES.PMA` + `BLEND_MODES.NORMAL` correctly composites
-> genuinely premultiplied source content, but this renderer always uploads `NPM` regardless of which
-> `BlendState` a later `Draw()` uses -- so `AlphaBlend` on premultiplied content would render wrong
-> today. Not attempted: fixing it would need per-flush `baseTexture.alphaMode` switching and is
-> plausibly a CNA-wide `Texture2D` semantics question (does the content pipeline premultiply by
-> default anywhere?), not a PixiJS-only fix.
->
-> **Update, 2026-08-17 (continued further) — PIXIJS-52's stretch goal implemented and verified for
-> real, and a genuine regression caught by a new native-test verification technique.** Before writing
-> any implementation code, a live probe confirmed `renderer.state.blendModes` accepts arbitrary
-> custom entries (`[srcRGB,dstRGB,srcAlpha,dstAlpha]` or the 6-element form with a blend equation
-> pair) and that PixiJS's own `state.setBlendMode` genuinely applies them via
-> `gl.blendFuncSeparate`/`gl.blendEquationSeparate` -- a hand-registered "multiply" blend mode
-> produced the exact expected composited pixel. `BlendStateToPixiJsBlendMode` now returns
-> `PixiJsBlendMode::Custom` (never throws) for any non-preset combination; `XnaBlendToGlFactor`/
-> `XnaBlendFunctionToGlEquation` map every `Blend`/`BlendFunction` enumerator to real WebGL GL
-> constants; a reserved `blendModes` slot is mutated in place per flush with the resolved factors/
-> equation. A real custom `BlendState` (`ColorSourceBlend=DestinationColor,
-> ColorDestinationBlend=Zero` -- a multiply blend, not one of the 4 presets) verified in the browser
-> smoke test: **22/22 PASS** (frame 12).
->
-> Separately: `PixiJsRendererTests.cpp` (the pure-C++ `PixiJsBlendStateMapping`/`PixiJsRendererThrowNo3D`
-> GTest coverage) has **never once compiled or run in any session** -- not because of the documented
-> `CnaTests`/Emscripten `ASYNCIFY` link crash alone, but because the `pixijs` CMake module itself only
-> configures `if(EMSCRIPTEN AND CNA_PIXIJS_JS_FILE)`, so it is entirely absent from every native
-> (non-Emscripten) `CnaTests` build too -- there was never a build combination in which it could run.
-> Worked around this session by compiling `PixiJsRendererTests.cpp` plus the 4 renderer `.cpp` files
-> directly with native `g++` (`-DCNA_RENDERER_PIXIJS`, no `-D__EMSCRIPTEN__`, so every `EM_JS` block
-> compiles out) against the already-built native `cmake-build-debug` libraries (`cna_graphics_core`,
-> `cna_core`, `sharp_runtime_*`, `SDL3`, `gtest`) -- a real, if manual, first-ever execution of this
-> test file. Result: **13/14 passed, 1 real regression caught**:
-> `PixiJsSpriteBatchRendererTest.NonIdentityTransformThrows` still expected `SetTransformMatrix` to
-> throw for a non-identity matrix, left over from before this session's own `PIXIJS-45`
-> implementation replaced that throw with a real transform. Fixed (renamed to
-> `NonIdentityTransformDoesNotThrow`, matching current behavior) and re-verified: **14/14 native
-> tests pass**, including 2 brand-new `XnaBlendToGlFactor`/`XnaBlendFunctionToGlEquation` coverage
-> tests exercising every enumerator. This native-compile workaround is not part of the CMake build
-> graph (it was a manual, one-off `g++` invocation, not a new build target) -- a future session could
-> turn it into a real lightweight native CMake target so this coverage runs automatically without
-> waiting on the `CnaTests`/Emscripten `ASYNCIFY` fix.
->
-> A `NonPremultiplied` check was also added (frame 13): previously untested at all (only ever
-> exercised implicitly by sharing `AlphaBlend`'s code path), now confirmed genuinely wired -- same
-> expected result as `AlphaBlend`'s own straight-alpha math, which is documented as today's correct,
-> if incomplete, behavior (the two presets are not yet *distinguished*; see PIXIJS-51). Result:
-> **23/23**.
->
-> **Bottom line, this update**: `cna_test_pixijs_smoke` is at **23/23 PASS**, and
-> `PixiJsRendererTests.cpp`'s pure-C++ coverage has been run for the first time ever (via a native
-> workaround), at **14/14 PASS** after fixing one real, genuine regression it caught. The only
-> genuinely open item left in this renderer's own v1 scope is the `AlphaBlend`/premultiplied-content
-> gap (PIXIJS-51, likely CNA-wide, not attempted -- see its own precise characterization above).
+> **Status legend** (this project's own convention): ✅ implemented *and verified against its stated
+> acceptance criteria*; 🟨 code or documentation exists but has not met those criteria; ⬜ not
+> implemented.
 
-### What remains — current, as of 2026-08-17
+## Current status — 2026-08-17
 
-Everything with its own well-scoped, safely-fixable path forward has been implemented and verified
-in a real browser this session. **Three items are genuinely still open**, each for a specific,
-documented reason (not overlooked):
+`PIXIJS` is CNA's 2D-only, Emscripten-only PixiJS renderer. Its draw path builds under a real
+Emscripten toolchain and is pixel-verified in a real browser on every change.
 
-1. **PIXIJS-51 — `AlphaBlend` renders wrong for genuinely premultiplied-alpha source content.**
-   Real XNA's `BlendState.AlphaBlend` expects the source texture's RGB to already be premultiplied by
-   its own alpha (the content pipeline's default behavior); this renderer always uploads textures as
-   `PIXI.ALPHA_MODES.NPM` (straight alpha) regardless of which `BlendState` a later `Draw()` uses.
-   Confirmed via a standalone probe: premultiplied content uploaded as `NPM` under
-   `BLEND_MODES.NORMAL` gives a visibly wrong composite (114,74,118,255 instead of the correct
-   178,74,118,255), while the same content uploaded as `PMA` composites correctly. **Not attempted**:
-   fixing it needs per-flush `baseTexture.alphaMode` switching (the same pattern PIXIJS-46/53 already
-   established for wrap/scale mode) *and* a decision about which `Texture2D`s are premultiplied in
-   the first place — CNA has no tracking of this at all today (unlike real XNA's content pipeline),
-   so this is plausibly a CNA-wide `Texture2D`/`BlendState` semantics question, not a PixiJS-only fix.
-   A naive PixiJS-only fix would also regress the currently-passing, currently-correct straight-alpha
-   `AlphaBlend`/`NonPremultiplied` tests (frames 6, 13) — confirmed by working through the math before
-   deciding not to attempt it.
-2. **The shared `CnaTests` target fails to link under Emscripten** (`-sASYNCIFY=1` is incompatible
-   with `-fwasm-exceptions`, a real Binaryen crash reproduced identically under 2 different emsdk
-   versions). This blocks the *official* CMake path for `PixiJsRendererTests.cpp`'s GTest coverage —
-   worked around this session via a manual native `g++` compile (14/14 pass, see the dated update
-   above), but that workaround is a one-off invocation, not a CMake target. Fixing the real link crash
-   means touching `cmake/UnitTests.cmake`'s shared flags, which affects every renderer, not just this
-   one — out of this plan's own scope.
-3. **No manual browser verification checklist has been run** (mirroring `docs/canvas-backend.md`'s
-   own 10-item checklist) and **no `emrun`/real-device pass has happened** — every browser result in
-   this plan comes from headless Chromium driven by Playwright, a real browser but not the full manual
-   matrix other renderers' docs describe.
+| Evidence | Result |
+|---|---|
+| `emcmake` configure, `-DCNA_GRAPHICS_RENDERER=PIXIJS` | passes |
+| `cna_renderer_pixijs`, `cna_test_pixijs_smoke` (Release, `-O3`) | build and link |
+| Browser pixel suite (`scripts/run_pixijs_browser_tests.mjs`, headless Chromium over local HTTP) | **70/70 checks pass** |
+| `cna_test_pixijs_host` (native GTest, `CNA_BUILD_PIXIJS_HOST_TESTS=ON`, ctest `PixiJsHostContracts`) | **28/28 pass** |
+| Multi-renderer `PIXIJS;CANVAS;HTML_DOM;SVG_DOM` (Emscripten) | configures; `cna_demo_renderer_selection` links |
+| `PIXIJS` non-default in `CANVAS;PIXIJS` | configures, and `--extern-pre-js` still reaches the link line |
+| `PIXIJS + DIRECTX11` / `PIXIJS + METAL` | rejected at configure time with a complete reason |
+| `scripts/check_renderer_identities.py`, `check_renderer_combinations.py`, the five platform gates | pass |
 
-**Follow-up tasks** — the first is now done, the second is still open:
+**What is still not verified**, and is therefore not claimed anywhere in this plan:
 
-- ~~Turn the native `g++` workaround for `PixiJsRendererTests.cpp` into a real, lightweight CMake
-  target~~ — **done 2026-08-17** as part of `plan_platform.md`'s post-merge re-audit.
-  `CNA_BUILD_PIXIJS_HOST_TESTS=ON` builds `cna_test_pixijs_host` and registers the
-  `PixiJsHostContracts` ctest. The "own path into the build graph" problem the note describes was
-  already solved for this renderer's three browser-only siblings: `modules/renderers/CMakeLists.txt`
-  registers `cna_test_canvas_host`, `cna_test_htmldom_host` and `cna_test_svgdom_host` *outside*
-  selected-renderer dispatch, compiling the family's sources directly with the EM_JS bodies excluded
-  by their own `#if defined(__EMSCRIPTEN__)`. PIXIJS now has the same target, and the suite passes
-  **18/18** natively.
-- A distinct `NonPremultiplied` code path (not just a test proving it's wired, which frame 13 now
-  provides) — currently identical to `AlphaBlend` in every way, which is only correct by coincidence
-  for straight-alpha content (see item 1 above).
+1. **No manual browser pass, and no `emrun`/real-device run** (`PIXIJS-82`). Every browser result
+   above comes from headless Chromium on SwiftShader — a real browser and a real WebGL
+   implementation, but one machine, one GPU stack, and no human looking at the screen. The
+   10-item-equivalent manual checklist `docs/canvas-backend.md` describes has not been written or run.
+2. **The shared Emscripten `CnaTests` target still cannot link** — `-sASYNCIFY=1` is incompatible
+   with `-fwasm-exceptions`, and `wasm-opt --asyncify` crashes (`UNREACHABLE executed at
+   .../Flatten.cpp:231`). Reproduced identically under two different emsdk releases, so it is a real
+   flag-combination incompatibility rather than toolchain drift. It affects every renderer, not this
+   one; `cna_test_pixijs_host` covers this family's browser-independent contracts without it.
+3. **The `CNA_PIXIJS_SHA256` pin has never been checked against jsDelivr itself.** It is computed
+   from, and reproduced against, the real `pixi.js@7.4.2` npm package; both sessions that did so had
+   `cdn.jsdelivr.net` blocked by an outbound proxy. See `cmake/ThirdPartyPixiJS.cmake`'s own note.
 
-### Post-merge migration onto the platform abstraction — 2026-08-17
+### What this session changed, and why
 
-This renderer was authored on a branch that predated `next`'s platform-abstraction and
-runtime-renderer-selection work, and merging the two left it holding a creation contract that no
-longer existed. It did not compile in the merged tree at all, and the four SDL references its
-sources still carried were absorbed by *raising* `plan_platform.md`'s ratchet budget from 0/0 to
-4 files / 14 references rather than by fixing the coupling. Repaired as part of
-`plan_platform.md`'s own re-audit:
+The renderer had a working-looking draw path built on one unsound premise: that PixiJS's retained
+scene graph could stand in for `SpriteBatch`. Pooled sprites were parented to the active container
+and only painted by `Present()`. Every state, ordering and lifetime defect below followed from that
+single decision, and the 23-check suite that existed could not have caught any of them, because it
+never left one `Begin`/`End` pair per frame.
 
-- `PixiJsRenderer` takes `const GraphicsRendererCreateArgs&` and reads the platform-neutral
-  `RendererSurfaceInfo` (window id, drawable size, display scale), exactly like `CanvasRenderer`.
-  `<SDL3/SDL.h>`, the `SDL_Window*` member and all four `SDL_GetWindowSize` calls are gone; sizes
-  come from the snapshot, and `OnSurfaceChanged()` adopts resizes.
-- `GetWindowInternal()`, `GetRendererInternal()` and both `GetNativeTexture()` overrides were
-  removed. They were `override`s of methods PLAT-59/PLAT-60 had already deleted from
-  `IGraphicsRenderer`, which is the specific reason the family could not compile.
-- `PixiJsRendererDescriptor.cpp` supplies the family's `GetDescriptor()` and its namespace-scoped
-  `CreateGraphicsRenderer`; `PIXIJS` is registered in `cmake/RendererRegistry.cmake`'s identity map,
-  without which configuring `-DCNA_GRAPHICS_RENDERER=PIXIJS` was a hard CMake error.
-- The renderer target and the smoke-test executable no longer link SDL3 at all, and the
-  ratchet is back at its 0/0 floor.
+**PIXIJS-87 — commit at every submission point.** One scratch `PIXI.Container` is filled from the
+sprite pool for exactly one flush, rendered into the active target with `clear:false`, and emptied.
+`End()` rasterizes; in `SpriteSortMode::Immediate`, each `Draw()` does. Confirmed in a browser
+first that separate `render(..., {clear:false})` calls genuinely accumulate. This fixed, together:
 
-The v1 scope, the EM_JS draw path and the browser-verified behaviour recorded above are unchanged
-by this: it is a creation-contract migration, not a rendering change.
+- a second Deferred `Begin`/`End` in one frame restarting the pool at index 0 and overwriting the
+  first batch;
+- `SpriteSortMode::Immediate` keeping only the last sprite of a batch;
+- binding another render target moving pooled nodes out of the previous target (PixiJS re-parents on
+  `addChild`);
+- blend and sampler state from a later batch applying to earlier, still-unpainted sprites;
+- a `Texture2D` destroyed after `End()` — which `SpriteBatch` explicitly permits, since it releases
+  its texture references there — taking its GPU resource with it before anything sampled it;
+- `Clear()` needing to be two different operations for the back buffer and a render target, and
+  dropping the active container's children as a "reset the frame" step that could discard another
+  batch's sprites. It is now one whole-target overwrite, and a real ordering boundary.
+
+Object pooling (Design decision 7) survives intact: the pool only has to cover the largest single
+flush. The `REMED-PIXIJS-1` and `REMED-PIXIJS-5` readback corrections are gone with the problem they
+worked around — nothing is ever left unpainted, so a read is just a read.
+
+**PIXIJS-51 — the premultiplied-alpha gap, resolved.** The root cause was not `ALPHA_MODES` at all.
+Presets were mapped onto `PIXI.BLEND_MODES`, and PixiJS rewrites `NORMAL` to `NORMAL_NPM` — a
+*different* factor tuple — through `utils.premultiplyBlendMode` whenever the sampled texture is not
+premultiplied. So `BlendState::AlphaBlend` was silently rendered with `BlendState::NonPremultiplied`'s
+factors, and the two presets were indistinguishable by construction.
+
+Every blend state now renders from its literal `XnaBlendToGlFactor`/`XnaBlendFunctionToGlEquation`
+factors through its own `blendModes` slot, with an identity `premultiplyBlendMode` entry so PixiJS
+cannot rewrite it. Combined with `ALPHA_MODES.NPM` uploads — which also make PixiJS pack a
+*straight* vertex tint, exactly XNA's tint semantics — both of XNA's conventions now work, and the
+convention lives where XNA puts it: in the pixel data plus the `BlendState` the application picks.
+The suite asserts the same colour in either convention compositing to the same result under its own
+preset, and visibly differently under the other. `AlphaBlend` on straight-alpha content now produces
+the literal `(One, InverseSourceAlpha)` answer every other CNA renderer gives, rather than the
+`NonPremultiplied` answer it used to.
+
+**PIXIJS-86 — `--pre-js` was corrupting the vendored bundle.** `--pre-js` content is handed to
+Emscripten's own JS optimizer, which at `-O3` dead-code-eliminated part of `pixi.min.js`: a real
+optimized build died with `ReferenceError: Pp is not defined` before any renderer code ran. This was
+invisible before because the only previous Emscripten build of this renderer was unoptimized.
+`--extern-pre-js` is emitted verbatim, which is the contract a third-party UMD bundle needs.
+
+**PIXIJS-88/89 — state that was silently discarded.** `SetBlendFactor` now reaches `gl.blendColor`,
+so `Blend::BlendFactor`/`InverseBlendFactor` are real rather than a partial mapping.
+`BlendState.ColorWriteChannels` reaches `gl.colorMask` instead of being ignored; a
+`MultiSampleMask` that disables coverage sample 0 is rejected, since single-sample targets have no
+equivalent for it, while every mask that leaves sample 0 enabled is genuinely equivalent to the
+default. Both are captured per batch at `Begin()` and applied immediately before the render that
+consumes them.
+
+**PIXIJS-87 — one blend slot per distinct tuple.** PixiJS's `StateSystem` skips `setBlendMode()`
+when the incoming id is unchanged, so the previous single reserved slot, mutated per flush, left a
+second batch rendering with the first batch's blend. Confirmed empirically before the fix.
+
+**PIXIJS-90 — sampler state that lied.** `SetSamplerAddressMode` stored both axes and applied only
+`AddressU`; a mixed pair is now rejected, because a `PIXI.BaseTexture` carries one `wrapMode` and
+approximating silently hands back a state the caller never asked for. Out-of-range `TextureFilter`
+and `TextureAddressMode` values are rejected rather than defaulting to Point/Clamp.
+
+**PIXIJS-91 — initialization no longer depends on `Clear()`.** The application is created in the
+constructor and ensured by every entry point, and every `EM_JS` call returns a status the C++ side
+turns into a real exception. A first frame that draws without `Clear()`, or binds a render target as
+its first operation, used to be discarded silently by `console.error(...); return;`.
+
+**PIXIJS-92 — ownership, corrected by a test that failed.** The first teardown implementation
+destroyed the `PIXI.Application`. Creating a second one then failed inside PixiJS's batch setup
+(`Invalid value of 0 passed to checkMaxIfStatementsInShader`), because a canvas hands out exactly
+one WebGL context and PixiJS's `Renderer.destroy()` loses it on purpose. The application is
+therefore scoped to the platform's canvas (`Module['cnaPixiApp']`) and everything the renderer
+creates is scoped to the renderer (`Module['cnaPixi']`); teardown releases the second and keeps the
+first, which is what makes destroy/recreate work with no state carried across. A `RenderTarget2D`
+destroyed while still bound restores the back buffer and warns.
+
+**PIXIJS-93/94.** `OnSurfaceChanged` resizes PixiJS's renderer, which was never told about a
+drawable-size change. Per-draw `PIXI.Texture` frame views are cached on their registry entry rather
+than allocated per draw — the churn the sprite pooling existed to avoid.
+
+**Outside this renderer.** `scripts/check_renderer_identities.py` compared only the enum and the
+cmake `STRINGS` list, which is why it reported all 49 identities as fine while
+`cna_renderer_identity_to_namespace("PIXIJS")` was a hard configure error. It now follows every
+identity through `cmake/RendererRegistry.cmake` to the C++ accessor and family-scoped factory that
+must back it, and was negative-tested against both failure shapes.
+`_cna_reject_combination` took its reason as a named parameter while every call site writes it as
+several adjacent string literals — which CMake passes separately — so every combination rejection
+was truncated to its first fragment.
 
 <details>
-<summary>Completed work, in the order it was tackled (click to expand)</summary>
+<summary>How this renderer got here — the earlier sessions, in order (click to expand)</summary>
 
-1. **PIXIJS-1** — pinned the real PixiJS v7.4.2 SHA256 (`npm pack`, since `cdn.jsdelivr.net` was
-   blocked by this sandbox's proxy).
-2. **PIXIJS-84** — got a real Emscripten toolchain (`emsdk`) and built `cna_renderer_pixijs`/
-   `cna_test_pixijs_smoke` cleanly.
-3. Fixed the one real bug the first Emscripten build surfaced: `Vector2::getZeroProperty()` doesn't
-   exist (`Vector2::Zero` does).
-4. Ran `cna_test_pixijs_smoke` in a real browser (headless Chromium via Playwright) and grew it from
-   the first successful run (5/5) to **23/23 PASS**, fixing 5 real, independent bugs along the way
-   (`REMED-PIXIJS-1` through `REMED-PIXIJS-5`: retained-mode readback timing, flip footprint-shift,
-   Opaque blend semantics, texture premultiply corruption on upload, render-target clear/readback) —
-   see the dated updates above for the full account of each.
-5. **PIXIJS-22** — verified `Present()`'s ticker design actually produces frames (with the
-   `GetBackBufferData` force-render correction, `REMED-PIXIJS-1`).
-6. **PIXIJS-43/44** — verified rotation-around-origin and `SpriteEffects` flip (flip needed a real
-   fix, `REMED-PIXIJS-2`).
-7. **PIXIJS-50** — verified `Opaque`/`AlphaBlend`/`Additive`/`NonPremultiplied` for straight-alpha
-   content, with exact compositing math confirmed via standalone probes.
-8. **PIXIJS-31** — investigated (not just left provisional) and decided: PixiJS has no public API for
-   a custom CPU-authored mip chain; the level>0 throw stays, now for a documented structural reason.
-9. **PIXIJS-32** — implemented direct `Texture2D::SetData` on a render target for real (a throwaway
-   buffer-backed texture painted over the target with `BLEND_MODES.NONE`).
-10. **PIXIJS-46/53** — implemented real `TextureAddressMode`/`SetSamplerFilter`, with a documented
-    architectural boundary (PixiJS rejects oversized per-draw texture frames, so wrap mode can't do
-    XNA's classic "oversized-rect tiling" trick).
-11. **PIXIJS-45** — implemented `SetTransformMatrix` for real (composed with each sprite's own local
-    placement matrix via `PIXI.Transform.setFromMatrix`).
-12. **PIXIJS-60** — confirmed `SpriteFont`/`DrawString` needs zero renderer-specific code.
-13. **PIXIJS-52** (stretch goal) — implemented fully generic `BlendState` support via a custom,
-    per-flush-mutated `renderer.state.blendModes` slot.
-14. Discovered and worked around a second, independent verification gap:
-    `PixiJsRendererTests.cpp` had never compiled in *any* build configuration (not just blocked by
-    item 2 above) — ran it for the first time via a native `g++` workaround, catching and fixing one
-    real regression (`SetTransformMatrix`'s pre-`PIXIJS-45` throw expectation, stale after item 11).
+1. **Authored 2026-08-16** per direct task instruction, with no live owner design conversation; the
+   design decisions below are this plan's own proposal. The authoring session had **no Emscripten
+   SDK at all**, so nothing was compiled or run.
+2. **PIXIJS-1** — pinned the real PixiJS v7.4.2 SHA256 via `npm pack` (`cdn.jsdelivr.net` was
+   blocked by the sandbox proxy; `registry.npmjs.org` was not).
+3. **PIXIJS-84** — a later session installed `emsdk` and built `cna_renderer_pixijs` and
+   `cna_test_pixijs_smoke` for real. The first build found a real bug:
+   `Vector2::getZeroProperty()` does not exist (`Vector2::Zero` does).
+4. Running the result under plain `node` reproduced `CANVAS-15`'s finding exactly — the platform's
+   video subsystem fails before any renderer code runs, because Node has no DOM. Confirms the
+   "needs a real browser" boundary for `PIXIJS` empirically rather than by analogy.
+5. **First real browser run: 3/5.** Both pixel checks failed. Diagnosed live in the page: the
+   upload, sprite math and readback mechanism were each already correct, but nothing painted until
+   `Present()`. `REMED-PIXIJS-1` made both readbacks force a render first — the first sign of the
+   retained-mode mismatch PIXIJS-87 later removed at the root.
+6. Grown to **23/23** across several rounds, each finding a real bug via live-browser probing
+   before writing the corresponding assertion: `REMED-PIXIJS-2` (flip via GroupD8 `rotate`, not
+   negative scale, which shifted the destination rectangle), `REMED-PIXIJS-3` (`Opaque` collapsed
+   onto `NORMAL`), `REMED-PIXIJS-4` (`ALPHA_MODES.UNPACK` is `PREMULTIPLY_ON_UPLOAD`),
+   `REMED-PIXIJS-5` (render-target `Clear`/readback). Also implemented `SetTransformMatrix`
+   (PIXIJS-45), `Texture2D::SetData` on a render target (PIXIJS-32), real sampler state
+   (PIXIJS-46/53), and generic `BlendState` (PIXIJS-52); confirmed `SpriteFont` needs no
+   renderer-specific code (PIXIJS-60); and established that PixiJS has no per-level CPU mip upload
+   API (PIXIJS-31).
+7. **Post-merge platform migration.** The renderer was authored on a branch predating `next`'s
+   platform-abstraction and runtime-renderer work and did not compile in the merged tree.
+   `PixiJsRenderer` took `GraphicsRendererCreateArgs` and the platform-neutral
+   `RendererSurfaceInfo`; `<SDL3/SDL.h>`, the `SDL_Window*` member and the `GetWindowInternal`/
+   `GetRendererInternal`/`GetNativeTexture` overrides of already-deleted interface methods were
+   removed; `PixiJsRendererDescriptor.cpp` and the `cmake/RendererRegistry.cmake` entry were added;
+   the SDL ratchet returned to its 0/0 floor.
+8. **`cna_test_pixijs_host`** was added so the pure-C++ contracts run without a browser — before it,
+   `PixiJsRendererTests.cpp` had never compiled in *any* configuration, because the `pixijs` module
+   only configured under `if(EMSCRIPTEN AND CNA_PIXIJS_JS_FILE)`.
 
 </details>
 
-Code review is still not the same as verification — every ✅ mark in this plan is tied to a specific,
-dated, reproduced browser (or, for pure-C++ logic, native GTest) result, not to source existing.
+Every ✅ below is tied to a specific, reproduced browser (or, for browser-independent logic, native
+GTest) result, not to source existing.
 
 ---
 
@@ -455,15 +231,20 @@ sit behind `#if defined(__EMSCRIPTEN__)`), so the pure-C++ logic (blend-mode map
 validation, transform/pivot math extracted as standalone functions per `CANVAS-80`'s own precedent)
 stays unit-testable under plain GTest.
 
-**2. Reuse SDL3's existing `<canvas>` element — PixiJS does not create a second one.** Same lookup
-`EasyGLGraphicsBackend.cpp`/`CanvasRenderer.cpp` already use
+**2. Reuse the platform's existing `<canvas>` element — PixiJS does not create a second one.** Same
+lookup `EasyGLGraphicsBackend.cpp`/`CanvasRenderer.cpp` already use
 (`Module['canvas'] || document.querySelector('canvas')`). PixiJS's `Application` is created with
-that element passed explicitly (`new PIXI.Application({ view: existingCanvas, ... })` in the
-PixiJS v7 API this plan pins — see Design decision 3) rather than letting PixiJS create its own
-canvas, so SDL3 keeps owning window sizing, input and the event pump exactly as it does for
-`WEBGL2`/`CANVAS`/`HTML_DOM`. Because `CNA_GRAPHICS_RENDERER` selects exactly one renderer at
-compile time, there is no runtime conflict with `WEBGL2` also wanting a WebGL context on that same
-element — only one of the two is ever linked into a given build.
+that element passed explicitly (`new PIXI.Application({ view: existingCanvas, ... })`) rather than
+letting PixiJS create its own canvas, so the platform keeps owning window sizing, input and the
+event pump exactly as it does for `WEBGL2`/`CANVAS`/`HTML_DOM`. The renderer itself sees only the
+platform-neutral `RendererSurfaceInfo` snapshot and links no windowing library at all.
+
+*Consequence, discovered the hard way (PIXIJS-92):* because the canvas is the platform's, so is its
+WebGL context — a canvas hands out exactly one, and PixiJS's `Renderer.destroy()` loses it. The
+`PIXI.Application` is therefore scoped to the canvas, not to the renderer, and renderer teardown
+releases only what the renderer created. In a multi-renderer build several browser renderers can be
+linked in together, so this also means the application must not be something one of them tears down
+under the others.
 
 **3. Pin PixiJS v7.x, vendored as a single UMD build, not fetched from a CDN at build or run time.**
 Two sub-decisions, both existing-precedent-driven:
@@ -493,14 +274,14 @@ function this renderer declares — so `PIXI.*` is a real global by the time any
 a verified auto-download" shape exactly.
 
 **5. All JS interop via `EM_JS`, `CNA_PixiJs_*`-prefixed, following `CANVAS`/`HTML_DOM`'s exact
-convention — no `embind`, no `emscripten::val`.** State lives on `Module`:
-`Module['cnaPixiApp']` (the one `PIXI.Application`), `Module['cnaPixiTextures']` (integer-id →
-`PIXI.Texture` registry, mirroring `CanvasTextureRenderer`'s `Module['cnaTextures']`),
-`Module['cnaPixiSpritePool']` (an array of pooled, recycled `PIXI.Sprite` objects added once to
-`app.stage` and reused across frames — the same pooled-and-recycled-object shape
-`plan_html_dom.md` Design decision 3 established for `<div>`s, applied here to `PIXI.Sprite`
-instead; see Design decision 7 for why pooling is still worth doing even though PixiJS re-renders
-every frame regardless).
+convention — no `embind`, no `emscripten::val`.** Every entry point returns a status the C++ side
+turns into a real exception; a CNA API call must never be lost to a `console.error` and an early
+return (PIXIJS-91). State lives on `Module`, split by lifetime (PIXIJS-92):
+`Module['cnaPixiApp']` is the one `PIXI.Application`, scoped to the platform's canvas;
+`Module['cnaPixi']` holds everything the renderer creates — the integer-id → texture registry
+(mirroring `CanvasTextureRenderer`'s `Module['cnaTextures']`, and shared by plain textures and
+render targets), the pooled `PIXI.Sprite` array, the scratch container every flush renders through,
+the reusable clear sprite, the blend-mode slot map and the active-target selection.
 
 **6. Blend state: start with the same 4 standard presets `CANVAS`/`HTML_DOM` support, but the
 underlying capability genuinely supports more — real generic `BlendState` mapping is a tracked
@@ -512,11 +293,20 @@ WebGL blend-factor tuple (registered via `renderer.state.blendModes[CUSTOM_ID] =
 (`One`/`Zero`), `AlphaBlend` (`One`/`InverseSourceAlpha`, assumes premultiplied source — same
 un-premultiply story `CANVAS`/`HTML_DOM` already solved, controlled here via each texture's
 `PIXI.ALPHA_MODES`), `NonPremultiplied` (`SourceAlpha`/`InverseSourceAlpha`) and `Additive`
-(`SourceAlpha`/`One`, PixiJS's built-in `PIXI.BLEND_MODES.ADD`) are the Phase P5 v1 scope, same
-boundary as the siblings. A fully generic `ApplyBlendState` (arbitrary `Blend`/`BlendFunction`
-combination registered as a fresh custom blend mode per unique tuple) is real, believed
-straightforward given the API above, and is tracked as PIXIJS-52 rather than assumed free — do not
-mark it done without actually implementing and testing the custom-blend-mode registration path.
+(`SourceAlpha`/`One`) were the Phase P5 v1 scope, same boundary as the siblings.
+
+*How this actually landed (PIXIJS-52/87/51), and it is not what this decision assumed.* The generic
+path was implemented — and then became the ONLY path. Mapping presets onto `PIXI.BLEND_MODES` is
+unsound, because PixiJS rewrites `NORMAL` to `NORMAL_NPM` (a different factor tuple) through
+`utils.premultiplyBlendMode` for any non-premultiplied texture, which silently rendered
+`BlendState::AlphaBlend` with `NonPremultiplied`'s factors. Every blend state now resolves to its
+literal XNA factors and gets its own `blendModes` slot with an identity `premultiplyBlendMode`
+entry. Two further details are load-bearing and were each a real defect: a **distinct** slot per
+distinct tuple (PixiJS's `StateSystem` skips `setBlendMode()` when the id is unchanged, so one
+mutated slot leaks the previous batch's blend), and `gl.blendColor` for the
+`BlendFactor`/`InverseBlendFactor` factors (PIXIJS-88). `Opaque` still takes
+`PIXI.BLEND_MODES.NONE`, which is arithmetically identical to `(One, Zero)` and the path PixiJS
+optimizes.
 
 **7. Pooled `PIXI.Sprite` objects, recycled across frames; `Draw()` batches into one `EM_JS` flush
 per `SpriteBatch::End()`, not one call per sprite.** Two independent reasons, kept distinct on
@@ -563,17 +353,23 @@ shared default) — PixiJS exposes no occlusion-query primitive, and there is no
 approximation worth building for a browser sprite renderer, same conclusion `CANVAS`/`HTML_DOM`
 already reached for the same reason.
 
-**12. Testing: this session cannot run *anything* — not even a native GTest build has been
-attempted yet, and Emscripten is entirely unavailable (see the status block above).** Every
-non-JS-touching piece of logic that can be structurally isolated as a pure C++ function (blend-state
-→ blend-factor-tuple mapping, address-mode validation, tint/premultiply math) is written as a
-standalone function specifically so a future session's GTest run can cover it without a browser —
-same shape as `CanvasRenderer.cpp`'s `BlendStateToCompositeOp`. Nothing in this plan should be
-marked ✅ until a real Emscripten toolchain build, and ideally a real browser run, actually happens.
+**12. Two test surfaces, because the renderer has two halves.** Every piece of logic that can be
+isolated as a pure C++ function (blend-state classification, the `Blend`/`BlendFunction`/
+`TextureFilter`/`TextureAddressMode` → GL mappings, the write-state decisions) is written as a
+standalone function — same shape as `CanvasRenderer.cpp`'s `BlendStateToCompositeOp` — so
+`cna_test_pixijs_host` can cover it natively, with no browser and no Emscripten toolchain. Anything
+the draw path expresses is verified by reading real pixels back in a real browser
+(`scripts/run_pixijs_browser_tests.mjs`).
+
+The division is not a convenience: the defects Phase P9 fixed were **all** in the second half, and
+none of them could have been caught by the first. A pure-function test cannot tell you that two
+`Begin`/`End` pairs overwrite each other. Add browser checks in the same task that implements a
+capability, and make them assert a value derived from XNA's own arithmetic rather than from what the
+renderer currently produces.
 
 ---
 
-## Proposed source layout
+## Source layout
 
 ```text
 modules/renderers/pixijs/
@@ -585,16 +381,18 @@ modules/renderers/pixijs/
     PixiJsSpriteBatchRenderer.hpp
   src/
     PixiJsRenderer.cpp
+    PixiJsRendererDescriptor.cpp     # the family's runtime-registry descriptor + factory address
     PixiJsTextureRenderer.cpp
     PixiJsRenderTargetRenderer.cpp
     PixiJsSpriteBatchRenderer.cpp
   examples/
     CMakeLists.txt
-    pixijs_smoke_test.cpp
+    pixijs_smoke_test.cpp            # the browser pixel suite
   tests/CNA/Internal/Renderers/PixiJs/
-    PixiJsRendererTests.cpp
+    PixiJsRendererTests.cpp          # cna_test_pixijs_host, native, no browser
 
 cmake/ThirdPartyPixiJS.cmake
+scripts/run_pixijs_browser_tests.mjs
 docs/pixijs-renderer.md
 ```
 
@@ -604,7 +402,10 @@ keep them separate.
 
 ---
 
-## Active execution order — do this one phase at a time
+## Original execution order — retained as a record of how the phases were sequenced
+
+Phases P0-P8 are complete; Phase P9 below is this renderer's remaining work. The ordering
+rationale is kept because it still explains why the code is shaped the way it is.
 
 1. Phase P0 (vendoring + CMake integration) unblocks everything else, same role `plan_canvas.md`
    Phase C1 and `plan_html_dom.md`'s own CMake step played for their renderers.
@@ -630,8 +431,8 @@ keep them separate.
    implements each capability, not bolted on afterward, and do not claim any automated verification
    this plan's own status block says did not happen.
 
-For every task: at minimum, get a real Emscripten toolchain in a later session and configure/build
-`-DCNA_GRAPHICS_RENDERER=PIXIJS`; do not mark a task ✅ without that having actually happened.
+For every task: a ✅ requires a real Emscripten build, and for anything the draw path can express,
+a real browser pixel result. Compiling is not verification.
 
 ---
 
@@ -639,18 +440,18 @@ For every task: at minimum, get a real Emscripten toolchain in a later session a
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| PIXIJS-1 | `cmake/ThirdPartyPixiJS.cmake`: `CNA_PIXIJS_ROOT` / `CNA_PIXIJS_AUTO_DOWNLOAD` (checksum-pinned `pixi.js@7` UMD download), following `ThirdPartyWebGPU.cmake`'s pattern (Design decisions 3-4) | 🟨 | Written; the auto-download path has never actually been run (no network attempt made in this session, and no Emscripten build to consume the result even if it had been). |
+| PIXIJS-1 | `cmake/ThirdPartyPixiJS.cmake`: `CNA_PIXIJS_ROOT` / `CNA_PIXIJS_AUTO_DOWNLOAD` (checksum-pinned `pixi.js@7` UMD download), following `ThirdPartyWebGPU.cmake`'s pattern (Design decisions 3-4) | 🟨 | `CNA_PIXIJS_ROOT` is exercised by every build in this plan. `CNA_PIXIJS_SHA256` is pinned and was independently reproduced from a fresh `npm pack pixi.js@7.4.2` (byte-identical). Stays 🟨 for one specific reason: the **jsDelivr auto-download path itself has still never run** -- `cdn.jsdelivr.net` was blocked by the outbound proxy in both sessions that touched this, so the pin is verified against the npm package rather than against the URL `cna_configure_pixijs()` fetches. |
 | PIXIJS-2 | Add `"PIXIJS"` to `CNA_GRAPHICS_RENDERER`'s CMake `STRINGS` property and a matching `CNA_RENDERER_PIXIJS` option, following the exact existing pattern for `CANVAS`/`HTML_DOM`/`SVG_DOM` | ✅ | |
 | PIXIJS-3 | Hard platform gate: `if(CNA_GRAPHICS_RENDERER STREQUAL "PIXIJS" AND NOT EMSCRIPTEN) message(FATAL_ERROR ...)`, mirroring `CANVAS`/`HTML_DOM`/`SVG_DOM`'s own gates (Design decision 1) | ✅ | |
-| PIXIJS-4 | `cna_renderer_pixijs` target dispatch (`elseif(CNA_GRAPHICS_RENDERER STREQUAL "PIXIJS")` block in `cmake/RendererSelection.cmake`), including the `--pre-js` link flag wiring for the vendored PixiJS UMD build | ✅ | `--pre-js` flag application is written but unverified end-to-end (no Emscripten toolchain to link with in this session). |
+| PIXIJS-4 | `cna_renderer_pixijs` target dispatch (`elseif(CNA_GRAPHICS_RENDERER STREQUAL "PIXIJS")` block in `cmake/RendererSelection.cmake`), including the link-flag wiring for the vendored PixiJS UMD build | ✅ | Verified end-to-end. **PIXIJS-86**: the flag is `--extern-pre-js`, not `--pre-js` -- `--pre-js` content goes through Emscripten's JS optimizer, which at `-O3` dead-code-eliminated part of `pixi.min.js` and killed the page with `ReferenceError: Pp is not defined` before any renderer code ran. Also verified in a multi-renderer build where `PIXIJS` is **not** the default (`CANVAS;PIXIJS`): the flag is `PUBLIC` on the family's own target, and per-identity dispatch runs for every selected identity, so it still reaches the link line. |
 | PIXIJS-5 | `pixijs` added to `modules/CMakeLists.txt`'s `_cna_renderer_modules` physical-source-partition list | ✅ | Required or configure fails for *any* renderer selection, not just `PIXIJS` — verified via a native (`SDL_RENDERER`) configure in this session (Phase P0's only genuinely-run check). |
-| PIXIJS-6 | `modules/renderers/pixijs/CMakeLists.txt`: `cna_add_renderer()` + link SDL3 (window/input reuse, Design decision 2) + `add_subdirectory(examples)`, mirroring `canvas`/`html-dom`'s own `CMakeLists.txt` | ✅ | |
+| PIXIJS-6 | `modules/renderers/pixijs/CMakeLists.txt`: `cna_add_renderer()` + the vendored-bundle link flag + `add_subdirectory(examples)`, mirroring `canvas`/`html-dom`'s own `CMakeLists.txt` | ✅ | Links no windowing library at all: the family consumes only the platform-neutral surface snapshot (post-merge platform migration, see the history above). |
 
 ## Phase P1 — Skeleton renderer
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| PIXIJS-10 | `PixiJsRenderer : IGraphicsRenderer` — every pure virtual overridden; construction/destruction real (`RegisterForWindow`/`UnregisterForWindow`), the inherently-3D-only surface wired to `HandleUnsupported3DCall`/`ShouldStubUnsupported3DResource` exactly like `CanvasRenderer`'s own Phase C1 bring-up | ✅ | Structurally complete; not build-verified (no Emscripten toolchain). |
+| PIXIJS-10 | `PixiJsRenderer : IGraphicsRenderer` — every pure virtual overridden; construction/destruction real, the inherently-3D-only surface wired to `HandleUnsupported3DCall`/`ShouldStubUnsupported3DResource` exactly like `CanvasRenderer`'s own Phase C1 bring-up | ✅ | Build-verified under Emscripten and natively, with the `ThrowNo3D` surface covered by `cna_test_pixijs_host`. Construction now also creates the `PIXI.Application` and destruction releases the renderer's own JS resources (PIXIJS-91/92). |
 | PIXIJS-11 | Factory dispatch: `CreateGraphicsRenderer()` returns a `PixiJsRenderer` under `CNA_RENDERER_PIXIJS` | ✅ | |
 | PIXIJS-12 | `SupportsDepthStencil()` → `false`; `SupportsCapability()` reports `AdditiveBlending` true (native `PIXI.BLEND_MODES.ADD`) and everything 3D-only false, matching Design decisions 1/6 | ✅ | |
 
@@ -667,7 +468,7 @@ For every task: at minimum, get a real Emscripten toolchain in a later session a
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| PIXIJS-30 | `PixiJsTextureRenderer : ITextureRenderer` — buffer-backed `PIXI.BaseTexture`/`PIXI.Texture`, registered by integer id in `Module['cnaPixiTextures']` (Design decision 8) | ✅ | Verified 2026-08-17: uploaded 2x2 RGBA8 pixels sampled back byte-for-byte correct through a real WebGL draw. |
+| PIXIJS-30 | `PixiJsTextureRenderer : ITextureRenderer` — buffer-backed `PIXI.BaseTexture`/`PIXI.Texture`, registered by integer id in `Module['cnaPixi'].textures` (Design decision 8) | ✅ | Verified 2026-08-17: uploaded 2x2 RGBA8 pixels sampled back byte-for-byte correct through a real WebGL draw. |
 | PIXIJS-31 | `UpdatePixels`/`UpdatePixelsLevel`: in-place buffer mutation + `baseTexture.update()`; mip level>0 policy | ✅ | level=0 path verified (frames 1-11). level>0 policy investigated for real 2026-08-17 (not left provisional): a live browser probe of `PIXI.BufferResource`'s prototype (only `upload`/`dispose`) and `PIXI.BaseTexture`'s (only a `mipmap` on/off flag, no per-level hook) confirmed PixiJS has **no public API** for a custom CPU-authored mip chain — mipmaps are GPU-auto-generated from level 0 only (`gl.generateMipmap`). Throws for level>0, same behavior as before, but now for an investigated, documented structural reason matching `CANVAS-21`'s own conclusion, not a "haven't looked into it" placeholder. |
 | PIXIJS-32 | `PixiJsRenderTargetRenderer : IRenderTargetRenderer` — `PIXI.RenderTexture.create()` + `Bind/UnbindAsRenderTarget` switching which target `app.renderer.render(...)` calls target (Design decision 8) | ✅ | Bind/Clear/draw/readback round-trip verified 2026-08-17 (frame 7). Direct `Texture2D::SetData` (`UpdatePixels`) implemented and verified 2026-08-17 (frame 11, 21/21): paints a throwaway buffer-backed texture over the whole target with `PIXI.BLEND_MODES.NONE` (the same unconditional-overwrite trick `REMED-PIXIJS-5` proved correct for `Clear()`), then discards it -- confirmed on an *unbound* render target, sampled back as an ordinary texture. |
 | PIXIJS-33 | `ReadBackbuffer`/render-target `GetData`: `app.renderer.extract.pixels(...)` (Design decision 9) | ✅ | `ReadBackbuffer` (main stage) verified 2026-08-17, after `REMED-PIXIJS-1`'s force-render fix. `PixiJsRenderTargetRenderer::GetData` independently verified in the same session (frame 7's own `rt.GetData()` check) after its own `REMED-PIXIJS-5` clear/readback fix — both paths now proven. |
@@ -678,23 +479,23 @@ For every task: at minimum, get a real Emscripten toolchain in a later session a
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| PIXIJS-40 | `PixiJsSpriteBatchRenderer : ISpriteBatchRenderer` skeleton; pooled-sprite `Begin()`/`End()` with the single-flush `EM_JS` batching (Design decisions 5/7) | 🟨 | 14-word packed `DrawCommand`, one `CNA_PixiJs_FlushSprites` crossing per `End()` (or per `Draw()` in immediate mode). |
-| PIXIJS-41 | Basic `Draw(texture, x, y)` / `Draw(texture, destRect, srcRect, color)` via a fresh per-draw `PIXI.Texture` view (shared `baseTexture`, distinct `frame`) assigned to a pooled sprite | 🟨 | The `Draw(destRect, srcRect, color)` overload verified 2026-08-17 for a scaled, unrotated, `anchor=(0,0)` draw (exact destination pixels), and for rotation/flip/blend/render-target variants (frames 2-8). `Draw(texture, x, y)` (the unscaled overload) still not independently exercised by any test. |
-| PIXIJS-42 | Color tint: `sprite.tint = 0xRRGGBB` (native, RGB only — same split as `CANVAS-32`/Canvas2D, alpha is `sprite.alpha` separately) | 🟨 | Exercised indirectly by every frame's `Color::White` draws (RGB tint 0xFFFFFF is a no-op, so this alone doesn't prove the split). No premultiply/straight-alpha tint normalization yet (`CANVAS-84`'s own analogous fix has no PixiJS counterpart) — tracked under PIXIJS-51. |
+| PIXIJS-40 | `PixiJsSpriteBatchRenderer : ISpriteBatchRenderer`; pooled-sprite `Begin()`/`End()` with the single-flush `EM_JS` batching (Design decisions 5/7) | ✅ | 14-word packed `DrawCommand`, one `CNA_PixiJs_FlushSprites` crossing per `End()` (or per `Draw()` in immediate mode). **PIXIJS-87** replaced the retained parenting with commit-on-submit; pooling is unchanged and still one crossing per flush. Verified: two Deferred batches in one frame with a correct overlap order, three Immediate draws all painted, and Deferred-then-Immediate ordering. |
+| PIXIJS-41 | Basic `Draw(texture, x, y)` / `Draw(texture, destRect, srcRect, color)` via a per-draw `PIXI.Texture` view (shared `baseTexture`, distinct `frame`) assigned to a pooled sprite | ✅ | Both overloads pixel-verified: the scaled `Draw(destRect, srcRect, color)` form across rotation, flip, blend, sampler, transform and render-target variants, and the unscaled `Draw(texture, x, y)` form placing the whole texture 1:1 at the requested position. **PIXIJS-94**: the per-draw view is now cached per `(frame, rotate)` on the texture's own registry entry instead of allocated per draw, which is what the sprite pooling existed to avoid; the cache is owned by the entry, so a view cannot outlive its base texture. |
+| PIXIJS-42 | Color tint: `sprite.tint = 0xRRGGBB` (native, RGB only — same split as `CANVAS-32`/Canvas2D, alpha is `sprite.alpha` separately) | ✅ | Verified with a real non-white tint: an opaque `Color(255,128,64)` scales RGB exactly, and a `Color(255,255,255,128)` composites its alpha separately from its RGB. No premultiply normalization is needed after all -- `ALPHA_MODES.NPM` makes PixiJS pack a **straight** vertex colour rather than premultiplying the tint, which is exactly XNA's own semantics (`CANVAS-84`'s analogous fix has no counterpart here for that reason, not because it was skipped). |
 | PIXIJS-43 | Rotation around `origin`: `sprite.anchor.set(originX/width, originY/height); sprite.rotation = ...` — PixiJS's `anchor` *is* XNA's `origin` concept almost directly | ✅ | Verified 2026-08-17 (frame 2): a 180° rotation around a texture's exact center (`origin=(1,1)` on a 2x2 texture) produces the exact expected swapped-quadrant pixels while the bounding box itself does not move. |
 | PIXIJS-44 | `SpriteEffects::FlipHorizontally`/`FlipVertically`: `PIXI.Texture`'s own GroupD8 `rotate` parameter (12=H-mirror, 8=V-mirror, 4=both) | ✅ | Verified 2026-08-17 (frame 3), with a real bug found and fixed first (`REMED-PIXIJS-2`): the original negative-`sprite.scale` design shifted the destination rectangle's footprint instead of only mirroring sampling. Fixed by switching to the texture-level `rotate` parameter; GroupD8 values confirmed empirically via a standalone browser probe, not from documentation alone. |
 | PIXIJS-45 | `SetTransformMatrix()` (`Begin(transformMatrix)`) | ✅ | Implemented and verified 2026-08-17: the batch's 2D affine transform (`M11/M12/M21/M22/M41/M42`) is composed with each sprite's own local placement matrix and applied via `PIXI.Transform.setFromMatrix`, matching FNA's own post-local-placement `transformMatrix` contract. Composition math confirmed correct via a standalone browser probe (identity/translate/scale cases) before being written; a real `Begin(transformMatrix)` with `Matrix::CreateTranslation(16,16,0)` correctly shifts an entire scaled draw in the smoke test (frame 10, 3 checks). Identity transform keeps the exact pre-existing fast code path, so no regression risk to the other 16 already-verified checks. |
-| PIXIJS-46 | `TextureAddressMode` via native `baseTexture.wrapMode = PIXI.WRAP_MODES.{CLAMP,REPEAT,MIRRORED_REPEAT}` | 🟨 | Implemented and verified 2026-08-17: `SetSamplerAddressMode` genuinely sets `baseTexture.wrapMode` to the real WebGL GL-enum values (confirmed live: `REPEAT`=10497, `CLAMP`=33071, `MIRRORED_REPEAT`=33648). Stays 🟨, not ✅: a real architectural boundary was found — PixiJS's `Texture` constructor rejects any per-draw frame rectangle exceeding the base texture, so XNA's classic "oversized source rect tiles under Wrap" behavior cannot be produced through this renderer's current per-draw-Texture-view architecture; only the subtler linear-filter edge-bleed effect is reachable, and that has not been pixel-verified. |
+| PIXIJS-46 | `TextureAddressMode` via native `baseTexture.wrapMode = PIXI.WRAP_MODES.{CLAMP,REPEAT,MIRRORED_REPEAT}` | 🟨 | `SetSamplerAddressMode` genuinely sets `baseTexture.wrapMode` to the real WebGL GL-enum values (`REPEAT`=10497, `CLAMP`=33071, `MIRRORED_REPEAT`=33648, confirmed live), and **PIXIJS-90** made the mapping total: an out-of-range enumerator throws instead of falling back to Clamp, and a mixed `AddressU`/`AddressV` pair is rejected outright rather than half-applied, because a `PIXI.BaseTexture` carries one `wrapMode` for both axes. Both rejections and the accepted matching-pair case are covered natively and in the browser. Stays 🟨 for the one thing that is genuinely unreachable: PixiJS's `Texture` constructor rejects a per-draw frame rectangle larger than its base texture, so XNA's classic "oversized source rect tiles under Wrap" behaviour cannot be produced through the per-draw-view architecture -- only linear-filter edge bleed is affected, and that specific effect is still not pixel-asserted. A `PIXI.TilingSprite` draw path would be needed, and is out of v1 scope. |
 | PIXIJS-47 | Custom `Effect` via `Begin(effect)`: throws for v1 (Design decision 10) | ✅ | Implemented in `PixiJsSpriteBatchRenderer::SetCustomEffect`, same confidence level as `CANVAS-38`. |
 
 ## Phase P5 — Blend and sampler state mapping
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| PIXIJS-50 | `ApplyBlendState` → the 4 standard presets, mapped to a `PixiJsBlendMode` as a pure C++ function (`BlendStateToPixiJsBlendMode`) | 🟨 | Verified 2026-08-17 for `Opaque` (frame 5), `AlphaBlend` (frame 6), `Additive` (frame 4), and now `NonPremultiplied` too (frame 13 -- previously had no test at all, only ever exercised implicitly by sharing `AlphaBlend`'s code path; confirmed genuinely wired, not silently falling through). `PixiBlendModeToPixiJsCode()` added as the single source of truth (`REMED-PIXIJS-3`) so `PixiJsRenderer.cpp`/`PixiJsSpriteBatchRenderer.cpp` can't drift apart. Stays 🟨, not ✅: `NonPremultiplied` and `AlphaBlend` are still not *distinguished* from each other (both produce the same result today) -- see PIXIJS-51's own precisely-characterized premultiply gap for why. |
-| PIXIJS-51 | Premultiply/straight-alpha handling for `AlphaBlend` vs `NonPremultiplied` via per-texture `PIXI.ALPHA_MODES` | 🟨 | Textures now upload with `PIXI.ALPHA_MODES.NPM` instead of the silently-premultiplying `UNPACK` (`REMED-PIXIJS-4`, found and fixed 2026-08-17 — `UNPACK` is actually `PREMULTIPLY_ON_UPLOAD`). This makes straight-alpha sampling correct (verified via frames 5/6) for straight-alpha *content*. **Real gap precisely characterized 2026-08-17 via a standalone probe** (not just "not implemented"): real XNA's `BlendState.AlphaBlend` formula `(One, InvSourceAlpha)` expects the source texture's RGB to already be premultiplied by its own alpha (the content pipeline's default `TextureProcessor` does this at build time); `BlendState.NonPremultiplied` `(SourceAlpha, InvSourceAlpha)` is the preset for straight-alpha (e.g. runtime-loaded) content. Confirmed live: `ALPHA_MODES.PMA` + genuinely premultiplied source pixels + `BLEND_MODES.NORMAL` gives the exact correct composite (178,74,118,255, matching frame 6's straight-alpha result exactly) -- PixiJS *can* do both correctly -- but uploading premultiplied content as `NPM` (what this renderer always does today, regardless of which `BlendState` a later `Draw()` uses) gives a wrong result (114,74,118,255 in the same probe). Since `Texture2D::CreateFromPixels` (this renderer's own test fixtures, and CNA's general runtime-load path) supplies straight-alpha data, not premultiplied, this gap is invisible to every check in this smoke test — it would only surface with genuinely premultiplied source content drawn under `BlendState::AlphaBlend`. Fixing it for real would mean tracking, per-`Draw()`, which alpha convention the active texture's content follows and switching `baseTexture.alphaMode` (+ `.update()`) accordingly -- the same per-flush baseTexture-mutation pattern `PIXIJS-46`/`PIXIJS-53` already established for wrap/scale mode -- and is plausibly a CNA-wide `Texture2D`/`BlendState` semantics question (does CNA's content pipeline premultiply by default anywhere yet?) rather than a PixiJS-only fix, so it was not attempted this session. |
-| PIXIJS-52 | **Stretch goal, now implemented and verified**: fully generic `ApplyBlendState` (arbitrary `Blend`/`BlendFunction`) via on-demand custom blend-mode registration (Design decision 6) | ✅ | Implemented 2026-08-17: `BlendStateToPixiJsBlendMode` now returns `PixiJsBlendMode::Custom` (instead of throwing) for any combination outside the 4 presets; `XnaBlendToGlFactor`/`XnaBlendFunctionToGlEquation` map every `Blend`/`BlendFunction` enumerator to real WebGL GL constants; a reserved slot in `renderer.state.blendModes` is mutated in place per flush (same pattern PIXIJS-46/53 established for wrap/scale mode) with the raw `[srcRGB,dstRGB,srcAlpha,dstAlpha,eqRGB,eqAlpha]` 6-tuple PixiJS's real `state.setBlendMode` genuinely applies via `gl.blendFuncSeparate`/`gl.blendEquationSeparate` (confirmed live before writing any implementation code: a hand-registered custom "multiply" blend mode produced the exact expected composited pixel). A real custom (non-preset) `BlendState` — `ColorSourceBlend=DestinationColor, ColorDestinationBlend=Zero` — verified in the browser smoke test (frame 12, 22/22): exact expected multiply-composited pixel. |
-| PIXIJS-53 | `SetSamplerFilter` → `PIXI.SCALE_MODES.{NEAREST,LINEAR}` | ✅ | Implemented and verified 2026-08-17 (frame 8): an explicit `SamplerState` with `TextureFilter::Point` keeps a texel-boundary pixel unblended, a value empirically confirmed (via a standalone probe) to differ from the `LinearClamp` default's own blended result at that exact pixel — the check can only pass if the real sampler state changed. |
+| PIXIJS-50 | `ApplyBlendState` → the 4 standard presets | ✅ | All four pixel-verified with exact compositing math: `Opaque` (an unconditional overwrite that ignores source alpha), `Additive`, `AlphaBlend` and `NonPremultiplied`. **PIXIJS-87**: they are now genuinely *distinguished* -- each renders from its own literal XNA factors rather than through a `PIXI.BLEND_MODES` preset PixiJS could rewrite. `BlendStateToPixiJsBlendMode` survives as the tested classifier and still selects `BLEND_MODES.NONE` for `Opaque`, which is what PixiJS optimizes for "no GL blending at all". |
+| PIXIJS-51 | Premultiply/straight-alpha handling for `AlphaBlend` vs `NonPremultiplied` | ✅ | **Resolved, and the earlier diagnosis was wrong about the cause.** It was never an `ALPHA_MODES` problem: presets were mapped onto `PIXI.BLEND_MODES`, and PixiJS rewrites `NORMAL` to `NORMAL_NPM` -- a *different* factor tuple -- through `utils.premultiplyBlendMode` whenever the sampled texture is not premultiplied, so `AlphaBlend` was silently rendered with `NonPremultiplied`'s factors and the two presets were indistinguishable by construction. Fixed by rendering every blend state from its literal factors through its own `blendModes` slot, with an identity `premultiplyBlendMode` entry so PixiJS cannot rewrite it. `ALPHA_MODES.NPM` uploads keep CNA's bytes verbatim AND make PixiJS pack a straight vertex tint, which is XNA's own tint semantics. No CNA-wide `Texture2D` metadata was needed after all: the convention lives where XNA puts it, in the pixel data plus the `BlendState` the application selects. Verified with fixtures of the SAME colour in both conventions -- each composites correctly under its own preset, to the same result, and visibly differently under the wrong one. |
+| PIXIJS-52 | Fully generic `ApplyBlendState` (arbitrary `Blend`/`BlendFunction`) via custom blend-mode registration (Design decision 6) | ✅ | `XnaBlendToGlFactor`/`XnaBlendFunctionToGlEquation` map every enumerator to real WebGL GL constants, and the resolved tuple is applied through PixiJS's own `renderer.state.blendModes`. **PIXIJS-87** corrected a real defect in the first implementation: it mutated ONE reserved slot per flush, and PixiJS's `StateSystem` skips `setBlendMode()` when the id is unchanged, so a second batch rendered with the first batch's factors. A distinct slot per distinct tuple fixes it -- verified with two different non-preset `BlendState`s in one frame, whose expected pixels are far enough apart that a mix-up cannot pass. |
+| PIXIJS-53 | `SetSamplerFilter` → `PIXI.SCALE_MODES.{NEAREST,LINEAR}` | ✅ | An explicit `TextureFilter::Point` keeps a texel-boundary pixel unblended where the `LinearClamp` default measurably blends it -- so the check can only pass if the real sampler state changed. **PIXIJS-87** made this per-batch for real: sampler state lives on the shared `PIXI.BaseTexture`, so with deferred rasterization two batches drawing the same texture collapsed onto whichever filter was set last. Verified with Point and Linear batches on the same texture in one frame. **PIXIJS-90**: an out-of-range `TextureFilter` throws instead of silently rendering as Point. |
 
 ## Phase P6 — `SpriteFont`
 
@@ -713,11 +514,30 @@ For every task: at minimum, get a real Emscripten toolchain in a later session a
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| PIXIJS-80 | Structural GTest coverage for everything that doesn't need a real `PIXI.Application` (`ThrowNo3D` coverage, blend-state→blend-factor-tuple mapping as a pure function once P5 exists, CMake configure/build check) | 🟨 | `PixiJsRendererTests.cpp` written with the P1/P7 `ThrowNo3D` coverage; not yet run against any build (status block). |
-| PIXIJS-81 | `docs/pixijs-renderer.md`: mirror `docs/webgpu-renderer.md`'s status/limitations/architecture structure | ✅ | Written alongside this plan. |
-| PIXIJS-82 | Manual browser verification checklist (`needs_human`), same shape as `CANVAS-82` | 🟨 | One item (basic scaled sprite draw + readback) now has real evidence, but from an automated headless-Chromium/Playwright run in this session, not a human manually checking in a real browser -- the full 10-item-equivalent checklist (rotation/origin, flip, all 4 blend presets, render-target round-trip, `SpriteFont`) still needs writing and running. |
-| PIXIJS-83 | Update `CLAUDE.md`'s renderer-identity list/count (46→47) | ✅ | |
-| PIXIJS-84 | A real Emscripten toolchain build of `-DCNA_GRAPHICS_RENDERER=PIXIJS`, in whatever future session has `emsdk` available — the honest first real verification step for everything above | ⬜ | A native (`SDL_RENDERER`) configure+full `CnaTests` build+link was run and PASSED in this session (`[100%] Built target CnaTests`, exit code 0), confirming the shared identity-registry edits (`GraphicsRendererType.hpp` and friends) don't break any other renderer, and `PixiJsRendererTests.cpp` itself compiles cleanly (its `#if defined(CNA_RENDERER_PIXIJS)` guard just makes it an empty TU under `SDL_RENDERER`). `GraphicsRendererTypeTest.*` (7/7, including `NameMatchesTypeForEveryRenderer`/`EveryPublicRendererHasOneUniqueCanonicalName` over all 47 identities) and `GraphicsRendererCompileDefinitionsTest.ExactlyOneGraphicsRendererIsSelected` were run and PASSED. 6 unrelated pre-existing test failures were observed (`XnbBuiltInReaderRegistrationTest`/`Texture3DTextureCubeContentTypeReaderTest`, all "Couldn't open tests/assets/xnb/monogame/..." — missing fixture files in this checkout, nothing to do with this plan's edits). None of this exercises `PixiJsRenderer.cpp`'s own code (Emscripten-gated, never compiled under a native selection) -- still the blocking prerequisite for upgrading *any* 🟨 in this plan to ✅. |
+| PIXIJS-80 | Structural GTest coverage for everything that doesn't need a real `PIXI.Application` | ✅ | `cna_test_pixijs_host` (`CNA_BUILD_PIXIJS_HOST_TESTS=ON`, ctest `PixiJsHostContracts`) runs the suite natively, with no browser and no Emscripten toolchain: **28/28 pass**. Covers the `ThrowNo3D` surface, the blend classifier, both GL-mapping functions over every enumerator plus their rejections, the sampler mappings' domains and their rejections, the blend write-state decisions, the MRT refusal, and the surface contract. |
+| PIXIJS-81 | `docs/pixijs-renderer.md` | ✅ | Rewritten to state the current, verified picture: it previously claimed "no pixel-level or browser verification of any kind" in its limitations while its own status section reported 23/23 browser checks. |
+| PIXIJS-82 | Manual browser verification checklist (`needs_human`), same shape as `CANVAS-82` | 🟨 | The automated suite is now 70 pixel checks in headless Chromium, but that is one machine on SwiftShader with nobody looking at the screen. The manual checklist `docs/canvas-backend.md` describes has still not been written or run, and no `emrun`/real-device pass has happened. This is the renderer's largest remaining gap. |
+| PIXIJS-83 | Update `CLAUDE.md`'s renderer-identity list/count | ✅ | The count itself is owned by `scripts/check_renderer_identities.py` rather than restated here; `CLAUDE.md`'s `PIXIJS` paragraph now describes the verified state and the commit-on-submit invariant. |
+| PIXIJS-84 | A real Emscripten toolchain build of `-DCNA_GRAPHICS_RENDERER=PIXIJS` | ✅ | Configures and builds (`cna_renderer_pixijs`, `cna_test_pixijs_smoke`) under emsdk, in Release `-O3` as well as unoptimized -- the optimized build is what surfaced PIXIJS-86. A native `SDL_RENDERER` configure also passes, confirming the shared identity-registry edits break no other renderer. |
+
+## Phase P9 — Correctness under real `SpriteBatch`/`GraphicsDevice` semantics
+
+The renderer reached "every capability implemented and pixel-checked in isolation" before anything
+exercised two `Begin`/`End` pairs in one frame. These tasks are what that exposed.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| PIXIJS-85 | A reproducible browser runner, so the pixel suite is a command rather than a hand-driven session | ✅ | `scripts/run_pixijs_browser_tests.mjs` serves a built page over local HTTP and drives it with headless Chromium. The page's own `printf` summary is the verdict, because Emscripten's HTML shell replaces any `Module.onExit` hook injected from outside. |
+| PIXIJS-86 | Stop Emscripten's JS optimizer from mangling the vendored PixiJS bundle | ✅ | `--extern-pre-js`, not `--pre-js`. A real `-O3` build lost one of `pixi.min.js`'s own top-level declarations and died with `ReferenceError: Pp is not defined` before a single check ran. Invisible until now because the only previous Emscripten build of this renderer was unoptimized. |
+| PIXIJS-87 | Commit at every submission point instead of leaving pooled sprites parented for `Present()` | ✅ | The root fix. See "What this session changed" above for the six defects that fell out of it together. Verified: two Deferred batches with correct overlap order, three Immediate draws, Deferred-then-Immediate ordering, a render target actually **drawn into** and sampled back, A→B→A→back-buffer switching with independent contents, two non-preset `BlendState`s in one frame, two sampler states on one texture in one frame, and a `Texture2D` destroyed between `End()` and the readback. |
+| PIXIJS-88 | `SetBlendFactor` / `Blend::BlendFactor` / `Blend::InverseBlendFactor` for real | ✅ | Reaches WebGL's `gl.blendColor`, captured per batch at `Begin()` so a later change cannot alter an already-submitted one. Verified against a real constant, both the factor and its inverse. The constant is carried on the `BlendState` (where XNA puts it), since applying a `BlendState` re-applies its own `BlendFactor`. |
+| PIXIJS-89 | Honour or reject `BlendWriteState` instead of discarding it | ✅ | `ColorWriteChannels` slot 0 reaches `gl.colorMask`; verified that a red-only mask leaves G/B from the background and does not leak into the next batch. `MultiSampleMask` is accepted whenever coverage sample 0 is enabled -- on single-sample targets that is an equivalence, not an approximation -- and rejected otherwise. Slots 1..3 describe MRT outputs `SetRenderTargets` already refuses, so they are inapplicable rather than dropped. |
+| PIXIJS-90 | Sampler state that does not lie | ✅ | Mixed `AddressU`/`AddressV` is rejected rather than half-applied; out-of-range `TextureFilter`/`TextureAddressMode` values throw instead of defaulting. Covered natively and in the browser, including that the batch stays usable after a rejection. |
+| PIXIJS-91 | Explicit, reliable initialization | ✅ | The application is created in the constructor and ensured by every entry point; every `EM_JS` call returns a status the C++ side turns into an exception, replacing `console.error(...); return;`. Verified on the process's genuinely first frame: `SetRenderTarget` as the very first operation, and a back-buffer draw, both with no `Clear()` anywhere before them. |
+| PIXIJS-92 | Renderer teardown and recreation | ✅ | Renderer-owned resources are released; the `PIXI.Application` deliberately is not. A canvas hands out one WebGL context and PixiJS's `Renderer.destroy()` loses it, so destroying the application left the platform's canvas permanently unusable -- a second one failed inside PixiJS's batch setup. Found by testing destroy/recreate for real. A still-bound `RenderTarget2D` being destroyed restores the back buffer and warns. |
+| PIXIJS-93 | Resize synchronization | ✅ | `OnSurfaceChanged` calls `app.renderer.resize()`, which PixiJS was never told about. Verified by enlarging the drawable, drawing beyond the old width, reading it back, and restoring. `GetSurfaceInfo()` exists so a caller can build a resize snapshot without inventing a window identity the renderer would rightly reject. |
+| PIXIJS-94 | Reduce avoidable JS object churn | ✅ | Per-draw `PIXI.Texture` frame views are cached per `(frame, rotate)` on their texture's registry entry instead of allocated per draw. The cache is owned by the entry and destroyed with it, so a view can never outlive the base texture it describes, and a shared base texture is never destroyed because a view was replaced. |
+| PIXIJS-95 | A runtime-registry consistency gate, so a public identity cannot exist without being instantiable | ✅ | `scripts/check_renderer_identities.py` now follows every identity through `cmake/RendererRegistry.cmake` to the C++ accessor and family-scoped factory that must back it. Negative-tested against both shapes: a missing registry entry, and a renamed descriptor accessor. |
 
 ---
 
@@ -729,7 +549,9 @@ For every task: at minimum, get a real Emscripten toolchain in a later session a
   impossible (PixiJS has a real shader stage), just out of scope for this plan.
 - **No native desktop support** — Emscripten-only (Design decision 1).
 - **No CDN-loaded PixiJS at build or run time** — vendored and pinned only (Design decisions 3-4).
-- **No automated verification of any kind performed in this session** (status block) — every 🟨
-  task above is unverified code, not "structurally verified, pixel-unverified" the way `CANVAS`'s
-  own 🟨 marks were. Do not read this plan's ✅/🟨 marks as carrying the same confidence level
-  `plan_canvas.md`'s do until Phase P8's real Emscripten build actually happens.
+- **No MRT, depth or stencil, and no mip level > 0 upload** — see `docs/pixijs-renderer.md`'s
+  limitations list for each one's reason and its `PIXIJS-N` task.
+
+The two open items are `PIXIJS-82` (no manual browser pass, no `emrun`/real-device run) and the
+jsDelivr half of `PIXIJS-1` (the auto-download URL has never been reachable from a session that
+could verify it). Everything else in this plan is marked against a reproduced result.

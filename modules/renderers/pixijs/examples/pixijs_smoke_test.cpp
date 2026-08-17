@@ -33,7 +33,7 @@ using namespace CNA::Internal::Renderers::PixiJs;
 
 namespace
 {
-    constexpr int kExpectedChecks = 66;
+    constexpr int kExpectedChecks = 70;
     constexpr int kBackBuffer = 64;
 
     /// CornflowerBlue, the background every frame that clears uses.
@@ -267,13 +267,48 @@ protected:
 
     void FrameScaledDraw()
     {
+        SamplerState pointClamp;
+        pointClamp.setFilterProperty(TextureFilter::Point);
+
         // 2x2 RGBY source scaled 4x into an 8x8 destination rect.
         drawTexel(*texture_, Rectangle(0, 0, 2, 2), Rectangle(8, 8, 8, 8));
+
+        // PIXIJS-41: the unscaled Draw(texture, x, y) overload, which the earlier suite never
+        // exercised -- it takes the whole texture, Color::White, and a 1:1 destination.
+        spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp, nullptr, nullptr);
+        spriteBatch_->Draw(*texture_, 32.0f, 32.0f);
+        spriteBatch_->End();
+
+        // PIXIJS-42: colour tint. sprite.tint carries RGB and sprite.alpha carries A, and because
+        // textures upload as ALPHA_MODES.NPM, PixiJS packs a STRAIGHT vertex colour -- so an opaque
+        // tint scales RGB exactly, with no premultiplication folded in.
+        spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp, nullptr, nullptr);
+        spriteBatch_->Draw(*whiteTexture_, Rectangle(40, 0, 1, 1), Rectangle(0, 0, 1, 1),
+                           Color(255, 128, 64, 255));
+        spriteBatch_->End();
+
+        // A tint alpha of 128 under NonPremultiplied over CornflowerBlue:
+        //   R = 255*(128/255) + 100*(127/255) = 128 + 49.8 = 177.8 -> 178
+        //   G = 255*(128/255) + 149*(127/255) = 128 + 74.2 = 202.2 -> 202
+        //   B = 255*(128/255) + 237*(127/255) = 128 + 118.0 = 246.0 -> 246
+        spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::NonPremultiplied, &pointClamp, nullptr, nullptr);
+        spriteBatch_->Draw(*whiteTexture_, Rectangle(42, 0, 1, 1), Rectangle(0, 0, 1, 1),
+                           Color(255, 255, 255, 128));
+        spriteBatch_->End();
+
         readBackbuffer();
         checkPixel(backbufferPixel(8, 8), Color(255, 0, 0, 255),
                    "scaled draw starts with the source's top-left texel");
         checkPixel(backbufferPixel(15, 15), Color(255, 255, 0, 255),
                    "scaled draw reaches the exact destination bottom-right texel");
+        checkPixel(backbufferPixel(32, 32), Color(255, 0, 0, 255),
+                   "Draw(texture, x, y) places the whole texture unscaled at the requested position");
+        checkPixel(backbufferPixel(33, 33), Color(255, 255, 0, 255),
+                   "Draw(texture, x, y) covers the texture's full extent");
+        checkPixel(backbufferPixel(40, 0), Color(255, 128, 64, 255),
+                   "an opaque draw colour tints RGB exactly, with no premultiplication folded in");
+        checkPixel(backbufferPixel(42, 0), Color(178, 202, 246, 255),
+                   "a draw colour's alpha composites separately from its RGB tint");
     }
 
     void FrameRotation()
