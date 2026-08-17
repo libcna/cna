@@ -1753,6 +1753,19 @@ namespace CNA::Internal::Renderers
         /// PreserveContents cube face was wiped on every bind cycle.
         virtual std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) { return nullptr; }
 
+        /// plan_modern.md MOD-107: CreateRenderTargetCube plus an explicit
+        /// Microsoft::Xna::Framework::Graphics::SurfaceFormat ordinal, exactly as
+        /// CreateRenderTarget2DEXT is to CreateRenderTarget2D. The default forwards and ignores the
+        /// format, so every renderer keeps its Color-only cube behaviour until it implements more;
+        /// the CNAEXT engine layer needs this for image-based lighting, whose irradiance and
+        /// prefiltered-specular products are float cube maps rendered face by face.
+        virtual std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int /*surfaceFormat*/)
+        {
+            return CreateRenderTargetCube(size, depthFormat, preserveContents, mipMap, multiSampleCount);
+        }
+
         /// Compiles a shader program from GLSL/HLSL source strings.
         /// Returns nullptr on renderers that do not support programmable shaders.
         virtual std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,

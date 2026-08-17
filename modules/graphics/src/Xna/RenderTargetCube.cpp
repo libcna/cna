@@ -45,14 +45,19 @@ namespace Microsoft::Xna::Framework::Graphics
                       // IRenderTargetCubeRenderer : ITextureCubeRenderer — pass single renderer
                       // to TextureCube so sampling and rendering share the same GPU image.
                       std::shared_ptr<ITextureCubeRenderer>(
-                          device.renderer_ ? device.renderer_->CreateRenderTargetCube(
+                          device.renderer_ ? device.renderer_->CreateRenderTargetCubeEXT(
                                                  size, static_cast<int>(preferredDepthFormat),
                                                  // REMED-GFX-136: `usage` used to stop here. The
                                                  // renderer had to invent its own answer, and both
                                                  // renderers that had to (Vulkan, WebGPU) invented
                                                  // "always discard".
                                                  RenderTargetUsagePreservesContentsEXT(usage), mipMap,
-                                                 ClosestMSAAPower(preferredMultiSampleCount)).release()
+                                                 ClosestMSAAPower(preferredMultiSampleCount),
+                                                 // plan_modern.md MOD-107: the format stops being
+                                                 // dropped here, the way RenderTarget2D's already
+                                                 // is. TextureCube's own constructor checks it
+                                                 // against the renderer's verdict.
+                                                 static_cast<int>(preferredFormat)).release()
                                           : nullptr),
                       mipMap ? CalculateMipLevels(size) : 1)
         , size_(size)

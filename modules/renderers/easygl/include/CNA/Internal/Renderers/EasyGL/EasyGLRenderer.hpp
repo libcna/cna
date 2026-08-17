@@ -276,7 +276,8 @@ namespace CNA::Internal::Renderers::EasyGL
          */
         EasyGLRenderTargetCubeRenderer(int size, int depthFormat, ::easygl::ResourceRegistry* registry,
                                        std::weak_ptr<EasyGLBoundTargetEXT> binding,
-                                       bool mipMap = false, int multiSampleCount = 0);
+                                       bool mipMap = false, int multiSampleCount = 0,
+                                       int surfaceFormat = 0);
         ~EasyGLRenderTargetCubeRenderer() override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
@@ -358,6 +359,7 @@ namespace CNA::Internal::Renderers::EasyGL
         std::array<::easygl::Renderbuffer, 6> msaaColorRbos_;
         int  size_             = 0;
         int  depthFormat_      = 0;  ///< Raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal.
+        int  surfaceFormat_    = 0;  ///< Raw Microsoft::Xna::Framework::Graphics::SurfaceFormat ordinal.
         bool mipMap_           = false;
         int  levelCount_       = 1;
         int  multiSampleCount_ = 0;
@@ -1022,6 +1024,11 @@ namespace CNA::Internal::Renderers::EasyGL
         /// format defers to the framework rule, unchanged.
         [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
+        /// plan_modern.md MOD-107: the cube counterpart of CreateRenderTarget2DEXT -- real float
+        /// storage for the formats this context can render to, and a refusal for the rest.
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
         std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,

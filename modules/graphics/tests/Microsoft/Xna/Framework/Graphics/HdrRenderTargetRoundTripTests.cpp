@@ -13,7 +13,9 @@
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
@@ -23,7 +25,9 @@ using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Vector4;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4;
 
@@ -117,6 +121,44 @@ TEST(HdrRenderTargetRoundTripTest, AHalfFloatTargetKeepsValuesAboveOne)
         EXPECT_FLOAT_EQ(texel.Z, kBlue);
         EXPECT_FLOAT_EQ(texel.W, 1.0f);
     }
+}
+
+TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetIsCreatedInTheRequestedFormat)
+{
+    // MOD-107: the cube path carried the same silent substitution the 2D one did -- and it is the
+    // path image-based lighting needs, since an irradiance or prefiltered-specular cube is rendered
+    // face by face into float storage. A cube that reported HdrBlendable while holding 8-bit texels
+    // would make every IBL product quietly wrong.
+    GraphicsDevice gd;
+    if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable))
+        GTEST_SKIP() << "this renderer/driver has no RGBA16F render targets";
+
+    RenderTargetCube cube(gd, kSize, false, SurfaceFormat::HdrBlendable, DepthFormat::None);
+
+    EXPECT_EQ(cube.getFormatProperty(), SurfaceFormat::HdrBlendable);
+    EXPECT_EQ(cube.getSizeProperty(), kSize);
+
+    // Every face must be bindable and clearable in that format, not just face +X.
+    for (const CubeMapFace face : {CubeMapFace::PositiveX, CubeMapFace::NegativeX,
+                                   CubeMapFace::PositiveY, CubeMapFace::NegativeY,
+                                   CubeMapFace::PositiveZ, CubeMapFace::NegativeZ})
+    {
+        gd.SetRenderTarget(&cube, face);
+        gd.Clear(kRed, kGreen, kBlue, 1.0f);
+    }
+    gd.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+}
+
+TEST(HdrRenderTargetRoundTripTest, AnUnsupportedCubeFormatIsRefused)
+{
+    GraphicsDevice gd;
+    if (gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Dxt1))
+        GTEST_SKIP() << "this renderer claims a compressed render-target format; test not applicable";
+
+    EXPECT_ANY_THROW({
+        RenderTargetCube cube(gd, kSize, false, SurfaceFormat::Dxt1, DepthFormat::None);
+        (void)cube.getFormatProperty();
+    });
 }
 
 } // namespace

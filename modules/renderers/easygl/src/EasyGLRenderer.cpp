@@ -2422,11 +2422,11 @@ if (ProfileIsEs2ApiGeneration())
 
     // --- EasyGLRenderTargetCubeRenderer ---
 
-    EasyGLRenderTargetCubeRenderer::EasyGLRenderTargetCubeRenderer(int size, int depthFormat,
-                                                                    ::easygl::ResourceRegistry* registry,
-                                                                    std::weak_ptr<EasyGLBoundTargetEXT> binding,
-                                                                    bool mipMap, int multiSampleCount)
-        : size_(size), depthFormat_(depthFormat), mipMap_(mipMap),
+    EasyGLRenderTargetCubeRenderer::EasyGLRenderTargetCubeRenderer(
+        int size, int depthFormat, ::easygl::ResourceRegistry* registry,
+        std::weak_ptr<EasyGLBoundTargetEXT> binding, bool mipMap, int multiSampleCount,
+        int surfaceFormat)
+        : size_(size), depthFormat_(depthFormat), surfaceFormat_(surfaceFormat), mipMap_(mipMap),
           multiSampleCount_(multiSampleCount), registry_(registry), binding_(std::move(binding))
     {
         levelCount_ = mipMap_ ? CalculateRenderTargetMipLevels(size, size) : 1;
@@ -2489,6 +2489,15 @@ if (ProfileIsEs2ApiGeneration())
         // renderbuffers/blit, so the requested preference degrades to single-sample.
         multiSampleCount_ = 0;
 }
+        // plan_modern.md MOD-107: the same storage description the 2D targets use, so a float cube
+        // face and a float 2D target cannot end up with different GL formats.
+        RenderTargetColorStorage cubeStorage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat_, cubeStorage))
+        {
+            MapRenderTargetColorFormat(0, cubeStorage);
+            surfaceFormat_ = 0;
+        }
+
         cubeTex_.create();
         cubeTex_.bind(::easygl::TextureTarget::TextureCubeMap);
         // Allocate storage for all 6 faces, all mip levels (see EasyGLRenderTargetRenderer's
@@ -2507,10 +2516,10 @@ if (ProfileIsEs2ApiGeneration())
             for (int level = 0; level < levelCount_; ++level)
             {
                 cubeTex_.set_image_2d(faceTarget, level,
-                                       RgbaTexImageInternalFormat(),
+                                       cubeStorage.internalFormat,
                                        levelSize, levelSize,
-                                       ::metagl::PixelFormat::Rgba,
-                                       ::metagl::PixelType::UnsignedByte,
+                                       cubeStorage.pixelFormat,
+                                       cubeStorage.pixelType,
                                        nullptr);
                 levelSize = std::max(1, levelSize / 2);
             }
@@ -2566,8 +2575,10 @@ else
             {
                 rbo.create();
                 rbo.bind();
+                // MOD-107: same reason as the 2D target's multisample storage -- the resolve blit
+                // needs compatible formats, and an RGBA8 multisample side would clamp a float face.
                 rbo.set_storage_multisample(multiSampleCount_,
-                                             ::metagl::InternalFormat::Rgba8,
+                                             cubeStorage.internalFormat,
                                              size_, size_);
             }
             // Face 0 is attached here only so this FBO is complete the moment it exists;
@@ -3935,6 +3946,22 @@ if (!ProfileIsEs2ApiGeneration())
         // REMED-GFX-168: see CreateRenderTarget2D above for why the binding record is passed weakly.
         return std::make_unique<EasyGLRenderTargetCubeRenderer>(size, depthFormat, RegistryPtr(),
                                                                bound_, mipMap, multiSampleCount);
+    }
+
+    std::unique_ptr<IRenderTargetCubeRenderer> EasyGLRenderer::CreateRenderTargetCubeEXT(
+        int size, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
+        (void)preserveContents;   // REMED-GFX-136: deliberately unused, see CreateRenderTargetCube.
+        if (ClassifyRenderTargetFormatEXT(surfaceFormat) == RendererFormatVerdict::Unsupported)
+        {
+            throw std::runtime_error(
+                "EasyGL: SurfaceFormat ordinal " + std::to_string(surfaceFormat) +
+                " is not supported as a cube render target on this GL context. Query "
+                "GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT() first.");
+        }
+        return std::make_unique<EasyGLRenderTargetCubeRenderer>(
+            size, depthFormat, RegistryPtr(), bound_, mipMap, multiSampleCount, surfaceFormat);
     }
 
     std::unique_ptr<ITexture3DRenderer> EasyGLRenderer::CreateTexture3D(
