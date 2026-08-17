@@ -39,6 +39,10 @@
 #include "CNA/Graphics/SsaoPass.hpp"
 #include "CNA/Graphics/TonemapPass.hpp"
 
+// ---- Shadows ---------------------------------------------------------------------------------
+#include "CNA/Graphics/DirectionalLightEXT.hpp"
+#include "CNA/Graphics/ShadowMap.hpp"
+
 // ---- Materials -----------------------------------------------------------------------------
 #include "CNA/Graphics/PbrMaterial.hpp"
 

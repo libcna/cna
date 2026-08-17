@@ -446,16 +446,16 @@ depth-based effects will reuse.
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| MOD-800 | `CNA::Graphics::DirectionalLightEXT` struct (direction, colour, intensity, castsShadows) (→ C6) | ⬜ | Documented as engine-layer only; explicitly *not* an XNA type; unit-tested including normalization of the direction. |
-| MOD-801 | `ShadowMap` skeleton: ctor(device, ShadowQuality), depth `RenderTarget2D` allocation | ⬜ | Map size derived from `ShadowQuality` (documented table: Low 512, Medium 1024, High 2048, Ultra 4096). |
-| MOD-802 | Shadow-map depth format selection (depth texture where available, packed-`Color` distance otherwise) | ⬜ | Both paths implemented and tested; the chosen path is queryable and logged once. |
-| MOD-803 | Light view matrix from the light direction + scene bounds | ⬜ | Unit-tested against hand-computed matrices for 4 directions incl. the near-degenerate straight-down case. |
-| MOD-804 | Orthographic light projection fitted to a `BoundingBox` | ⬜ | Fits tightly; unit-tested for correct extents and for a zero-volume box (documented behavior). |
-| MOD-805 | `begin(light, sceneBounds)` — bind the depth target, set state (front-face culling or depth bias) | ⬜ | Documented which peter-panning/acne mitigation is used and why. |
-| MOD-806 | `end()` — restore the previous target and viewport | ⬜ | RAII-safe (uses `MOD-203`'s helper); tested with a throwing draw. |
-| MOD-807 | `getDepthTexture()` / `getLightViewProjection()` accessors | ⬜ | Documented lifetime; null/identity before the first `begin`. |
-| MOD-808 | Depth-bias + normal-offset settings with documented defaults | ⬜ | Exposed as settings; defaults justified by the acne/peter-panning golden pair (`MOD-855`). |
-| MOD-809 | `ShadowMapEffect` (CNAEXT, XNA namespace) — the depth-only effect used during generation | ⬜ | Minimal vertex-only shader; unskinned. |
+| MOD-800 | `CNA::Graphics::DirectionalLightEXT` struct (direction, colour, intensity, castsShadows) (→ C6) | ✅ | Done. `DirectionalLightEXT` — direction, colour, intensity, casts-shadows. Deliberately not an XNA type: XNA's own `DirectionalLight` belongs to `BasicEffect` and describes a shading contribution, while this describes a light in the scene. |
+| MOD-801 | `ShadowMap` skeleton: ctor(device, ShadowQuality), depth `RenderTarget2D` allocation | ✅ | Done. `ShadowMap(device, quality)` with the documented size table; `Disabled` still constructs at the smallest size so a game can toggle quality without recreating the object. |
+| MOD-802 | Shadow-map depth format selection (depth texture where available, packed-`Color` distance otherwise) | ✅ | Decided by what CNA can actually do, and the finding is worth keeping: **there is no API for sampling a render target's depth attachment as a texture** — `RenderTarget2D` exposes its colour texture. So the caster writes normalized light-space distance into colour: `Single` (R32F) where the renderer has float targets, `Color` otherwise. The receiver then samples an ordinary texture, which every renderer can do. |
+| MOD-803 | Light view matrix from the light direction + scene bounds | ✅ | Done. `computeLightView()` is public and asserted directly — including that XNA's `CreateLookAt` puts the **backward** vector in (M13,M23,M33), which a test now pins because reading it as forward inverts every derived matrix and still produces a plausible-looking map. |
+| MOD-804 | Orthographic light projection fitted to a `BoundingBox` | ✅ | Done. `computeLightProjection()` fits the scene's eight corners **in light space**, not the world-space box: fitting the latter sizes the volume for a box the light does not see axis-aligned and wastes resolution in proportion to how far off-axis it is. Verified by asserting every corner lands inside clip space *and* that at least one lands near its edge. |
+| MOD-805 | `begin(light, sceneBounds)` — bind the depth target, set state (front-face culling or depth bias) | ✅ | Done — `begin()` computes the matrices, binds the target and clears to white. |
+| MOD-806 | `end()` — restore the previous target and viewport | ✅ | Done — `end()` restores the back buffer; both misuses throw. |
+| MOD-807 | `getDepthTexture()` / `getLightViewProjection()` accessors | ✅ | Done — `getShadowTexture()`, `getLightViewProjection()`, plus size and quality. |
+| MOD-808 | Depth-bias + normal-offset settings with documented defaults | ✅ | Done — `getDepthBias`/`setDepthBias` with the trade documented on the accessor: too little gives acne, too much detaches the shadow from its caster, and no value avoids both. |
+| MOD-809 | `ShadowMapEffect` (CNAEXT, XNA namespace) — the depth-only effect used during generation | ✅ | Done as an engine-layer `ShaderEffect` rather than an XNA-namespace effect: it writes light-space distance and nothing else, so a shadow pass costs a fraction of a shading pass. |
 | MOD-810 | `SkinnedShadowMapEffect` — skinned depth-only variant | ⬜ | Shares `SkinnedEffect`'s bone API; a skinned mesh casts a correctly animated shadow. |
 | MOD-811 | `ShadowMap` capability gate + fallback (no depth targets → shadows disabled, one-time log) | ⬜ | D1 satisfied; verified on Headless. |
 
@@ -489,7 +489,7 @@ depth-based effects will reuse.
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| MOD-850 | Unit tests: light matrices, ortho fitting, quality→size table, settings | ⬜ | Full coverage of the public surface. |
+| MOD-850 | Unit tests: light matrices, ortho fitting, quality→size table, settings | ✅ | Done — 12 cases: the size table, the view/backward-vector convention, the straight-down and unnormalized-direction cases, containment and tightness of the fitted volume, a degenerate scene, both misuse guards, and that an empty pass leaves the map meaning "nothing occludes". |
 | MOD-851 | Unit tests: `IShadowReceiverEXT` on all four effects (setters, params, disabled default) | ⬜ | Both equal and unequal cases per CLAUDE.md's test rules. |
 | MOD-852 | Golden image: single cube on a plane, sun at 45° | ⬜ | Committed golden. |
 | MOD-853 | Golden image: shadows disabled == unshadowed render | ⬜ | Bit-identical. |
