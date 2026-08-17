@@ -24,6 +24,9 @@
 // Check D -- the shadow moves monotonically as the sun tilts, which no single-angle check shows.
 // Check E -- with `RenderPipelineSettings::setShadowsEnabled(false)` the plane is uniformly lit.
 //
+// `--benchmark` additionally times the shadow pass at each quality (MOD-857). Off by default: a
+// timing is a recording of one machine, not a budget, and spending it in every CI run buys nothing.
+//
 // Exit code 0 = all checks PASS, 1 = any FAIL, 77 = SKIP.
 
 #include "CNA/Graphics/DirectionalLightEXT.hpp"
@@ -45,16 +48,19 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
@@ -166,6 +172,7 @@ class ShadowMapExample : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     std::vector<float> angles_;
+    bool benchmark_ = false;
     int  passCount_ = 0;
     int  checkCount_ = 0;
     int  result_ = 1;
@@ -377,13 +384,68 @@ protected:
         check(!pipeline.didShadowPassRun() && ShadowCentroid(pixels, unusedX, unusedY) == 0,
               "with shadows disabled no pass runs and the plane is uniformly lit");
 
+        if (benchmark_)
+            RunBenchmark(device, cube, sceneBounds);
+
         std::printf("=== %d/%d PASS ===\n", passCount_, checkCount_);
         result_ = (passCount_ == checkCount_) ? 0 : 1;
         Exit();
     }
 
+    /// plan_modern.md MOD-857. Off by default -- a timing on a software rasterizer is a recording,
+    /// not a budget, and running it in every CI job would spend minutes to learn nothing.
+    void RunBenchmark(GraphicsDevice& device,
+                      const std::vector<VertexPositionNormalTexture>& cube,
+                      const BoundingBox& sceneBounds)
+    {
+        DirectionalLightEXT sun;
+        sun.Direction = Vector3(-0.7071f, -0.7071f, 0.0f);
+
+        const std::array<std::pair<ShadowQuality, const char*>, 4> levels{{
+            {ShadowQuality::Low, "Low (512)"},
+            {ShadowQuality::Medium, "Medium (1024)"},
+            {ShadowQuality::High, "High (2048)"},
+            {ShadowQuality::Ultra, "Ultra (4096)"},
+        }};
+
+        std::printf("--- shadow pass cost, %d casting triangles ---\n",
+                    static_cast<int>(cube.size()) / 3);
+        // Screen resolution is absent from this table on purpose: the pass renders into the map,
+        // never into the frame, so its cost is a function of map size and caster count and nothing
+        // else. A 720p and a 1080p column would print the same number twice and imply otherwise.
+        for (const auto& [quality, label] : levels)
+        {
+            ShadowMap map(device, quality);
+            // One untimed pass first: the caster program is compiled on its first use, and folding
+            // a shader compile into the first measurement would make Low look like the slow one.
+            map.begin(sun, sceneBounds);
+            device.DrawUserPrimitives(PrimitiveType::TriangleList, cube.data(), 0, 12);
+            map.end();
+
+            constexpr int kIterations = 20;
+            const auto start = std::chrono::steady_clock::now();
+            for (int i = 0; i < kIterations; ++i)
+            {
+                map.begin(sun, sceneBounds);
+                device.DrawUserPrimitives(PrimitiveType::TriangleList, cube.data(), 0, 12);
+                map.end();
+            }
+            // A readback, once, after the loop: without it the timing would measure how fast this
+            // program can queue work rather than how long the work takes.
+            std::vector<Color> drain(16, Color::Black);
+            try { map.getShadowTexture()->GetData(0, nullptr, drain.data(), 0, 0); }
+            catch (const std::exception&) { /* the sync is the point, not the pixels */ }
+            const auto finish = std::chrono::steady_clock::now();
+
+            const double milliseconds =
+                std::chrono::duration<double, std::milli>(finish - start).count() / kIterations;
+            std::printf("    %-14s %6.2f ms/pass\n", label, milliseconds);
+        }
+    }
+
 public:
-    explicit ShadowMapExample(std::vector<float> angles) : angles_(std::move(angles))
+    ShadowMapExample(std::vector<float> angles, bool benchmark)
+        : angles_(std::move(angles)), benchmark_(benchmark)
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kFrame);
@@ -398,7 +460,11 @@ int main(int argc, char** argv)
 {
     try
     {
-        ShadowMapExample game(ParseAngles(argc, argv));
+        bool benchmark = false;
+        for (int i = 1; i < argc; ++i)
+            if (std::strcmp(argv[i], "--benchmark") == 0)
+                benchmark = true;
+        ShadowMapExample game(ParseAngles(argc, argv), benchmark);
         game.Run();
         return game.getResult();
     }
