@@ -1966,9 +1966,28 @@
   "cna_graphics_device_unbind_texture",
   "cna_graphics_device_unsubscribe",
   "cna_graphics_ext_is_available",
+  "cna_graphics_renderer_copy_available_ext",
   "cna_graphics_renderer_copy_current_name",
+  "cna_graphics_renderer_fallback_copy_message_ext",
+  "cna_graphics_renderer_fallback_get_message_size_ext",
+  "cna_graphics_renderer_fallback_reason_copy_name_ext",
+  "cna_graphics_renderer_fallback_reason_get_name_size_ext",
+  "cna_graphics_renderer_get_active_ext",
+  "cna_graphics_renderer_get_automatic_fallback_ext",
+  "cna_graphics_renderer_get_available_count_ext",
   "cna_graphics_renderer_get_current_name_size",
   "cna_graphics_renderer_get_current_type",
+  "cna_graphics_renderer_get_fallback_at_ext",
+  "cna_graphics_renderer_get_fallback_count_ext",
+  "cna_graphics_renderer_get_is_available_ext",
+  "cna_graphics_renderer_get_is_latched_ext",
+  "cna_graphics_renderer_get_selected_ext",
+  "cna_graphics_renderer_reset_selection_for_tests_ext",
+  "cna_graphics_renderer_set_automatic_fallback_ext",
+  "cna_graphics_renderer_set_fallback_chain_ext",
+  "cna_graphics_renderer_set_preferred_by_name_ext",
+  "cna_graphics_renderer_set_preferred_ext",
+  "cna_graphics_renderer_try_parse_name_ext",
   "cna_graphics_resource_copy_name",
   "cna_graphics_resource_copy_string",
   "cna_graphics_resource_dispose",
@@ -2245,7 +2264,9 @@
   "cna_logger_info",
   "cna_logger_info_if",
   "cna_logger_log",
+  "cna_logger_reset_sink_ext",
   "cna_logger_set_minimum_level",
+  "cna_logger_set_sink_ext",
   "cna_logger_trace",
   "cna_logger_trace_if",
   "cna_logger_warn",
@@ -2799,7 +2820,11 @@
   "cna_plane_not_equals",
   "cna_plane_transform_matrix",
   "cna_plane_transform_quaternion",
+  "cna_platform_copy_current_name_ext",
   "cna_platform_get_current",
+  "cna_platform_get_current_name_size_ext",
+  "cna_platform_get_is_apple_ext",
+  "cna_platform_get_is_mobile_ext",
   "cna_playlist_collection_copy_type_name",
   "cna_playlist_collection_destroy",
   "cna_playlist_collection_dispose",
@@ -4114,6 +4139,11 @@
   "CNA_GRAPHICS_RENDERER_DIRECTX7": 28,
   "CNA_GRAPHICS_RENDERER_DIRECTX8": 29,
   "CNA_GRAPHICS_RENDERER_DIRECTX9": 22,
+  "CNA_GRAPHICS_RENDERER_FALLBACK_INITIALIZATION_FAILED": 2,
+  "CNA_GRAPHICS_RENDERER_FALLBACK_MAXIMUM": 3,
+  "CNA_GRAPHICS_RENDERER_FALLBACK_NOT_COMPILED_IN": 0,
+  "CNA_GRAPHICS_RENDERER_FALLBACK_PROBE_UNAVAILABLE": 1,
+  "CNA_GRAPHICS_RENDERER_FALLBACK_WINDOW_KIND_CONFLICT": 3,
   "CNA_GRAPHICS_RENDERER_FNA3D": 43,
   "CNA_GRAPHICS_RENDERER_FREEDIRECT": 21,
   "CNA_GRAPHICS_RENDERER_GDI": 40,
@@ -5196,6 +5226,10 @@
    4
   ],
   "CNA_GraphicsProfile": [
+   4,
+   4
+  ],
+  "CNA_GraphicsRendererFallbackReason": [
    4,
    4
   ],
@@ -7979,6 +8013,28 @@
     ]
    },
    "size": 24
+  },
+  "CNA_GraphicsRendererFallbackRecord": {
+   "align": 4,
+   "fields": {
+    "reason": [
+     12,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "type": [
+     8,
+     4
+    ]
+   },
+   "size": 16
   },
   "CNA_GyroscopeReading": {
    "align": 8,

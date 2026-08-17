@@ -15,9 +15,9 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 6,080 | A C route exists and is tested. |
+| Fully mapped | 6,111 | A C route exists and is tested. |
 | **Partially mapped** | 12 | A route exists but covers a stated subset. Read the next section before relying on one. |
-| **No C form** | 380 | Nothing callable was omitted; see the reasons below. |
+| **No C form** | 385 | Nothing callable was omitted; see the reasons below. |
 
 ## Partially mapped: a route exists, and it does less than the C++ does
 
@@ -47,6 +47,10 @@ All of them are **approved by the project owner on 2026-08-16 (CBIND-044)**.
 
 Every unmapped symbol falls under one of these. The generator fails if one does not, which
 is what stops this list from acquiring a silent "other" category.
+
+### The inward direction of a two-way contract — 5 symbols
+
+Some CNA surfaces come in pairs: one class a game calls, and a separate one the implementing module calls back with facts about the build. `GraphicsRendererSelection` and `GraphicsRendererSelectionAccessEXT` are the example, and the canonical header keeps them apart so the two directions are not confusable. The C ABI binds the outward half only: telling the selection which renderers are compiled in is a fact about the build, not a choice a caller may make.
 
 ### Hooks the platform layer calls into — 3 symbols
 

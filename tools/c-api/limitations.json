@@ -2,6 +2,14 @@
   "schema_version": 1,
   "themes": [
     {
+      "id": "inward-direction",
+      "title": "The inward direction of a two-way contract",
+      "match": [
+        "the **inward** direction"
+      ],
+      "note": "Some CNA surfaces come in pairs: one class a game calls, and a separate one the implementing module calls back with facts about the build. `GraphicsRendererSelection` and `GraphicsRendererSelectionAccessEXT` are the example, and the canonical header keeps them apart so the two directions are not confusable. The C ABI binds the outward half only: telling the selection which renderers are compiled in is a fact about the build, not a choice a caller may make."
+    },
+    {
       "id": "platform-hooks",
       "title": "Hooks the platform layer calls into",
       "match": [
