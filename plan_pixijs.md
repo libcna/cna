@@ -221,9 +221,15 @@
 > transform. Five real, independent bugs (`REMED-PIXIJS-1` through `REMED-PIXIJS-5`) were found and
 > fixed this way, none of them guessed -- every fix (and the `SetTransformMatrix`/`SetData`
 > implementations themselves) was preceded by a standalone live-browser probe confirming the actual
-> PixiJS/WebGL behavior before the corresponding source change was written. Not yet exercised by any
-> test: mip level>0 policy (PIXIJS-31, still throws) and the generic-`BlendState` stretch goal
-> (PIXIJS-52).
+> PixiJS/WebGL behavior before the corresponding source change was written.
+>
+> **PIXIJS-31's mip level>0 policy was also investigated for real this session** (not a code change,
+> a decision): a live probe of `PIXI.BufferResource`/`PIXI.BaseTexture`'s own prototypes confirmed
+> PixiJS exposes no public per-level CPU upload API at all -- mipmaps are GPU-auto-generated from
+> level 0 only. The throw for level>0 is unchanged, but is now a documented structural conclusion
+> (matching `CANVAS-21`'s own reasoning) rather than an open question. Only the generic-`BlendState`
+> stretch goal (PIXIJS-52) and a distinct `NonPremultiplied`-vs-`AlphaBlend` test remain genuinely
+> open in this renderer's own v1 scope.
 
 ### What remains (in dependency order)
 
@@ -259,8 +265,10 @@
      `AlphaBlend`'s code path but has no test of its own yet): `Opaque` now maps to real
      `BLEND_MODES.NONE` and textures upload with `ALPHA_MODES.NPM` instead of the silently-
      premultiplying `UNPACK` (`REMED-PIXIJS-3`/`REMED-PIXIJS-4`).
-   - **PIXIJS-31** — decide and implement the real mip-level (`level > 0`) policy instead of the
-     current unconditional throw. **Still open.**
+   - ~~**PIXIJS-31** — decide the real mip-level (`level > 0`) policy.~~ **Investigated and
+     decided**: PixiJS's `BufferResource`/`BaseTexture` have no public API for a custom CPU-authored
+     mip chain (confirmed via a live prototype probe) -- the throw for level>0 stays, but now for a
+     real, documented structural reason instead of an unresearched placeholder.
    - ~~**PIXIJS-32** — implement direct `Texture2D::SetData` on a bound render target.~~
      **Implemented and verified**: a throwaway buffer-backed texture painted over the target with
      `BLEND_MODES.NONE`, same trick as `Clear()`'s own `REMED-PIXIJS-5` fix.
@@ -558,7 +566,7 @@ For every task: at minimum, get a real Emscripten toolchain in a later session a
 | # | Task | Status | Notes |
 |---|---|---|---|
 | PIXIJS-30 | `PixiJsTextureRenderer : ITextureRenderer` — buffer-backed `PIXI.BaseTexture`/`PIXI.Texture`, registered by integer id in `Module['cnaPixiTextures']` (Design decision 8) | ✅ | Verified 2026-08-17: uploaded 2x2 RGBA8 pixels sampled back byte-for-byte correct through a real WebGL draw. |
-| PIXIJS-31 | `UpdatePixels`/`UpdatePixelsLevel`: in-place buffer mutation + `baseTexture.update()`; mip level>0 policy — implemented as a throw for now (same shape as `CANVAS-21`), explicitly documented as provisional rather than a real investigated decision, since PixiJS textures *can* carry real mipmaps (`PIXI.MIPMAP_MODES`), unlike Canvas2D, and this has not been investigated | 🟨 | level=0 path written; level>0 throws with an explanatory message rather than silently copying Canvas2D's permanent-boundary reasoning. |
+| PIXIJS-31 | `UpdatePixels`/`UpdatePixelsLevel`: in-place buffer mutation + `baseTexture.update()`; mip level>0 policy | ✅ | level=0 path verified (frames 1-11). level>0 policy investigated for real 2026-08-17 (not left provisional): a live browser probe of `PIXI.BufferResource`'s prototype (only `upload`/`dispose`) and `PIXI.BaseTexture`'s (only a `mipmap` on/off flag, no per-level hook) confirmed PixiJS has **no public API** for a custom CPU-authored mip chain — mipmaps are GPU-auto-generated from level 0 only (`gl.generateMipmap`). Throws for level>0, same behavior as before, but now for an investigated, documented structural reason matching `CANVAS-21`'s own conclusion, not a "haven't looked into it" placeholder. |
 | PIXIJS-32 | `PixiJsRenderTargetRenderer : IRenderTargetRenderer` — `PIXI.RenderTexture.create()` + `Bind/UnbindAsRenderTarget` switching which target `app.renderer.render(...)` calls target (Design decision 8) | ✅ | Bind/Clear/draw/readback round-trip verified 2026-08-17 (frame 7). Direct `Texture2D::SetData` (`UpdatePixels`) implemented and verified 2026-08-17 (frame 11, 21/21): paints a throwaway buffer-backed texture over the whole target with `PIXI.BLEND_MODES.NONE` (the same unconditional-overwrite trick `REMED-PIXIJS-5` proved correct for `Clear()`), then discards it -- confirmed on an *unbound* render target, sampled back as an ordinary texture. |
 | PIXIJS-33 | `ReadBackbuffer`/render-target `GetData`: `app.renderer.extract.pixels(...)` (Design decision 9) | ✅ | `ReadBackbuffer` (main stage) verified 2026-08-17, after `REMED-PIXIJS-1`'s force-render fix. `PixiJsRenderTargetRenderer::GetData` independently verified in the same session (frame 7's own `rt.GetData()` check) after its own `REMED-PIXIJS-5` clear/readback fix — both paths now proven. |
 | PIXIJS-34 | `HasRealDepthBuffer()` → `false` (no depth attachment on a 2D sprite-only `RenderTexture` in this renderer's v1 scope) | ✅ | Trivial override, same confidence level as `CANVAS-23`. |

@@ -113,7 +113,7 @@ obtained copy (e.g. via `npm pack pixi.js@7.4.2`) was used instead; both paths a
   2026-08-17 update for the full account, including the (unrelated) workaround needed for
   Emscripten's own blocked `zlib` port fetch in a network-restricted sandbox.
 - **Still open**: `NonPremultiplied` blend (shares `AlphaBlend`'s code path, no distinct test yet),
-  mip level > 0 texture uploads, and the generic-`BlendState` stretch goal remain unverified or
+  and the generic-`BlendState` stretch goal remain unverified or
   unimplemented -- see `plan_pixijs.md`'s own "What remains" list for the current, precise picture.
 
 The renderer's C++ source compiles conditionally behind `#if defined(__EMSCRIPTEN__)` for every
@@ -163,8 +163,11 @@ described as complete until that task actually closes with real verification:
   (`autoStart:false`, `sharedTicker:false`) and calling `app.renderer.render()` explicitly from
   `Present()`, keeping CNA's `Game` loop authoritative -- consistent with every other renderer, but
   unverified.
-- **Mip level > 0 texture uploads throw** (`PIXIJS-31`) -- unlike `CANVAS`, PixiJS textures can
-  genuinely carry mipmaps, so this is a real gap to close, not a structural boundary like Canvas2D's.
+- **Mip level > 0 texture uploads throw, now for an investigated reason** (`PIXIJS-31`) -- a live
+  probe of `PIXI.BufferResource`/`PIXI.BaseTexture`'s own prototypes (2026-08-17) confirmed PixiJS
+  exposes no public per-level CPU upload API at all; mipmaps are GPU-auto-generated from level 0
+  only. This is a real structural boundary, same conclusion `CANVAS-21` reached, not an unresearched
+  placeholder.
 - **Custom `Effect` support throws** (`PIXIJS-47`) -- unlike `CANVAS`/`HTML_DOM`, this is *not* a
   structural boundary (PixiJS has a real GLSL shader stage via `PIXI.Filter`/`PIXI.Shader`); it is
   simply out of this plan's v1 scope.

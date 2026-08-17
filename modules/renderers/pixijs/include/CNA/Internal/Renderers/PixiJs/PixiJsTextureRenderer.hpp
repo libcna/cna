@@ -26,8 +26,13 @@ namespace CNA::Internal::Renderers::PixiJs
         [[nodiscard]] int GetHeight() const override { return height_; }
         [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
-        /// plan_pixijs.md PIXIJS-31: mip level>0 policy is not yet decided (PixiJS textures can
-        /// carry real mipmaps, unlike Canvas2D) -- throws for now rather than silently guessing.
+        /// plan_pixijs.md PIXIJS-31: investigated and decided, 2026-08-17 (not merely undecided) --
+        /// `PIXI.BufferResource` (this renderer's own upload path) exposes only `upload()`/
+        /// `dispose()`, and `PIXI.BaseTexture` exposes only a `mipmap` on/off mode, no per-level
+        /// upload hook at all (confirmed live via a browser probe of both prototypes). PixiJS
+        /// mipmaps are GPU-auto-generated from level 0 (`gl.generateMipmap`) only; there is no
+        /// public API to upload a custom CPU-authored mip chain. Throws for level>0, matching
+        /// Canvas2D's own structural conclusion, but for an independently investigated reason.
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
         /// Id into `Module['cnaPixiTextures']`, used by PixiJsSpriteBatchRenderer and

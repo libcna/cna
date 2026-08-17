@@ -128,10 +128,10 @@ namespace CNA::Internal::Renderers::PixiJs
     {
         if (level != 0)
             throw std::runtime_error(
-                "PixiJS (v1 scope) does not support mip-level texture uploads (level " +
-                std::to_string(level) + ") yet -- plan_pixijs.md PIXIJS-31 has not decided the real "
-                "policy here (PixiJS textures can carry real mipmaps, unlike Canvas2D, so this is "
-                "not assumed to be a permanent boundary). Use Texture2D::SetData(level=0, ...) only.");
+                "PixiJS does not support custom mip-level texture uploads (level " +
+                std::to_string(level) + ") -- plan_pixijs.md PIXIJS-31: investigated 2026-08-17, "
+                "PIXI.BufferResource/BaseTexture expose no per-level CPU upload API at all; mipmaps "
+                "are GPU-auto-generated from level 0 only. Use Texture2D::SetData(level=0, ...) only.");
         (void)levelW; (void)levelH;
         UpdatePixels(rgba, width_ * 4);
     }
