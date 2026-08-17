@@ -17,7 +17,18 @@ EM_JS(void, CNA_PixiJs_CreateTextureWithPixels, (int id, int width, int height, 
     const baseTexture = new PIXI.BaseTexture(new PIXI.BufferResource(buffer, { width: width, height: height }), {
         width: width, height: height,
         scaleMode: PIXI.SCALE_MODES.NEAREST,
-        alphaMode: PIXI.ALPHA_MODES.UNPACK,
+        // REMED-PIXIJS-4 (found via the same real-browser Opaque-blend test, 2026-08-17):
+        // ALPHA_MODES.UNPACK is NOT "leave the data alone" -- it is a synonym for
+        // PREMULTIPLY_ON_UPLOAD (confirmed live: PIXI.ALPHA_MODES.UNPACK === 1 ===
+        // PIXI.ALPHA_MODES.PREMULTIPLY_ON_UPLOAD), so every texture uploaded this way was silently
+        // having its RGB multiplied by its own alpha at the GPU level -- invisible for the fully
+        // opaque (alpha=255) fixtures every earlier test used, but a real, silent corruption for
+        // any genuinely semi-transparent texture. ALPHA_MODES.NPM (No Premultiplied Alpha) is the
+        // real "upload exactly as given" mode and is what Design decision 8's synchronous
+        // straight-RGBA8 upload path actually needs -- confirmed empirically to make both
+        // BLEND_MODES.NONE (Opaque) and BLEND_MODES.NORMAL (AlphaBlend/NonPremultiplied) produce
+        // the mathematically correct straight-alpha compositing result.
+        alphaMode: PIXI.ALPHA_MODES.NPM,
     });
     const texture = new PIXI.Texture(baseTexture);
     Module['cnaPixiTextures'][id] = { baseTexture: baseTexture, texture: texture, buffer: buffer, isRenderTarget: false };
@@ -31,7 +42,18 @@ EM_JS(void, CNA_PixiJs_CreateBlankTexture, (int id, int width, int height), {
     const baseTexture = new PIXI.BaseTexture(new PIXI.BufferResource(buffer, { width: width, height: height }), {
         width: width, height: height,
         scaleMode: PIXI.SCALE_MODES.NEAREST,
-        alphaMode: PIXI.ALPHA_MODES.UNPACK,
+        // REMED-PIXIJS-4 (found via the same real-browser Opaque-blend test, 2026-08-17):
+        // ALPHA_MODES.UNPACK is NOT "leave the data alone" -- it is a synonym for
+        // PREMULTIPLY_ON_UPLOAD (confirmed live: PIXI.ALPHA_MODES.UNPACK === 1 ===
+        // PIXI.ALPHA_MODES.PREMULTIPLY_ON_UPLOAD), so every texture uploaded this way was silently
+        // having its RGB multiplied by its own alpha at the GPU level -- invisible for the fully
+        // opaque (alpha=255) fixtures every earlier test used, but a real, silent corruption for
+        // any genuinely semi-transparent texture. ALPHA_MODES.NPM (No Premultiplied Alpha) is the
+        // real "upload exactly as given" mode and is what Design decision 8's synchronous
+        // straight-RGBA8 upload path actually needs -- confirmed empirically to make both
+        // BLEND_MODES.NONE (Opaque) and BLEND_MODES.NORMAL (AlphaBlend/NonPremultiplied) produce
+        // the mathematically correct straight-alpha compositing result.
+        alphaMode: PIXI.ALPHA_MODES.NPM,
     });
     const texture = new PIXI.Texture(baseTexture);
     Module['cnaPixiTextures'][id] = { baseTexture: baseTexture, texture: texture, buffer: buffer, isRenderTarget: false };

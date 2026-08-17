@@ -118,6 +118,21 @@ namespace CNA::Internal::Renderers::PixiJs
             if (const auto* rt = dynamic_cast<const PixiJsRenderTargetRenderer*>(&texture)) return rt->GetPixiTextureId();
             return 0;
         }
+
+        // REMED-PIXIJS-3: single source of truth for the PixiJsBlendMode -> real PIXI.BLEND_MODES
+        // numeric value mapping, matching CNA_PixiJs_SetBlendMode's own table exactly (PixiJsRenderer.cpp)
+        // -- kept as one function rather than duplicated inline so the two never drift apart.
+        int PixiBlendModeToPixiJsCode(PixiJsBlendMode mode)
+        {
+            switch (mode)
+            {
+                case PixiJsBlendMode::Opaque: return 20; // PIXI.BLEND_MODES.NONE
+                case PixiJsBlendMode::Additive: return 1; // PIXI.BLEND_MODES.ADD
+                case PixiJsBlendMode::AlphaBlend:
+                case PixiJsBlendMode::NonPremultiplied:
+                default: return 0; // PIXI.BLEND_MODES.NORMAL
+            }
+        }
     }
 
     PixiJsSpriteBatchRenderer::PixiJsSpriteBatchRenderer()
@@ -144,7 +159,7 @@ namespace CNA::Internal::Renderers::PixiJs
         {
             // PIXI.BLEND_MODES.NORMAL=0 / .ADD=1 in PixiJS v7 -- see
             // PixiJsRenderer.cpp's CNA_PixiJs_SetBlendMode for the same table.
-            const int pixiBlendModeCode = activeBlendMode_ == PixiJsBlendMode::Additive ? 1 : 0;
+            const int pixiBlendModeCode = PixiBlendModeToPixiJsCode(activeBlendMode_);
             CNA_PixiJs_FlushSprites(commands_.data(), static_cast<int>(commands_.size()), 14,
                                     pixiBlendModeCode);
         }
@@ -223,7 +238,7 @@ namespace CNA::Internal::Renderers::PixiJs
 #if defined(__EMSCRIPTEN__)
         if (immediateMode_)
         {
-            const int pixiBlendModeCode = activeBlendMode_ == PixiJsBlendMode::Additive ? 1 : 0;
+            const int pixiBlendModeCode = PixiBlendModeToPixiJsCode(activeBlendMode_);
             CNA_PixiJs_FlushSprites(&command, 1, 14, pixiBlendModeCode);
             return;
         }

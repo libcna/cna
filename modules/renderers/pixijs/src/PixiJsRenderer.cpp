@@ -105,17 +105,26 @@ EM_JS(void, CNA_PixiJs_ReadCurrentPixels, (int x, int y, int w, int h, uint8_t* 
     }
 });
 
-// plan_pixijs.md Design decision 6: caches the active PIXI.BLEND_MODES value (or, for the future
-// PIXIJS-52 custom-blend-mode path, a registered custom id) that PixiJsSpriteBatchRenderer's own
-// flush applies to each pooled sprite. blendCode: 0=Opaque, 1=AlphaBlend, 2=NonPremultiplied,
-// 3=Additive -- mirrors PixiJsBlendMode's own numbering (PixiJsRenderer.hpp).
+// plan_pixijs.md Design decision 6 / REMED-PIXIJS-3: caches the active PIXI.BLEND_MODES value (or,
+// for the future PIXIJS-52 custom-blend-mode path, a registered custom id) that
+// PixiJsSpriteBatchRenderer's own flush applies to each pooled sprite. blendCode: 0=Opaque,
+// 1=AlphaBlend, 2=NonPremultiplied, 3=Additive -- mirrors PixiJsBlendMode's own numbering
+// (PixiJsRenderer.hpp).
 EM_JS(void, CNA_PixiJs_SetBlendMode, (int blendCode), {
-    // PIXI.BLEND_MODES.NORMAL === 0, .ADD === 1 in PixiJS v7. Opaque/AlphaBlend/NonPremultiplied
-    // all render via NORMAL in this v1 scope (Design decision 6's 4-preset boundary); only Additive
-    // gets a distinct native blend mode. Opaque's real (One,Zero) semantics and
-    // AlphaBlend/NonPremultiplied's premultiply distinction are not yet applied here -- tracked as
-    // PIXIJS-50/51, not silently assumed equivalent to NORMAL.
-    const modes = [0, 0, 0, 1];
+    // PIXI.BLEND_MODES.NORMAL===0, .ADD===1, .NONE===20 in PixiJS v7 (confirmed live, 2026-08-17:
+    // PIXI.BLEND_MODES was enumerated directly in a real browser rather than assumed from memory).
+    // Opaque -> NONE: PixiJS's real "disable GL_BLEND entirely" mode, matching XNA's real
+    // srcBlend=One/dstBlend=Zero contract (an unconditional overwrite that ignores source alpha) --
+    // verified in a real browser (cna_test_pixijs_smoke) that a semi-transparent source pixel drawn
+    // with Opaque produces a fully-opaque destination pixel, not a blended one.
+    // AlphaBlend/NonPremultiplied still both render via NORMAL in this v1 scope (Design decision
+    // 6's 4-preset boundary) -- PixiJS's default NORMAL blend already composites straight-alpha
+    // (non-premultiplied) texture data correctly for the common case (verified via the Additive
+    // test's own CornflowerBlue-background math and the flip/rotation tests' exact pixel checks,
+    // all of which draw through this same NORMAL path with Color::White tint), but the exact
+    // premultiplied-vs-straight distinction the two BlendState presets are supposed to carry is
+    // still not independently applied -- tracked as PIXIJS-51, not silently assumed equivalent.
+    const modes = [20, 0, 0, 1];
     Module['cnaPixiBlendMode'] = modes[blendCode] !== undefined ? modes[blendCode] : 0;
 });
 
