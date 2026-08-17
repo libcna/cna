@@ -30,6 +30,7 @@
 #include "CNA/Graphics/BlitPass.hpp"
 #include "CNA/Graphics/BloomPass.hpp"
 #include "CNA/Graphics/FullscreenPass.hpp"
+#include "CNA/Graphics/FxaaPass.hpp"
 #include "CNA/Graphics/PostProcessChain.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"

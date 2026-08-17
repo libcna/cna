@@ -23,6 +23,7 @@ namespace CNA::Graphics {
 
     class BlitPass;
     class BloomPass;
+    class FxaaPass;
     class PostProcessPass;
     class TonemapPass;
 
@@ -174,6 +175,7 @@ namespace CNA::Graphics {
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D> sceneTarget_;
         std::unique_ptr<BloomPass> bloomPass_;
         std::unique_ptr<TonemapPass> tonemapPass_;
+        std::unique_ptr<FxaaPass> fxaaPass_;
         std::vector<PostProcessPass*> userPasses_;
 
         int  width_  = 0;

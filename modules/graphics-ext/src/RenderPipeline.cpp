@@ -4,6 +4,7 @@
 #ifdef CNA_CNAEXT
 
 #include "CNA/Graphics/BloomPass.hpp"
+#include "CNA/Graphics/FxaaPass.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
 #include "CNA/Graphics/TonemapPass.hpp"
@@ -25,7 +26,8 @@ namespace CNA::Graphics {
 
     RenderPipeline::RenderPipeline(GraphicsDevice& device)
         : device_(device), chain_(device), bloomPass_(std::make_unique<BloomPass>(device)),
-          tonemapPass_(std::make_unique<TonemapPass>(device))
+          tonemapPass_(std::make_unique<TonemapPass>(device)),
+          fxaaPass_(std::make_unique<FxaaPass>(device))
     {
     }
 
@@ -135,6 +137,11 @@ namespace CNA::Graphics {
             chain_.addPass(bloomPass_.get());
         if (settings_.getTonemappingMode() != TonemappingMode::None || settings_.isHDREnabled())
             chain_.addPass(tonemapPass_.get());
+        // FXAA detects edges by luminance contrast, so it runs on displayed pixels: on
+        // scene-referred values a highlight ten times brighter than white reads as an enormous
+        // edge and gets blurred into its surroundings.
+        if (settings_.isFXAAEnabled())
+            chain_.addPass(fxaaPass_.get());
         for (PostProcessPass* pass : userPasses_)
             chain_.addPass(pass);
 

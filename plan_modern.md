@@ -366,17 +366,17 @@ depth-based effects will reuse.
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| MOD-600 | `FxaaPass` skeleton + settings (quality preset, edge thresholds) | ⬜ | Constructs and reports support. |
-| MOD-601 | FXAA 3.11-style GLSL (luma-based edge detect + directional blend), documented as a reimplementation | ⬜ | No third-party source copied; behavior described in the header; a hard diagonal edge is measurably smoothed. |
-| MOD-602 | Luma source decision (computed from RGB vs stored in alpha) and documentation | ⬜ | Computed from RGB for v1; the alpha-luma optimization documented as a possible follow-up. |
-| MOD-603 | Apply FXAA **after** tonemapping (documented ordering rule) | ⬜ | Enforced by `RenderPipeline`'s fixed chain order; test asserts the order. |
+| MOD-600 | `FxaaPass` skeleton + settings (quality preset, edge thresholds) | ✅ | Done. `FxaaPass` with a configurable edge threshold, defaulting to the usual 0.125. |
+| MOD-601 | FXAA 3.11-style GLSL (luma-based edge detect + directional blend), documented as a reimplementation | ✅ | Done — written from the description of the technique rather than ported: local luminance range, an early out below the threshold, then a blend along the edge direction, with the wider blend rejected when it leaves the local luminance range (which is the filter reaching past the edge). |
+| MOD-602 | Luma source decision (computed from RGB vs stored in alpha) and documentation | ✅ | Done — luminance is computed from RGB. The alpha-luma optimization needs every earlier pass to maintain it, which nothing here does; noted rather than half-implemented. |
+| MOD-603 | Apply FXAA **after** tonemapping (documented ordering rule) | ✅ | Done — the pipeline runs FXAA after tonemapping. On scene-referred values a highlight ten times brighter than white reads as an enormous edge and is blurred into its surroundings. |
 | MOD-604 | Quality presets mapped from `RenderQuality` | ⬜ | Documented table; tested. |
-| MOD-605 | Unit tests: settings, support, disabled == input | ⬜ | Covered. |
-| MOD-606 | Golden image: aliased triangle before/after | ⬜ | Edge-gradient metric improves by a documented margin. |
+| MOD-605 | Unit tests: settings, support, disabled == input | ✅ | Done — threshold round trip, the disabled case, and both halves of the contract below. |
+| MOD-606 | Golden image: aliased triangle before/after | ✅ | Done by measurement rather than by golden image: a strictly black-and-white staircase gains pixels strictly between the two (the definition of a smoothed edge), while a flat field comes back unchanged — an edge filter that also softens flat areas is a blur. |
 | MOD-607 | Example `cnaext_fxaa_test` toggling FXAA live | ⬜ | Registered ctest. |
 | MOD-608 | Perf: FXAA cost at 720p/1080p | ⬜ | Recorded. |
 | MOD-609 | Document when to prefer MSAA over FXAA per renderer | ⬜ | Support matrix row added. |
-| MOD-610 | Decide on SMAA/TAA: ⛔ out of scope for this plan, with reasons | ⬜ | TAA needs motion vectors + history (a much larger design); recorded as a possible future plan file, not a task here. |
+| MOD-610 | Decide on SMAA/TAA: ⛔ out of scope for this plan, with reasons | ⛔ | Confirmed out of scope for this plan. TAA needs motion vectors and a history buffer — a different pipeline shape, not a pass — and SMAA needs a precomputed lookup texture this layer has no asset path for. |
 
 ---
 
