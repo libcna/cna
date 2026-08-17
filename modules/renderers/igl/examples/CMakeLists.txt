@@ -70,4 +70,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
     cna_register_renderer_test(NAME Igl_DualTextureEffect COMMAND cna_test_igl_dualtextureeffect
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # IGL-38/IGL-55: BasicEffect fog -- FNA's fogVector view-space formulation.
+    cna_igl_test(cna_test_igl_fog igl_fog_test.cpp)
+    cna_register_renderer_test(NAME Igl_Fog COMMAND cna_test_igl_fog
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
