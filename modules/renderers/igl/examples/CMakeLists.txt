@@ -144,4 +144,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
         COMMAND cna_test_igl_environmentmapeffect_fresnel
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # IGL-37/IGL-55: PbrEffect's NormalMap, EmissiveFactor, OcclusionMap and null-map fallback.
+    cna_igl_test(cna_test_igl_pbreffect_maps igl_pbreffect_maps_test.cpp)
+    cna_register_renderer_test(NAME Igl_PbrEffectMaps COMMAND cna_test_igl_pbreffect_maps
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
