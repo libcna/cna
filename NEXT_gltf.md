@@ -107,6 +107,7 @@ Expected as of this writing:
 | `ctest -L gltf-conformance` | **10/10 passed** (the `Perf` rung joined on 2026-08-12) |
 | full suite, from the ROOT | **7 514 tests: 7 286 passed, 228 skipped, 0 failed** |
 | `*Gltf*` | **597 tests: 594 passed, 3 skipped, 0 failed** — the skips are the opt-in licensed ChronographWatch asset and the two opt-in large-reference-asset budgets |
+| `*Gltf*` and the ladder on the **OPENGLES3** tree | **598 tests: 595 passed, 3 skipped** (one more case runs there than on HEADLESS) and **10/10** conformance, both under `xvfb-run -a` — §27.1 row 19's cross-renderer claim re-checked with stride 80 and the 146th asset in place |
 | generator `--check` / `--determinism` | **146 assets, 734 files — byte-identical**, and two independent generator runs agree byte-for-byte |
 | EasyGL L7 corpus (Xvfb, production viewer) | **146 dispositions: 138 deterministic PNGs, 8 deterministic safe rejections**, zero RGB/alpha tolerance |
 | Vulkan L7 corpus (Xvfb, lavapipe) | **146 dispositions: 138 PNGs, 8 safe rejections** — export `VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json` or the report omits the ICD pin and its integrity test fails |
