@@ -371,6 +371,26 @@ if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
     target_link_libraries(cna_mojoshader_gl_probe PRIVATE cna_mojoshader SDL3::SDL3)
 endif()
 
+# plan_fx.md FX-064 existence gate: proves the pinned MojoShader's raw "spirv" profile
+# (MOJOSHADER_PROFILE_SPIRV, MOJOSHADER_linkSPIRVShaders) turns a committed effect's shader pair
+# into a real Vulkan graphics pipeline this machine can create and render with. Unlike GL, SDL_GPU
+# and D3D11, MojoShader ships no Vulkan adapter, so this probe implements the nine-function
+# MOJOSHADER_effectShaderContext backend itself -- it IS the prototype adapter FX-064 exists to
+# produce, not a test of someone else's. Links only MojoShader and the Vulkan loader, no SDL, no
+# CNA, no CNA Vulkan renderer.
+#
+# Not registered with ctest: it needs a working Vulkan device, which a headless CI runner may not
+# have, and a missing device is not a CNA regression. Does not require the VULKAN renderer identity
+# to be selected -- only cna_mojoshader (any renderer that enables its own compiled-effects option
+# publishes that target) and a system Vulkan loader/headers (libvulkan-dev).
+if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
+    find_package(Vulkan QUIET)
+    if(Vulkan_FOUND)
+        add_executable(cna_mojoshader_vulkan_probe tools/graphics/mojoshader_vulkan_probe.cpp)
+        target_link_libraries(cna_mojoshader_vulkan_probe PRIVATE cna_mojoshader Vulkan::Vulkan)
+    endif()
+endif()
+
 # --- plan_platform.md PLAT-131: terminal restoration harness ---
 # A tiny standalone (non-GTest) executable that takes the terminal over with a TerminalSession and
 # then dies in a chosen way: normally, by SIGINT/SIGTERM/SIGHUP, by abort(), or by letting an
