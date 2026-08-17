@@ -717,6 +717,14 @@
       "category": "renderer-integration-executable",
       "max_references": 7
     },
+    "modules/renderers/pixijs/examples/pixijs_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/pixijs/tests/CNA/Internal/Renderers/PixiJs/PixiJsRendererTests.cpp": {
+      "category": "inert-window-pointer-fixture",
+      "max_references": 2
+    },
     "modules/renderers/portablegl/examples/portablegl_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 5

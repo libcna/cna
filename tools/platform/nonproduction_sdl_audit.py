@@ -62,6 +62,11 @@ CATEGORY_RATIONALES = {
         "artifact -- and asserts on SDL tokens found inside it. The tokens exist only as string "
         "literals to search for; the test neither includes nor calls the native API."
     ),
+    "inert-window-pointer-fixture": (
+        "Passes a non-null, never-dereferenced SDL_Window* to satisfy a renderer constructor's "
+        "own null check, so pure-C++ logic below that constructor (e.g. blend-state mapping) is "
+        "unit-testable without a real window. The pointer is never passed to an SDL API call."
+    ),
 }
 
 
@@ -107,6 +112,11 @@ def classify(record: FileRecord) -> str | None:
         "modules/content/tests/CNA/Internal/GltfImport/GltfRendererPbrFallbackPolicyTests.cpp",
     }:
         return "text-evidence-assertion"
+
+    if path in {
+        "modules/renderers/pixijs/tests/CNA/Internal/Renderers/PixiJs/PixiJsRendererTests.cpp",
+    }:
+        return "inert-window-pointer-fixture"
 
     return None
 
