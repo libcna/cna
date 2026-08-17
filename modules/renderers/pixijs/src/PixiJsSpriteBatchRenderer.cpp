@@ -24,7 +24,15 @@
 //   7 destinationWidth (float32) 8 destinationHeight (float32)
 //   9 rotation (float32)         10 originX (float32)      11 originY (float32)
 //   12 flags (int32, bit0=flipH bit1=flipV)  13 packedColor (uint32, R|G<<8|B<<16|A<<24)
-EM_JS(void, CNA_PixiJs_FlushSprites, (const void* commands, int count, int stride, int blendMode), {
+// plan_pixijs.md PIXIJS-46/PIXIJS-53: wrapMode/scaleMode are real PIXI.WRAP_MODES/SCALE_MODES
+// numeric (GL) values, applied to each drawn texture's shared baseTexture -- these are
+// SpriteBatch-level sampler state (set once per Begin()/SetSampler* call, same as XNA's own
+// SamplerState application), not per-command, so every sprite in one flush gets the same value.
+// A baseTexture's wrapMode/scaleMode are properties of the GPU texture OBJECT, not of any one
+// PIXI.Texture "view" onto it (Design decision 8's own per-draw frame views all share one
+// baseTexture) -- setting them here is genuinely global to that texture, matching how a real
+// WebGL sampler parameter would behave too.
+EM_JS(void, CNA_PixiJs_FlushSprites, (const void* commands, int count, int stride, int blendMode, int wrapMode, int scaleMode), {
     const app = Module['cnaPixiApp'];
     if (!app) return;
     if (!Module['cnaPixiSpritePool']) Module['cnaPixiSpritePool'] = [];
@@ -53,6 +61,10 @@ EM_JS(void, CNA_PixiJs_FlushSprites, (const void* commands, int count, int strid
         const entry = textures[textureId];
         if (!entry) continue;
 
+        const drawnBaseTexture = entry.texture.baseTexture || entry.texture;
+        if (drawnBaseTexture.wrapMode !== wrapMode) drawnBaseTexture.wrapMode = wrapMode;
+        if (drawnBaseTexture.scaleMode !== scaleMode) { drawnBaseTexture.scaleMode = scaleMode; drawnBaseTexture.update(); }
+
         let sprite = pool[i];
         if (!sprite) {
             sprite = new PIXI.Sprite();
@@ -78,8 +90,7 @@ EM_JS(void, CNA_PixiJs_FlushSprites, (const void* commands, int count, int strid
         // A fresh PIXI.Texture "view" per draw, sharing the entry's baseTexture/GPU resource but
         // carrying its own frame rectangle -- mutating a shared texture's own .frame in place would
         // corrupt every other sprite currently sampling the same atlas with a different sub-rect.
-        const baseTexture = entry.texture.baseTexture || entry.texture;
-        sprite.texture = new PIXI.Texture(baseTexture, new PIXI.Rectangle(sourceX, sourceY, sourceWidth, sourceHeight), undefined, undefined, pixiRotate);
+        sprite.texture = new PIXI.Texture(drawnBaseTexture, new PIXI.Rectangle(sourceX, sourceY, sourceWidth, sourceHeight), undefined, undefined, pixiRotate);
 
         // plan_pixijs.md PIXIJS-43: anchor is PixiJS's own normalized (0..1 of the frame) pivot --
         // XNA's origin is source-pixel space, so divide through by the source rectangle's own size.
@@ -133,6 +144,36 @@ namespace CNA::Internal::Renderers::PixiJs
                 default: return 0; // PIXI.BLEND_MODES.NORMAL
             }
         }
+
+        // plan_pixijs.md PIXIJS-46: raw TextureAddressMode int (0=Wrap, 1=Clamp, 2=Mirror) -> real
+        // WebGL wrap-mode GL enum values PIXI.WRAP_MODES exposes directly (confirmed live,
+        // 2026-08-17: PIXI.WRAP_MODES.CLAMP===33071/CLAMP_TO_EDGE, .REPEAT===10497,
+        // .MIRRORED_REPEAT===33648 -- real gl.* constants, not small ordinal indices).
+        //
+        // Known boundary (found via a live browser probe, 2026-08-17, before writing a smoke-test
+        // assertion that would have been untestable): this value is genuinely applied to the
+        // baseTexture's own WebGL sampler (`baseTexture.wrapMode`), so it is real, not a stub -- but
+        // XNA/D3D's classic "one Draw() call with a source rectangle larger than the texture tiles
+        // automatically under TextureAddressMode.Wrap" trick cannot be reproduced through it. Each
+        // Draw() builds a fresh `new PIXI.Texture(baseTexture, frameRect, ...)` "view" (see
+        // CNA_PixiJs_FlushSprites above), and PixiJS's Texture constructor throws
+        // ("frame does not fit inside the base Texture dimensions") for any frameRect that exceeds
+        // the base texture's own pixel bounds -- confirmed live: `new PIXI.Texture(base2x2,
+        // new PIXI.Rectangle(0,0,4,4))` throws even with wrapMode already set to REPEAT. A source
+        // rect stays within the base texture's bounds by construction in every other test in this
+        // file, so wrapMode currently only affects the subtler linear-filter edge-bleed case (a
+        // sampler reading half a texel past a frame's edge), not visible large-scale tiling --
+        // that would need a `PIXI.TilingSprite`-based draw path, which is out of this v1 scope.
+        int TextureAddressModeToPixiWrapMode(int addressMode)
+        {
+            switch (addressMode)
+            {
+                case 0: return 10497; // Wrap -> PIXI.WRAP_MODES.REPEAT
+                case 2: return 33648; // Mirror -> PIXI.WRAP_MODES.MIRRORED_REPEAT
+                case 1:
+                default: return 33071; // Clamp -> PIXI.WRAP_MODES.CLAMP
+            }
+        }
     }
 
     PixiJsSpriteBatchRenderer::PixiJsSpriteBatchRenderer()
@@ -160,8 +201,10 @@ namespace CNA::Internal::Renderers::PixiJs
             // PIXI.BLEND_MODES.NORMAL=0 / .ADD=1 in PixiJS v7 -- see
             // PixiJsRenderer.cpp's CNA_PixiJs_SetBlendMode for the same table.
             const int pixiBlendModeCode = PixiBlendModeToPixiJsCode(activeBlendMode_);
+            const int pixiWrapMode = TextureAddressModeToPixiWrapMode(addressU_);
+            const int pixiScaleMode = linearFilter_ ? 1 : 0; // PIXI.SCALE_MODES.LINEAR/.NEAREST
             CNA_PixiJs_FlushSprites(commands_.data(), static_cast<int>(commands_.size()), 14,
-                                    pixiBlendModeCode);
+                                    pixiBlendModeCode, pixiWrapMode, pixiScaleMode);
         }
 #endif
         begun_ = false;
@@ -192,14 +235,32 @@ namespace CNA::Internal::Renderers::PixiJs
                 "Canvas2D/DOM, but mapping CNA's Effect model onto it is out of v1 scope).");
     }
 
-    void PixiJsSpriteBatchRenderer::SetSamplerFilter(int /*textureFilter*/)
+    void PixiJsSpriteBatchRenderer::SetSamplerFilter(int textureFilter)
     {
-        // plan_pixijs.md PIXIJS-53: not yet implemented.
+        // plan_pixijs.md PIXIJS-53: same magnification-dominant TextureFilter grouping
+        // CANVAS-42/CanvasSpriteBatchRenderer::SetSamplerFilter already established -- SpriteBatch
+        // draws are near-universally magnification-dominant, so the "expand" component of
+        // TextureFilter is what visibly matters. Linear=0, Anisotropic=2, LinearMipPoint=3,
+        // MinLinearMagPointMipLinear/MipPoint... -- reusing the exact {0,2,3,7,8} set Canvas's own
+        // Task 701 derivation settled on, applied here as PIXI.SCALE_MODES.LINEAR vs .NEAREST.
+        switch (textureFilter)
+        {
+            case 0: case 2: case 3: case 7: case 8:
+                linearFilter_ = true;
+                break;
+            default:
+                linearFilter_ = false;
+                break;
+        }
     }
 
-    void PixiJsSpriteBatchRenderer::SetSamplerAddressMode(int /*addressU*/, int /*addressV*/)
+    void PixiJsSpriteBatchRenderer::SetSamplerAddressMode(int addressU, int addressV)
     {
-        // plan_pixijs.md PIXIJS-46: not yet implemented.
+        // plan_pixijs.md PIXIJS-46: PIXI.BaseTexture exposes one wrapMode for both axes -- addressU
+        // is applied at flush time as the representative value (addressV is stored but currently
+        // unused); mixed per-axis U/V modes are a known, documented boundary, not silently dropped.
+        addressU_ = addressU;
+        addressV_ = addressV;
     }
 
     void PixiJsSpriteBatchRenderer::QueueOrDraw(const ITextureRenderer& texture,
@@ -239,7 +300,9 @@ namespace CNA::Internal::Renderers::PixiJs
         if (immediateMode_)
         {
             const int pixiBlendModeCode = PixiBlendModeToPixiJsCode(activeBlendMode_);
-            CNA_PixiJs_FlushSprites(&command, 1, 14, pixiBlendModeCode);
+            const int pixiWrapMode = TextureAddressModeToPixiWrapMode(addressU_);
+            const int pixiScaleMode = linearFilter_ ? 1 : 0; // PIXI.SCALE_MODES.LINEAR/.NEAREST
+            CNA_PixiJs_FlushSprites(&command, 1, 14, pixiBlendModeCode, pixiWrapMode, pixiScaleMode);
             return;
         }
 #endif

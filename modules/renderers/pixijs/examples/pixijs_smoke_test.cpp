@@ -28,7 +28,7 @@ using namespace CNA::Internal::Renderers::PixiJs;
 
 namespace
 {
-    constexpr int kExpectedChecks = 14;
+    constexpr int kExpectedChecks = 15;
 }
 
 class PixiJsSmokeTest : public Game
@@ -79,7 +79,7 @@ protected:
             renderer.GetViewportSize(w, h);
             check(w > 0 && h > 0, "GetViewportSize() reports a positive logical size");
         }
-        else if (frame_ == 8)
+        else if (frame_ == 9)
         {
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             result_ = (passCount_ == kExpectedChecks) ? 0 : 1;
@@ -220,6 +220,28 @@ protected:
             rt.GetData(rtPixels.data(), 0, static_cast<int>(rtPixels.size()));
             check(rtPixels[0] == Color(10, 20, 30, 255),
                   "RenderTarget2D::GetData reads back the same fill color directly");
+        }
+        else if (frame_ == 8)
+        {
+            // SetSamplerFilter(Point) end-to-end: draw the 2x2 RGBY texture scaled 4x (each texel
+            // covers a 4x4 destination block) with an explicit Point-filter SamplerState, then
+            // sample destination pixel (3,1) -- the last column of the top-left (Red) texel's own
+            // footprint, one pixel before the boundary with the top-right (Green) texel. With the
+            // LinearClamp default (used by every earlier frame's Begin()), this exact pixel blends
+            // toward Green (empirically measured via a standalone probe before writing this
+            // assertion: (159,96,0,255)); Point filtering must keep it a pure, unblended Red instead
+            // -- the only way this check passes is if SetSamplerFilter's Point mapping actually
+            // reached PIXI.SCALE_MODES.NEAREST on the sampled base texture.
+            SamplerState pointClamp;
+            pointClamp.setFilterProperty(TextureFilter::Point);
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp, nullptr, nullptr);
+            spriteBatch_->Draw(*texture_, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 2, 2), Color::White);
+            spriteBatch_->End();
+
+            std::vector<Color> pixels(64 * 64, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
+            check(pixels[1 * 64 + 3] == Color(255, 0, 0, 255),
+                  "SetSamplerFilter(Point) keeps a texel-edge pixel unblended, unlike the LinearClamp default");
         }
     }
 

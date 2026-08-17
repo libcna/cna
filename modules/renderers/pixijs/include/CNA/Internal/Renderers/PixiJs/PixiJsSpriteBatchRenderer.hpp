@@ -44,7 +44,10 @@ namespace CNA::Internal::Renderers::PixiJs
         /// plan_pixijs.md PIXIJS-53: maps to PIXI.SCALE_MODES on the sampled base texture.
         void SetSamplerFilter(int textureFilter) override;
         /// plan_pixijs.md PIXIJS-46: maps to PIXI.WRAP_MODES on the sampled base texture (native
-        /// gl.REPEAT/gl.MIRRORED_REPEAT, unlike CANVAS-44's pattern-source emulation).
+        /// gl.REPEAT/gl.MIRRORED_REPEAT, unlike CANVAS-44's pattern-source emulation). Known
+        /// boundary (see PixiJsSpriteBatchRenderer.cpp): PixiJS rejects any per-draw texture frame
+        /// larger than the base texture, so this only affects linear-filter edge bleed, not the
+        /// classic XNA "oversized source rect tiles under Wrap" trick.
         void SetSamplerAddressMode(int addressU, int addressV) override;
 
         void Draw(const ITextureRenderer& texture, float x, float y) override;
@@ -95,5 +98,14 @@ namespace CNA::Internal::Renderers::PixiJs
         std::vector<DrawCommand> commands_;
         bool begun_ = false;
         bool immediateMode_ = false;
+        /// Raw TextureAddressMode ints (0=Wrap, 1=Clamp, 2=Mirror); default Clamp matches XNA/FNA's
+        /// own default SamplerState (LinearClamp). PixiJS's BaseTexture exposes one wrapMode for
+        /// both axes -- addressU is the representative value applied at flush time (PIXIJS-46's
+        /// own documented boundary: mixed per-axis U/V modes are not expressible this way).
+        int addressU_ = 1;
+        int addressV_ = 1;
+        /// True for a "linear" (smoothed) sampler, false for "point" (nearest) -- same
+        /// magnification-dominant TextureFilter grouping CANVAS-42 already established.
+        bool linearFilter_ = true;
     };
 }
