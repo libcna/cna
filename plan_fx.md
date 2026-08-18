@@ -3,8 +3,14 @@
 - Status: **Three backends supported and gated: FNA3D, SDL_GPU and the EasyGL/OpenGL family. The
   FNA3D vertical slice was declared usable (`FX-057`) on 2026-08-15; a repair pass on 2026-08-17
   (`FX-080`–`FX-090`) closed the silent-fallback and coverage gaps the first rollout left behind
-  and turned the `FX-060` shared suite into a real capability gate with a read-back draw matrix.
-  Every other renderer identity is `CompiledEffects == false` and refuses by name (section 10.2/10.3)**
+  and turned the `FX-060` shared suite into a real capability gate with a read-back draw matrix; a
+  follow-up pass on 2026-08-18 (`FX-091`–`FX-110`, Phase J) did the same for the texture/sampler/pass
+  half, which the first pass had left asserted against CNA's own state objects. `CompiledEffects`
+  remains true on all three and is now justified by drawing rather than by state inspection.
+  Every other renderer identity is `CompiledEffects == false` and refuses by name (section 10.2/10.3).
+  Section 10.5 classifies every remaining limitation as renderer-wide or compiled-Effect-specific.
+  The project-wide Definition of Done (section 10.2) is **not** met: renderer waves beyond these
+  three remain**
 - Planning baseline: `develop` at `a749fdce34a5825eb80a778b5db68e11da9358f8`
 - Target branch: `feature/fx`
 - Scope of this document: architecture, implementation checklist, and current delivery status
@@ -216,8 +222,17 @@ indefinitely on this machine.
 
 `RendererStrideConformance` on SDL_GPU is not caused by this work:
 `SdlGpuRenderer::DrawIndexedPrimitivesEx` falls through to `DrawColoredPrimitives` for a stride-24
-unlit buffer, which then refuses anything but stride 16. No file on that path is in this change
-set. It is a real SDL_GPU gap for unlit vertex-coloured glTF geometry and wants its own task.
+unlit buffer, which then refuses anything but stride 16. It is a real SDL_GPU gap for unlit
+vertex-coloured glTF geometry and wants its own task.
+
+**Correction (2026-08-18, follow-up pass).** The sentence that used to stand here -- "No file on
+that path is in this change set" -- was false: `SdlGpuRenderer.cpp` *is* in the `FX-080`-`FX-089`
+change set. What is true, and is what the conclusion actually rests on, is narrower and checkable:
+neither the stride-16 guard nor the dispatch that reaches it has been touched by any FX work.
+`git log -S "DrawColoredPrimitives requires a stride-16" -- modules/renderers/sdl-gpu/src/SdlGpuRenderer.cpp`
+returns exactly one commit, `57aee5f88` ("rename graphics backend terminology to renderer"), which
+predates this feature branch's FX work entirely. The failure is pre-existing and unrelated; the
+old wording overstated the evidence for that.
 
 The four platform boundary gates were run too: `sdl_inventory --check` and `hot_path_lint` pass;
 `sdl_classify --check` and `renderer_sdl_audit --check` fail identically on a stashed clean tree
@@ -230,6 +245,58 @@ the window's visual -- but that hook held the only call to `FNA3D_PrepareWindowA
 production path, and that call is where FNA3D *selects its driver*. Every `FNA3D_CreateDevice`
 failed with "Call FNA3D_PrepareWindowAttributes first!", so every FNA3D test failed at
 `GraphicsDevice device;`. Restored in `Fna3dRenderer`'s constructor (`FX-090`).
+
+### Verification (2026-08-18, follow-up pass)
+
+All runs on a private Xvfb (`:77`), `CnaTests` launched from the repository root, `-j3` builds, each
+tree rebuilt from the sources in this change set before it was run. The gtest filter excludes the
+same set the previous pass documented -- `TwoProcessLoopbackTest.*`, `CnaInputClipboardTest.*`,
+`MetalResourceHealth.RenderTargetCubeRendererEscapesThroughTextureCubeBaseMove`,
+`GamePlatformOwnershipTest.*` and `ENet*` -- the last because
+`ENetDiscoveryServiceTest.ReplyToQueryOnlyAnswersWhenSessionTypeFilterMatchesTheHost` hangs
+indefinitely on this machine (confirmed again this pass: an unfiltered run stopped there at 6082
+tests and had to be killed).
+
+| Tree | Configuration | Ran | Passed | Skipped | Failed |
+|---|---|---:|---:|---:|---:|
+| `cmake-build-fna3d` | `FNA3D` | 7516 | 7325 | 188 | 3 |
+| `cmake-build-sdlgpu` | `SDL_GPU`, `CNA_SDL_GPU_COMPILED_EFFECTS=ON` | 7436 | 7299 | 131 | 6 |
+| `cmake-build-easygl` | `OPENGLES3`, `CNA_EASYGL_COMPILED_EFFECTS=ON` | 7459 | 7398 | 60 | 1 |
+
+Every failure classified, none introduced by this pass:
+
+| Test | Trees | Classification |
+|---|---|---|
+| `TerminalRestoration.SighupGivesTheTerminalBack` | all three | **Harness artifact of this pass's own run method.** The suites were launched under `setsid nohup` so they would survive the 120-second foreground limit, which leaves the process with no controlling terminal. Re-running the case attached passes all seven `TerminalRestoration` cases. Not a product failure, and not present in the previous pass's numbers because that pass ran attached |
+| `GameEventSemanticsGoldenTest.../Headless` and `/Terminal` | FNA3D, SDL_GPU | **Pre-existing**, the documented golden gap; unchanged from the previous pass |
+| `CnjEffectTest.LoadsRealCnjFixture`, `CnjStockEffectTest.CustomGlslEffectStillWorks` | SDL_GPU | **Pre-existing**, the documented `Cnj*` GLSL-dialect gap |
+| `RendererStrideConformance.EveryGltfStrideReachesTheNativeDrawBoundary` | SDL_GPU | **Pre-existing**, the stride-24 gap; see the corrected note in the previous pass's verification section for the evidence |
+
+EasyGL went from 7392 passing (previous pass) to **7398 with zero product failures**, the difference
+being this pass's own additions.
+
+**Sanitizers.** `cmake-build-fna3d-asan` (`FNA3D`, `CNA_SANITIZE=address,undefined`, Debug) rebuilt
+from these sources and run over the Effect/compiled-effect/XNB/sampler-cache subset: **929 tests
+ran, 928 passed, 1 skipped, 0 failed**, and **zero AddressSanitizer findings**. Five distinct
+UndefinedBehaviorSanitizer reports, every one of them inside **pinned MojoShader** and none in CNA
+code -- the same five the previous pass recorded, at the same sites:
+
+- `mojoshader_common.c:1050` -- `signed integer overflow: 1000000000 * 10 cannot be represented in
+  type 'int'`, in its own string-to-number parsing;
+- `mojoshader_effects.c:1617`, `:1641`, `:1825`, `:1831` -- `null pointer passed as argument 2,
+  which is declared to never be null`, i.e. `memcpy`/`memset` with a null source and a zero length,
+  which is technically undefined and practically harmless.
+
+Nothing new and nothing attributable to this change set. LeakSanitizer is disabled for the run for
+the reason the previous pass recorded (every record attributed to `libGLX_mesa.so`).
+
+**Platform boundary gates.** `sdl_inventory --check`, `sdl_ratchet --check`, `hot_path_lint` and
+`nonproduction_sdl_audit --check` all pass. `sdl_classify --check` and `renderer_sdl_audit --check`
+fail on the same pre-existing items the previous pass recorded (the `SDL_WINDOWEVENT_*` symbols and
+the `pixijs` family); neither is touched by this change set.
+
+**Release build:** not run. The three trees above are Debug, which is what they were configured as;
+this pass did not create a Release configuration and does not claim Release verification.
 
 ## 1. Executive conclusion
 
@@ -637,7 +704,7 @@ values everywhere except inside a structure.
 
 | ID | Task | Depends on | Acceptance criteria |
 |---|---|---|---|
-| FX-060 | Extract a reusable shared backend conformance suite from the FNA3D tests | FX-057 | **Done, and materially widened by `FX-084`-`FX-088` (2026-08-17).** `tests/support/CNA/TestSupport/` holds the Direct3D 9 Effect Framework format constants, the deterministic fixture builders (a hand-assembled Shader Model 2.0 **pair** now -- pixel and vertex) and sixteen contract sections: format, reflection, **parameter API**, techniques/passes, render state, state policy, samplers, texture binding, clone, lifecycle, **draw matrix, multi-stream, instancing, SpriteBatch, orientation and effect switching**, plus an explicit unsupported-backend contract. A backend adds one test file that builds its device and calls them. FNA3D runs it and static-asserts the neutral constants against its parser's own enumerations. Every draw section reads a pixel back and compares it against the effect's own parameter, which is what makes the suite able to see a silent stock-shader fallback at all -- the nine original sections could not have |
+| FX-060 | Extract a reusable shared backend conformance suite from the FNA3D tests | FX-057 | **Done, and materially widened by `FX-084`-`FX-088` (2026-08-17).** `tests/support/CNA/TestSupport/` holds the Direct3D 9 Effect Framework format constants, the deterministic fixture builders (a hand-assembled Shader Model 2.0 **pair** now -- pixel and vertex) and a contract section per shape: format, reflection, **parameter API**, techniques/passes, render state, state policy, samplers, texture binding, clone, lifecycle, and the drawing sections **enumerated in `RunCompiledEffectContract`'s own doc comment** (draw matrix, multi-stream, instancing, SpriteBatch and its multi-pass and texture-slot shapes, sampler pixels, pass selection, render-target source, stock-draw isolation, orientation, effect switching), plus an explicit unsupported-backend contract. That doc comment is the single place the drawing sections are listed; this row deliberately no longer carries a count, because three separate documents had drifted to three different ones (`FX-093`). A backend adds one test file that builds its device and calls them. FNA3D runs it and static-asserts the neutral constants against its parser's own enumerations. Every draw section reads a pixel back and compares it against the effect's own parameter, which is what makes the suite able to see a silent stock-shader fallback at all -- the nine original sections could not have |
 | FX-061 | Implement and gate SDL_GPU through the MojoShader SDL adapter | FX-030, FX-060 | **Done -- `SupportsCompiledEffects()` reports true.** `cna_configure_mojoshader()` separates the dependency from FNA3D, the renderer-neutral translation moved to `modules/renderers/common/mojoshader` and is shared with FNA3D, and `SdlGpuCompiledEffect` creates, clones, reflects, selects techniques and passes, translates render and sampler states, and validates parameter and texture assignment against MojoShader's own SDL_GPU adapter. Two existence gates plus dedicated tests cover it, and one of those tests caught a real crash: several MojoShader parse failures are static sentinels rather than allocations, and deleting one walks static storage -- now guarded in the shared module for every backend. `FX-071` closed the remaining gaps: a real draw route, a golden-pixel test, and the FX-060 shared suite passing through the public `Effect`/`GraphicsDevice` API. Still refused explicitly rather than silently mishandled: vertex-stage sampling, 3D/cube textures, and multi-stream declarations |
 | FX-062 | Implement and gate EasyGL/OpenGL-family support through MojoShader GL | FX-030, FX-060 | **Done -- `SupportsCompiledEffects()` reports true.** `EasyGLCompiledEffect` (`modules/renderers/easygl/{include,src}/.../EasyGLCompiledEffect.{hpp,cpp}`) creates, clones, reflects, selects techniques and passes, and translates render/sampler states against MojoShader's own OpenGL adapter, reusing the shared `CNA::Internal::Renderers::MojoShaderEffect` translation module FX-061 already built and the existence gate's calling-convention trampolines. Simpler than the SDL_GPU runtime in two ways the existence gate predicted: no separate link step (`MOJOSHADER_glBindShaders` links and binds in one call) and no uniform-snapshot capture (EasyGL draws immediately, no `Present()`-deferred queue). New `CNA_EASYGL_COMPILED_EFFECTS` CMake option, off by default. `EasyGLRenderer::BindCompiledEffectForDrawEXT` closed the remaining gap (`FX-062`'s own equivalent of `FX-071`): it matches the caller's `VertexDeclaration` against the applied pass's reflected vertex attributes (`MOJOSHADER_glSetVertexAttribute` per match), binds each reflected pixel-stage sampler's texture, and calls `MOJOSHADER_glProgramReady()` then `MOJOSHADER_glProgramViewportInfo()` before a new compiled-effect branch in `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` dispatches the draw -- ahead of the stock declaration guard, mirroring the SDL_GPU draw route. Verified by 13 tests, including a golden-pixel render-target test (byte-identical expected RGBA to SDL_GPU's, cross-validating the shared MojoShader preshader fix a third time) and the FX-060 shared suite, plus a full 6910-test `CnaTests` regression run on `cmake-build-easygl` (OPENGLES3) with zero new regressions (5 failures, all pre-existing/environmental). Also fixed a latent bug in `GraphicsDeviceCapabilityTests.cpp`'s `kExpectCompiledEffects`: it checked renderer selection alone, which would have wrongly expected `true` for a plain SDL_GPU/EasyGL build lacking their off-by-default `CNA_SDL_GPU_COMPILED_EFFECTS`/`CNA_EASYGL_COMPILED_EFFECTS` opt-in. **Superseded in part by the 2026-08-17 repair pass:** the four gaps this row originally recorded as "refused explicitly" for SpriteBatch, sampler state, instancing and multi-stream were not all refusals -- SpriteBatch and instancing silently used the stock shader instead. All four are now implemented (`FX-080`, `FX-082`, `FX-083`). What remains genuinely refused by name: vertex-stage sampling and 3D/cube sampler bindings. Accepted-and-inert, documented rather than approximated: `AddressW`, and `MipMapLevelOfDetailBias` on the OpenGL ES profiles |
 | FX-063 | Implement and gate DirectX 11 through the MojoShader D3D11 adapter | FX-030, FX-060 | Full shared suite passes on the supported Windows CI matrix |
@@ -892,6 +959,38 @@ top of this file; the acceptance criteria are here.
 | FX-089 | Settle compiled string-parameter semantics against XNA, not against FNA's FIXME | FX-016 | **Done.** XNA's `EffectParameter.SetValue(string)`/`GetValueString()` (decompiled `Microsoft.Xna.Framework.Graphics`) reject a parameter whose `_paramType` is not `String` with `InvalidCastException`, and otherwise set/get through `ID3DXBaseEffect`. CNA now does the same for a compiled parameter; the value lives in CNA's own per-instance storage because an Effect Framework string is CPU-side reflection data no shader stage reads, so nothing has to mutate MojoShader's shared object table. A CNA-constructed stock/CNAEXT parameter keeps its lenient behaviour, which the C API's own standalone-parameter tests rely on |
 | FX-090 | Restore FNA3D device creation (out of FX scope, but it blocked verifying FX on the reference backend) | - | **Done.** `plan_runtimerenderer.md` RTR-P1-D41 removed the descriptor's `prepareWindowFlags` hook in favour of static data. That was correct for the window's visual and wrong for FNA3D, whose `FNA3D_PrepareWindowAttributes()` is also where the driver is *selected*: with the hook gone nothing called it, and every `FNA3D_CreateDevice` refused. `Fna3dRenderer`'s constructor calls it before creating the device. Before this fix every FNA3D test failed at `GraphicsDevice device;` |
 
+### Phase J - Follow-up repair: sampler identity, GPU-visible conformance, batching (2026-08-18)
+
+A second independent audit of `FX-080`-`FX-090` reported one HIGH-severity defect and a set of
+verification gaps. Verifying each of them against the tree found the reported defects real, found
+three the audit had not reached -- each of them a *silent* wrong-pixels fallback on a backend
+advertising `CompiledEffects` -- and found one reported defect not reproducible as described.
+
+The organising principle of the previous pass was "the suite must prove the compiled shader is what
+draws". This pass extends it: **the suite must prove the compiled Effect's texture, sampler and pass
+semantics reach the GPU**, because everything in that half was previously asserted against CNA's own
+state objects and could therefore break without a single test noticing.
+
+| ID | Task | Depends on | Acceptance criteria |
+|---|---|---|---|
+| FX-091 | Replace SDL_GPU's packed sampler-cache key with a structured one | FX-083 | **Done.** The key was a hand-packed `uint64` with the 32-bit LOD bias shifted to bit 40, so its top eight bits -- an IEEE-754 float's sign and seven of its eight exponent bits -- fell off the end: `0.0`, `+/-0.5`, `+/-2.0` and `+/-8.0` produced one key and `+/-1.0`, `+/-4.0`, `0.25` produced another, and each family was served the first native sampler ever built for it. `MaxMipLevel` was masked to eight bits on top of that. It is now `SamplerCacheKeyEXT`, a struct with defaulted member-wise equality and an FNV-1a hash over every member, covering filter, addressU, addressV, **addressW**, maxAnisotropy, maxMipLevel and the bias's exact bit pattern; `addressW` is carried even though this renderer's 2D-only compiled sampling cannot observe it, so adopting the axis later cannot be handed a sampler built for a different W mode. Pinned by `SdlGpuSamplerCacheKeyTest` (four cases: the aliasing bias list, signed zero and NaN determinism, one-field-at-a-time identity across all nine filters and all three modes per axis, and `MaxMipLevel`'s full signed range) |
+| FX-092 | Stop a compiled Effect's sampler state leaking into later stock draws | FX-083 | **Done, and wider than reported.** EasyGL's `samplers_[slot]` is one long-lived GL sampler object mutated in place, so every property `ApplySamplerState` did not write survived from whoever wrote it last -- and `ApplySamplerMipState` writes three of them. `ApplySamplerState` now establishes the sampler's **complete** state from its own arguments: min/mag filter, wrap S/T/R, anisotropy, `GL_TEXTURE_MIN_LOD`, `GL_TEXTURE_MAX_LOD`, `GL_TEXTURE_LOD_BIAS` and `GL_TEXTURE_COMPARE_MODE`. EasyGL also adopted `ApplySamplerAddressW` (`GL_TEXTURE_WRAP_R`), which was previously accepted and dropped. The same leak shape was then found on **FNA3D**, which the audit had not reported: its stock `SpriteBatch` flush copied `samplerStates_[0]` and overrode only filter and addressing, inheriting `maxAnisotropy`/`maxMipLevel`/`mipMapLevelOfDetailBias` from whatever wrote the slot last. FNA has no such inheritance -- `PrepRenderState` assigns the batch's whole `SamplerState` to slot zero -- so the sprite sampler is now built from the batch's state plus `SamplerState`'s own defaults. Pinned by `RunCompiledEffectStockDrawIsolationContract`, which clamps a compiled Effect to mip level 1, draws, then draws the same mipmapped texture through the stock sprite program and requires the base level back |
+| FX-093 | Give the shared fixture a pixel shader that actually samples | FX-084 | **Done.** `BuildSyntheticSamplingEffect` emits `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint` with the vertex shader forwarding TEXCOORD0 to `oT0`. Every Direct3D 9 token in it (`dcl t0`, `dcl_2d s0`, `texld`, `mul`, and the vs `mov oT0.xy, v1`) was checked against `fxc`'s own output for `CnaConformanceEffect.fx`'s `MainPixelShader`, which is the same shape, so the fixture stays compiler-free without being guesswork. Before this, every drawable fixture had no sampler at all, so the entire texture/sampler half of a compiled Effect could break with the draw suite still green |
+| FX-094 | Make two passes of the shared fixture GPU-observably different | FX-084 | **Done.** A drawable fixture now carries a second pixel shader, `oC0 = Tint.yzxw`, and gives it to pass `P0` alone; `StatePass` and `P1` keep the unrotated one. One channel rotation is enough to tell them apart and costs one extra object. `RunCompiledEffectPassSelectionContract` draws each pass in turn, returns to the first, and selects a second technique's pass by name. Before this every pass of a drawable fixture bound the identical program pair, so a backend that applied pass 0 where the contract asked for pass 1 -- or fell back to "the first pass" when it could not resolve one -- rendered identical pixels and passed |
+| FX-098 | Stop EasyGL's compiled draws silently running the stock program | FX-062 | **Done. Not reported by the audit; found while building the fixture above.** `MOJOSHADER_glBindProgram` shadows the bound GL program (`if (program == ctx->bound_program) return;`) and `MOJOSHADER_glProgramReady` never calls `glUseProgram` at all. So the moment anything else in the renderer bound its own program -- every stock 3D draw's `p.prog.use()`, every SpriteBatch flush's `program_.use()`, and even the `program_.use()` inside `EasyGLSpriteBatchRenderer`'s **constructor** -- MojoShader still believed its program was current and every later compiled draw in the process ran the stock program instead, permanently, with no diagnostic. Merely constructing a `SpriteBatch` was enough. `BindCompiledEffectForDrawEXT` now bounces the bound pair through `MOJOSHADER_glBindShaders(nullptr, nullptr)` and back, which is the public API for "assume nothing about the GL program"; the pair comes from the linker cache, so nothing is recompiled and the program's refcount goes 2 -> 1 -> 2 with the cache's own reference holding it. Pinned by `RunCompiledEffectSwitchingContract`, which now interleaves a stock `BasicEffect` draw and a stock `SpriteBatch` draw with compiled ones in both directions -- something its own doc comment already claimed and its code did not do |
+| FX-099 | Let a compiled Effect sample a `RenderTarget2D`, the right way up | FX-062, FX-071 | **Done. The audit's F-2 as reported was NOT reproduced; the underlying gap was worse.** The claim was that EasyGL silently samples a render target mirrored. It did not: `EasyGLCompiledEffect::SetParameterTexture` **refused a `RenderTarget2D` outright** (`AsEasyGLTexture` recognised only `EasyGLTextureRenderer`), so the most ordinary use a compiled Effect has -- post-processing a scene the game just drew -- could not be expressed at all. SDL_GPU refused it identically. Both resolvers now accept a render target. On SDL_GPU nothing else was needed: its targets store rows the same way up as an uploaded texture. On EasyGL they do not, and MojoShader's generated GLSL carries none of this renderer's own `uRtFlipV`/`cnaSampleUV` sampling-time correction and cannot be made to -- so `AcquireCompiledEffectFlippedSourceEXT` blits the source's colour texture into a per-slot copy with the destination Y range reversed and binds the copy. Applied only where `SampledRowOrderIsBottomUp()` is true, so an ordinary `Texture2D` is never flipped; reallocated only when the source's extent or level count changes; refused by name on the ES 2 profiles, which have no `glBlitFramebuffer`, and when the source is the target currently being drawn into. Pinned by `RunCompiledEffectRenderTargetSourceContract` (stock baseline, one hop, two hops, and a plain `Texture2D` that must not be flipped), verified to fail when the blit's Y reversal is removed |
+| FX-100 | Size FNA3D's SpriteBatch projection from the bound render target | - | **Done. Out of FX scope, but it blocked two of this pass's contracts.** `Fna3dSpriteBatch`'s pixel-space projection came from `GetViewportSize()`, which is the renderer-wide LOGICAL extent and always reported the back buffer. A stock `SpriteBatch` drawing into a `RenderTarget2D` smaller than the window therefore projected its pixels into a fraction of clip space: for an 8x8 target against the test window it rasterized nothing at all, silently. EasyGL and SDL_GPU both size this from the bound target already. `GetViewportSize` keeps its meaning (input coordinate transforms read the same method); the sprite projection reads `boundTargets_` when one is bound |
+| FX-101 | Make a repeated `EffectPass.Apply()` re-establish its own pass state on FNA3D | FX-071 | **Done. Not reported by the audit.** CNA cleared its `MOJOSHADER_effectStateChanges` before every `FNA3D_ApplyEffect`. MojoShader writes that struct only in `effectBeginPass`, and FNA3D reaches that only when the effect, technique or pass CHANGES -- re-applying the same pass takes the `MOJOSHADER_effectCommitChanges` shortcut, which leaves the struct holding the pass's own pointers. FNA depends on exactly that: it allocates the struct once per Effect and never clears it. Clearing it made every repeat application publish nothing -- no render states, no sampler states, no texture binding -- so the second and every later `Apply()` of one compiled sampling effect silently dropped its own sampler binding and the draw that followed rendered nothing. Reproduced with two consecutive draws of one effect, which produced the clear colour from the second onwards; a game holding one Effect across a frame is the normal case, not an edge one. Pinned by a repeat-apply section in `RunCompiledEffectSamplerPixelContract` |
+| FX-102 | Give SDL_GPU's SpriteBatch XNA's own compiled-Effect batching granularity | FX-071, FX-080 | **Done.** XNA runs a compiled Effect's passes at flush granularity over a contiguous run of same-texture sprites (`SpriteBatch.FlushBatch` splits the runs, `DrawPrimitives` wraps each run's draw in `foreach (pass)`), so for two sprites sharing a texture the order is pass-major. SDL_GPU applied the passes inside `Draw()` and queued the sprite once per pass, which is sprite-major -- a different image under any order-dependent blend. Sprites are now recorded until the flush and replayed run-major then pass-major; `SpriteSortMode::Immediate` is deliberately NOT routed through it, because XNA flushes per `Draw()` there and the per-sprite loop is already the right order. Pinned by `RunCompiledEffectSpriteBatchMultiPassContract`, which uses `BlendState.NonPremultiplied` and two overlapping half-transparent sprites so the two orders differ by 192 against 160 out of 255; verified to produce exactly 160 when the fix is reverted |
+| FX-103 | Test that a sprite's own texture wins slot 0 | FX-080 | **Done.** FNA's `SpriteBatch.DrawPrimitives` sets `GraphicsDevice.Textures[0] = texture` immediately after `pass.Apply()` ("Set this _after_ Apply, otherwise EffectParameters override it!"). `RunCompiledEffectSpriteBatchTextureSlotContract` gives the effect's own texture parameter a red texture and draws a green/blue sprite, so which one reached the sampler is the read-back pixel; the same batch also checks that a source rectangle and `SpriteEffects.FlipHorizontally` reach the shader as texture coordinates, which is only observable once something samples |
+| FX-104 | Add the positive half of the compiled string-parameter contract | FX-089 | **Done.** `BuildSyntheticStringParameterEffect` declares `Caption`, a real Effect Framework string object with an initial value. The parameter contract now checks the reflected type and class, the initial value, set/get, the empty string as a value in its own right, clone independence in both directions, and that applying an effect carrying one uploads nothing |
+| FX-105 | Reject the numeric accessors on a String parameter | FX-104 | **Open, deliberately.** XNA rejects `GetValueSingle()`/`SetValue(float)` on a String parameter with `InvalidCastException`; CNA's numeric accessors reach the compiled byte storage with no type check, so they read and write the object-table index behind the string. Every numeric accessor on `EffectParameter` needs the guard (there are ~30, and `compiledStorage_` is touched in ~140 places), which is a wider change than a repair pass should make. Written down rather than half-done; the contract carries the same note where the assertion would go |
+| FX-106 | Cover per-stream offsets and the instancing edges | FX-082, FX-086 | **Done.** The multi-stream contract now binds each stream at a DIFFERENT non-zero `VertexOffset` and draws from a non-zero `vertexStart`, with junk in front of each buffer's real data, so ignoring the offsets, applying one stream's to both, or folding them and losing the remainder all read junk. The instancing contract adds a non-zero `baseVertex`, `startIndex` and instance-stream `VertexOffset`, and then an ordinary non-instanced compiled draw that must read its second stream per vertex -- a divisor left at 1 on the shared array object makes the whole quad stop depending on that stream |
+| FX-107 | Rebuild the compiled route's GL objects across a context recreation | FX-082 | **Done, as an explicit refusal plus a real reset.** The compiled route owns two GL objects outside easy-gl's recovery registry: the shared vertex array object and the per-slot flipped-source copies. `compiledEffectVaoCreated_` stayed true across a recreation while the name behind it died with the old context, so every later compiled draw bound array object 0 and rasterized nothing. Both are now dropped (handles only, no GL call) inside the context-loss transaction. The deeper half is refused rather than faked: MojoShader's context owns the linked programs for every live compiled Effect, rebuilding them means rebuilding the effects from bytecode the game no longer holds, so `RequireCompiledEffectContextEXT` throws by name once the meta-gl context generation moves past the one MojoShader's context was made in. Pinned by `EasyGLCompiledEffectDrawTest.CompiledDrawObjectsSurviveAContextRecreation`, which accepts either a correct draw or a named refusal and rejects silence |
+| FX-108 | Name the 3D/cube and vertex-stage refusals by shape, and classify them | FX-062, FX-071 | **Done.** EasyGL's pixel-sampler refusal used to fold three different situations into one message ("an unbound slot, or a 3D/cube texture"). It now names `Texture3D` and `TextureCube` separately, says that the renderer samples both elsewhere, and says the limitation is specific to compiled Effects; SDL_GPU's does the same. The vertex-stage refusal is explicitly marked as the OTHER kind -- renderer-wide, because no renderer consumes the public vertex-sampler surface at all (`FX-109`). See the limitation table in section 10.5 |
+| FX-109 | Decide what `GraphicsDevice.VertexTextures`/`VertexSamplerStates` are | FX-026 | **Open, classified.** Verified: `IGraphicsRenderer` has no vertex-sampler or vertex-texture hook of any kind, and `GraphicsDevice` never pushes either collection anywhere. Both are public XNA API that reaches no renderer -- a **renderer-wide** unimplemented feature, not a compiled-Effect one. The single exception is FNA3D's compiled effect, which reads the effect's OWN vertex sampler assignments and calls `FNA3D_VerifyVertexSampler` directly, bypassing the public collections entirely. So compiled Effects are the only place vertex-stage sampling works at all in CNA today, and only on FNA3D. Implementing the public surface means a new renderer hook plus per-renderer support and is out of this pass's scope |
+| FX-110 | Implement compiled-Effect 3D/cube sampler bindings | FX-108 | **Open.** Both EasyGL and SDL_GPU sample `Texture3D` and `TextureCube` in their ordinary draw families; only the compiled-effect binding path resolves 2D alone. The work is not large -- both renderers' resolvers would accept the other kinds and the reflected `MOJOSHADER_sampler.type` would have to be validated against the bound texture's kind, so a `sampler2D` cannot be handed a cube -- but it needs `dcl_cube`/`dcl_volume` fixtures the shared suite does not have yet, which is why it is written down rather than started inside a repair pass |
+
 ## 9. Required test matrix
 
 Every renderer that claims `CompiledEffects` must run the following shared categories:
@@ -1008,9 +1107,11 @@ suite and enabled `CompiledEffects`, or has an explicit documented unsupported r
 with that renderer's purpose. FNA3D support alone is a valuable production milestone, but must not
 be presented as universal CNA renderer support.
 
-#### Assessment (2026-08-17)
+#### Assessment (2026-08-17, re-confirmed 2026-08-18)
 
-**Not yet closed**, and the plan says so rather than declaring victory on three backends.
+**Not yet closed**, and the plan says so rather than declaring victory on three backends. The
+2026-08-18 follow-up pass did not change this verdict and was not scoped to: it hardened the three
+supported backends, it did not add a fourth.
 
 | Renderer | `CompiledEffects` | Evidence |
 |---|---|---|
@@ -1020,18 +1121,30 @@ be presented as universal CNA renderer support.
 | SDL_GPU / EasyGL with the option off | false | The runtime is not compiled in; the capability reports false and construction refuses by name |
 | every other identity | false | Section 10.3: planned, assessed-feasible, or unsupported by design |
 
-What is still open before 10.2 can close:
+What is still open before 10.2 can close (updated 2026-08-18):
 
 - DirectX 11 (`FX-063`), Vulkan (`FX-065`), Metal (`FX-066`) and DirectX 9 (`FX-070`) are unwritten;
   three of the four cannot be verified on this Linux machine at all.
 - `FX-069`'s final cross-renderer matrix depends on those.
-- Two refusals are shared by both new backends and are real functional gaps, not design choices: a
-  compiled effect whose **vertex shader samples a texture**, and a **3D or cube** sampler binding.
-  Both throw by name, so no content renders wrongly -- but an effect using either cannot run.
+- A **3D or cube** sampler binding is still refused on SDL_GPU and EasyGL. Both renderers sample
+  those kinds elsewhere, so this is a compiled-Effect-specific gap and carries `FX-110`.
+- A compiled effect whose **vertex shader samples a texture** is refused on SDL_GPU and EasyGL. This
+  is renderer-wide, not compiled-Effect-specific: `IGraphicsRenderer` has no vertex-sampler hook of
+  any kind and `GraphicsDevice.VertexTextures`/`VertexSamplerStates` reach no renderer at all
+  (`FX-109`). FNA3D's compiled effect is the only place vertex-stage sampling works in CNA today,
+  and it does so from the effect's own assignments, bypassing the public collections.
+- A compiled draw after a GL context recreation is refused by name on EasyGL (`FX-107`).
 - SDL_GPU cannot bind more than one vertex stream and has no instanced draw path at all, for stock
   and compiled effects alike. That is a renderer-wide gap, not a compiled-effect one.
-- `SamplerState.AddressW` is carried through the neutral contract and consumed only by FNA3D.
-- `MipMapLevelOfDetailBias` is unrepresentable on the OpenGL ES profiles.
+- `MipMapLevelOfDetailBias` is unrepresentable on the OpenGL ES profiles, and `AddressW` on the
+  OpenGL ES 2 / WebGL 1 profiles. Both renderer-wide API limits, not gaps.
+- `EffectParameter`'s numeric accessors do not reject a `String` parameter (`FX-105`).
+
+Closed since the previous assessment: `AddressW` is now consumed by EasyGL as well as FNA3D
+(`FX-092`), and a `RenderTarget2D` is accepted as a compiled sampler's source on all three
+backends (`FX-099`).
+
+Section 10.5 carries the same information as a single table, classified by limitation kind.
 
 ### 10.3 Per-renderer assessment (`FX-067`, 2026-08-15)
 
@@ -1157,6 +1270,37 @@ flips to true before it passes the `FX-060` shared suite in full.
 - enabling a capability after parser-only or shader-only success;
 - silently substituting stock shaders, ignoring pass states, or falling back to pass 0;
 - requiring every fixed-function or CPU renderer to emulate arbitrary programmable shaders.
+
+### 10.5 Limitation classes on a supported backend (2026-08-18)
+
+Once a renderer advertises `CompiledEffects == true`, every remaining "this does not work" needs to
+say *which kind* of not-working it is, because the two kinds carry different obligations. Folding
+them together is how a compiled-Effect gap gets excused as a renderer property, and how a renderer
+property gets mistaken for something the FX work still owes.
+
+**Case 1 - renderer-wide limitation.** The renderer does not support the operation through *any*
+route. A compiled Effect is not expected to add it, and the general capability surface should already
+say so. The correct behaviour is a refusal that names the operation and says it is renderer-wide.
+
+**Case 2 - compiled-Effect-specific limitation.** The renderer performs the operation elsewhere, and
+only the compiled-Effect path cannot. This is a debt of the FX work, it belongs in this plan with a
+task ID, and the refusal must say so rather than implying the renderer cannot do it.
+
+Neither case may ever be a silent fallback, a substituted texture, an ignored state or an ignored
+pass. That is the line `CompiledEffects == true` is a promise about.
+
+| Limitation | Class | FNA3D | SDL_GPU | EasyGL | Task |
+|---|---|---|---|---|---|
+| Vertex-stage texture sampling from `GraphicsDevice.VertexTextures`/`VertexSamplerStates` | **Case 1**, renderer-wide on *every* CNA renderer -- `IGraphicsRenderer` has no hook and `GraphicsDevice` pushes neither collection anywhere | n/a | n/a | n/a | `FX-109` |
+| Vertex-stage sampling from an Effect's own `sampler_state` | Supported on FNA3D; **Case 1** elsewhere, since those renderers have no vertex-sampler path at all | works | refused by name | refused by name | `FX-109` |
+| A compiled sampler bound to a `Texture3D` or `TextureCube` | **Case 2** -- both renderers sample these in their ordinary draw families | works | refused by name and shape | refused by name and shape | `FX-110` |
+| A compiled Effect sampling a `RenderTarget2D` | Was **Case 2** (refused outright); now works everywhere | works | works | works, via a row-order-corrected copy | `FX-099` |
+| `MipMapLevelOfDetailBias` on the OpenGL ES profiles | **Case 1** -- `GL_TEXTURE_LOD_BIAS` does not exist in OpenGL ES, which is why FNA3D's own GL driver skips it | works | works | desktop profiles only | `FX-083` |
+| `AddressW` on the OpenGL ES 2 / WebGL 1 profiles | **Case 1** -- no sampler objects and no `GL_TEXTURE_WRAP_R`; those profiles have no volume textures either | works | recorded, unobservable (2D-only sampling) | ES 3+ profiles only | `FX-092` |
+| A compiled draw after a GL context recreation | **Case 2** -- the renderer's own resources recover; MojoShader's context and its linked programs do not | n/a (no context loss) | n/a (no context loss) | refused by name | `FX-107` |
+| More than one vertex stream, and instanced draws | **Case 1** on SDL_GPU -- it reports `MultiStreamVertexInput` false, so `GraphicsDevice` refuses before the FX layer is reached | works | renderer-wide, capability says so | works | - |
+| `SamplerState.MaxMipLevel`/`MipMapLevelOfDetailBias` on SDL_GPU's **stock** draw families | **Case 1**, and the inverse of the usual direction: the compiled route carries both, the stock families still capture only filter/addressing/anisotropy | works | stock families only | works | `docs/sampler-state-support.md` §6b |
+| `EffectParameter`'s numeric accessors on a `String` parameter | **Case 1**, shared layer -- no type check, so they read the object-table index | open | open | open | `FX-105` |
 
 ## 11. Recommended critical path
 

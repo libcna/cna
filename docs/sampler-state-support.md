@@ -109,12 +109,12 @@ clamping automatic LOD selection to level 0 regardless of filter) — all fixes 
 Vulkan `Texture2D` mips to work at all. The confounded Vulkan test variant was un-registered rather
 than left misleadingly failing for the wrong reason.
 
-## 6b. `MaxMipLevel` and `MipMapLevelOfDetailBias` (plan_fx.md FX-074, 2026-08-17)
+## 6b. `MaxMipLevel` and `MipMapLevelOfDetailBias` (plan_fx.md FX-083, 2026-08-17)
 
 `IGraphicsRenderer::ApplySamplerMipState(slot, maxMipLevel, lodBias)` carries XNA's two LOD states
 across the renderer-neutral boundary. It has a default no-op body, so a renderer that has not
 adopted it accepts the state, publishes it on `GraphicsDevice.SamplerStates[slot]`, and does not
-change what the GPU samples. That was true of **every** renderer except FNA3D until FX-074.
+change what the GPU samples. That was true of **every** renderer except FNA3D until FX-083.
 
 | Renderer | `MaxMipLevel` | `MipMapLevelOfDetailBias` |
 |---|---|---|
@@ -123,6 +123,7 @@ change what the GPU samples. That was true of **every** renderer except FNA3D un
 | EasyGL, ES 3 profiles (`OPENGLES3`, `WEBGL2`) | **implemented** — sampler-object `GL_TEXTURE_MIN_LOD` | **not representable**: OpenGL ES has no `GL_TEXTURE_LOD_BIAS` at all |
 | EasyGL, `OPENGL33` | **implemented** — `GL_TEXTURE_MIN_LOD` | **implemented** — `GL_TEXTURE_LOD_BIAS` |
 | EasyGL, ES 2 profiles (`OPENGLES2`, `WEBGL1`) | **not representable**: no sampler objects and no `GL_TEXTURE_MIN_LOD` | not representable |
+| EasyGL `AddressW` | **implemented on the ES 3 and desktop profiles** since FX-092 — sampler-object `GL_TEXTURE_WRAP_R`; not representable on the ES 2 profiles, which have neither sampler objects nor volume textures | — |
 | every other renderer | default no-op | default no-op |
 
 Why `GL_TEXTURE_MIN_LOD` rather than FNA3D's `GL_TEXTURE_BASE_LEVEL`: base level is texture-object
@@ -136,6 +137,33 @@ draw route. The stock 3D draw families capture only filter/addressing/anisotropy
 deferred command structs, so a game assigning `GraphicsDevice.SamplerStates[0].MaxMipLevel` and
 then drawing with `BasicEffect` still gets `min_lod = 0`. Closing that means adding the two fields
 to each family's command struct; it is a stock-draw sampler task, not a compiled-effect one.
+
+### 6b.1 Sampler identity and state lifetime (plan_fx.md FX-091, FX-092, 2026-08-18)
+
+Two follow-up findings, both about the same thing: what a renderer's sampler is a function OF.
+
+**SDL_GPU's sampler cache key was lossy.** It packed the description into a `uint64` with the
+32-bit LOD bias shifted to bit 40, so an IEEE-754 float's sign and seven of its eight exponent bits
+fell off the end. `0.0`, `+/-0.5`, `+/-2.0` and `+/-8.0` produced one key; `+/-1.0`, `+/-4.0` and
+`0.25` produced another; each family was served the first native sampler ever built for it.
+`MaxMipLevel` was masked to eight bits on top of that. It is now a struct with member-wise equality
+over filter, all three address modes, anisotropy, `MaxMipLevel` and the bias's exact bit pattern.
+The lesson generalises: a cache key assembled by bit-shifting is a silent-corruption hazard, because
+losing a field costs nothing at the point where it happens and everything at the point where it is
+read.
+
+**A mutated sampler object keeps what nobody rewrote.** EasyGL keeps one long-lived GL sampler per
+slot, and FNA3D keeps one `FNA3D_SamplerState` per slot; both were written by
+`ApplySamplerState`-shaped calls that describe only filter and addressing. So `MaxMipLevel` and the
+LOD bias, once written by an Effect's own `sampler_state` block, survived into every later draw on
+that slot -- including a stock `SpriteBatch` flush, which in XNA assigns its whole `SamplerState` to
+slot zero and therefore resets them. Both renderers now establish the complete sampler state on
+every application rather than the subset the call names. Any renderer that keeps mutable per-slot
+sampler state has this hazard; a renderer that builds a fresh descriptor per draw (Vulkan, WebGPU)
+cannot.
+
+EasyGL also adopted `ApplySamplerAddressW` in the same pass, so its `GL_TEXTURE_WRAP_R` row above is
+no longer "not adopted".
 
 ## 7. Anisotropic filtering (Task 299, EasyGL row updated 2026-07-11 per Task 918)
 

@@ -191,24 +191,40 @@ half is that the state actually filters the sampled texture. What each backend c
 |---|---|---|---|---|
 | `Filter` | yes | yes | yes | yes |
 | `AddressU` / `AddressV` | yes | yes | yes | yes |
-| `AddressW` | yes | no (clamped) | no | no |
+| `AddressW` | yes | recorded, unobservable | yes (`GL_TEXTURE_WRAP_R`) | yes (`GL_TEXTURE_WRAP_R`) |
 | `MaxAnisotropy` | yes | yes | yes | yes |
 | `MaxMipLevel` | yes (`GL_TEXTURE_BASE_LEVEL`) | yes (`min_lod`) | yes (`GL_TEXTURE_MIN_LOD`) | yes (`GL_TEXTURE_MIN_LOD`) |
 | `MipMapLevelOfDetailBias` | desktop GL only | yes (`mip_lod_bias`) | **no** | yes (`GL_TEXTURE_LOD_BIAS`) |
 
+Every "yes" in that table is now checked by drawing, not by reading CNA's state objects back:
+`RunCompiledEffectSamplerPixelContract` binds a real texture, applies the pass, draws, reads the
+pixel and compares it against the texel the requested sampler state selects. Addressing is probed
+from coordinates outside `[0,1]` with two probes per axis, so `Wrap`, `Clamp` and `Mirror` have
+three distinct signatures; the filter check samples a quarter of the way between two texel centres,
+away from any boundary; `MaxMipLevel` and the LOD bias are checked against a mipmapped texture whose
+levels are different colours (`plan_fx.md` FX-093).
+
 `MipMapLevelOfDetailBias` has no OpenGL ES equivalent at all -- `GL_TEXTURE_LOD_BIAS` is a desktop
 GL parameter -- which is why FNA3D's own OpenGL driver skips it under ES too. CNA does not
 approximate it there; it is accepted, published on the device state object, and documented as
-unrepresentable rather than mapped onto a nearby state.
+unrepresentable rather than mapped onto a nearby state. The shared contract is told which subset a
+backend can represent rather than guessing, so an ES build proves everything else and skips only
+that one section.
 
 `AddressW` is carried through the renderer-neutral contract by
-`IGraphicsRenderer::ApplySamplerAddressW` (`plan_fx.md` FX-026). FNA3D consumes it; a renderer that
-has not adopted it leaves W at its own default instead of inventing one from U, so an effect's
-assigned `ADDRESSW` is inert rather than wrong. It only matters for volume textures.
+`IGraphicsRenderer::ApplySamplerAddressW` (`plan_fx.md` FX-026). FNA3D and EasyGL apply it; SDL_GPU
+records it and carries it in its sampler-cache identity, but its compiled route resolves 2D textures
+only, so the axis is not observable there yet (FX-092, FX-110). It only matters for volume textures.
 
 A slot no pass has assigned keeps whatever the game selected. The compiled-effect draw routes read
 `GraphicsDevice.SamplerStates[slot]` for those, so `SpriteBatch.Begin`'s own sampler state, for
 example, is not overwritten with defaults by an effect that never mentions slot 0.
+
+The reverse also holds, and used to not: a slot a compiled Effect *did* assign must not keep that
+assignment once a stock draw takes over. A renderer that mutates one long-lived sampler object per
+slot has to re-establish every property on each application, or an effect's `MaxMipLevel` outlives
+it into the next `SpriteBatch` flush and clamps a texture the game never asked to clamp. Both EasyGL
+and FNA3D had that leak; `RunCompiledEffectStockDrawIsolationContract` pins the fix (FX-092).
 
 ## 8. Cloning
 
@@ -251,6 +267,14 @@ a porting bug look like an art bug. That rule holds per draw route as well, not 
 a route a backend has not implemented (a compiled effect's vertex shader sampling a texture, a
 3D/cube sampler binding, a stream set the renderer cannot bind) throws by name at draw time.
 
+A refusal also has to say *which kind* of limitation it is, because the two kinds mean different
+things to a port. A **renderer-wide** limitation is one the renderer has through every route --
+vertex-stage texture sampling, for one, which no CNA renderer implements at all; a compiled Effect
+is not expected to add it. A **compiled-Effect-specific** limitation is one the renderer does not
+have elsewhere -- a `Texture3D` bound to a compiled sampler, say, which both SDL_GPU and EasyGL
+sample perfectly well in their ordinary draw families. The second kind is a debt of this feature and
+carries a task ID. `plan_fx.md` section 10.5 is the full table.
+
 DirectX 11, Vulkan, Metal and DirectX 9 are the planned next waves; each becomes true only after it
 passes the same shared suite. Fixed-function, 2D-only and CPU renderers stay intentionally
 unsupported. `plan_fx.md` Phase G tracks the rollout, and section 10.3 there classifies every
@@ -275,15 +299,24 @@ renderer-specific. They are:
 | clone | values, textures and technique copied; independent mutation and disposal |
 | lifecycle | repeated create/apply/dispose, disposed-effect rejection, idempotent disposal |
 | **draw matrix** | buffered and user draws, indexed and not, non-zero `baseVertex`/`startIndex`/`vertexStart`, and canonical built-in vertex types with no explicit declaration -- each reading back the effect's own `Tint` from a render target |
-| **multi-stream** | a shader consuming attributes from two bound buffers renders differently when the second stream's contents change |
-| **instancing** | a per-instance stream advances per instance |
+| **multi-stream** | a shader consuming attributes from two bound buffers renders differently when the second stream's contents change, including with a different non-zero `VertexOffset` per stream |
+| **instancing** | a per-instance stream advances per instance, survives a non-zero `baseVertex`/`startIndex`/instance offset, and does not leave its divisor behind for the next ordinary draw |
 | **SpriteBatch** | `SpriteBatch.Begin(..., effect)` either runs the compiled shader or refuses by name |
+| **SpriteBatch multi-pass** | the passes run at XNA's own batch granularity -- once per pass over the whole texture run, not once per sprite |
+| **SpriteBatch texture slot** | the sprite being drawn wins slot 0 over the effect's own texture parameter, and source rectangles and `SpriteEffects` reach the shader |
+| **sampler pixels** | the pass's texture binding, addressing, filter, `MaxMipLevel` and LOD bias are checked in the rendered pixel, not on a state object |
+| **pass selection** | the pass a caller applies is the pass that draws; the fixture's passes write different colours, so a fallback to pass 0 cannot pass |
+| **render-target source** | a compiled Effect sampling a `RenderTarget2D` sees it the same way up as a stock draw does, through one hop and two, while a plain `Texture2D` is not flipped |
+| **stock-draw isolation** | a compiled Effect's sampler state does not survive into a later stock `SpriteBatch` draw |
 | **orientation** | compiled geometry lands in the same half of a render target as a stock effect's |
-| **effect switching** | two effects and a clone drawing alternately each render their own parameter values |
+| **effect switching** | two effects and a clone drawing alternately each render their own parameter values, and a stock 3D or `SpriteBatch` draw in between disturbs neither direction |
 
 The draw sections all read a pixel back and compare it against the effect's own parameter. That is
-deliberate: a draw that silently fell back to a stock shader, or bound an attribute from the wrong
-stream, produces a different pixel instead of passing quietly.
+deliberate: a draw that silently fell back to a stock shader, bound an attribute from the wrong
+stream, applied the wrong pass, or dropped the pass's sampler state produces a different pixel
+instead of passing quietly. `RunCompiledEffectContract`'s own doc comment carries the authoritative
+list of the drawing sections a backend must run; this table is a description of what they mean, not
+a second copy of the list.
 
 ## 11. Error guide
 
@@ -298,6 +331,12 @@ stream, produces a different pixel instead of passing quietly.
 | `Shader parameter not found in effect.` | `std::runtime_error` | A shader's constant table names a parameter the effect does not declare |
 | `unsupported render state <n>` / `unsupported sampler state <n>` | `std::runtime_error` | A token CNA does not translate; report it with the effect that produced it |
 | `Border and MirrorOnce sampler addressing are not representable...` | `std::runtime_error` | Addressing mode outside XNA 4.0 |
+| `...binds a Texture3D/TextureCube to pixel sampler slot N. This renderer samples that kind elsewhere...` | `NotSupportedException` | A compiled-Effect-specific limitation on SDL_GPU and EasyGL (`plan_fx.md` FX-110) |
+| `...samples slot N, but no texture is bound there.` | `NotSupportedException` | The effect's texture parameter was never assigned, and nothing was selected on `GraphicsDevice.Textures` |
+| `Vertex-stage texture sampling is not implemented in this renderer at all, by any draw route.` | `NotSupportedException` | Renderer-wide, not FX-specific (`plan_fx.md` FX-109) |
+| `...cannot run after the GL context was recreated...` | `NotSupportedException` | EasyGL only: MojoShader's context and its linked programs died with the old GL context; recreate the `Effect` from its bytecode (`plan_fx.md` FX-107) |
+| `...cannot sample the RenderTarget2D it is drawing into.` | `NotSupportedException` | EasyGL only: reading and writing one target in a single draw, which is undefined in XNA too |
+| `...cannot sample a RenderTarget2D on the OpenGL ES 2.0 / WebGL 1 profiles...` | `NotSupportedException` | Correcting a render target's row order needs `glBlitFramebuffer`, which those profiles do not have |
 | Any of the above while loading an asset | `ContentLoadException` | Same cause, wrapped with the asset name |
 
 Malformed content and an unsupported backend are deliberately distinguishable: `ArgumentException`
