@@ -1802,6 +1802,69 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderHonorsTransportedFresnelEndpoi
     }
 }
 
+// plan_gltf.md GLTF-476. The inventory below this one partitions the PBR renderers by whether they
+// sample KHR_materials_specular's two maps, and it labelled `igl` "factor-only" -- which was never
+// checked against anything. It was false: `igl` consumed 6 of the 20 PBR draw parameters, and the
+// 14 it dropped included four CORE glTF 2.0 material inputs (normalTexture.scale,
+// occlusionTexture.strength, the sRGB encoding of base colour and emissive, and KHR_texture_transform
+// with its per-slot TEXCOORD selection). It did not refuse those materials; it drew them with the
+// shader's own defaults substituted, which is the forbidden third state and the exact thing the
+// campaign's partition tests exist to make impossible.
+//
+// So this test asks the question the label assumed the answer to. Every parameter here is one that
+// EVERY PBR renderer must consume -- the specular-texture six are deliberately excluded, because
+// `metal` and `wicked` genuinely are factor-only and that is a stated boundary, not a defect.
+//
+// A missing NAME here is not proof of a wrong picture on its own, and this test does not claim
+// otherwise: it is a cheap necessary condition. What makes it worth having is that the condition
+// was already violated, by one renderer, for fourteen parameters at once, and nothing said so.
+TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererConsumesEveryUniversalPbrDrawParameter)
+{
+    constexpr std::array<const char*, 13> universal{{
+        "pbrBaseColorTextureIsSrgb", "pbrDielectricF0", "pbrEmissiveMap",
+        "pbrEmissiveTextureIsSrgb", "pbrEncodeOutputToSrgb", "pbrMetallicFactor",
+        "pbrMetallicRoughnessMap", "pbrNormalMap", "pbrNormalScale", "pbrOcclusionMap",
+        "pbrOcclusionStrength", "pbrRoughnessFactor", "pbrTextureTransformRows",
+    }};
+    // The grazing endpoint is the one input with two correct spellings. `pbrDielectricF90` is the
+    // already-weighted value; `pbrSpecularFactor` is the authored strength the weight comes from,
+    // and a renderer that samples the strength MAP must start from the latter because the map
+    // multiplies it. Seven renderers legitimately read only the second. Requiring the first by name
+    // would fail them for being more complete, so the condition is "one of the two".
+    constexpr std::array<const char*, 2> grazingEndpoint{{"pbrDielectricF90", "pbrSpecularFactor"}};
+    // The same sixteen the specular partition below covers, so a renderer cannot be visible to one
+    // audit and invisible to the other.
+    constexpr std::array<const char*, 16> pbrRenderers{{
+        "bgfx", "diligent", "directx9", "directx11", "directx12", "easygl", "igl", "llgl",
+        "magnum", "metal", "opengl2", "opengl4", "sdl-gpu", "vulkan", "webgpu", "wicked",
+    }};
+
+    const std::filesystem::path renderers = RepositoryRoot() / "modules" / "renderers";
+    ASSERT_TRUE(std::filesystem::is_directory(renderers));
+
+    for (const char* name : pbrRenderers)
+    {
+        SCOPED_TRACE(name);
+        const std::string source = RendererSlotText(renderers, name);
+        ASSERT_FALSE(source.empty()) << "no policy source found for this renderer";
+        for (const char* parameter : universal)
+        {
+            EXPECT_NE(std::string::npos, source.find(parameter))
+                << name << " never mentions GpuDrawParams::" << parameter
+                << ". A renderer that does not read a material input does not refuse the material "
+                   "either -- it draws it with a substituted default, which is the one outcome the "
+                   "two-state partition forbids.";
+        }
+        const bool hasGrazingEndpoint =
+            source.find(grazingEndpoint[0]) != std::string::npos ||
+            source.find(grazingEndpoint[1]) != std::string::npos;
+        EXPECT_TRUE(hasGrazingEndpoint)
+            << name << " mentions neither GpuDrawParams::" << grazingEndpoint[0] << " nor ::"
+            << grazingEndpoint[1] << ", so KHR_materials_specular's grazing weight reaches its "
+               "shader in no form at all.";
+    }
+}
+
 TEST(GltfRendererPbrFallbackPolicy, SpecularTextureInventoryClassifiesEveryPbrRenderer)
 {
     // GLTF-344 is `KHR_materials_specular`'s partial boundary, and prose is the wrong place to
@@ -1813,17 +1876,23 @@ TEST(GltfRendererPbrFallbackPolicy, SpecularTextureInventoryClassifiesEveryPbrRe
     // Both directions are asserted. A renderer moved into `sampling` without the bindings fails,
     // and so does one that grows them while still listed as factor-only, which is the direction a
     // half-finished backend would otherwise take unnoticed.
-    constexpr std::array<const char*, 13> sampling{{
-        "bgfx", "diligent", "directx9", "directx11", "directx12", "easygl",
+    constexpr std::array<const char*, 14> sampling{{
+        "bgfx", "diligent", "directx9", "directx11", "directx12", "easygl", "igl",
         "llgl", "magnum", "opengl2", "opengl4", "sdl-gpu", "vulkan", "webgpu",
     }};
     // Factor-only is not a capability decision -- it is unfinished work. `webgpu` left this set on
     // 2026-08-18 (`GLTF-344`): its PBR uniform block grew KHR_materials_specular's own inputs -- the
     // UNCLAMPED dielectric F0, the specular factor and two affine transform rows per map -- and its
-    // two WGSL shaders sample both maps at bindings 6 and 7. IGL is declaration-driven and its
-    // generated shader library samples exactly the four core PBR maps; `metal` cannot be compiled
-    // anywhere this repository runs; `wicked` needs WickedEngine shader work.
-    constexpr std::array<const char*, 3> factorOnly{{"igl", "metal", "wicked"}};
+    // two WGSL shaders sample both maps at bindings 6 and 7. `igl` left it on the same day
+    // (`GLTF-476`), and the reason is worth keeping: the label above used to say it sampled "exactly
+    // the four core PBR maps", which nothing had checked. It was reading 6 of the 20 PBR draw
+    // parameters -- it had no specular inputs, but it also had no normal scale, no occlusion
+    // strength, no sRGB decode and no texture transforms, so calling it factor-only overstated it in
+    // one direction while the count understated the gap in the other. It now samples both maps at
+    // units 7 and 8 with per-slot TEXCOORD selection. `metal` cannot be compiled anywhere this
+    // repository runs; `wicked` needs WickedEngine shader work. Both genuinely ARE factor-only:
+    // each reads 14 of the 20, missing exactly the six specular-texture inputs.
+    constexpr std::array<const char*, 2> factorOnly{{"metal", "wicked"}};
 
     std::set<std::string> expected;
     for (const char* name : sampling) { expected.insert(name); }

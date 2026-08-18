@@ -68,6 +68,26 @@ own display connection and leaves the drawable unset, which cannot present to a 
 | Cube render-target MSAA | `igl::FramebufferDesc` cannot express a multisampled cube attachment with a per-face resolve | applied count reported as 1 |
 | `ShaderEffect` parameters on Vulkan | Loose (non-block) uniforms do not exist in Vulkan GLSL, and IGL's Vulkan encoder leaves `bindUniform` unimplemented | the draw throws by name; use a std140 block, or `CNA_IGL_BACKEND=opengl` |
 
+## glTF material inputs
+
+This renderer consumes the full `GpuDrawParams` PBR set: base-colour, normal, metallic-roughness,
+emissive, occlusion and `KHR_materials_specular`'s two maps at units 0, 3, 4, 5, 6, 7 and 8, each
+with its own `TEXCOORD_0`/`TEXCOORD_1` selection and its own `KHR_texture_transform` rows;
+`normalTexture.scale`; `occlusionTexture.strength`; the sRGB decode of base colour, emissive and
+specular colour, and the sRGB encode of the shaded result; and both Fresnel endpoints, so
+`KHR_materials_ior` and `KHR_materials_specular` reach the BRDF instead of a hard-coded 0.04.
+
+**It did not until 2026-08-18** (`plan_gltf.md GLTF-476`). It transported 6 of those 20 parameters
+and drew the other 14 with the shader's own constants substituted — including four core glTF 2.0
+material inputs — without refusing anything, which is the outcome CNA's renderer partition exists to
+forbid. It was also adding `emissiveFactor` to the emissive sample where glTF §3.9.2 multiplies
+them. The gap was invisible to every source inventory in the repository, because each of them asked
+whether a renderer *declared* the PBR maps and this one did.
+
+`Igl_PbrEffect` and `Igl_PbrEffectMaps` are the standing pixel witnesses: the analytic BRDF value
+(91) at `N = V = L`, the same scene with `SpecularFactorEXT = 0` (81, which the old hard-coded F0
+could not produce), and the 128-versus-182 pair that makes the output transfer function observable.
+
 ## How the frame is built
 
 A **lazily opened render pass**, not a deferred command list:

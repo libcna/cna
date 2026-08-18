@@ -67,8 +67,12 @@ namespace CNA::Internal::Renderers::Igl
         inline constexpr std::uint32_t EmissiveMap = 5;
         /** @brief PbrEffect's occlusion map (R channel). */
         inline constexpr std::uint32_t OcclusionMap = 6;
+        /** @brief `KHR_materials_specular`'s scalar strength map (A channel). */
+        inline constexpr std::uint32_t SpecularMap = 7;
+        /** @brief `KHR_materials_specular`'s colour map (RGB, sRGB-encoded). */
+        inline constexpr std::uint32_t SpecularColorMap = 8;
         /** @brief Number of units the generated fragment shader declares. */
-        inline constexpr std::uint32_t Count = 7;
+        inline constexpr std::uint32_t Count = 9;
     }
 
     /**
@@ -128,6 +132,18 @@ namespace CNA::Internal::Renderers::Igl
         inline constexpr std::int32_t EmissiveMap = 1 << 14;
         /** @brief Darken ambient by `uOcclusionMap`. */
         inline constexpr std::int32_t OcclusionMap = 1 << 15;
+        /** @brief Sample `KHR_materials_specular`'s scalar strength from `uSpecularMap`. */
+        inline constexpr std::int32_t SpecularMap = 1 << 16;
+        /** @brief Sample `KHR_materials_specular`'s colour from `uSpecularColorMap`. */
+        inline constexpr std::int32_t SpecularColorMap = 1 << 17;
+        /** @brief The base-colour texture's samples are sRGB-encoded and must be decoded. */
+        inline constexpr std::int32_t BaseColorSrgb = 1 << 18;
+        /** @brief The emissive texture's samples are sRGB-encoded and must be decoded. */
+        inline constexpr std::int32_t EmissiveSrgb = 1 << 19;
+        /** @brief The specular colour texture's samples are sRGB-encoded and must be decoded. */
+        inline constexpr std::int32_t SpecularColorSrgb = 1 << 20;
+        /** @brief Encode the shaded PBR result back to sRGB before writing it. */
+        inline constexpr std::int32_t EncodeOutputSrgb = 1 << 21;
     }
 
     /**
@@ -165,6 +181,38 @@ namespace CNA::Internal::Renderers::Igl
         float envMapSpecular[4] = {0, 0, 0, 0};
         /** @brief PbrEffect factors: metallic, roughness, unused, unused. */
         float pbrFactors[4] = {1, 1, 0, 0};
+        /**
+         * @brief glTF `normalTexture.scale`, `occlusionTexture.strength`, then padding.
+         *
+         * plan_gltf.md GLTF-224/GLTF-225. Both are core glTF 2.0 material inputs, not extensions:
+         * a renderer that ignores them draws an authored material with different semantics.
+         */
+        float pbrScales[4] = {1, 1, 0, 0};
+        /**
+         * @brief Dielectric normal-incidence reflectance (rgb) and grazing reflectance (a).
+         *
+         * `KHR_materials_ior` and the factor-only half of `KHR_materials_specular`, already
+         * clamped and weighted on the CPU. Core glTF's default is 0.04 with a grazing weight of 1.
+         */
+        float pbrDielectricFresnel[4] = {0.04f, 0.04f, 0.04f, 1.0f};
+        /**
+         * @brief Pre-clamp dielectric F0 (rgb) and the authored specular factor (a).
+         *
+         * `specularColorTexture` multiplies BEFORE the specification's per-channel clamp, so a
+         * shader handed the already-clamped value above cannot reproduce the extension.
+         */
+        float pbrSpecularInputs[4] = {0.04f, 0.04f, 0.04f, 1.0f};
+        /**
+         * @brief Two affine rows per core PBR map: base colour, normal, metallic-roughness,
+         *        emissive, occlusion. `KHR_texture_transform`, identity by default.
+         */
+        float pbrTextureTransform[10][4] = {
+            {1,0,0,0}, {0,1,0,0}, {1,0,0,0}, {0,1,0,0},
+            {1,0,0,0}, {0,1,0,0}, {1,0,0,0}, {0,1,0,0},
+            {1,0,0,0}, {0,1,0,0}};
+        /** @brief The same two rows for the specular strength map, then the specular colour map. */
+        float pbrSpecularTextureTransform[4][4] = {
+            {1,0,0,0}, {0,1,0,0}, {1,0,0,0}, {0,1,0,0}};
         /** @brief World-space, pre-normalized directions of the three directional lights. */
         float lightDirection[3][4] = {{0,-1,0,0}, {0,-1,0,0}, {0,-1,0,0}};
         /** @brief Diffuse colours of the three directional lights; zero when a light is disabled. */
@@ -175,7 +223,14 @@ namespace CNA::Internal::Renderers::Igl
         float colorMatrix[4][4] = {{1,0,0,0}, {0,1,0,0}, {0,0,1,0}, {0,0,0,1}};
         /** @brief Constant added after @ref colorMatrix. */
         float colorOffset[4] = {0, 0, 0, 0};
-        /** @brief x = @ref EffectFeature bitmask, y = weights per vertex, z = bone count, w = unused. */
+        /**
+         * @brief x = @ref EffectFeature bitmask, y = weights per vertex, z = bone count,
+         *        w = the seven-bit PBR texture-coordinate-set mask.
+         *
+         * plan_gltf.md GLTF-182/GLTF-183: bit i of `w` selects `TEXCOORD_1` for PBR texture slot i
+         * -- base colour, normal, metallic-roughness, emissive, occlusion, specular strength,
+         * specular colour -- and a clear bit selects `TEXCOORD_0`.
+         */
         std::int32_t flags[4] = {0, 4, 0, 0};
     };
 

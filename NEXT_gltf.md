@@ -8,7 +8,7 @@ session needs to start work without re-deriving the state.
 
 - **Branch:** `feature/gltf`, with local commits. The owner explicitly requested a push when the
   current autonomous run reaches its weekly-limit cutoff; no pull request has been requested.
-- **Working document:** `plan_gltf.md`, **475** numbered rows. **Three remain open: `GLTF-344` and
+- **Working document:** `plan_gltf.md`, **476** numbered rows. **Three remain open: `GLTF-344` and
   `GLTF-465` (both `✅/⬜`), and `GLTF-459` (`⬜`).** The campaign retrospective
   (`GLTF-460`) is written: `docs/gltf-campaign-retrospective.md`. Read it before starting the next
   subsystem campaign — its central finding is that this campaign's own L0–L7 ladder reads data and
@@ -19,6 +19,12 @@ session needs to start work without re-deriving the state.
   `OPENGL4` painted a stride-48 record's `NORMAL` as the surface colour and `DILIGENT` drew the same
   input black, both for a plain XNA `BasicEffect` draw. `OPENGL4` now renders the effect's colour;
   `DILIGENT`, which has no unlit program for that layout, refuses by name before touching GPU state.
+  `GLTF-476` closed the same day and is the sharpest finding of the three: `IGL` transported **6 of
+  the 20** PBR draw parameters and drew the other fourteen — four of them **core** glTF 2.0 material
+  inputs — with the shader's own constants substituted, while the specular inventory labelled it
+  "factor-only". It now consumes all twenty, verified on a live IGL OpenGL device in the new
+  `cmake-build-igl` tree (40/40 IGL witnesses, 720/720 glTF/PBR tests), which also moved `GLTF-344`
+  to 14 of 16.
   **No renderer in the tree is in the forbidden third state any more** — nothing accepts a valid core glTF primitive and renders it
   with different semantics. `GLTF-465` is half closed: **no PBR renderer draws a `COLOR_0` asset with different
   core semantics any more** (thirteen apply the product, four refuse the draw), and what remains is

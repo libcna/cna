@@ -66,6 +66,22 @@ renderer; the probe that closed it answered eight, and `DILIGENT` — which the 
 was drawing the same input **black**. A source audit finds the instance it was looking for. A live
 draw enumerates the instances that exist.
 
+**And a sixth, which is a different lesson: a label is not evidence either.** `GLTF-476` began by
+asking what the specular inventory's "factor-only" label for `IGL` was based on. Nothing: the
+partition asked whether a renderer's sources mention `pbrNormalMap`, and `IGL` did. Counting the PBR
+draw parameters each renderer actually names put `IGL` at **6 of 20** against 14–20 for the other
+fifteen, and the fourteen it dropped included four **core** glTF 2.0 material inputs — normal scale,
+occlusion strength, sRGB encoding, and per-map texture transforms — which it neither applied nor
+refused. Two of its own pixel witnesses were passing *on* the defect: one expected the linear BRDF
+value without disabling the sRGB switches its cited reference disables, and read the right number
+only because no encode existed to disable.
+
+> **Reusable rule.** When an inventory partitions components, check the partition's own discriminator
+> against the property it claims to measure. "Mentions the normal map" is not "implements the
+> material model", and the gap between the two is where a renderer can sit for months looking
+> finished. The cheap version of this check — does each component name each input at all? — is one
+> test, and it would have caught this one on the day `IGL` landed.
+
 > **Reusable rule.** A source audit can only see what a component *declares*. If a subsystem has a
 > dispatch step between "the feature exists" and "the feature runs", the audit must include one test
 > that executes the dispatch. Adding a table row to an inventory is not that test.

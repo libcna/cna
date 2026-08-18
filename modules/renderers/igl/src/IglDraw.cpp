@@ -188,6 +188,29 @@ namespace CNA::Internal::Renderers::Igl
         uniforms.envMapSpecular[3] = 0.0f;
         uniforms.pbrFactors[0] = params.pbrMetallicFactor;
         uniforms.pbrFactors[1] = params.pbrRoughnessFactor;
+        // plan_gltf.md GLTF-476. Everything from here to the transform rows used to be dropped on
+        // the floor: this renderer transported metallic and roughness and nothing else, so a glTF
+        // material's normal scale, occlusion strength, sRGB encoding, texture transforms, IOR and
+        // KHR_materials_specular were all silently replaced by the shader's own defaults.
+        uniforms.pbrScales[0] = params.pbrNormalScale;
+        uniforms.pbrScales[1] = params.pbrOcclusionStrength;
+        for (int c = 0; c < 3; ++c)
+        {
+            uniforms.pbrDielectricFresnel[c] = params.pbrDielectricF0[c];
+            uniforms.pbrSpecularInputs[c] = params.pbrDielectricF0Unclamped[c];
+        }
+        uniforms.pbrDielectricFresnel[3] = params.pbrDielectricF90;
+        uniforms.pbrSpecularInputs[3] = params.pbrSpecularFactor;
+        static_assert(sizeof(uniforms.pbrTextureTransform) ==
+                          sizeof(params.pbrTextureTransformRows),
+                      "the ten core KHR_texture_transform rows must transport exactly");
+        static_assert(sizeof(uniforms.pbrSpecularTextureTransform) ==
+                          sizeof(params.pbrSpecularTextureTransformRows),
+                      "the four specular KHR_texture_transform rows must transport exactly");
+        std::memcpy(uniforms.pbrTextureTransform, params.pbrTextureTransformRows,
+                    sizeof(uniforms.pbrTextureTransform));
+        std::memcpy(uniforms.pbrSpecularTextureTransform, params.pbrSpecularTextureTransformRows,
+                    sizeof(uniforms.pbrSpecularTextureTransform));
 
         const float* lightDirections[3] = {params.light0Dir, params.light1Dir, params.light2Dir};
         const float* lightDiffuse[3] = {params.light0Diffuse, params.light1Diffuse,
@@ -241,6 +264,24 @@ namespace CNA::Internal::Renderers::Igl
             flags |= EffectFeature::EmissiveMap;
         if (params.pbrOcclusionMap != nullptr)
             flags |= EffectFeature::OcclusionMap;
+        if (params.pbrSpecularMap != nullptr)
+            flags |= EffectFeature::SpecularMap;
+        if (params.pbrSpecularColorMap != nullptr)
+            flags |= EffectFeature::SpecularColorMap;
+        // glTF 3.9.2: a texture's samples are sRGB-ENCODED and the factor they multiply is already
+        // linear, so only the sample is decoded. These are meaningful on the PBR path alone --
+        // XNA's own stock effects have no colour management and must keep their exact old output.
+        if (params.pbr)
+        {
+            if (params.pbrBaseColorTextureIsSrgb)
+                flags |= EffectFeature::BaseColorSrgb;
+            if (params.pbrEmissiveTextureIsSrgb)
+                flags |= EffectFeature::EmissiveSrgb;
+            if (params.pbrSpecularColorTextureIsSrgb)
+                flags |= EffectFeature::SpecularColorSrgb;
+            if (params.pbrEncodeOutputToSrgb)
+                flags |= EffectFeature::EncodeOutputSrgb;
+        }
 
         // The alpha test's default {0, 0, 1, 1} is XNA's "always pass"; only a real AlphaTestEffect
         // produces weights that can go negative, so the shader branch is enabled only for those.
@@ -250,6 +291,8 @@ namespace CNA::Internal::Renderers::Igl
         uniforms.flags[0] = flags;
         uniforms.flags[1] = std::clamp(params.weightsPerVertex, 1, 4);
         uniforms.flags[2] = std::clamp(params.boneCount, 0, kMaxBones);
+        // The seven-bit TEXCOORD-set mask, one bit per PBR texture slot.
+        uniforms.flags[3] = static_cast<std::int32_t>(params.pbrTextureCoordinateSetMask & 0x7Fu);
     }
 
     void IglRenderer::BindEffectResources(igl::IRenderCommandEncoder& encoder,
@@ -308,6 +351,8 @@ namespace CNA::Internal::Renderers::Igl
                  false);
         bindUnit(TextureUnit::EmissiveMap, textureOf(params.pbrEmissiveMap), false);
         bindUnit(TextureUnit::OcclusionMap, textureOf(params.pbrOcclusionMap), false);
+        bindUnit(TextureUnit::SpecularMap, textureOf(params.pbrSpecularMap), false);
+        bindUnit(TextureUnit::SpecularColorMap, textureOf(params.pbrSpecularColorMap), false);
 
         encoder.setBlendColor(igl::Color(blendFactor_[0], blendFactor_[1], blendFactor_[2],
                                          blendFactor_[3]));
