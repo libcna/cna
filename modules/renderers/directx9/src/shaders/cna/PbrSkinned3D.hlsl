@@ -53,6 +53,20 @@ struct VSInput
     int4   BoneIndices : BLENDINDICES0;
 };
 
+// plan_gltf.md GLTF-465/GLTF-463: the stride-80 twin. Stride 80 is the stride-76 skinned PBR
+// record with a packed, normalized COLOR_0 appended at offset 76. A separate input struct for the
+// same reason as the rigid pair: the stride-68/76 declarations have no colour element.
+struct VSInputColor
+{
+    float3 Position    : POSITION0;
+    float3 Normal      : NORMAL0;
+    float4 Tangent     : TANGENT0;
+    float2 UV          : TEXCOORD0;
+    float4 BoneWeights : BLENDWEIGHT0;
+    int4   BoneIndices : BLENDINDICES0;
+    float4 Color       : COLOR0;
+};
+
 struct VSOutput
 {
     float4 Position  : SV_Position;
@@ -61,6 +75,8 @@ struct VSOutput
     float2 UV        : TEXCOORD2;
     float3 WorldPos  : TEXCOORD3;
     float  FogFactor : TEXCOORD4;
+    // Written by both entry points: the authored colour, or opaque white where the layout has none.
+    float4 Color     : COLOR0;
 };
 
 // REMED-GFX-006: transpose(inverse(m)) of a 3x3 (cofactor matrix over its determinant). HLSL has
@@ -90,9 +106,10 @@ float CnaDirectionHandedness(float3x3 m)
     return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
 }
 
-VSOutput VSPbrSkinned3D(VSInput vin)
+VSOutput VSPbrSkinned3DBody(VSInput vin, float4 color)
 {
     VSOutput vout;
+    vout.Color = color;
 
     // Task 895's real Skin(vin, boneCount) shape: only sum the first WeightsPerVertex (1, 2, or 4)
     // weight/index pairs, matching XNA's own validated SkinningEffect.WeightsPerVertex domain.
@@ -126,6 +143,24 @@ VSOutput VSPbrSkinned3D(VSInput vin)
     return vout;
 }
 
+VSOutput VSPbrSkinned3D(VSInput vin)
+{
+    // Stride 68/76 carry no colour element: opaque white is the multiplier's identity.
+    return VSPbrSkinned3DBody(vin, float4(1.0, 1.0, 1.0, 1.0));
+}
+
+VSOutput VSPbrSkinned3DColor(VSInputColor vin)
+{
+    VSInput bare;
+    bare.Position = vin.Position;
+    bare.Normal = vin.Normal;
+    bare.Tangent = vin.Tangent;
+    bare.UV = vin.UV;
+    bare.BoneWeights = vin.BoneWeights;
+    bare.BoneIndices = vin.BoneIndices;
+    return VSPbrSkinned3DBody(bare, vin.Color);
+}
+
 sampler2D Texture              : register(s0);
 sampler2D NormalMap            : register(s1);
 sampler2D MetallicRoughnessMap : register(s2);
@@ -147,6 +182,8 @@ float3 Light2Diffuse           : register(c9);
 float3 EyePosition             : register(c10);
 float4 AlphaTest               : register(c11);
 float4 FogColor                : register(c12); // xyz=color, w=encode PBR output to sRGB
+// plan_gltf.md GLTF-465: same free register, same meaning, as Pbr3D.hlsl's own.
+float4 VertexColorFlags        : register(c13); // x = VertexColorEnabledEXT
 float4 TextureTransformRows[10] : register(c14); // two affine UV rows per PBR map
 float4 SpecularFresnelInputs    : register(c24); // xyz=unclamped F0, w=specular factor
 float4 SpecularMapFlags        : register(c25); // x=decode specular-colour sample from sRGB
@@ -159,6 +196,7 @@ struct PSInput
     float2 UV        : TEXCOORD2;
     float3 WorldPos  : TEXCOORD3;
     float  FogFactor : TEXCOORD4;
+    float4 Color     : COLOR0;
 };
 
 float3 CnaSrgbToLinear(float3 color)
@@ -218,6 +256,13 @@ float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
     float3 baseColor = lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), AmbientColor.w);
     float3 albedo = baseColor * DiffuseColor.rgb;
     float alpha = baseColorTex.a * DiffuseColor.a;
+    // glTF 3.9.2: COLOR_0 multiplies the whole base-colour product, alpha included, before the
+    // alpha test below consumes that alpha.
+    if (VertexColorFlags.x > 0.5)
+    {
+        albedo *= pin.Color.rgb;
+        alpha  *= pin.Color.a;
+    }
 
     float3 N = normalize(pin.Normal);
     float3 T = normalize(pin.TangentWS.xyz - N * dot(N, pin.TangentWS.xyz));

@@ -39,6 +39,20 @@ struct VSInput
     float2 UV       : TEXCOORD0;
 };
 
+// plan_gltf.md GLTF-465: the stride-60 twin of VSInput. glTF 3.9.2 makes COLOR_0 an additional
+// linear multiplier on base colour, and stride 60 is the rigid PBR record that carries it (offset
+// 56, packed as a normalized D3DCOLOR). It is a SEPARATE input struct rather than an optional field
+// because the stride-48 declaration has no colour element, and a vs_3_0 input D3D9 has no stream for
+// reads undefined -- so the two layouts get two entry points sharing one body.
+struct VSInputColor
+{
+    float3 Position : POSITION0;
+    float3 Normal   : NORMAL0;
+    float4 Tangent  : TANGENT0;
+    float2 UV       : TEXCOORD0;
+    float4 Color    : COLOR0;
+};
+
 struct VSOutput
 {
     float4 Position  : SV_Position;
@@ -47,6 +61,9 @@ struct VSOutput
     float2 UV        : TEXCOORD2;
     float3 WorldPos  : TEXCOORD3;
     float  FogFactor : TEXCOORD4;
+    // Written by BOTH entry points: the authored colour where the layout supplies one, opaque white
+    // -- the multiplier's identity -- where it does not, so one pixel shader serves both.
+    float4 Color     : COLOR0;
 };
 
 float CnaDirectionHandedness(float3x3 m)
@@ -54,9 +71,15 @@ float CnaDirectionHandedness(float3x3 m)
     return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
 }
 
-VSOutput VSPbr3D(VSInput vin)
+VSOutput VSPbr3DBody(float3 position, float3 normal, float4 tangent, float2 uv, float4 color)
 {
     VSOutput vout;
+    VSInput vin;
+    vin.Position = position;
+    vin.Normal = normal;
+    vin.Tangent = tangent;
+    vin.UV = uv;
+    vout.Color = color;
 
     vout.Position = mul(float4(vin.Position, 1.0), WorldViewProj);
     vout.Normal = mul(vin.Normal, NormalMatrix);
@@ -74,6 +97,18 @@ VSOutput VSPbr3D(VSInput vin)
     vout.FogFactor = 1.0 - saturate(dot(float4(vin.Position, 1.0), FogParams));
 
     return vout;
+}
+
+VSOutput VSPbr3D(VSInput vin)
+{
+    // No colour element in the stride-48 declaration: opaque white is the multiplier's identity, so
+    // the shared pixel stage multiplies by one instead of reading a stream that is not there.
+    return VSPbr3DBody(vin.Position, vin.Normal, vin.Tangent, vin.UV, float4(1.0, 1.0, 1.0, 1.0));
+}
+
+VSOutput VSPbr3DColor(VSInputColor vin)
+{
+    return VSPbr3DBody(vin.Position, vin.Normal, vin.Tangent, vin.UV, vin.Color);
 }
 
 sampler2D Texture              : register(s0);
@@ -97,6 +132,10 @@ float3 Light2Diffuse           : register(c9);
 float3 EyePosition             : register(c10);
 float4 AlphaTest               : register(c11);
 float4 FogColor                : register(c12); // xyz=color, w=encode PBR output to sRGB
+// plan_gltf.md GLTF-465: c13 was the one free register between FogColor and TextureTransformRows.
+// x is the effect's own VertexColorEnabledEXT, so an application can opt back into the opaque-white
+// identity on coloured geometry deliberately.
+float4 VertexColorFlags        : register(c13); // x = VertexColorEnabledEXT
 float4 TextureTransformRows[10] : register(c14); // two affine UV rows per PBR map
 float4 SpecularFresnelInputs    : register(c24); // xyz=unclamped F0, w=specular factor
 float4 SpecularMapFlags        : register(c25); // x=decode specular-colour sample from sRGB
@@ -109,6 +148,7 @@ struct PSInput
     float2 UV        : TEXCOORD2;
     float3 WorldPos  : TEXCOORD3;
     float  FogFactor : TEXCOORD4;
+    float4 Color     : COLOR0;
 };
 
 float3 CnaSrgbToLinear(float3 color)
@@ -171,6 +211,14 @@ float4 PSPbr3D(PSInput pin) : SV_Target0
     float3 baseColor = lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), AmbientColor.w);
     float3 albedo = baseColor * DiffuseColor.rgb;
     float alpha = baseColorTex.a * DiffuseColor.a;
+    // glTF 3.9.2: COLOR_0 is an additional LINEAR multiplier on the whole base-colour product, its
+    // alpha included -- the alpha half is where a BLEND-mode vertex-coloured primitive's
+    // transparency comes from. Before the alpha test below, which consumes that alpha.
+    if (VertexColorFlags.x > 0.5)
+    {
+        albedo *= pin.Color.rgb;
+        alpha  *= pin.Color.a;
+    }
 
     float3 N = normalize(pin.Normal);
     float3 T = normalize(pin.TangentWS.xyz - N * dot(N, pin.TangentWS.xyz));

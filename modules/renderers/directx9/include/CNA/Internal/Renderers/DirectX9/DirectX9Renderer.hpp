@@ -640,8 +640,12 @@ namespace CNA::Internal::Renderers::DirectX9
         /// on first `DrawPbrEffectEXT()` call. Not `D3DPOOL_DEFAULT` resources -- survive `Reset()`
         /// unaffected, same as `shaderCache_`/`instancedVS_` above.
         ComPtr<IDirect3DVertexShader9> pbrVS_;
+        /// plan_gltf.md GLTF-465: the stride-60 twin, whose input struct declares COLOR0.
+        ComPtr<IDirect3DVertexShader9> pbrColorVS_;
         ComPtr<IDirect3DPixelShader9> pbrPS_;
         ComPtr<IDirect3DVertexShader9> pbrSkinnedVS_;
+        /// plan_gltf.md GLTF-465: the stride-80 twin.
+        ComPtr<IDirect3DVertexShader9> pbrSkinnedColorVS_;
         ComPtr<IDirect3DPixelShader9> pbrSkinnedPS_;
         /// D3D9 skinned-vertex-color porting task: CNA's own CNAEXT SkinnedVertexColor3D shader
         /// pair, lazily created on first `DrawSkinnedVertexColorEXT()` call.

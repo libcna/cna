@@ -22,7 +22,6 @@
 // constant at the same index).
 
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
-#include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Textures.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9RenderTargets.hpp"
@@ -163,23 +162,23 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         using namespace Shaders;
 
-        // plan_gltf.md GLTF-465: stride 60/80 already fail the two stride checks below, but they fail
-        // them as "no matching CNA vertex layout", which says nothing about the semantic that is
-        // actually missing. Name it first, with the application's own opt-out, so the refusal is the
-        // shared one every other renderer in this state gives.
-        RequireVertexColourPbrSupportEXT(params, stride, "DIRECTX9");
-
+        // plan_gltf.md GLTF-465: this renderer applies the COLOR_0 product now, so the shared
+        // RequireVertexColourPbrSupportEXT refusal is gone. Stride 60 is the rigid PBR record with a
+        // packed COLOR_0 at offset 56 and stride 80 the skinned one with its own at 76; each selects
+        // the vertex program whose input struct that declaration satisfies, because a vs_3_0 input
+        // with no stream behind it reads undefined rather than zero.
         const bool skinned = params.skinned;
-        if (skinned && stride != 68)
+        const bool colored = skinned ? (stride == 80) : (stride == 60);
+        if (skinned && stride != 68 && stride != 80)
             throw std::runtime_error(
                 "DirectX9Renderer::DrawPrimitivesEx (PbrEffect, skinned): stride " +
-                std::to_string(stride) + " has no matching CNA vertex layout (expected 68, "
-                "VertexPositionNormalTangentTextureSkinned)");
-        if (!skinned && stride != 48)
+                std::to_string(stride) + " has no matching CNA vertex layout (expected 68 or 80, "
+                "VertexPositionNormalTangentTextureSkinned, optionally with COLOR_0)");
+        if (!skinned && stride != 48 && stride != 60)
             throw std::runtime_error(
                 "DirectX9Renderer::DrawPrimitivesEx (PbrEffect): stride " +
-                std::to_string(stride) + " has no matching CNA vertex layout (expected 48, "
-                "VertexPositionNormalTangentTexture)");
+                std::to_string(stride) + " has no matching CNA vertex layout (expected 48 or 60, "
+                "VertexPositionNormalTangentTexture, optionally with COLOR_0)");
 
         IDirect3DVertexShader9* vs;
         IDirect3DPixelShader9* ps;
@@ -190,10 +189,13 @@ namespace CNA::Internal::Renderers::DirectX9
 
         if (skinned)
         {
-            if (!pbrSkinnedVS_)
+            ComPtr<IDirect3DVertexShader9>& skinnedVs = colored ? pbrSkinnedColorVS_ : pbrSkinnedVS_;
+            if (!skinnedVs)
             {
                 const HRESULT hr = device_->CreateVertexShader(
-                    reinterpret_cast<const DWORD*>(kPbrSkinned3DVSBytecode), pbrSkinnedVS_.GetAddressOf());
+                    reinterpret_cast<const DWORD*>(colored ? kPbrSkinned3DColorVSBytecode
+                                                           : kPbrSkinned3DVSBytecode),
+                    skinnedVs.GetAddressOf());
                 if (FAILED(hr))
                     throw std::runtime_error("DrawPbrEffectEXT: CreateVertexShader (skinned) failed, hr=" + FormatHr(hr));
             }
@@ -204,17 +206,19 @@ namespace CNA::Internal::Renderers::DirectX9
                 if (FAILED(hr))
                     throw std::runtime_error("DrawPbrEffectEXT: CreatePixelShader (skinned) failed, hr=" + FormatHr(hr));
             }
-            vs = pbrSkinnedVS_.Get();
+            vs = skinnedVs.Get();
             ps = pbrSkinnedPS_.Get();
             vsRegs = kPbrSkinned3DVS_Registers; vsCount = kPbrSkinned3DVS_RegistersCount;
             psRegs = kPbrSkinned3DPS_Registers; psCount = kPbrSkinned3DPS_RegistersCount;
         }
         else
         {
-            if (!pbrVS_)
+            ComPtr<IDirect3DVertexShader9>& rigidVs = colored ? pbrColorVS_ : pbrVS_;
+            if (!rigidVs)
             {
                 const HRESULT hr = device_->CreateVertexShader(
-                    reinterpret_cast<const DWORD*>(kPbr3DVSBytecode), pbrVS_.GetAddressOf());
+                    reinterpret_cast<const DWORD*>(colored ? kPbr3DColorVSBytecode : kPbr3DVSBytecode),
+                    rigidVs.GetAddressOf());
                 if (FAILED(hr))
                     throw std::runtime_error("DrawPbrEffectEXT: CreateVertexShader failed, hr=" + FormatHr(hr));
             }
@@ -225,7 +229,7 @@ namespace CNA::Internal::Renderers::DirectX9
                 if (FAILED(hr))
                     throw std::runtime_error("DrawPbrEffectEXT: CreatePixelShader failed, hr=" + FormatHr(hr));
             }
-            vs = pbrVS_.Get();
+            vs = rigidVs.Get();
             ps = pbrPS_.Get();
             vsRegs = kPbr3DVS_Registers; vsCount = kPbr3DVS_RegistersCount;
             psRegs = kPbr3DPS_Registers; psCount = kPbr3DPS_RegistersCount;
@@ -284,6 +288,14 @@ namespace CNA::Internal::Renderers::DirectX9
         const float fogColor[4] = {params.fogColor[0], params.fogColor[1], params.fogColor[2],
                                    params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f};
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "FogColor", fogColor);
+        // plan_gltf.md GLTF-465: the effect's own VertexColorEnabledEXT, and the layout must
+        // supply the attribute as well -- the stride-48/68 programs write opaque white to the
+        // interpolant, so raising the flag for them would multiply by an identity rather than by
+        // a colour, but stating both keeps the uniform meaning one thing.
+        const float vertexColorFlags[4] = {
+            (params.vertexColorEnabled && colored) ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f};
+        TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "VertexColorFlags",
+                                        vertexColorFlags);
         const float dielectricFresnel[4] = {
             params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
             params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor};

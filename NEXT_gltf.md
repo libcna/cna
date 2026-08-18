@@ -19,7 +19,7 @@ session needs to start work without re-deriving the state.
   file, is the record of what the milestone still needs.
 
 - **The milestone in force is `GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT` (§27.1.3), and it is
-  stated with its renderer coverage beside it: `PBR renderer coverage: 13/17 apply COLOR_0, 4 refuse
+  stated with its renderer coverage beside it: `PBR renderer coverage: 14/17 apply COLOR_0, 3 refuse
   such a draw by name`.** The unqualified `GLTF CORE 2.0 CORRECT` was written on 2026-08-17, rejected
   by the owner the next day, held as the qualified name, taken back when the owner's condition looked
   met — and **qualified again by `GLTF-472`, which showed the condition had not actually been met when
@@ -309,7 +309,7 @@ Rewritten 2026-08-17 after the re-audit. Ordered by cost, cheapest first.
 
 1. **`GLTF-465`: carry `COLOR_0` into the remaining four PBR renderers.** Thirteen are done (EasyGL,
    SOFTWARE, IGL, OpenGL 2, OpenGL 4, Vulkan, DirectX 11, DirectX 12, Magnum, Diligent, Bgfx, LLGL,
-   SDL GPU) and the other four refuse such a draw, so nothing renders wrongly meanwhile — coverage
+   SDL GPU, DirectX 9) and the other three refuse such a draw, so nothing renders wrongly meanwhile — coverage
    work, not correctness work. **Before marking one done, draw with it:**
    `CNA_GRAPHICS_RENDERER=<X> SDL_VIDEODRIVER=x11 DISPLAY=:<n> ./cmake-build-multi/Debug/bin/CnaTests
    --gtest_filter='RendererStrideConformance.*'`. `GLTF-472` found two renderers marked done whose
