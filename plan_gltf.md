@@ -1970,6 +1970,15 @@ partition holds again — but the claim below is now backed by evidence of the s
 > (`metal`, `wicked`). `GLTF-465` tracks
 > implementing it in each of them; none of them draws such an asset wrongly meanwhile.
 >
+> **The seventeen are sixteen full PBR renderers plus `SOFTWARE`**, and the count should not be read
+> as seventeen equivalent implementations. `SOFTWARE` is a CPU rasteriser with no metallic-roughness
+> BRDF: it evaluates no lights and none of the normal/metallic-roughness/emissive/occlusion maps, so
+> a `PbrEffect` draw resolves to `vertexColor * diffuseColor * texture0`. That reduction predates
+> this campaign, is stated in `docs/software-renderer.md`, and is why the sixteen-renderer sets in
+> `GltfRendererPbrFallbackPolicy` exclude it. It *does* evaluate `COLOR_0`, which is what this
+> partition asks of it, and its committed L7 goldens are an oracle for determinism and geometry
+> rather than for the BRDF.
+>
 > **Why the name is qualified rather than unqualified.** An unqualified `GLTF CORE 2.0 CORRECT` reads
 > as "every renderer CNA advertises as glTF/PBR-capable renders every valid core glTF input", and
 > one thing still makes that untrue: **two PBR renderers refuse `COLOR_0` outright** (`GLTF-465`).
@@ -2027,7 +2036,17 @@ defects.
 
 *Source-verified only* for `DIRECTX12` (which shares DirectX11's pixel-proven HLSL, constant buffer
 and input-element table) and `BGFX` (whose offline-compiled blobs this host can rebuild but whose
-draw it cannot run). `IGL` is correct by construction and by its own generated shader library. Of the
+draw it cannot run).
+
+**`IGL` was in this tier on the words "correct by construction and by its own generated shader
+library", and that sentence is the one `GLTF-476` falsified.** Construction is not evidence: the
+generated library sampled the four core PBR maps and the renderer transported 6 of the 20 PBR draw
+parameters, substituting shader constants for four *core* glTF material inputs without refusing
+them. It is now the best-evidenced renderer outside the four L7 policies -- a live IGL OpenGL device
+in `cmake-build-igl` runs 40 renderer witnesses including hand-derived pixel values (91 for the
+analytic BRDF, 81 for `SpecularFactorEXT = 0`, 128 against 182 for the output transfer function),
+plus all seven canonical strides at the draw boundary. Read that as *live draw with pixel witnesses*,
+not as a whole-corpus golden policy, which it still is not. Of the
 four refusing renderers, `directx9` syntax-checks under MinGW, `webgpu` and `wicked` syntax-check
 against their own SDK headers, and **`metal` alone cannot be compiled in any environment this
 repository has** — its two-line call mirrors the one immediately above it and its argument types were

@@ -3103,6 +3103,17 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherAppliesVertexColourOrR
     // and never "accepts the asset and draws it with different core semantics". This partition is the
     // precondition for the unqualified milestone name, so it is machine-checked over all seventeen
     // rather than tracked in a table somebody has to remember to update.
+    //
+    // "Seventeen PBR renderers" is sixteen full ones plus `software`, and the difference is worth
+    // stating where the count is asserted rather than only in docs/software-renderer.md. SOFTWARE is
+    // a CPU rasteriser with no metallic-roughness BRDF at all: it consumes the base-colour map's UV
+    // selection and transform and nothing else of the twenty PBR draw parameters, and it evaluates
+    // no lights, so a PbrEffect draw comes out as vertexColor * diffuseColor * texture0. That is a
+    // deliberate, documented reduction that predates this campaign -- the plan calls it a "reduced
+    // CPU cross-check" and reserves "full PBR renderer" for the other sixteen -- and it is why the
+    // sixteen-renderer sets in the tests around this one exclude it. COLOR_0 specifically it does
+    // evaluate, which is what this partition asks. Do not read the count as sixteen-plus-one
+    // equivalent implementations (plan_gltf.md GLTF-476).
     const std::filesystem::path renderers = RepositoryRoot() / "modules" / "renderers";
     ASSERT_TRUE(std::filesystem::is_directory(renderers));
 
