@@ -6,6 +6,7 @@ layout(location = 2) in vec3  fragTangent;
 layout(location = 3) in float fragBitangentSign;
 layout(location = 4) in vec3  fragWorldPos;
 layout(location = 5) in vec4 fragFog;    // REMED-GFX-009
+layout(location = 6) in vec4  fragColor0;
 
 layout(location = 0) out vec4 outColor;
 
@@ -30,7 +31,7 @@ layout(set = 3, binding = 0) uniform PC {
     vec3  light0Dir;
     float textureEnabled;  // unused -- PbrEffect always samples the base color texture
     vec3  light0Diffuse;
-    float vertexColorEnabled; // unused -- PbrEffect has no vertex-color path
+    float vertexColorEnabled; // plan_gltf.md GLTF-465: gates the COLOR_0 product below
 } pc;
 
 layout(set = 3, binding = 1) uniform LitLightParams {
@@ -120,8 +121,12 @@ vec2 cnaPbrSpecularTransformUV(vec2 uv, int slot) {
 void main() {
     vec4 baseColorTex = texture(uTexture, cnaPbrTransformUV(fragUV, 0));
     vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), pbrp.srgbFlags.x);
-    vec3 albedo = baseColor * pc.diffuseColor.rgb;
-    float alpha = baseColorTex.a * pc.diffuseColor.a;
+    // plan_gltf.md GLTF-465: COLOR_0 multiplies the base colour product, ALPHA INCLUDED -- the alpha
+    // half is where a BLEND-mode vertex-coloured primitive's transparency comes from. The colour is
+    // linear, so unlike the base-colour texture it is not sRGB-decoded.
+    vec4 cnaVertexColor = (pc.vertexColorEnabled > 0.5) ? fragColor0 : vec4(1.0);
+    vec3 albedo = baseColor * pc.diffuseColor.rgb * cnaVertexColor.rgb;
+    float alpha = baseColorTex.a * pc.diffuseColor.a * cnaVertexColor.a;
     bool passesAlphaTest = (pbrp.alphaTest.y > 0.0)
         ? (abs(alpha - pbrp.alphaTest.x) < pbrp.alphaTest.y)
         : (alpha < pbrp.alphaTest.x);

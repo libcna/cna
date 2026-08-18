@@ -6,6 +6,12 @@ layout(location = 0) in vec3 inPos;
 layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec4 inTangent;
 layout(location = 3) in vec2 inUV;
+// plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
+// colour. Declared only in the variants whose pipeline supplies it (strides 60 and 80); the others
+// pass opaque white, the multiplier's identity, so the shared fragment stage has one interface.
+#ifdef CNA_PBR_VERTEX_COLOR
+layout(location = 4) in vec4 inColor;
+#endif
 
 layout(location = 0) out vec2  fragUV;
 layout(location = 1) out vec3  fragNormal;
@@ -13,6 +19,7 @@ layout(location = 2) out vec3  fragTangent;
 layout(location = 3) out float fragBitangentSign;
 layout(location = 4) out vec3  fragWorldPos;
 layout(location = 5) out vec4 fragFog;    // REMED-GFX-009 xyz=FogColor, w=keep-factor
+layout(location = 6) out vec4  fragColor0;
 
 // Reuses lit_textured3d.vert.glsl's exact PC layout (FillExtUniforms) -- PbrEffect's
 // DiffuseColor/AmbientColor/DirectionalLight0 all land in the same slots that already exist for
@@ -59,6 +66,11 @@ float cnaDirectionHandedness(mat3 m) {
 void main() {
     gl_Position = pc.mvp * vec4(inPos, 1.0);
     fragUV = inUV;
+    #ifdef CNA_PBR_VERTEX_COLOR
+    fragColor0 = inColor;
+    #else
+    fragColor0 = vec4(1.0);
+    #endif
     // GLSL has a built-in inverse(), matching lit_textured3d.vert.glsl's own normal-matrix
     // convention exactly (no CPU-precomputed normal matrix needed, unlike WebGPU's WGSL path).
     mat3 normalMatrix = transpose(inverse(mat3(lp.world)));

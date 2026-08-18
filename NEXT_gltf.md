@@ -11,12 +11,12 @@ session needs to start work without re-deriving the state.
 - **Working document:** `plan_gltf.md`, **471** numbered rows. **Five remain open: `GLTF-344` and
   `GLTF-465` (both `✅/⬜`), and `GLTF-459`, `GLTF-460`, `GLTF-464` (`⬜`).** `GLTF-463` closed on
   2026-08-17. `GLTF-465` is half closed: **no renderer draws a `COLOR_0` asset with different core
-  semantics any more** (twelve apply the product, five refuse the draw), and what remains is
+  semantics any more** (thirteen apply the product, four refuse the draw), and what remains is
   implementing it in those eight. §27.2 carries a row-by-row ROBUST assessment; that section, not this
   file, is the record of what the milestone still needs.
 
 - **The milestone in force is `GLTF CORE 2.0 CORRECT` (§27.1.3, 2026-08-18), and it is stated with
-  its renderer coverage beside it: `PBR renderer coverage: 12/17 apply COLOR_0, 5 refuse such a draw by
+  its renderer coverage beside it: `PBR renderer coverage: 13/17 apply COLOR_0, 4 refuse such a draw by
   name`.** The name was written on 2026-08-17, rejected by the owner the next day, held for a day as
   `GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT`, and taken back only when the owner's own condition was
   met. **Read §27.1.3 before §27.1, and §27.1.2 before either.**
@@ -260,15 +260,16 @@ found by *running the thing that was said to be impossible* rather than by reaso
 
 Rewritten 2026-08-17 after the re-audit. Ordered by cost, cheapest first.
 
-1. **`GLTF-465`: carry `COLOR_0` into the remaining five PBR renderers.** Twelve are done (EasyGL,
-   SOFTWARE, IGL, OpenGL 2, OpenGL 4, Vulkan, DirectX 11, DirectX 12, Magnum, Diligent, Bgfx, LLGL)
-   and the other five refuse such a draw, so nothing renders wrongly meanwhile — coverage work, not
-   correctness work. What is left is genuinely harder than what is done: `directx9` needs the pinned
-   native `d3dcompiler_47.dll` Wine prefix (`~/.wine-cna-d3d9-spike`, SHA-256 gated) before its
-   `vs_3_0`/`ps_3_0` bytecode can be regenerated, and `metal`, `sdl-gpu`, `webgpu` and `wicked` have
-   **no stride-60/80 vertex layout at all**, so each needs a layout, a pipeline variant and a shader
-   change rather than just the product. `metal` additionally cannot be compiled anywhere this
-   repository runs.
+1. **`GLTF-465`: carry `COLOR_0` into the remaining four PBR renderers.** Thirteen are done (EasyGL,
+   SOFTWARE, IGL, OpenGL 2, OpenGL 4, Vulkan, DirectX 11, DirectX 12, Magnum, Diligent, Bgfx, LLGL,
+   SDL GPU) and the other four refuse such a draw, so nothing renders wrongly meanwhile — coverage
+   work, not correctness work. What is left is genuinely harder than what is done: `directx9` needs
+   the pinned native `d3dcompiler_47.dll` Wine prefix (`~/.wine-cna-d3d9-spike`, SHA-256 gated) before
+   its `vs_3_0`/`ps_3_0` bytecode can be regenerated; `webgpu` and `wicked` have **no stride-60/80
+   vertex layout at all**, so each needs a layout, a pipeline variant and a shader change rather than
+   just the product (`webgpu` is buildable if you point `CNA_WEBGPU_ROOT` at the wgpu-native artifact
+   another tree already downloaded); and `metal` cannot be compiled anywhere this repository runs, so
+   its two-line guard call is the honest limit of what this host can verify about it.
 
    Recipes that worked, in the order they were cheapest:
    - **Magnum / Diligent** — shaders are generated or template-expanded at runtime, so no offline
