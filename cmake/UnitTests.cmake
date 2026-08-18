@@ -657,6 +657,10 @@ if(CNA_BUILD_TESTS)
     # parses this exact list out of this file and asserts that every registered Gltf* suite falls
     # into exactly one rung -- so a new suite that matches no rung fails the run instead of
     # silently sitting outside `ctest -L gltf-conformance`. Keep the entries here only.
+    # plan_modern.md MOD-1309/MOD-1310 add two suites that exist only when the engine layer is
+    # compiled in. They are named here unconditionally -- the rung list is parsed as TEXT by
+    # GltfConformanceLadderTests, so a CMake variable inside one of these strings would be read
+    # literally -- and that test knows which of them are CNAEXT-gated.
     set(CNA_GLTF_CONFORMANCE_RUNGS
         "L0|GltfFixtureCorpus.*:GltfOracleEXT.*:GltfConformanceLadder.*:GltfSharedDefectPolicy.*:GltfRendererPbrFallbackPolicy.*:GltfRendererIndexWidthPolicy.*:GltfRendererPointTopologyPolicy.*:GltfDracoEncoderPin.*"
         "L1|GltfConformanceL1.*:GltfContainerRobustness.*:GltfContainerValidation.*:GltfUriContainment.*:GltfExternalBuffer.*:GltfExtensionRegistry.*:GltfLimitationsDoc.*:GltfVendoredCgltf.*"

@@ -38,6 +38,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <chrono>
@@ -318,11 +319,21 @@ public:
 
 int main(int argc, char** argv)
 {
-    bool benchmark = false;
-    for (int i = 1; i < argc; ++i)
-        if (std::strcmp(argv[i], "--benchmark") == 0) benchmark = true;
+    try
+    {
+        bool benchmark = false;
+        for (int i = 1; i < argc; ++i)
+            if (std::strcmp(argv[i], "--benchmark") == 0) benchmark = true;
 
-    InstancingLodExample example(benchmark);
-    example.Run();
-    return example.result();
+        InstancingLodExample example(benchmark);
+        example.Run();
+        return example.result();
+    }
+    catch (const CNA::Platform::PlatformException& e)
+    {
+        // The registered ctest points at CNA_TEST_DISPLAY, which is not always a display that
+        // exists; SKIP is the honest answer there, not a crash.
+        std::printf("SKIP: no video subsystem here (%s)\n", e.what());
+        return 77;
+    }
 }

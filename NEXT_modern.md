@@ -271,6 +271,8 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-18 | same, with all of Phase 13 (the material reconciliation) | same | 7787 ran · 7723 pass · 64 skip · **0 fail** |
 | 2026-08-18 | same, with all of Phase 14 (instancing, LOD and culling) | same | 7806 ran · 7742 pass · 64 skip · **0 fail** |
 | 2026-08-18 | same, with all of Phase 15 (compute, storage buffers, auto-exposure) | same | 7824 ran · 7758 pass · 66 skip · **0 fail** |
+| 2026-08-18 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`** again, after Phases 11-15 (`MOD-1709`) | same | 7556 ran · 7492 pass · 64 skip · **0 fail** |
+| 2026-08-18 | `cmake-build-cnaext`, with the Phase 17/18 verification and documentation work | same | 7829 ran · 7763 pass · 66 skip · **0 fail** |
 
 The `CNA_CNAEXT=OFF` row is the one that answers "can this break what already works". It configures,
 builds and passes with the whole engine layer compiled out. Its lower test count is expected and not
@@ -304,6 +306,12 @@ Two things about how the suite is run matter more than they look:
 - **Run it from the repository root**, not from the build directory. Content/media/audio tests
   resolve fixtures like `tests/assets/xnb/...` relative to the CWD; from `cmake-build-cnaext/` that
   is 116 failures of pure path noise.
+- **`CNA_TEST_DISPLAY` is now `:99` in `cmake-build-cnaext`.** It defaulted to `:0`, which does not
+  exist here, so every registered engine-layer ctest skipped and the label suites looked green
+  without running. Reconfigured with `-DCNA_TEST_DISPLAY=:99`; `ctest -L CnaExt` now runs all nine
+  for real. The examples also catch `PlatformException` and exit 77 rather than aborting, so a tree
+  configured without a display still *skips* instead of failing.
+
 - **The C API is off in `cmake-build-cnaext`, and turning it on has a catch.** Phase 13 verified
   the C mirror by configuring that tree with `-DCNA_BUILD_C_API=ON`, then turned it back off. The
   reason: `libcna_c_api_static.a`'s generator reads `CMakeFiles/<target>.dir/link.txt`, which only

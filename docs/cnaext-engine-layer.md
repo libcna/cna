@@ -104,7 +104,10 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ⬜ | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Point / spot lights + shadows | ✅ punctual lighting and its cube/spot lookup on all four lit programs | ⬜ | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Skybox | ✅ one fullscreen pass; needs `CustomEffects` | ⬜ | ⬜ | ⬜ — where the shader will not compile the sky is skipped and logged once |
-| Compute / storage buffers | ⬜ | ⬜ | ⬜ | ⬜ |
+| Image-based lighting | ✅ CPU precompute (works on every renderer) + split-sum shading | ⬜ | ⬜ | ⬜ — the precompute runs anywhere; the shading needs the renderer's own shader path |
+| Materials (`PbrMaterial` ↔ `PbrEffect`) | ✅ | ✅ | ✅ | ✅ — no renderer code at all: it moves values between two existing objects |
+| Instancing / LOD / culling | ✅ | ⬜ | ⬜ | ⬜ — `LodGroupEXT` and `FrustumCullerEXT` are renderer-free and run everywhere; `InstancedRendererEXT` needs `GraphicsCapability::Instancing` and otherwise refuses (or falls back, on request) |
+| Compute / storage buffers | ✅ GL ES ≥ 3.1 / GL ≥ 4.3, runtime-probed; image bindings desktop-GL only | ⬜ | ⬜ | ⬜ — both wrappers throw `System::NotSupportedException` naming the renderer |
 
 ### Using it
 

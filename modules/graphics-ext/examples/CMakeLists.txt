@@ -93,7 +93,7 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT)
     # Pure function, no GraphicsDevice/window needed at all.
     cna_graphics_ext_test(cna_test_ascii_quantizer ascii_quantizer_test.cpp)
     cna_register_renderer_test(NAME Ascii_Quantizer COMMAND cna_test_ascii_quantizer
-        TIMEOUT 30)
+        TIMEOUT 30 LABELS "CnaExt")
 
     if(NOT EMSCRIPTEN AND NOT WIN32)
         cna_graphics_ext_test(cna_test_ascii_fontatlas ascii_fontatlas_test.cpp)
@@ -121,31 +121,48 @@ endif()
 if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_graphics_ext_test(cna_test_cnaext_shadowmap cnaext_shadowmap_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_ShadowMap COMMAND cna_test_cnaext_shadowmap
-        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_graphics_ext_test(cna_test_cnaext_csm cnaext_csm_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_CascadedShadowMap COMMAND cna_test_cnaext_csm
-        TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 90 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_graphics_ext_test(cna_test_cnaext_pointshadow cnaext_pointshadow_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_PointShadow COMMAND cna_test_cnaext_pointshadow
-        TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 90 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_graphics_ext_test(cna_test_cnaext_skybox cnaext_skybox_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_Skybox COMMAND cna_test_cnaext_skybox
-        TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 90 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_graphics_ext_test(cna_test_cnaext_ibl cnaext_ibl_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_ImageBasedLighting COMMAND cna_test_cnaext_ibl
-        TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_graphics_ext_test(cna_test_cnaext_instancing_lod cnaext_instancing_lod_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_InstancingAndLod COMMAND cna_test_cnaext_instancing_lod
-        TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_graphics_ext_test(cna_test_cnaext_compute_particles cnaext_compute_particles_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_ComputeParticles COMMAND cna_test_cnaext_compute_particles
-        TIMEOUT 180 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 180 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_graphics_ext_test(cna_test_cnaext_bloom cnaext_bloom_test.cpp)
+    cna_register_renderer_test(NAME CNAEXT_BloomInTenLines COMMAND cna_test_cnaext_bloom
+        TIMEOUT 90 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+endif()
+
+# ---- plan_modern.md MOD-1740: the guard script, as a test ---------------------------------------
+# MOD-3's scripts/check_cnaext_guards.sh proves every engine-layer file is wrapped in
+# `#ifdef CNA_CNAEXT`, which is what makes the layer genuinely absent from a default build. A rule
+# nothing enforces is a rule that decays, so it runs as a ctest: pure text, no device, no display,
+# and it runs in EVERY configuration -- including the CNA_CNAEXT=OFF one, where an unguarded file
+# would otherwise not even be compiled.
+if(CNA_BUILD_TESTS)
+    add_test(NAME CNAEXT_GuardDiscipline
+             COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/check_cnaext_guards.sh" "${CMAKE_SOURCE_DIR}")
+    set_tests_properties(CNAEXT_GuardDiscipline PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "CnaExt")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

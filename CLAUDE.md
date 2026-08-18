@@ -553,6 +553,32 @@ own honest status legend and capability boundary; do not describe it as verified
 
 ---
 
+## The CNAEXT Engine Layer (`CNA::Graphics`)
+
+Everything above the XNA API — HDR pipeline, post-process passes, shadows, sky, image-based
+lighting, materials, instancing/LOD/culling, compute — lives in `modules/graphics-ext/` under the
+`CNA_CNAEXT` CMake option, which is **OFF by default**. With it off the layer does not exist: every
+file in that module is wrapped in `#ifdef CNA_CNAEXT`, and a ctest (`CNAEXT_GuardDiscipline`)
+enforces that. A game that does not opt in renders exactly what it rendered before.
+
+Do not reconstruct this subsystem's state by reading its code:
+
+- **`CNAEXT.md`** — the design (what the layer is, what it is not, why).
+- **`plan_modern.md`** — the task backlog implementing it, `MOD-1`–`MOD-1924`, with every deviation
+  and refusal recorded in the row itself rather than in a commit message.
+- **`NEXT_modern.md`** — the running ledger: what is done, the decisions that did not survive
+  contact, the full-suite baseline after each phase, and how to run the tests here
+  (repo-root CWD, a real display, `Xvfb :99`).
+- **`docs/cnaext-engine-layer.md`** — the capability boundary, per subsystem and per renderer.
+- **`docs/cnaext-perf.md`** — every recorded measurement, with the recipe that produced it.
+
+The build directory for this work is `cmake-build-cnaext/` (`-DCNA_CNAEXT=ON`). EasyGL is the
+reference renderer; other renderers pick each subsystem up in `plan_modern.md` Phase 16, and until
+they do they report `false` from the matching capability and take a documented fallback rather than
+failing.
+
+---
+
 ## WebGPU Is Active (Experimental)
 
 The project owner explicitly lifted the former WebGPU prohibition on **2026-07-12** and authorized
