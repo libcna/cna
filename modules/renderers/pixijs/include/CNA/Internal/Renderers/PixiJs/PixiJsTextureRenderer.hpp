@@ -7,10 +7,11 @@ namespace CNA::Internal::Renderers::PixiJs
     /**
      * @brief Texture backed by a synchronous, buffer-uploaded PIXI.Texture (Design decision 8).
      *
-     * Each instance owns one JS-side PIXI.BaseTexture/PIXI.Texture pair, registered under a unique
-     * integer id in `Module['cnaPixiTextures']` (see PixiJsRenderer.cpp's EM_JS functions and
-     * PixiJsSpriteBatchRenderer.cpp's Draw() path, which sources pooled PIXI.Sprite.texture
-     * assignments from it via that id).
+     * Each instance owns one JS-side PIXI.Texture (and, through it, its PIXI.BaseTexture and the
+     * cache of per-source-rectangle views onto it), registered under a unique integer id in
+     * `Module['cnaPixi'].textures` -- see PixiJsRenderer.cpp's EM_JS functions and
+     * PixiJsSpriteBatchRenderer.cpp's flush, which resolves the sampled texture from that registry
+     * by id.
      */
     class PixiJsTextureRenderer : public ITextureRenderer
     {
@@ -24,7 +25,6 @@ namespace CNA::Internal::Renderers::PixiJs
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         /// plan_pixijs.md PIXIJS-31: investigated and decided, 2026-08-17 (not merely undecided) --
         /// `PIXI.BufferResource` (this renderer's own upload path) exposes only `upload()`/
@@ -35,7 +35,7 @@ namespace CNA::Internal::Renderers::PixiJs
         /// Canvas2D's own structural conclusion, but for an independently investigated reason.
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
-        /// Id into `Module['cnaPixiTextures']`, used by PixiJsSpriteBatchRenderer and
+        /// Id into `Module['cnaPixi'].textures`, used by PixiJsSpriteBatchRenderer and
         /// PixiJsRenderTargetRenderer's bind/unbind.
         [[nodiscard]] int GetPixiTextureId() const { return id_; }
 

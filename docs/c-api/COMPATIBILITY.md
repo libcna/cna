@@ -51,4 +51,4 @@ repository does **not** exercise, and the reason each one is absent:
 - **Running a Windows binary.** The cross-compiler proves the headers parse for a Windows target; nothing here links or executes one, so no Windows behaviour is claimed.
 - **macOS, iOS, Android and the web targets.** No toolchain for any of them is present, so no cell exists for them at all rather than an untested claim.
 - **C89.** The headers use `//` comments and mixed declarations, so C99 is the floor by design rather than by accident.
-- **Renderers other than the four configured.** CNA has 46 renderer identities; four are built and run here. The other 42 share the same C surface, and the capability queries are what a caller uses to find out what any of them supports.
+- **Renderers other than the four configured.** CNA has 49 renderer identities; four are built and run here. The other 45 share the same C surface, and the capability queries are what a caller uses to find out what any of them supports.

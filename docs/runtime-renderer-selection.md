@@ -25,8 +25,8 @@ linked in and the concrete one is chosen at runtime, before CNA is started.
 |---|---|
 | Descriptor / registry value types | ✅ present (`GraphicsRendererDescriptor`, `GraphicsRendererRegistry`, `GraphicsRendererFallbackRecord`) |
 | Pre-window contract extracted from `GraphicsDevice` | ✅ window flags, `SDL_INIT_VIDEO`, the no-window branch and OPENGL1's GLX attributes are all descriptor-driven |
-| Per-family descriptors | ✅ all 43 families / 47 public identities; guarded by `scripts/check_runtime_renderer_discipline.py` |
-| Namespaced factories / generated registry | ✅ all 43 factories namespaced; `cmake/RendererRegistry.cmake` emits the table |
+| Per-family descriptors | ✅ all 45 implementation families / 49 public identities; guarded by `scripts/check_runtime_renderer_discipline.py` |
+| Namespaced factories / generated registry | ✅ all 45 factories namespaced; `cmake/RendererRegistry.cmake` emits the table, and the discipline gate checks every identity reaches it |
 | `GraphicsRendererSelection` API | ✅ selection, latch, env var, availability; 20 tests |
 | Fallback chain | ✅ resolution, recording, logging and exhaustion; cross-window-kind recreation verified with `SDL_RENDERER;OPENGLES3;HEADLESS` and `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` multi builds |
 | Multi-renderer CMake mode | ✅ `CNA_GRAPHICS_RENDERERS`, configure-time combination rules, CI job |
@@ -49,10 +49,17 @@ can serve them. Each renderer family answers them through its own
 
 | Question | Field |
 |---|---|
-| Does this renderer need a window at all? | `needsWindow` — false for `HEADLESS`, `SOFTWARE`, `STUB`, `PORTABLEGL` |
-| Must SDL's video subsystem be initialized? | `needsVideoSubsystem` — false for the same four, which is what lets them run with no display server |
-| Which SDL window flags does it need? | `prepareWindowFlags()` |
-| Anything to set before `SDL_CreateWindow`? | `applyPreWindowAttributes()` — only `OPENGL1` has real work here |
+| Does this renderer need a window at all? | `needsWindow` — false for `HEADLESS`, `SOFTWARE`, `STUB`, `PORTABLEGL`, `TINYGL` |
+| Must the platform's video subsystem be started? | `needsVideoSubsystem` — false for the same families, which is what lets them run with no display server |
+| What kind of window does it need? | `windowKind` (`None`/`Plain`/`OpenGL`/`Vulkan`/`Metal`), plus `wantsHighDpi` |
+| Anything to fix before the window exists? | `glFramebuffer` — depth/stencil/double-buffer/multisample bits, which a desktop GLX visual fixes at window-creation time. Only `OPENGL1` and `FNA3D` have real work here |
+| Which platform services is it handed? | `needsSurfacePresenter`, `needsGlContext`, `needsVulkanSurface` |
+
+These last three groups were function-pointer hooks (`prepareWindowFlags()`,
+`applyPreWindowAttributes()`) when this design was written, and became **data** when the platform
+contract landed: every hook implementation only mapped the window kind onto flags the windowing
+library understood, and `WindowDescription` already carries those. `GraphicsDevice` performs the
+mapping once, so no descriptor names a windowing library at all.
 
 Four families compute their window flags at **runtime**, because their own native API is itself a
 runtime choice. This predates runtime renderer selection; the plan generalizes their existing
@@ -156,7 +163,30 @@ cmake -S . -B cmake-build-multi -G Ninja \
 ```
 
 `CNA_GRAPHICS_RENDERER` keeps its meaning: it names the **default** renderer, the one used when
-nothing selects another at runtime. It must be a member of `CNA_GRAPHICS_RENDERERS`.
+nothing selects another at runtime. It must be a member of `CNA_GRAPHICS_RENDERERS`, and a default
+outside the list is a **configure error**:
+
+```text
+CMake Error at cmake/RendererDefaultSelection.cmake:54 (message):
+  CNA: CNA_GRAPHICS_RENDERER=SOFTWARE is not a member of
+  CNA_GRAPHICS_RENDERERS="OPENGL4;VULKAN".
+
+    CNA_GRAPHICS_RENDERER names the DEFAULT renderer chosen from the compiled-in set, so it has to be one of them.
+    Either add SOFTWARE to CNA_GRAPHICS_RENDERERS, or set -DCNA_GRAPHICS_RENDERER=OPENGL4 to make the list's first entry the default.
+```
+
+It is refused rather than silently corrected on purpose. The default is not merely which renderer
+starts first: it also decides which `CNA_RENDERER_<X>` macro is defined project-wide, which example
+targets exist, and what every `CNA_GRAPHICS_RENDERER STREQUAL` gate in the build answers. A build
+that asked for one default and quietly got another is a build whose every later renderer question
+is about a renderer nobody asked for. It is also the same policy the runtime already applies —
+CNA never substitutes a renderer silently — and configure time may not be laxer than run time about
+the same question.
+
+The rule is exercised by the `CnaRendererDefaultSelection_*` CTest cases, which run
+`cmake/RendererDefaultSelection.cmake` in script mode for a valid default inside the list, a default
+that is the list's last entry (proving the resolved set is reordered default-first), an invalid
+default outside the list, and an ordinary single-renderer configuration.
 
 Leaving `CNA_GRAPHICS_RENDERERS` unset is single-renderer mode, unchanged in every respect.
 
@@ -201,7 +231,7 @@ configure time, not merely to exist.
 |---|---|
 | `PORTABLEGL` + any real-OpenGL renderer | PORTABLEGL is a single-header C library that **defines** the global `gl*` symbols (`glClear`, `glDrawArrays`, …). Linking it beside a renderer that calls the real OpenGL of the same names is a duplicate-symbol error. |
 | `GDI` + `SOFTWARE` | GDI compiles the SOFTWARE module's own translation units a second time with `CNA_SOFTWARE_2D_ONLY`. Both in one binary would define the same functions twice with different bodies — an ODR violation. |
-| Renderers from different **platform** partitions | Windows-only (the DirectX family, `GLIDE`, `GDI`, `DIRECT2D`), Emscripten-only (`WEBGL1`, `WEBGL2`, `CANVAS`, `HTML_DOM`, `SVG_DOM`) and macOS-only (`METAL`) cannot be targeted by one toolchain. |
+| Renderers from different **platform** partitions | Windows-only (the DirectX family, `GLIDE`, `GDI`, `DIRECT2D`), Emscripten-only (`WEBGL1`, `WEBGL2`, `CANVAS`, `HTML_DOM`, `SVG_DOM`, `PIXIJS`) and macOS-only (`METAL`) cannot be targeted by one toolchain. |
 | `GLIDE` + anything | GLIDE pins the build to the native 32-bit x86 Glide ABI. |
 
 ### Verified combinations
@@ -210,6 +240,7 @@ configure time, not merely to exist.
 |---|---|
 | `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime, real fallback between them verified |
 | `WEBGL2;WEBGL1;CANVAS;HTML_DOM;SVG_DOM` (Emscripten) | 🟨 **one wasm bundle carries all five**, and the selection API works inside it — `GetAvailable()` reports all five and `GetSelected()` resolves. Creating a device needs a real browser, which is not yet automated here |
+| `PIXIJS;CANVAS;HTML_DOM;SVG_DOM` (Emscripten) | 🟨 configures and **links** — `cna_demo_renderer_selection` builds with all four families in one wasm bundle, and `PIXIJS` is carried whether or not it is the default. Its vendored `pixi.min.js` reaches the link line through `cna_renderer_pixijs`'s own `PUBLIC --extern-pre-js`, which is per-family rather than per-default. Runtime selection between them needs a real browser, not automated here; `PIXIJS`'s own pixel suite (`scripts/run_pixijs_browser_tests.mjs`) covers the single-renderer build |
 | `OPENGLES3;OPENGLES1;OPENVG;BLEND2D;SOFTWARE;HEADLESS` | ✅ six renderers; **17/17 dispatch tests** pass. `OPENGLES1` needs an ES 1.1-capable Mesa (`scripts/opengles1-test-env.sh`); without it the suite covers the other five and says so |
 | `OPENGLES3;WICKED;SOFTWARE;HEADLESS` | ✅ all four selectable. `WICKED` needs `SDL_VIDEODRIVER=x11` **and** `libdxcompiler.so` in the working directory — its shader compiler loads that path literally |
 | `OPENGLES3;DILIGENT;SOFTWARE;HEADLESS` | ✅ 17/17 dispatch tests. First heavy **external artifact** in a multi build — needs `-DCNA_SKIA_ROOT=` and `-DCNA_SKIA_BUILD_DIR=` |
@@ -461,5 +492,5 @@ archive sizes overstates it by an order of magnitude here.
 ## See also
 
 - `plan_runtimerenderer.md` — the design decisions and the full task breakdown.
-- `modules/core/include/CNA/GraphicsRendererType.hpp` — the 46 public renderer identities.
+- `modules/core/include/CNA/GraphicsRendererType.hpp` — the public renderer identities.
 - `cmake/RendererSelection.cmake` — compile-time selection.

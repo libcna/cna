@@ -38,9 +38,6 @@ namespace CNA::Internal::Renderers::OpenGL1
      */
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args);
 
-        }
-    }
-
     /**
      * @brief The OpenGL1 family's descriptor.
      *

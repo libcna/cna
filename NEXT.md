@@ -1,5 +1,26 @@
 # NEXT.md
 
+## The 2026-08-18 merge of `next` into `feature/fx`
+
+> Merged `origin/next` at `94f23eac7` into `feature/fx` (merge base `05a9eab06`, 43 commits).
+> Textually almost uneventful: only **four** files were touched by both sides, three of them
+> auto-merged, and the single conflict was this file -- two status sections appended to the same
+> place, kept in date order.
+>
+> Worth writing down because the first reading of it was wrong: `next` carries commits whose
+> subjects say *"custom ShaderEffect parameters on Vulkan"*, *"give Vulkan one row order instead of
+> three"* and *"read cube faces back, and prove volumes cannot be"*, which looked like a direct
+> collision with the FX pass's own Vulkan work (a viewport Y-flip for compiled draws, and newly
+> reachable volume sampling). They are not. Every one of them touches `modules/renderers/igl/`
+> only -- the "Vulkan" in those subjects is **IGL's own Vulkan backend**, selected by
+> `CNA_IGL_BACKEND`, not CNA's `VULKAN` renderer identity. `git diff <base> origin/next` touches no
+> file under `modules/renderers/vulkan/` at all. A subject line is not a file list.
+>
+> The three auto-merged code files were checked rather than trusted: `next` refactored
+> `GraphicsDevice`'s video-subsystem release and added `GetShaderDialectEXT`, and added an `Igl`
+> arm to the capability expectations -- all disjoint from the FX pass's `CNA_VULKAN_COMPILED_EFFECTS`
+> option and its Vulkan arm in `kExpectCompiledEffects`, both of which survived intact.
+
 ## Compiled XNA effects: the 2026-08-18 follow-up pass (`plan_fx.md` Phase J, `FX-091`-`FX-110`)
 
 > **Carry this forward: the previous pass proved the compiled shader is what draws. It did not
@@ -303,6 +324,158 @@ task.
   this repository uses `SDL_assert`/`SDL_SetAssertionHandler` at all, CNA's own assertions are plain
   `<cassert>`, and the file's only undefined symbol is `setenv`.
 - `plan_fx.md`'s global definition of done (section 10.2) is **not** satisfied, and says so.
+## The compiled-effect and IGL merge, and the renderer nobody could reach (2026-08-17)
+
+> The branch caught up with `next` again, 128 commits of it: the compiled Effect Framework campaign
+> (`plan_fx.md`) and the IGL renderer. The reopening was the smallest of the three so far — 12
+> planned rows — but it is the one that showed the coverage matrix can be wrong in a direction the
+> matrix itself cannot report.
+>
+> **`CNA::GraphicsRendererType::TinyGL` was recorded `implemented`, with test evidence, and no
+> `CNA_GRAPHICS_RENDERER_TINYGL` constant existed anywhere in the ABI.** It had arrived in an
+> earlier merge. `CBIND-050` seeded its rule approvals from the **pre-merge** tree, which is what
+> stopped that merge's 121 unreviewed rows being blessed and is still the right decision — and it
+> also froze whatever the pre-merge tree already believed, which included this. Seeding cannot tell
+> a reviewed claim from an inherited one. The practical rule that follows: when a slice touches an
+> identity family, `grep` for the C constant instead of trusting the row.
+>
+> **Nothing caught it because `cna_c_api` was the one target in its own module compiled without the
+> strict warnings.** `cna_c_api_enable_strict_warnings` is called on all 59 test executables and
+> never on the library, so GCC had been reporting `enumeration value 'TinyGL' not handled in
+> switch` onto a stream nobody read. The library now builds with `-Wall -Wextra -Werror`, minus two
+> named exclusions: `-Wpedantic`, which fires only inside Sharp Runtime's `Decimal.hpp` on a
+> sibling project's `__int128` extension, and `-Wmissing-field-initializers`, which contradicts
+> this ABI's own `{sizeof(T), version}` idiom. It cost three fixes, all small and all real.
+>
+> `CBIND-052A` bound `IGL`, `PIXIJS` and the `CompiledEffects` capability, and gave both identity
+> ranges the `_MAXIMUM` that 21 other identity families in this ABI already had. That absence is
+> the actual root cause: nothing could enumerate either range, so no test could notice it had
+> stopped matching CNA. Three gates now hold them together — a `consteval` count of the renderers
+> `getGraphicsRendererName` really names, held against the C table's size; the maximum tied to that
+> table; and exhaustive no-`default` switches in both directions so `-Werror=switch` catches an
+> appended renderer *or* capability — and each was shown to fail by deleting `PixiJs` from one
+> side. **The implemented delta was +3, not +4**, and that missing one is exactly the row that had
+> been counted all along.
+>
+> **A second lesson, about the verification trees.** Three of the four had been built *before* the
+> merge commit existed and passed 81/81 on the old library; only the rebuilt tree showed the two
+> failures HEAD had really introduced (`cna_effect_create_compiled` no longer refusing wholesale,
+> and the `EffectReader` placeholder replaced by a reader that actually decodes). A green suite in
+> a tree you did not rebuild is not evidence. Compare `libcna_c_api.so`'s mtime with
+> `git log -1 --format=%ci` first.
+>
+> **`CBIND-052B` then closed the other 9, and its finding was a defect nothing would have
+> reported.** `Effect::Clone()` and `OnApply()` stopped being pure virtual in the merge. The C
+> adapter had overridden `Clone()` with "construct a fresh empty effect" — correct while there was
+> nothing to inherit, and wrong the moment the base began cloning a compiled effect's runtime and
+> copying its parameter values. A C caller cloning a compiled effect would have received an empty
+> one, silently, with no error anywhere. The lesson generalizes past this class: **when a canonical
+> method stops being pure virtual, every adapter override of it becomes a candidate bug**, because
+> the override was written to substitute for nothing and now substitutes for something.
+>
+> The rest followed precedent. `GetCompiledRuntimePtr()` became `cna_effect_get_is_compiled_ext`,
+> since the runtime object is renderer-owned implementation C can neither construct nor call into.
+> The three `EffectParameter` `const` overloads were re-approvals — C has no second spelling of the
+> same read, and the `EffectPass` annotation pair was already approved that way. The two reflected
+> constructors became additive `_ext` siblings rather than growing published signatures, for the
+> fourth time in this campaign. And the one owner decision — `EffectPass`'s `passIndex`, private,
+> accessorless and unreachable from C — was ruled on by adding the public
+> `EffectPass::getIndexInternal()` that `EffectTechnique` already had, which is the asymmetry the FX
+> work left behind, rather than recording a thirteenth partial.
+>
+> The matrix is closed at **6,296 implemented, 12 approved partial, 0 planned, 386 not applicable**
+> and `RELEASE_GATE.md` reads **ready**. Across the pair of slices the gate fired in **both**
+> directions it was built for: refusing a recorded-met criterion that had regressed, then refusing a
+> recorded-not-met one that had quietly become met. One gap is recorded rather than papered over:
+> no tree this campaign builds advertises `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`, so
+> `cna_effect_create_compiled`'s accepting path is never taken here.
+
+## IGL renderer — audited, repaired and completed (2026-08-17 / 2026-08-18)
+
+> A full audit of the IGL renderer against `plan_igl.md` found four real defects and fixed them;
+> what remains open is listed below and in `plan_igl.md`'s own task table, which is the detailed
+> record. The theme of the fixed set is worth carrying forward: **a task marked "written, not yet
+> compiled" is not evidence that the code was ever written.** `IGL-7` (the window's render intent)
+> had carried that marker since the renderer landed, and the commit that added the renderer does
+> not touch `GraphicsDevice.cpp` at all — the two helper functions the row named existed, were unit
+> tested, and were called by nothing. The later runtime-renderer port then wrote a *constant*
+> `windowKind` into the family's new descriptor, which looked like a faithful port of a decision
+> that had never actually been made.
+>
+> **Fixed.** IGL's descriptor now derives its window kind, its pre-window OpenGL framebuffer request
+> and its GL-context service from `Detail::ResolveRendererBackendForWindow()` — the same cached
+> answer the device is later built from — so `CNA_IGL_BACKEND=vulkan` gets a Vulkan-intent window
+> and `CNA_IGL_BACKEND=opengl` gets a 24/8/double-buffered/multisample-capable GLX visual instead of
+> the platform default (whose 0-bit stencil silently disables every `StencilEnable`). The
+> surface-format layer was rebuilt: `width * 4` was the row pitch of every texture upload regardless
+> of format, `Rgba64` was mapped to a texel twice its size with integer sampling, and every other
+> unrepresentable format silently became RGBA8. And `~IglRenderer` never released the flat-normal
+> dummy texture added by GLTF-374, so every example test aborted at process exit on IGL's own
+> dangling-context assert *after* printing all its passes.
+>
+> A second theme worth carrying: **four shared, renderer-keyed test tables had no IGL arm**, so an
+> IGL build was asserted against the default renderer's profile and stood red on behaviour
+> `plan_igl.md` documents as correct — an occlusion query IGL cannot have, an instanced path it does
+> implement, cube storage treated as implying cube readback, and a `RenderTargetCube.SetData`
+> refusal it deliberately does not make. Adding a renderer identity is not finished when the
+> registries accept it; these tables are part of the registry surface too. Fixing the cube one also
+> surfaced a real ODR bug: two test translation units defined the same `inline` predicate at
+> namespace scope with different bodies, so the linker kept one arbitrarily and the first edit to
+> that table changed nothing at all.
+>
+> **Status: the IGL renderer is complete on both backends.** 70/70 registered tests, and all 27
+> example binaries pass on OpenGL/GLX and on Vulkan alike. What remains open is upstream limits of
+> IGL `v1.1.1`, each established against the pinned source or by attempting it — not unfinished CNA
+> work. Details in `plan_igl.md`:
+>
+> * **IGL-60 and IGL-67 — CLOSED on 2026-08-18.** Both were the same family of bug: Vulkan stored
+>   and read render-target rows three different ways, and each defect hid the other two by
+>   cancelling against them. `Igl_2D` now passes 5/5 on Vulkan and `Igl_Msaa` 4/4. Two lessons worth
+>   carrying. First, **the obvious fix was measurably wrong** — flipping rows in `UpdatePixels`, the
+>   candidate IGL-67 refused to guess, would have broken the sampler to satisfy the readback,
+>   because uploading into a target and sampling it was already correct. Second, **a test that
+>   renders its own pattern cannot see this class of bug at all**, because a readback flip and a
+>   projection flip cancel exactly; `Igl_ReadbackOrientation` uses no draw call for the part that
+>   matters, which is the only reason it could tell the three apart.
+> * **IGL-17 — cube readback landed, volume readback proved impossible.** A plain `TextureCube` now
+>   reads back at every declared mip level: the old refusal ("IGL exposes readback through
+>   `IFramebuffer`, not `ITexture`") was true and not a reason, since a framebuffer is a cheap
+>   descriptor over an existing image and the render-target path was already building throwaway ones.
+>   All 49 `TextureCubeTest` cases pass. Volume readback is a genuine upstream limit, established by
+>   attempting it: IGL cannot attach a 3D texture to a framebuffer on either backend, and the driver
+>   says so (`GL_INVALID_OPERATION … invalid textarget GL_TEXTURE_3D`). The three suites that
+>   asserted it now assert the refusal instead — the per-renderer table the previous audit said did
+>   not exist.
+> * **IGL-43 and IGL-72 — DONE.** A custom `ShaderEffect` now works on Vulkan with parameters, and
+>   the contract was decided rather than patched. Loose uniforms do not exist there, so parameters
+>   travel in a std140 block whose layout the application **declares** —
+>   `ShaderEffect::DeclareUniformBlockEXT` — because IGL `v1.1.1` returns an empty Vulkan reflection
+>   and there is genuinely nothing to discover the offsets from. A parameter with no member in the
+>   declaration fails by name; dropping it would render a zero where the caller set a value.
+>   `GraphicsDevice::GetShaderDialectEXT()` is the renderer-neutral half: an application can now ask
+>   which dialect to supply instead of inferring it from the build's renderer identity, which is
+>   wrong in a multi-renderer build and meaningless for a renderer that picks its API per process.
+>   All three legacy custom-effect tests carry SPIR-V variants and are registered on Vulkan.
+> * **IGL-53 — DONE.** `docs/graphics-renderer-feature-matrix.md` now carries an `IGL` column across
+>   all five per-renderer tables, 21 rows, each backed by a named test. The row was held open on a
+>   real condition and the condition was met, not waived: its two blockers (IGL-60's unexplained
+>   Vulkan `SpriteBatch` failure and the custom-effect abort) are both closed. An IGL cell describes
+>   both backends unless it says otherwise — the honest difficulty of one column for a renderer that
+>   is itself an abstraction over two APIs.
+> * **IGL-61/62/63** — occlusion queries, sampler LOD bias and cube-target MSAA are not
+>   implementable at IGL `v1.1.1`; re-verified against the pinned headers rather than restated.
+> * **Wayland** — the IGL renderer wires up an X11 native window only, and its constructor throws by
+>   name on Wayland rather than half-working. Left deliberately: it is a platform-layer question
+>   rather than a renderer one, and not worth taking ahead of more important CNA work.
+> * **Non-`Color` surface formats — `Rg32` and `Single` are now public; the rest are not.** The
+>   earlier audit refused to promote anything, for the right reason: it had verified storage, while
+>   promotion promises the whole path. `Igl_PublicSurfaceFormat` supplies the missing two thirds —
+>   upload through the format's own typed overload, sampling in a real draw checked against the
+>   channel semantics the format implies, readback, and render-target use — on both backends, and
+>   only those two formats carry it. `ByteEXT`, `UShortEXT` and `HalfSingle` are storable but stay
+>   deferred on principle: their texels are not a multiple of four bytes, which is the framework's
+>   own transfer rule, so promoting them would pass this gate and fail the next layer. Widening
+>   further is a matter of extending that test, not of relaxing the gate.
 
 ## The 2026-08-17 merge of `next`, and what it exposed
 
@@ -384,22 +557,38 @@ task.
 
 > **Active campaign — CNA platform separation (`feature/platform`):** `plan_platform.md` is the
 > authoritative task/evidence log, `docs/platform-abstraction.md` is the durable implementer's
-> guide, and `NEXT_platform.md` carries detailed continuity notes.
+> guide, `docs/platform-sdl2.md` is the SDL2 backend's own boundary, and `NEXT_platform.md`
+> carries detailed continuity notes.
 >
 > Platform, graphics and audio are independent build choices:
-> `CNA_PLATFORM={SDL3,HEADLESS,TERMINAL}`, `CNA_GRAPHICS_RENDERER=<renderer>`, and
-> `CNA_AUDIO_PLATFORM={SDL3,NULL}`. `CNA_PLATFORM` selects window/events/input/host services; it
-> does not imply a renderer or audio backend.
+> `CNA_PLATFORM={SDL3,SDL2,HEADLESS,TERMINAL}`, `CNA_GRAPHICS_RENDERER=<renderer>`, and
+> `CNA_AUDIO_PLATFORM={SDL3,SDL2,NULL}`. `CNA_PLATFORM` selects window/events/input/host services;
+> it does not imply a renderer or audio backend. Only `CNA_AUDIO_PLATFORM=SDL3` defines
+> `SOUND_ENABLED` — the high-level XNA decoder/mixer is an SDL3_mixer engine, so the other two
+> selections have a real playback transport and no decoder above it.
 >
-> **New production code must not include SDL or call `SDL_*`/`MIX_*` outside the platform SDL3
-> implementation, the isolated SDL3/audio mixer implementation, and the four audited renderer
+> **New production code must not include SDL or call `SDL_*`/`MIX_*` outside the platform SDL3/SDL2
+> implementations, the isolated audio mixer implementation, and the four audited renderer
 > exceptions (`sdl-renderer`, `sdl-gpu`, `fna3d`, `freedirect`).** Use `IPlatform` services,
-> explicit capabilities/refusals, batched events and cached input snapshots. Run the inventory,
-> classification, renderer-audit, ratchet and hot-path gates from `tools/platform/`.
+> explicit capabilities/refusals, batched events and cached input snapshots. Run all **seven**
+> gates from `tools/platform/` — inventory, classification, renderer audit, `sdl_ratchet.py
+> --check --strict`, hot-path lint, non-production manifest and `check_contract.py`. The ratchet's
+> `--strict` is not optional: without it the script warns and exits 0 where PLAT-121 requires a
+> hard failure, which is how the 0/0 floor was silently raised once already.
 >
-> Existing reusable builds are `cmake-build-debug` (SDL3 default), `cmake-build-headless`, and
-> `cmake-build-terminal`; do not create another full tree without a distinct configuration need.
+> **A completed plan is not a finished one.** The 2026-08-17 post-merge re-audit in
+> `plan_platform.md` found that later work had reintroduced a renderer holding a raw window
+> pointer, raised the "irreversible" ratchet floor to accommodate it, and left an entire audio
+> selection unable to compile — none of it visible, because no configuration that would expose it
+> had been built and run. If you add a backend or a renderer, run the configuration end to end
+> rather than trusting the gates that ran on a different one.
+>
+> Existing reusable builds are `cmake-build-debug` (SDL3 default), `cmake-build-headless`,
+> `cmake-build-terminal` and `cmake-build-sdl2` (SDL2 platform + SDL2 audio + OPENGLES3); do not
+> create another full tree without a distinct configuration need.
 > `CNA_DEVICES` defaults to OFF, so a devices change must be compiled with it explicitly enabled.
+> Run test suites against an Xvfb display, not the dummy video driver: the dummy driver silently
+> *skips* window-dependent cases, and on SDL2 it cannot provide an OpenGL window at all.
 
 ## C BINDING / C ABI — CBIND-035 CLOSED (2026-08-15)
 

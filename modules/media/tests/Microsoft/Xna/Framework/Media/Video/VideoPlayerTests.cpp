@@ -136,6 +136,11 @@ TEST(VideoPlayerTest, PlayRealFixtureProducesATextureOfCorrectSize)
     EXPECT_EQ(texture->getHeightProperty(), 90);
 }
 
+// plan_platform.md PLAT-SDL2-8: this case asserts on a real mixer playback stream, which only
+// exists under SOUND_ENABLED (the SDL3_mixer selection). Under CNA_AUDIO_PLATFORM=SDL2 or =NULL
+// VideoPlayer opens no stream at all, so the assertion would be vacuous rather than failing --
+// compiled out instead, while the rest of this suite's video coverage keeps running there.
+#ifdef SOUND_ENABLED
 // plan_media.md MEDIA-131 regression (found by external code review): Play() left the newly
 // opened audio stream paused forever -- playback-stream creation opens every stream paused
 // by default, and ReconfigureAudioOutputForCurrentTrack() only resumes it when state_ == Playing,
@@ -152,7 +157,13 @@ TEST(VideoPlayerTest, PlayGenuinelyResumesTheAudioStreamNotJustOpensIt)
     ASSERT_TRUE(VideoPlayerTestAccess::HasAudioStream(player));
     EXPECT_FALSE(VideoPlayerTestAccess::IsAudioStreamDevicePaused(player));
 }
+#endif  // SOUND_ENABLED
 
+// plan_platform.md PLAT-SDL2-8: this case asserts on a real mixer playback stream, which only
+// exists under SOUND_ENABLED (the SDL3_mixer selection). Under CNA_AUDIO_PLATFORM=SDL2 or =NULL
+// VideoPlayer opens no stream at all, so the assertion would be vacuous rather than failing --
+// compiled out instead, while the rest of this suite's video coverage keeps running there.
+#ifdef SOUND_ENABLED
 // plan_media.md MEDIA-131 regression: Pause() must still actually pause the audio device (the
 // fix above must not have removed Pause()'s own real behavior while fixing the resume-on-Play bug).
 TEST(VideoPlayerTest, PauseStillActuallyPausesTheAudioStream)
@@ -169,6 +180,7 @@ TEST(VideoPlayerTest, PauseStillActuallyPausesTheAudioStream)
     player.Resume();
     EXPECT_FALSE(VideoPlayerTestAccess::IsAudioStreamDevicePaused(player));
 }
+#endif  // SOUND_ENABLED
 
 // plan_media.md MEDIA-41: a non-looped 2-second video eventually reaches Stopped once played past
 // its own duration (whether or not a real audio device is available in this environment -- if one
@@ -196,6 +208,11 @@ TEST(VideoPlayerTest, NonLoopedVideoEventuallyStopsAfterItsDuration)
     EXPECT_TRUE(reachedStopped);
 }
 
+// plan_platform.md PLAT-SDL2-8: needs the decoder/mixer engine, which is the SDL3_mixer
+// implementation and is absent from the archive for every other CNA_AUDIO_PLATFORM value.
+// Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
+// so this case is unobservable there rather than merely untested.
+#ifdef SOUND_ENABLED
 // plan_media.md MEDIA-130/MEDIA-41: audio_tail.mkv's video track is 2.0s but its audio track is
 // deliberately 3.0s (see its own manifest.json) -- confirms VideoPlayer genuinely stays Playing
 // past the video's own duration until the queued audio has actually drained, not just until video
@@ -232,6 +249,7 @@ TEST(VideoPlayerTest, NonLoopedVideoWithLongerAudioTailStaysPlayingPastVideoDura
     EXPECT_TRUE(stillPlayingPastVideoDuration);
     EXPECT_TRUE(reachedStopped);
 }
+#endif  // SOUND_ENABLED
 
 TEST(VideoPlayerTest, LoopedVideoKeepsPlayingPastItsDuration)
 {
@@ -364,6 +382,11 @@ TEST(VideoPlayerTest, SetAudioTrackEXTMidPlaybackActuallyChangesTheActiveSampleR
     EXPECT_EQ(VideoPlayerTestAccess::GetDecoderSampleRate(player), 44100); // track 1
 }
 
+// plan_platform.md PLAT-SDL2-8: needs the decoder/mixer engine, which is the SDL3_mixer
+// implementation and is absent from the archive for every other CNA_AUDIO_PLATFORM value.
+// Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
+// so this case is unobservable there rather than merely untested.
+#ifdef SOUND_ENABLED
 // plan_media.md MEDIA-148 (found by external code review): before this fix, a single combined
 // ReconfigureAudioAndVideoOutputForCurrentTracks() always tore down and reopened the SDL audio
 // stream on every SetVideoTrackEXT() call, even a video-only switch -- discarding whatever audio
@@ -385,6 +408,7 @@ TEST(VideoPlayerTest, SetVideoTrackEXTDoesNotTearDownTheUnrelatedAudioStream)
 
     EXPECT_EQ(VideoPlayerTestAccess::GetAudioStreamPtr(player), before);
 }
+#endif  // SOUND_ENABLED
 
 // The symmetric half of MEDIA-148: an audio-only track switch must not needlessly reallocate the
 // video frame texture either.
@@ -470,6 +494,11 @@ TEST(VideoPlayerTest, PlayOnAFirstFrameDecodeFailureLeavesThePlayerFullyClosedNo
     std::remove(corruptedPath.c_str());
 }
 
+// plan_platform.md PLAT-SDL2-8: this case asserts on a real mixer playback stream, which only
+// exists under SOUND_ENABLED (the SDL3_mixer selection). Under CNA_AUDIO_PLATFORM=SDL2 or =NULL
+// VideoPlayer opens no stream at all, so the assertion would be vacuous rather than failing --
+// compiled out instead, while the rest of this suite's video coverage keeps running there.
+#ifdef SOUND_ENABLED
 // plan_media.md MEDIA-153 (found by external code review): decoder_->DrainAudio(audioBuffer_) ran
 // unconditionally every decode iteration, but audioBuffer_.clear() only ran inside
 // `if (audioStream_)` -- with no audio device (e.g. this simulated failure, or a genuinely headless
@@ -501,7 +530,13 @@ TEST(VideoPlayerTest, AudioBufferDoesNotAccumulateWithoutAnAudioDevice)
 
     player.Stop();
 }
+#endif  // SOUND_ENABLED
 
+// plan_platform.md PLAT-SDL2-8: needs the decoder/mixer engine, which is the SDL3_mixer
+// implementation and is absent from the archive for every other CNA_AUDIO_PLATFORM value.
+// Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
+// so this case is unobservable there rather than merely untested.
+#ifdef SOUND_ENABLED
 // plan_media.md MEDIA-154 (found by external code review): VideoDecoder::SetAudioStream()/
 // SetVideoStream() correctly no-op at the decoder level when re-selecting the already-active track
 // (or an out-of-range index), but VideoPlayer::SetAudioTrackEXT()/SetVideoTrackEXT() used to call
@@ -523,6 +558,7 @@ TEST(VideoPlayerTest, ReselectingTheSameAudioTrackDoesNotTearDownTheStream)
 
     EXPECT_EQ(VideoPlayerTestAccess::GetAudioStreamPtr(player), before);
 }
+#endif  // SOUND_ENABLED
 
 TEST(VideoPlayerTest, ReselectingTheSameVideoTrackDoesNotRecreateTheTexture)
 {
@@ -539,6 +575,11 @@ TEST(VideoPlayerTest, ReselectingTheSameVideoTrackDoesNotRecreateTheTexture)
     EXPECT_EQ(player.GetTexture(), before);
 }
 
+// plan_platform.md PLAT-SDL2-8: needs the decoder/mixer engine, which is the SDL3_mixer
+// implementation and is absent from the archive for every other CNA_AUDIO_PLATFORM value.
+// Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
+// so this case is unobservable there rather than merely untested.
+#ifdef SOUND_ENABLED
 // An out-of-range track index is also a true no-op at the decoder level -- must not tear down the
 // stream either.
 TEST(VideoPlayerTest, SelectingAnOutOfRangeAudioTrackDoesNotTearDownTheStream)
@@ -555,3 +596,4 @@ TEST(VideoPlayerTest, SelectingAnOutOfRangeAudioTrackDoesNotTearDownTheStream)
 
     EXPECT_EQ(VideoPlayerTestAccess::GetAudioStreamPtr(player), before);
 }
+#endif  // SOUND_ENABLED

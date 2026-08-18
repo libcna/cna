@@ -160,10 +160,19 @@ _Static_assert(sizeof(CNA_SkinningDataDescriptor) == 64U,
 _Static_assert(sizeof(CNA_RendererInfo) == 32U,
                "CNA_RendererInfo layout must remain stable");
 _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&
-                   CNA_GRAPHICS_RENDERER_PORTABLEGL == UINT32_C(46),
+                   CNA_GRAPHICS_RENDERER_PORTABLEGL == UINT32_C(46) &&
+                   CNA_GRAPHICS_RENDERER_TINYGL == UINT32_C(47) &&
+                   CNA_GRAPHICS_RENDERER_IGL == UINT32_C(48) &&
+                   CNA_GRAPHICS_RENDERER_PIXIJS == UINT32_C(49) &&
+                   CNA_GRAPHICS_RENDERER_MAXIMUM == CNA_GRAPHICS_RENDERER_PIXIJS,
                "CNA renderer identities must remain stable");
 _Static_assert(CNA_GRAPHICS_CAPABILITY_THREE_D == UINT32_C(0) &&
-                   CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING == UINT32_C(12),
+                   CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING == UINT32_C(12) &&
+                   CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS == UINT32_C(13) &&
+                   CNA_GRAPHICS_CAPABILITY_MAXIMUM ==
+                       CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS &&
+                   CNA_GRAPHICS_CAPABILITY_FLAG_COMPILED_EFFECTS ==
+                       (UINT64_C(1) << CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS),
                "CNA graphics capability identities must remain stable");
 _Static_assert(sizeof(CNA_SurfaceFormat) == sizeof(uint32_t),
                "CNA_SurfaceFormat must have a fixed-width representation");

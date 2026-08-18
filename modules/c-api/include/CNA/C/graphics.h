@@ -106,6 +106,22 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_OPENVG UINT32_C(45)
 /** @brief Identifies the PortableGL backend. */
 #define CNA_GRAPHICS_RENDERER_PORTABLEGL UINT32_C(46)
+/** @brief Identifies the TinyGL backend. */
+#define CNA_GRAPHICS_RENDERER_TINYGL UINT32_C(47)
+/** @brief Identifies the IGL backend. */
+#define CNA_GRAPHICS_RENDERER_IGL UINT32_C(48)
+/** @brief Identifies the PixiJS backend. */
+#define CNA_GRAPHICS_RENDERER_PIXIJS UINT32_C(49)
+
+/**
+ * @brief Largest defined renderer identity.
+ *
+ * The renderer identities occupy the closed range
+ * @ref CNA_GRAPHICS_RENDERER_UNKNOWN through this value with no gaps, so a caller can walk the
+ * whole identity space without naming each backend. Every value above it is refused by every
+ * route that takes a @ref CNA_GraphicsRendererType.
+ */
+#define CNA_GRAPHICS_RENDERER_MAXIMUM CNA_GRAPHICS_RENDERER_PIXIJS
 
 /** @brief Fixed-width identifier for a renderer-dependent graphics capability. */
 typedef uint32_t CNA_GraphicsCapability;
@@ -149,6 +165,23 @@ typedef uint32_t CNA_GraphicsCapability;
 /** @brief Indicates faithful support for additive blending. */
 #define CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING UINT32_C(12)
 
+/**
+ * @brief Indicates support for XNA/FNA Direct3D 9 Effect Framework bytecode.
+ *
+ * Separate from @ref CNA_GRAPHICS_CAPABILITY_CUSTOM_EFFECTS, which describes the
+ * caller-supplied shader-source contract: a renderer may support either format independently.
+ */
+#define CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS UINT32_C(13)
+
+/**
+ * @brief Largest defined graphics capability identity.
+ *
+ * The capability identities occupy the closed range
+ * @ref CNA_GRAPHICS_CAPABILITY_THREE_D through this value with no gaps, so a caller can query
+ * every capability without naming each one. Every value above it is refused.
+ */
+#define CNA_GRAPHICS_CAPABILITY_MAXIMUM CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS
+
 /** @brief Fixed-width bit set containing zero or more graphics capabilities. */
 typedef uint64_t CNA_GraphicsCapabilityFlags;
 
@@ -190,6 +223,9 @@ typedef uint64_t CNA_GraphicsCapabilityFlags;
 
 /** @brief Bit corresponding to @ref CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING. */
 #define CNA_GRAPHICS_CAPABILITY_FLAG_ADDITIVE_BLENDING (UINT64_C(1) << 12)
+
+/** @brief Bit corresponding to @ref CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS. */
+#define CNA_GRAPHICS_CAPABILITY_FLAG_COMPILED_EFFECTS (UINT64_C(1) << 13)
 
 /** @brief Fixed-width surface-format identity used by texture APIs. */
 typedef uint32_t CNA_SurfaceFormat;

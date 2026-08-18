@@ -113,14 +113,16 @@ namespace CNA::Internal::Renderers::Igl
         /**
          * @brief Adopts an already-created IGL texture.
          *
-         * @param owner     Renderer whose frame must be flushed before a readback; may be null.
-         * @param texture   The texture resource; must not be null.
-         * @param width     Width in pixels of mip level 0.
-         * @param height    Height in pixels of mip level 0.
-         * @param mipLevels Number of mip levels the texture was created with.
+         * @param owner         Renderer whose frame must be flushed before a readback; may be null.
+         * @param texture       The texture resource; must not be null.
+         * @param width         Width in pixels of mip level 0.
+         * @param height        Height in pixels of mip level 0.
+         * @param mipLevels     Number of mip levels the texture was created with.
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal the texture was created with; it
+         *                      decides how many bytes one texel and one row occupy.
          */
         IglTextureRenderer(IglRenderer* owner, std::shared_ptr<igl::ITexture> texture,
-                           int width, int height, int mipLevels);
+                           int width, int height, int mipLevels, int surfaceFormat);
 
         ~IglTextureRenderer() override = default;
 
@@ -136,7 +138,8 @@ namespace CNA::Internal::Renderers::Igl
         /**
          * @brief Replaces the whole of mip level 0.
          *
-         * @param rgba   Source pixels, RGBA8.
+         * @param rgba   Source pixels in this texture's own `SurfaceFormat`, which is RGBA8 only
+         *               when that format is `Color`.
          * @param stride Row pitch of @p rgba in bytes.
          */
         void UpdatePixels(const std::uint8_t* rgba, int stride) override;
@@ -145,7 +148,7 @@ namespace CNA::Internal::Renderers::Igl
          * @brief Replaces the whole of one mip level.
          *
          * @param level  Mip level to write.
-         * @param rgba   Source pixels, RGBA8, tightly packed.
+         * @param rgba   Source pixels in this texture's own `SurfaceFormat`, tightly packed.
          * @param levelW Width of that mip level.
          * @param levelH Height of that mip level.
          */
@@ -181,6 +184,7 @@ namespace CNA::Internal::Renderers::Igl
         int width_ = 0;
         int height_ = 0;
         int mipLevels_ = 1;
+        int surfaceFormat_ = 0;
         // Highest mip level that has actually had pixels uploaded into it, plus one. Allocated GPU
         // storage is not readable content, so HasDefinedMipLevel answers from this rather than from
         // the allocation.
@@ -200,13 +204,14 @@ namespace CNA::Internal::Renderers::Igl
         /**
          * @brief Adopts an already-created IGL cube texture.
          *
-         * @param owner     Renderer whose frame must be flushed before a readback; may be null.
-         * @param texture   The texture resource; must not be null.
-         * @param size      Width and height in pixels of each square face at mip level 0.
-         * @param mipLevels Number of mip levels the texture was created with.
+         * @param owner         Renderer whose frame must be flushed before a readback; may be null.
+         * @param texture       The texture resource; must not be null.
+         * @param size          Width and height in pixels of each square face at mip level 0.
+         * @param mipLevels     Number of mip levels the texture was created with.
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal the texture was created with.
          */
         IglTextureCubeRenderer(IglRenderer* owner, std::shared_ptr<igl::ITexture> texture,
-                               int size, int mipLevels);
+                               int size, int mipLevels, int surfaceFormat);
 
         ~IglTextureCubeRenderer() override = default;
 
@@ -214,14 +219,14 @@ namespace CNA::Internal::Renderers::Igl
         IglTextureCubeRenderer& operator=(const IglTextureCubeRenderer&) = delete;
 
         /**
-         * @brief Uploads raw RGBA8 pixels into a sub-rectangle of a single cube face.
+         * @brief Uploads pixels in this texture's own `SurfaceFormat` into part of one cube face.
          * @return True if the whole region was stored; false if this renderer stored nothing.
          */
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
 
         /**
-         * @brief Reads back raw RGBA8 pixels from a sub-rectangle of a single cube face.
+         * @brief Reads back pixels in this texture's own `SurfaceFormat` from one cube face.
          * @return True if the whole region was written; false if this renderer read nothing back.
          */
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
@@ -238,6 +243,7 @@ namespace CNA::Internal::Renderers::Igl
         std::shared_ptr<igl::ITexture> texture_;
         int size_ = 0;
         int mipLevels_ = 1;
+        int surfaceFormat_ = 0;
     };
 
     /**
@@ -252,15 +258,16 @@ namespace CNA::Internal::Renderers::Igl
         /**
          * @brief Adopts an already-created IGL volume texture.
          *
-         * @param owner     Renderer whose frame must be flushed before a readback; may be null.
-         * @param texture   The texture resource; must not be null.
-         * @param width     Width in voxels at mip level 0.
-         * @param height    Height in voxels at mip level 0.
-         * @param depth     Depth in voxels at mip level 0.
-         * @param mipLevels Number of mip levels the texture was created with.
+         * @param owner         Renderer whose frame must be flushed before a readback; may be null.
+         * @param texture       The texture resource; must not be null.
+         * @param width         Width in voxels at mip level 0.
+         * @param height        Height in voxels at mip level 0.
+         * @param depth         Depth in voxels at mip level 0.
+         * @param mipLevels     Number of mip levels the texture was created with.
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal the texture was created with.
          */
         IglTexture3DRenderer(IglRenderer* owner, std::shared_ptr<igl::ITexture> texture,
-                             int width, int height, int depth, int mipLevels);
+                             int width, int height, int depth, int mipLevels, int surfaceFormat);
 
         ~IglTexture3DRenderer() override = default;
 
@@ -268,14 +275,14 @@ namespace CNA::Internal::Renderers::Igl
         IglTexture3DRenderer& operator=(const IglTexture3DRenderer&) = delete;
 
         /**
-         * @brief Uploads raw RGBA8 voxels into a sub-volume of the given mip level.
+         * @brief Uploads voxels in this texture's own `SurfaceFormat` into part of a mip level.
          * @return True if the whole box was stored; false if this renderer stored nothing.
          */
         [[nodiscard]] bool SetData(int level, int x, int y, int z, int w, int h, int depth,
                                    const void* data, int dataLength) override;
 
         /**
-         * @brief Reads back raw RGBA8 voxels from a sub-volume of the given mip level.
+         * @brief Reads back voxels in this texture's own `SurfaceFormat` from a mip level.
          * @return True if the whole box was written; false if this renderer read nothing back.
          */
         [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
@@ -294,6 +301,7 @@ namespace CNA::Internal::Renderers::Igl
         int height_ = 0;
         int depth_ = 0;
         int mipLevels_ = 1;
+        int surfaceFormat_ = 0;
     };
 
     /**
@@ -472,6 +480,7 @@ namespace CNA::Internal::Renderers::Igl
          * @param sampleCount      Device-clamped sample count actually applied.
          * @param preserveContents Whether a bind must load the target's previous contents.
          * @param appliedDepthStencilFormat Applied `DepthFormat` ordinal.
+         * @param surfaceFormat    Raw XNA `SurfaceFormat` ordinal of the colour texture.
          */
         IglRenderTargetRenderer(IglRenderer* owner,
                                 std::shared_ptr<igl::ITexture> color,
@@ -479,7 +488,8 @@ namespace CNA::Internal::Renderers::Igl
                                 std::shared_ptr<igl::ITexture> depth,
                                 std::shared_ptr<igl::IFramebuffer> framebuffer,
                                 int width, int height, int mipLevels, int sampleCount,
-                                bool preserveContents, int appliedDepthStencilFormat);
+                                bool preserveContents, int appliedDepthStencilFormat,
+                                int surfaceFormat);
 
         ~IglRenderTargetRenderer() override = default;
 
@@ -491,7 +501,7 @@ namespace CNA::Internal::Renderers::Igl
 
         /**
          * @brief Uploads pixels into mip level 0 of the colour texture.
-         * @param rgba   Source pixels, RGBA8.
+         * @param rgba   Source pixels in this target's own `SurfaceFormat`.
          * @param stride Row pitch of @p rgba in bytes.
          */
         void UpdatePixels(const std::uint8_t* rgba, int stride) override;
@@ -499,7 +509,7 @@ namespace CNA::Internal::Renderers::Igl
         /**
          * @brief Uploads pixels into one mip level of the colour texture.
          * @param level  Mip level to write.
-         * @param rgba   Source pixels, RGBA8, tightly packed.
+         * @param rgba   Source pixels in this target's own `SurfaceFormat`, tightly packed.
          * @param levelW Width of that mip level.
          * @param levelH Height of that mip level.
          */
@@ -521,12 +531,25 @@ namespace CNA::Internal::Renderers::Igl
          * @param y          Top edge of the region in pixels.
          * @param w          Width of the region in pixels.
          * @param h          Height of the region in pixels.
-         * @param data       Destination for tightly packed RGBA8 rows, top row first.
-         * @param dataLength Size of @p data in bytes; at least `w * h * 4`.
+         * @param data       Destination for tightly packed rows in this target's own
+         *                   `SurfaceFormat`, top row first.
+         * @param dataLength Size of @p data in bytes; at least one region's worth of that format.
          * @return True if the whole region was written; false otherwise.
          */
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+
+        /**
+         * @brief Reverses the row order IGL's Vulkan readback imposed, so both backends agree.
+         *
+         * A no-op on OpenGL and for a single-row region. See the definition for why exactly one of
+         * the two backends' conventions has to be undone.
+         *
+         * @param w    Region width in texels.
+         * @param h    Region height in texels.
+         * @param data Start of the region just filled by `copyBytesColorAttachment`.
+         */
+        CNAEXT void UndoVulkanReadbackRowFlip(int w, int h, void* data) const noexcept;
 
         /** @brief No-op: this renderer binds targets through `SetRenderTargets`, not per-resource. */
         void BindAsRenderTarget() override {}
@@ -579,6 +602,7 @@ namespace CNA::Internal::Renderers::Igl
         int sampleCount_ = 1;
         bool preserveContents_ = false;
         int appliedDepthStencilFormat_ = 0;
+        int surfaceFormat_ = 0;
     };
 
     /**
@@ -649,13 +673,14 @@ namespace CNA::Internal::Renderers::Igl
          * @param mipLevels        Mip levels of @p color.
          * @param sampleCount      Device-clamped sample count actually applied.
          * @param preserveContents Whether a bind must load a face's previous contents.
+         * @param surfaceFormat    Raw XNA `SurfaceFormat` ordinal of the shared colour texture.
          */
         IglRenderTargetCubeRenderer(IglRenderer* owner,
                                     std::shared_ptr<igl::ITexture> color,
                                     std::shared_ptr<igl::ITexture> depth,
                                     std::array<std::shared_ptr<igl::IFramebuffer>, 6> faces,
                                     int size, int mipLevels, int sampleCount,
-                                    bool preserveContents);
+                                    bool preserveContents, int surfaceFormat);
 
         ~IglRenderTargetCubeRenderer() override = default;
 
@@ -694,15 +719,16 @@ namespace CNA::Internal::Renderers::Igl
          * @param y          Top edge of the region in texels.
          * @param w          Width of the region in texels.
          * @param h          Height of the region in texels.
-         * @param data       Source pixels, tightly packed RGBA8 rows, top row first.
-         * @param dataLength Size of @p data in bytes; at least `w * h * 4`.
+         * @param data       Source pixels in this target's own `SurfaceFormat`, tightly packed
+         *                   rows, top row first.
+         * @param dataLength Size of @p data in bytes; at least one region's worth of that format.
          * @return True if the whole region was stored; false otherwise.
          */
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
 
         /**
-         * @brief Reads back raw RGBA8 pixels from a rendered cube face.
+         * @brief Reads back pixels in this target's own `SurfaceFormat` from a rendered cube face.
          * @return True if the whole region was written; false if it could not be read.
          */
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
@@ -726,6 +752,7 @@ namespace CNA::Internal::Renderers::Igl
         std::array<std::unique_ptr<IglRenderTargetCubeFace>, 6> faceBindings_;
         int sampleCount_ = 1;
         bool preserveContents_ = false;
+        int surfaceFormat_ = 0;
     };
 
     /**
@@ -944,6 +971,33 @@ namespace CNA::Internal::Renderers::Igl
             return uniforms_;
         }
 
+        /**
+         * @brief Records the std140 layout of the block this effect's parameters live in. CNAEXT.
+         *
+         * See the base declaration for why the layout is declared by the application rather than
+         * reflected out of the shader: IGL `v1.1.1` has no Vulkan reflection to ask.
+         *
+         * @param blockSizeBytes Size of the whole block, std140-padded.
+         * @param names          Member names.
+         * @param offsets        Each member's byte offset from the start of the block.
+         * @param count          Number of members; zero clears the declaration.
+         */
+        void DeclareUniformBlockEXT(int blockSizeBytes, const char* const* names,
+                                    const int* offsets, int count) override;
+
+        /** @brief Returns the declared block's size in bytes, or 0 if none was declared. */
+        [[nodiscard]] int GetUniformBlockSizeEXT() const { return uniformBlockSize_; }
+
+        /**
+         * @brief Packs the recorded uniforms into the declared block. CNAEXT.
+         *
+         * @param bytes Destination, at least @ref GetUniformBlockSizeEXT bytes.
+         * @return The names that were set but do not appear in the declaration, if any -- a
+         *         parameter the shader can never see, which is worth reporting rather than
+         *         dropping silently.
+         */
+        [[nodiscard]] std::vector<std::string> PackUniformBlockEXT(std::uint8_t* bytes) const;
+
     private:
         void RecordUniform(const char* name, igl::UniformType type, int numElements,
                            const float* values, int floatCount);
@@ -954,6 +1008,8 @@ namespace CNA::Internal::Renderers::Igl
         std::uint64_t programId_ = 0;
         std::unordered_map<std::string, UniformValue> uniforms_;
         std::array<igl::ITexture*, igl::IGL_TEXTURE_SAMPLERS_MAX> boundTextures_{};
+        int uniformBlockSize_ = 0;
+        std::unordered_map<std::string, int> uniformBlockOffsets_;
     };
 
     /** @brief A GPU occlusion query. CNAEXT. */
@@ -1623,6 +1679,34 @@ namespace CNA::Internal::Renderers::Igl
 
         /** @brief Returns whether the presented surface has a depth/stencil buffer. */
         [[nodiscard]] bool SupportsDepthStencil() const override;
+
+        /**
+         * @brief Reports whether a `Texture2D` may be created with the given surface format.
+         *
+         * plan_runtimerenderer.md design decision 9's tri-state, used here to NARROW rather than
+         * to widen. `Unsupported` is returned only for the formats IGL v1.1.1 genuinely cannot
+         * store with XNA's own texel semantics (`IglSurfaceFormats.hpp` records why, per format);
+         * every other format defers to the framework's own rule, which is the honest answer for a
+         * renderer that has not verified a promoted format end to end.
+         *
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.
+         * @return `Unsupported` for a format this renderer cannot store, `Defer` otherwise.
+         */
+        /** @brief Returns GlslVulkan or GlslDesktop, from the backend this process resolved. */
+        CNAEXT [[nodiscard]] ShaderDialectEXT GetShaderDialectEXT() const override;
+
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+
+        /**
+         * @brief Reports whether a `RenderTarget2D` may be created with the given surface format.
+         *
+         * Same answer as @ref ClassifySurfaceFormatEXT: a format this renderer cannot store is not
+         * one it can render into either, and renderability beyond that is the framework's call.
+         *
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.
+         * @return `Unsupported` for a format this renderer cannot store, `Defer` otherwise.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
 
         /** @brief Returns the largest single-axis texture dimension the device accepts. */
         [[nodiscard]] int GetMaxTextureDimension() const override;

@@ -163,9 +163,10 @@ TEST(EasyGLRendererFactory, MissingGlServiceIsAPlatformCapabilityRefusal)
     {
         // plan_runtimerenderer.md design decision 4: the factory lives in the FAMILY's namespace
         // so several renderer archives can link into one binary. Called qualified, exactly as the
-        // GDI family's own programs do: IGraphicsRenderer.hpp also declares a bare
-        // CNA::Internal::Renderers::CreateGraphicsRenderer, so an unqualified call is ambiguous --
-        // and the bare symbol is not the one this family defines.
+        // GDI family's own programs do. (IGraphicsRenderer.hpp used to also declare a bare
+        // CNA::Internal::Renderers::CreateGraphicsRenderer, which made an unqualified call
+        // ambiguous; that leftover declaration is gone, but qualifying the call is still what
+        // states which family is under test.)
         (void)CNA::Internal::Renderers::EasyGL::CreateGraphicsRenderer(args);
         FAIL() << "factory accepted a missing GL context service";
     }

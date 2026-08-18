@@ -36,11 +36,15 @@ jobs:
             renderer: OPENGLES3
             audio: SDL3
             display: true
-          # Exercises the SDL2 implementation's real GL/ES context path, not sdl2-compat.
+          # Exercises the SDL2 implementation's real GL/ES context path, not sdl2-compat. Audio is
+          # SDL2 as well, deliberately: that pair is the one selection cmake/Sdl2OnlyConfiguration
+          # .cmake calls SDL2-only, and it is what keeps SDL3 off every link line in the build --
+          # including CnaTests', where linking both generations would put two libraries exporting
+          # SDL_Init/SDL_GetError into one process and quietly invalidate the conformance run.
           - name: SDL2 + OpenGLES3
             platform: SDL2
             renderer: OPENGLES3
-            audio: "NULL"
+            audio: SDL2
             display: true
           - name: SDL3 + Vulkan
             platform: SDL3
@@ -149,15 +153,18 @@ jobs:
       - name: Build the contract, consumer tests and 2D integration demo
         run: cmake --build build --target CnaTests cna_demo_2d --parallel 3
 
-      - name: Build SDL2 native-queue platform test
+      # PLAT-SDL2-6/PLAT-SDL2-8: both SDL2-native suites live in their own executables, because
+      # SDL2 and SDL3 publish mutually exclusive interface requirements and CnaTests still carries
+      # SDL3-native fixtures in every other selection.
+      - name: Build SDL2 native-queue platform and audio tests
         if: matrix.platform == 'SDL2'
-        run: cmake --build build --target cna_platform_sdl2_tests --parallel 3
+        run: cmake --build build --target cna_platform_sdl2_tests cna_audio_sdl2_tests --parallel 3
 
       - name: Run platform CTest entries (graphical tuples)
         if: matrix.display
         env:
           SDL_AUDIODRIVER: dummy
-        run: ctest --test-dir build -R '^Cna(Platform(Tests|WindowTests)|Sdl2PlatformTests)$' --output-on-failure
+        run: ctest --test-dir build -R '^Cna(Platform(Tests|WindowTests)|Sdl2(Platform|AudioDevice)Tests)$' --output-on-failure
 
       - name: Run platform CTest entries with no display (Headless tuple)
         if: matrix.display == false
@@ -191,13 +198,21 @@ jobs:
         if: matrix.platform == 'TERMINAL'
         run: ctest --test-dir build -R '^TerminalBlend2DDemoIntegration$' --output-on-failure
 
-      # Run once rather than three times; configure already invokes the same checks for every
+      # Run once rather than six times; configure already invokes the same checks for every
       # matrix cell, while this explicit step keeps their commands visible in the CI log.
+      #
+      # All seven gates, matching docs/platform-abstraction.md's checklist and plan_platform.md's
+      # definition of done. Two were missing here and are not optional: the ratchet needs --strict
+      # (PLAT-121 made exceeding the 0/0 floor a hard error, and without the flag the script warns
+      # and exits 0), and the non-production manifest is what stops a new native reference from
+      # being parked in a test file instead of being fixed.
       - name: Run platform source gates
         if: matrix.platform == 'HEADLESS'
         run: |
           python3 tools/platform/sdl_inventory.py --check
           python3 tools/platform/sdl_classify.py --check
           python3 tools/platform/renderer_sdl_audit.py --check
-          python3 tools/platform/sdl_ratchet.py --check
+          python3 tools/platform/sdl_ratchet.py --check --strict
           python3 tools/platform/hot_path_lint.py
+          python3 tools/platform/nonproduction_sdl_audit.py --check
+          python3 tools/platform/check_contract.py

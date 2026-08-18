@@ -96,7 +96,7 @@
     },
     {
       "subject": "Renderers other than the four configured",
-      "note": "CNA has 46 renderer identities; four are built and run here. The other 42 share the same C surface, and the capability queries are what a caller uses to find out what any of them supports."
+      "note": "CNA has 49 renderer identities; four are built and run here. The other 45 share the same C surface, and the capability queries are what a caller uses to find out what any of them supports."
     }
   ]
 }

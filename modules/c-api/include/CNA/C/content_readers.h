@@ -363,6 +363,12 @@ CNA_C_API CNA_Result cna_content_type_reader_manager_create_reader(
  * @brief Registers the placeholder readers for recognized but unsupported compiled asset types.
  *
  * @return `CNA_RESULT_SUCCESS` or a documented native failure. The registration is idempotent.
+ *
+ * This set is currently empty: its one entry was the general `EffectReader`, and compiled Effect
+ * Framework bytecode is now a supported format with a reader that really decodes it. The route
+ * remains the registry's published extension point rather than being withdrawn, so a future
+ * recognized-but-unsupported format registers here without an ABI change. To obtain such a reader
+ * directly, use `cna_known_unsupported_content_type_reader_create`.
  */
 CNA_C_API CNA_Result cna_content_register_known_unsupported_xnb_readers(void);
 

@@ -83,6 +83,14 @@ namespace CNA::Internal::Renderers::Igl
         inline constexpr std::uint32_t Effect = 0;
         /** @brief The SkinnedEffect bone-matrix block. */
         inline constexpr std::uint32_t Bones = 1;
+        /**
+         * @brief A custom `ShaderEffect`'s own parameter block (plan_igl.md IGL-43).
+         *
+         * Only a custom effect declares this; the generated shaders do not, so the binding is free
+         * for one. A Vulkan custom shader that wants parameters declares
+         * `layout(set = 1, binding = 2, std140) uniform <name> { ... };` and CNA fills it.
+         */
+        inline constexpr std::uint32_t CustomEffect = 2;
     }
 
     /**

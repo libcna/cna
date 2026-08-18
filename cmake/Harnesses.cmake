@@ -61,7 +61,11 @@ endif()
 # sharing that binary. See tools/devices/shutdown_ordering_harness.cpp's own top-of-file comment
 # for the "--skip-shutdown-call" flag used to confirm under ASan that this reproduces a genuine
 # heap-use-after-free when the fix's guard is bypassed.
-if(CNA_BUILD_TESTS)
+# plan_platform.md PLAT-SDL2-6: the whole point of this harness is to call the real SDL3
+# SDL_Quit(), so it is meaningful only where SDL3 is actually the selected edge. Under an
+# SDL2-only selection it would be the one remaining executable dragging SDL3 back in, to test an
+# ordering hazard that selection cannot reach.
+if(CNA_BUILD_TESTS AND NOT CNA_SDL2_ONLY_CONFIGURATION)
     add_executable(cna_devices_shutdown_ordering_harness
         tools/devices/shutdown_ordering_harness.cpp
     )
@@ -88,7 +92,12 @@ endif()
 # `SDL3/SDL.h: No such file or directory` failure under every cross-compile toolchain (Emscripten,
 # D3D9/D3D11 MinGW) that has no such fallback -- link SDL3::SDL3 explicitly instead of relying on
 # transitive propagation, matching cna_devices_shutdown_ordering_harness's own pattern above.
-if(CNA_BUILD_TESTS)
+# plan_platform.md PLAT-SDL2-8: gated on the SDL3 audio selection because the harness calls
+# CNA::Internal::Audio::DestroyMixer() directly. That engine is the SDL3_mixer implementation and
+# is excluded from the archive for every other CNA_AUDIO_PLATFORM value, so under SDL2 or NULL
+# audio this source cannot compile at all -- and the suite that spawns it (AudioMixerTests) is
+# already filtered out of CnaTests for the same selections.
+if(CNA_BUILD_TESTS AND CNA_AUDIO_PLATFORM STREQUAL "SDL3")
     add_executable(cna_audio_mixer_destroy_active_static_voice_harness
         tools/audio/mixer_destroy_active_static_voice_harness.cpp
     )
@@ -105,7 +114,8 @@ endif()
 # just above -- same hazard/fix, but exercised through DynamicSoundEffectInstance's own independent
 # track_ access sites. See the harness file's own top-of-file comment for why this needs a separate
 # harness from the static-voice one, not just a shared one.
-if(CNA_BUILD_TESTS)
+# Same SDL3-audio gate as the static-voice harness just above, and for the same reason.
+if(CNA_BUILD_TESTS AND CNA_AUDIO_PLATFORM STREQUAL "SDL3")
     add_executable(cna_audio_mixer_destroy_active_dynamic_voice_harness
         tools/audio/mixer_destroy_active_dynamic_voice_harness.cpp
     )
@@ -163,7 +173,9 @@ endif()
 if(CNA_BUILD_EXAMPLES AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_reference_dump tools/cna-reference/CnaReferenceDump.cpp)
     target_link_libraries(cna_reference_dump PRIVATE CNA)
-    if(TARGET SDL3::SDL3main)
+    # plan_platform.md PLAT-SDL2-6: SDL3main supplies an entry-point shim for the SDL3 selection
+    # only; an SDL2-only build must not acquire an SDL3 link input through it.
+    if(TARGET SDL3::SDL3main AND NOT CNA_SDL2_ONLY_CONFIGURATION)
         target_link_libraries(cna_reference_dump PRIVATE SDL3::SDL3main)
     endif()
 endif()

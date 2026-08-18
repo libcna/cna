@@ -511,7 +511,7 @@ running that family's own smoke/example target where one exists.
 | RTR-P1-D40 | ✅ | `metal` → `METAL` (`SDL_WINDOW_METAL` \| `SDL_WINDOW_HIGH_PIXEL_DENSITY`; descriptor in the `.mm` unit) |
 | RTR-P1-D41 | ✅ | `fna3d` → `FNA3D` — `prepareWindowFlags` wraps `Fna3d::Detail::PrepareWindowFlags()` |
 | RTR-P1-D42 | ✅ | `openvg` → `OPENVG` (`SDL_WINDOW_OPENGL`) |
-| RTR-P1-D43 | ✅ | **Coverage gate.** A test enumerates all 46 identities and fails if any lacks a descriptor in its own configuration — the mechanical equivalent of `check_renderer_identities.py` for descriptors. |
+| RTR-P1-D43 | ✅ | **Coverage gate.** A test enumerates every identity and fails if any lacks a descriptor in its own configuration — the mechanical equivalent of `check_renderer_identities.py` for descriptors. **Re-established by RTR-P13-4 after it had quietly stopped covering three identities**: the gate was a per-FAMILY check (one `*RendererDescriptor.cpp` each) plus a hand-written 46-entry list in `GraphicsRendererDescriptorTests.cpp`, and neither noticed an IDENTITY with no route into the registry. `check_runtime_renderer_discipline.py` now walks the identity → namespace → accessor → descriptor chain for all 49, and the test's list is derived from the enum. |
 
 ---
 
@@ -519,7 +519,7 @@ running that family's own smoke/example target where one exists.
 
 | ID | St | Task |
 |---|---|---|
-| RTR-P2-1 | ✅ | Declare `CreateGraphicsRenderer` inside each family namespace in `IGraphicsRenderer.hpp` (or better: drop the global declaration entirely and let each family's own public header declare it). |
+| RTR-P2-1 | ✅ | Declare `CreateGraphicsRenderer` inside each family namespace in `IGraphicsRenderer.hpp` (or better: drop the global declaration entirely and let each family's own public header declare it). **The second half was only finished in RTR-P13-3.** Every family did move its factory into its own namespace, but the global declaration stayed in `IGraphicsRenderer.hpp` under a comment saying it had been removed. That is not inert: EasyGL's own suite carried a comment about the resulting call ambiguity, and a new family could define the colliding symbol and appear to work — which `PIXIJS` did. Declaration deleted; `check_runtime_renderer_discipline.py` now fails on a definition of it. |
 | RTR-P2-2 | ✅ | Write `cmake/RendererRegistry.cmake` — generates `CnaRendererRegistry.generated.cpp` into the build tree from the enabled-family list. |
 | RTR-P2-3 | ✅ | Implement `GraphicsRendererRegistry` over the generated table. With one family enabled, `Count() == 1`. |
 | RTR-P2-4 | ✅ | Replace `renderer_ = CreateGraphicsRenderer(args)` (`GraphicsDevice.cpp:2419`) with a registry lookup + `descriptor.create(args)`. |
@@ -655,7 +655,7 @@ substitution, which arrives with P8.
 | RTR-P5-12 | ✅ | Cross-kind fallback with `ownsWindow_ == true`: destroy and recreate the SDL window with the candidate's flags, re-publishing `Mouse`/`TextInputEXT` window handles. |
 | RTR-P5-13 | ✅ | Cross-kind fallback with a caller-supplied `DeviceWindowHandle`: record `WindowKindConflict` and skip that candidate with a clear log line — never silently reuse an incompatible window. **The code was right and unreachable, which the task had no way to notice until it was tested.** Writing the test exposed that `discardOwnedWindow()` ran on EVERY initialisation failure and unconditionally cleared `window_`, `ownsWindow_` and the caller's `DeviceWindowHandle` — so a caller-supplied window was silently abandoned (never destroyed, but no longer drawn into, with the handle field zeroed), and `window_` could never be non-null at the top of a later iteration, making the whole `WindowKindConflict` branch **dead code** since it was written. Fixed by discarding the window only when this device owns it. Written up as finding 8 in `threeissues.md`. The test now PASSES instead of skipping, which is the only thing that proves the path is live: it supplies a real SDL window, forces the origin to fail, and asserts both that `WindowKindConflict` is recorded with a message naming `DeviceWindowHandle` and that the caller's window survives. Needs two renderers wanting windows of DIFFERENT kinds — verified on `SDL_RENDERER;OPENGLES3;HEADLESS` (Plain vs OpenGL); a set whose other renderers need no window cannot reach it at all, since `None` is compatible with everything. |
 | RTR-P5-14 | ✅ | `applyPreWindowAttributes` must re-run for the candidate before its window is recreated (`OPENGL1`'s GLX visual would otherwise be wrong). |
-| RTR-P5-15 | ✅ | Fallback across `needsVideoSubsystem` (e.g. `VULKAN` → `HEADLESS`): `SDL_QuitSubSystem(SDL_INIT_VIDEO)` handling, and the reverse direction. |
+| RTR-P5-15 | ✅ | Fallback across `needsVideoSubsystem` (e.g. `VULKAN` → `HEADLESS`): video-subsystem teardown handling, and the reverse direction. **Repaired and finished in RTR-P13-5.** As shipped this only ever ACQUIRED, per candidate, and never released on the downgrade — and the platform merge left a second acquisition in `createOrAttachWindow()` against the single release in `Dispose()`, so every windowed device leaked one reference and every attempted candidate leaked another. The reference is now owned by one idempotent `setVideoSubsystemAcquired()` and moves with the candidate. Measured both ways: with the second acquisition reinstated the new suite reports 2 references taken where 1 is allowed and 1 still outstanding after a fallback and a `Dispose()`; with the fix, 7/7 green. |
 | RTR-P5-16 | ✅ | Fallback interaction with `PresentationParameters::HeadlessEXT` — a headless request must not silently fall back to a windowed renderer. |
 | RTR-P5-17 | ✅ | Fallback must **not** engage for `RecreateRendererForMultiSampleCount()`: an MSAA reconstruction failure is a genuine error on an already-chosen renderer, not a reason to change renderer mid-game. |
 | RTR-P5-18 | ✅ | Unit tests with a fake registry: probe-fail → next; create-throw → next; both → third; exhausted → throw with accumulated causes; disabled → first exception propagates. |
@@ -673,10 +673,10 @@ The first phase that changes the build model.
 
 | ID | St | Task |
 |---|---|---|
-| RTR-P6-1 | ✅ | Add `CNA_GRAPHICS_RENDERERS` (semicolon list). When set, `CNA_GRAPHICS_RENDERER` names the *default* preferred renderer and must be a member of the list. |
+| RTR-P6-1 | ✅ | Add `CNA_GRAPHICS_RENDERERS` (semicolon list). When set, `CNA_GRAPHICS_RENDERER` names the *default* preferred renderer and must be a member of the list. **"Must" was documentation, not behaviour, until RTR-P13-2:** a non-member default was replaced by the list's first entry with a `message(STATUS)`. That is the silent substitution design decision 6 refuses at runtime, applied to the one option whose whole job is to name the default — and it decides the project-wide macro, the example targets and every `STREQUAL` gate, so a masked mistake misdirects all of them. Now a `FATAL_ERROR` naming both values and the two ways to fix it, with four `cmake -P` CTest cases (`CnaRendererDefaultSelection_*`) covering valid-inside, list-last, invalid-outside and single-renderer. |
 | RTR-P6-2 | ✅ | Define `CNA_MULTI_RENDERER` globally when the list has more than one entry. |
 | RTR-P6-3 | ✅ | Convert `RENDERER_TARGET` (scalar) to `CNA_RENDERER_TARGETS` (list) — **128 references across 40+ files**; split into reviewable batches by module. **Resolved by removing the reason for the conversion, then enforcing the rule — not by rewriting 89 references.** With RTR-P6-6 in place the per-family loop no longer re-points `RENDERER_TARGET` at all; that overwrite was the workaround the whole fragility rested on. Safe to delete because it had no remaining reader: checked across all 42 families that **none** reads `${RENDERER_TARGET}` before establishing its own target. Converting the remaining references mechanically would have moved the fragility rather than removed it — the problem was never the count, it was that an **unwritten rule** governed correctness and a single-renderer build can never reveal a violation, because there the default IS the only renderer. So the rule is now enforced by `scripts/check_renderer_target_discipline.py`, registered as the CTest test `RendererTargetDiscipline`: a family may not read the scalar before establishing its own target; only listed files outside a family may read it at all; and the loop may not re-point it again. Proven to catch a violation, not merely to pass — an artificial read injected into the `vulkan` family was reported immediately with the fix to apply. The nine `examples/CMakeLists.txt` hits it found are legitimate and are allowed as a category with RTR-P9-13's evidence: all ~40 families gate their examples on **equality** with the default, so an example target exists only when its family IS the default. |
-| RTR-P6-4 | ✅ | Convert `add_compile_definitions(CNA_RENDERER_<X>)` to per-target `target_compile_definitions(... PRIVATE ...)` for every family. |
+| RTR-P6-4 | ✅ | Convert `add_compile_definitions(CNA_RENDERER_<X>)` to per-target `target_compile_definitions(... PRIVATE ...)` for every family. **True for the 42 families of the day and then quietly untrue again**, because the conversion was a one-time edit and the idiom it replaced still worked: `TINYGL` and `PIXIJS` were both added afterwards with `add_compile_definitions()`, which is DIRECTORY scoped and therefore defines that identity's macro project-wide for every identity in the list, not only the default. Repaired in RTR-P13-6, and `check_runtime_renderer_discipline.py` now fails on a new one — proven by reinstating TINYGL's and watching it report. |
 | RTR-P6-5 | ✅ | Rework `modules/renderers/CMakeLists.txt`'s single `CNA_SELECTED_RENDERER` dispatch into a loop over the selected family list. |
 | RTR-P6-6 | ✅ | Rework `cna_add_renderer()` / `cna_renderer_common_setup()` to take the family's own target name instead of reading the global `${RENDERER_TARGET}`. **Done, and the target name no longer comes from anywhere else at all.** The key finding is that it is DERIVABLE: `modules/renderers/<family>` builds `cna_renderer_<family>` with `-` → `_`, and that was checked against `RendererSelection.cmake`'s own 42 dir/target pairs — **42 of 42 agree**, so it is a fact about the layout rather than a convention. `cna_add_renderer()` and the new `cna_renderer_target_name()` derive the target from the directory the calling `CMakeLists.txt` lives in and publish it into that file's scope; `cna_renderer_common_setup(target)` takes it as an argument. A family can no longer be handed the wrong target, because its only input is where its own file sits. The four families that build their target directly (`software`, `directx9`, plus `metal`/`glide`, which are header-interface targets) derive it the same way. |
 | RTR-P6-7 | ✅ | `modules/graphics/CMakeLists.txt` — link every selected renderer target, preserving the declared archive cycles. |
@@ -857,7 +857,7 @@ Each set is its own task because each will surface its own third-party integrati
 | RTR-P10-20 | ⬜ | Windows legacy multi set: `DIRECTX1 + DIRECTX2 + DIRECTX3 + DIRECTX5 + DIRECTX6 + DIRECTX7 + DIRECTX8` — seven families sharing DirectDraw-era headers. |
 | RTR-P10-21 | ⬜ | `+ DIRECT2D + GDI + FREEDIRECT` on Windows (`GDI` excludes `SOFTWARE`, per the conflict matrix). |
 | RTR-P10-22 | ✅ | Emscripten multi set: `WEBGL2 + CANVAS + HTML_DOM + SVG_DOM` — one wasm bundle, renderer chosen from JS before start. Highest practical payoff of the whole plan. **Built end to end on 2026-08-15 with emsdk 6.0.6 and `CMAKE_CXX_FLAGS` EMPTY** — no workaround of any kind, which is itself the proof that the `sharp-runtime` fix (`bc8dbf41`, `threeissues.md` finding 3) holds for the whole project and not just the two modules it touched. 577 targets, 0 errors. Verified contents rather than exit code: all four renderer archives (`easygl`, `canvas`, `html_dom`, `svg_dom`), both RTR-P10-23 JS exports in `libcna_core.a`, and — the check that actually matters — **4 entries in the generated registry**, which is what `GraphicsRendererSelection` can reach at run time. **A checking mistake worth keeping:** the first registry grep used `GetDescriptor[A-Za-z0-9]+` and reported **1 of 4**, because a family with a single public identity generates a bare `GetDescriptor()` while EasyGL generates `GetDescriptorWebGL2()`. The bundle was correct and the check was wrong — the pattern now matches `::GetDescriptor…()` and is in the CI job, so an archive that exists without being selectable is caught. |
-| RTR-P10-23 | ✅ | JS-side selection surface for that Emscripten set (a `Module` property or exported function feeding `SetPreferred()`), documented in `docs/runtime-renderer-selection.md`. Two entry points in `modules/core/src/GraphicsRendererSelectionEmscripten.cpp`: `cna_set_preferred_renderer(name)` for a page that drives the module directly, and `Module.cnaPreferredRenderer` for one that just declares a preference. **The design decision worth keeping:** the property is consulted inside `ConsultEnvironmentOnce()`, at the `CNA_GRAPHICS_RENDERER` environment variable's precedence — NOT by having JS glue call `SetPreferred()`. Applying it would make a page property indistinguishable from an explicit call in the program and let it silently outrank one. Resolution order stays: explicit `SetPreferred()` > env var or `Module` property > compile-time default. Verified by a real `emcmake` build: `cna_core` compiles and both exports are present in the archive (`T cna_set_preferred_renderer`, `T cna_read_module_preferred_renderer`), and HEADLESS stays at 6389/6172/217/0 so the native path is untouched. **Not verified:** that the property switches the renderer in a live browser — that needs a headless browser run, not a link check. |
+| RTR-P10-23 | ✅ | JS-side selection surface for that Emscripten set (a `Module` property or exported function feeding `SetPreferred()`), documented in `docs/runtime-renderer-selection.md`. Two entry points in `modules/core/src/GraphicsRendererSelectionEmscripten.cpp`: `cna_set_preferred_renderer(name)` for a page that drives the module directly, and `Module.cnaPreferredRenderer` for one that just declares a preference. **The design decision worth keeping:** the property is consulted inside `ConsultEnvironmentOnce()`, at the `CNA_GRAPHICS_RENDERER` environment variable's precedence — NOT by having JS glue call `SetPreferred()`. Applying it would make a page property indistinguishable from an explicit call in the program and let it silently outrank one. Resolution order stays: explicit `SetPreferred()` > env var or `Module` property > compile-time default. Verified by a real `emcmake` build: `cna_core` compiles and both exports are present in the archive (`T cna_set_preferred_renderer`, `T cna_read_module_preferred_renderer`), and HEADLESS stays at 6389/6172/217/0 so the native path is untouched. **Not verified:** that the property switches the renderer in a live browser — that needs a headless browser run, not a link check. **And the archive check was not enough, which RTR-P13-11 found the hard way:** the property read used `emscripten::val` — embind — whose support library never reached any link line in this project, so while `cna_core` compiled and exported both symbols, **every Emscripten EXECUTABLE linking it failed** with six undefined `_emval_*` imports. "Compiles, and the exports are in the archive" is precisely the evidence that cannot see a missing link library. Repaired in RTR-P13-11. |
 | RTR-P10-24 | ⬜ | macOS multi set: `METAL + OPENGL4 + SOFTWARE`. |
 | RTR-P10-25 | 🟨 | Record binary size and build time for every set above; publish the table so the cost of each addition is visible. **Sizes published** in `docs/runtime-renderer-selection.md`: a four-renderer set (`HEADLESS;LLGL;SOFTWARE;STUB`) costs **+4.1 MB stripped, ~13 %**, over a single-renderer `HEADLESS` build of the same executable (36.2 vs 32.1 MB). Stripped is the only honest column — the same binary is 232 MB unstripped, so Debug symbols, not renderers, dominate that number. Per-renderer archives are listed too, with the point that **a renderer's cost in the binary is not its library's size on disk**: LLGL's third-party archives total ~103 MB yet the executable grows ~4 MB, because the linker takes what is referenced. **Deliberately not done:** build times, which need from-scratch builds of each set — the project's own build rules treat repeated clean rebuilds as real SSD wear, and timing a table was not worth that; and sets needing bgfx/FNA3D/WebGPU or Windows/macOS, whose rows are absent rather than estimated. Left 🟨 for that reason rather than claimed complete. |
 
@@ -913,6 +913,46 @@ glTF path, not in renderer selection.
 
 ---
 
+### P13 — Post-plan audit and repair (2026-08-17)
+
+The plan closed with P12, and then three renderer identities arrived after it — `TINYGL` with the
+`next` merge, `IGL` and `PIXIJS` afterwards — while `plan_platform.md`'s own campaign rewrote the
+window and subsystem paths underneath. This phase is a full re-read of P0–P12 against the tree as it
+then stood, and the repair of what had come apart.
+
+**What the regressions have in common, and why they are grouped rather than filed separately.**
+Four of the five are a rule that was *enforced by a one-time edit* rather than by anything a later
+change would run into: the factory rename, the per-target macro conversion, the identity-to-registry
+mapping and the "default must be a member" contract were each done correctly once and then documented
+as done. None of them had a gate. So the next renderer, and the next merge, reintroduced them without
+anything failing — and every one is invisible in the default single-renderer build, which is what let
+them survive. The repairs are therefore paired with checks: five new mechanical rules across
+`check_runtime_renderer_discipline.py` and four new CTest cases, each **proven by injecting the
+violation and watching it fail**, not merely by passing against a clean tree.
+
+The fifth (`RTR-P13-10`) is a different lesson and worth stating separately: it was never a
+regression at all, but a defect present from the day its row was marked ✅, which survived because
+the evidence recorded for that row — "the archive compiles and both exports are in it" — was
+structurally incapable of seeing it. A missing link library only fails at a LINK. That is the second
+time in this plan a green archive has been read as a green link (the first was `RTR-P9-9`'s LLGL
+include roots), which is why it is recorded as a pattern rather than as a one-off.
+
+| ID | St | Task |
+|---|---|---|
+| RTR-P13-1 | ✅ | **Audit.** Re-read P0–P12 against the tree and classify every claim as still-true, regressed, or stale-documentation. Four regressions found (RTR-P13-2/3/5/6), plus one stale test list (RTR-P13-4) and a set of documentation counts frozen at 46/47 identities. |
+| RTR-P13-2 | ✅ | **`CNA_GRAPHICS_RENDERER` must be a member of `CNA_GRAPHICS_RENDERERS`** — see RTR-P6-1. The resolution moved into `cmake/RendererDefaultSelection.cmake` so it can run under `cmake -P`, which is what makes the contract testable at all: four `CnaRendererDefaultSelection_*` CTest cases cover a default inside the list, a default that is the list's LAST entry (proving the resolved order is default-first), a default outside the list, and an ordinary single-renderer configure. The reject case was proven by restoring the substitution and watching it fail. Documented with the real error text in `docs/runtime-renderer-selection.md`; added to `multi-renderer-ci.yml`. |
+| RTR-P13-3 | ✅ | **Delete the obsolete global factory declaration** — see RTR-P2-1. Traced every use of `CreateGraphicsRenderer` in the tree first: 45 family definitions (all namespaced), the four GDI example programs and EasyGL's suite (all calling qualified), and the descriptor units' own declarations. No consumer, so the declaration went. `check_runtime_renderer_discipline.py` gained a brace-aware rule refusing a DEFINITION of the bare symbol — brace-aware because the first version passed a real violation: every family writes a closed one-line `namespace <Family> { ...declaration; }` between the shared namespace and the definition, and a line-based reading mistook that for the enclosing scope. |
+| RTR-P13-4 | ✅ | **Every identity reaches the generated registry** — see RTR-P1-D43. The discipline gate now walks identity → namespace → descriptor accessor → descriptor unit for all 49, and refuses two identities sharing one accessor. `GraphicsRendererDescriptorTests.cpp`'s identity list is derived from the enum instead of restated; the restated one had been frozen at 46 entries while `TINYGL`, `IGL` and `PIXIJS` were added, so the name-completeness test had silently stopped covering the three newest names. A `static_assert` on the count now makes adding an identity a deliberate, visible change. New `GraphicsRendererRegistryTests` (10 cases) pin what only a build can check: that each descriptor names its own identity, spells its name from the shared table, carries both required hooks, and that `needsWindow` implies `needsVideoSubsystem`. |
+| RTR-P13-5 | ✅ | **One owned video-subsystem reference** — see RTR-P5-15. `GraphicsDevice::setVideoSubsystemAcquired()` is now the only thing that can change it, idempotent in both directions, so acquisitions equal releases on every path by construction rather than by call-site discipline. New `GraphicsDeviceSubsystemLifecycleTests` (7 cases) count real acquisitions through a decorating platform, including the audit's own scenario — renderer A fails, renderer B succeeds, device disposed, platform back where it started. Verified in both directions: with the second acquisition reinstated, 2 of the 7 fail reporting 2 references taken and 1 left outstanding. |
+| RTR-P13-6 | ✅ | **A non-default identity's macro must not be project-wide** — see RTR-P6-4. `TINYGL` and `PIXIJS` moved from `add_compile_definitions()` to `list(APPEND _cna_identity_defines ...)`; the discipline gate now refuses the former for any known identity, proven by reinstating TINYGL's. |
+| RTR-P13-7 | ✅ | **`PIXIJS` joins the Emscripten platform partition** in `cmake/RendererCombinations.cmake` and the documented combination table. It was refused outside Emscripten by its own per-identity gate but was absent from the pairwise rule, so a cross-platform pair naming it would have been rejected for the wrong reason. |
+| RTR-P13-8 | ✅ | **Documentation counts corrected, then given an owner.** Corrected where a document makes a present-tense claim: `docs/runtime-renderer-selection.md` (43/47 → 45/49, and its descriptor table still described `prepareWindowFlags()`/`applyPreWindowAttributes()` as hooks long after they became data), `docs/renderer-expansion-candidates.md`, `docs/physical-modules.md`, `AUDIT.md` and `GraphicsRendererType.hpp`. Historical records in other plans were deliberately left alone. **Correcting them by hand is not a fix, which this row proved on itself:** the pass that corrected four documents still left three wrong (`runtime-renderer-selection.md`'s own "See also", `renderer-expansion-candidates.md`'s pointer to the live registry, and an `AUDIT.md` line), and they were only found once `scripts/check_renderer_identities.py` was taught to compare every stated count against the registry. A count in prose is a fact with no owner — TINYGL, IGL and PIXIJS each arrived without updating one. The check names an explicit list of documents allowed to state a count, reports identities and families separately, and says in its own message that dropping the number is the better fix. Verified in both directions: it passes clean, and reinstating the two counts this repo really carried (43/47 and 42/46) reports all four. Its family pattern initially read the "12" out of "the d3d11 and d3d12 families" and called the repo 12 families — caught by running it against the clean tree before trusting it, which is the only reason the word boundary is there. **Two further defects surfaced when the platform session added `plan_platform.md` to the list**, both worth keeping: `\b(\d+)` captures the 76 of `PLAT-76`, because `\b` matches after a hyphen (both patterns use `(?<![-\w])` now); and "renderer families" is how SUB-counts are phrased too ("11 renderer families need it"), so the whole-registry marker had to become "implementation families", the counterpart of "public" for identities. **Tightening the patterns then created the opposite failure, which is the real lesson:** a count phrased any other way stopped being checked at all, and the first rewrite of `plan_platform.md`'s rule 5 wrote "is **49** today" and sailed straight past. A count the check cannot see is exactly as unowned as one nobody wrote down. Each listed document therefore declares whether a count must remain VISIBLE to the patterns, and rewording one out of view is itself reported — proven by rephrasing `renderer-expansion-candidates.md`'s count into prose and watching it fail. That found one live instance: this document's own descriptor row said "45 families / 49 public identities", whose family half no pattern could see. |
+| RTR-P13-9 | ✅ | **Verification.** Multi-renderer `HEADLESS;SDL_RENDERER;SOFTWARE;STUB` (default `HEADLESS`) — chosen over the P8 reference set deliberately, because none of `HEADLESS`/`SOFTWARE`/`STUB` needs a window, so the double-acquisition defect is **invisible** in the set this plan had been using as its reference: **7526 ran / 7296 passed / 230 skipped / 0 failed**, `MultiRendererFallbackTest` 11 passed / 1 skipped (the caller-supplied cross-kind refusal, unreachable in this set), `CrossRendererContractTest` 6/6, and 8/8 renderer CTest gates. Single-renderer `HEADLESS` control: **7508 ran / 7277 passed / 231 skipped / 0 failed**. Both runs on a dedicated Xvfb display. All four discipline scripts pass, and each new mechanical rule was proven by injecting its violation and watching it fail rather than only by passing. |
+| RTR-P13-10 | ✅ | **Every Emscripten executable failed to link, and had since RTR-P10-23 landed** — see that row. `GraphicsRendererSelectionEmscripten.cpp` read `Module.cnaPreferredRenderer` through `emscripten::val`, i.e. embind, and nothing in the build ever put embind on a link line (`--bind`/`-lembind` appear nowhere in any `*.cmake`, `CMakeLists.txt` or workflow). Repaired by removing embind rather than by adding the flag: the read is now an `EM_JS` function copying into a caller-owned buffer, which is how every other JS interop here is written, and which does not put embind's runtime in the download of every page that never sets the property. The copy is written by hand rather than through `stringToUTF8` so it cannot depend on a JS runtime helper surviving link-time DCE; identities are ASCII by construction, so a non-ASCII code unit reports "absent" instead of truncating into something that might parse. **Measured, at both ends:** compiling that one TU with the real emsdk, `strings` finds **6** `emval` references at `HEAD` and **0** after (object 22,207 → 6,026 bytes); and a full four-renderer wasm bundle that previously could not link now produces `cna_test_pixijs_smoke.{html,js,wasm}` with `_emval` appearing **0** times in the emitted JS. Found by the platform session's PIXIJS bundle link, not by this audit's own reading — recorded because that is the second time in this plan a green ARCHIVE was mistaken for a green LINK. |
+| RTR-P13-11 | 🟨 | **`PIXIJS` end to end.** The identity is now correctly wired into the runtime-renderer architecture — descriptor, namespaced factory, registry entry, target-private macro, combination rule — and, unlike when this row was first written, it has been **built and linked by a real Emscripten toolchain**: the platform session's `cna_test_pixijs_smoke` bundle produces a 50 MB wasm with the vendored `pixi.min.js` `--pre-js` present and the renderer's own `EM_JS` bodies surviving DCE. What remains unverified is the only thing a link cannot show — that the bundle actually *renders* through PixiJS in a browser, and that `Module.cnaPreferredRenderer` really switches renderer there. Left 🟨 for that, and tracked by `plan_pixijs.md` PIXIJS-84 rather than claimed here. |
+
+---
+
 ## Task count
 
 | Phase | Done | Partial | Not started | Total |
@@ -930,7 +970,8 @@ glTF path, not in renderer selection.
 | P10 Wider multi sets | 20 | 1 | 4 | 25 |
 | P11 EasyGL runtime profile | 12 | 0 | 0 | 12 |
 | P12 Documentation and gates | 15 | 0 | 0 | 15 |
-| **Total** | **289** | **2** | **4** | **295** |
+| P13 Post-plan audit and repair | 10 | 1 | 0 | 11 |
+| **Total** | **299** | **3** | **4** | **306** |
 
 ## Merge with the platform campaign (`next`)
 
@@ -946,22 +987,26 @@ What changed in THIS plan's design as a result (details in section 4's descripto
 | `applyPreWindowAttributes()` hook | `glFramebuffer` data | same reason; it had exactly one real implementation (OPENGL1's GLX visual), whose finding is unchanged |
 | -- | `needsSurfacePresenter` / `needsGlContext` / `needsVulkanSurface` | `next` chose platform services with `#ifdef` chains, which answer for whichever macro is defined rather than for the family being constructed |
 
-Renderer count is now **43 families / 47 identities**: `next` added TINYGL, which arrived without a
-descriptor (the platform branch has no descriptor concept) and gained one here.
+Renderer count was **43 families / 47 identities** at the merge: `next` added TINYGL, which arrived
+without a descriptor (the platform branch has no descriptor concept) and gained one here. It is
+**45 families / 49 identities** as of 2026-08-17, IGL and PIXIJS having landed since — see P13 for
+what those two arrivals cost and what now stops the next one costing the same.
 
 Verified on HEADLESS: 6747/6973 pass, the single failure being the known environmental
 `TwoProcessLoopbackTest.HostMigration...` networking timeout. The merge also fixed two failures
 previously tolerated as environmental -- the stdout startup banner and the order-dependent
 `PollEventsClearsStaleCallerContent` -- rather than leaving them tolerated.
 
-Status as of 2026-08-16 (third pass, after the platform merge). ✅ = implemented **and** verified
+Status as of 2026-08-17 (fourth pass, after the P13 audit). ✅ = implemented **and** verified
 against its stated acceptance criteria; 🟨 = implemented but not fully verified; ⬜ = not started.
 
 P0–P5 deliver the selection/fallback architecture without changing the default single-renderer
 mode; P6 onward introduces the opt-in multi-renderer build mode. The feature is implemented and
-usable, with the six platform-specific validation/measurement rows below still open.
+usable, with the seven platform-specific validation/measurement rows below still open.
 
-Six validation/measurement rows remain, none of which blocks the already usable feature:
+Seven rows remain, none of which blocks the already usable feature — and note that one of them,
+`RTR-P10-23`, was until 2026-08-17 a row marked ✅ whose feature could not link into any Emscripten
+executable at all (see `RTR-P13-10`):
 
 - **P3** — `RTR-P3-18`: the Skia oracle is verified, but the D3D9 divergence suite still needs a
   Windows/Wine run.
@@ -969,7 +1014,97 @@ Six validation/measurement rows remain, none of which blocks the already usable 
   `METAL + OPENGL4 + SOFTWARE` combination have not been built.
 - **P10 measurements** — `RTR-P10-25`: binary sizes are published, but the intentionally expensive
   clean-build timing matrix is not.
+- **P13** — `RTR-P13-11`: `PIXIJS` is correctly integrated into the runtime-renderer architecture
+  and its wasm bundle links, but nothing has run it in a browser.
 
 P9's corpus audit/conversion and P11's EasyGL runtime-profile work are complete. BGFX's descriptor
 and namespaced factory, formerly left 🟨 for lack of a checkout, were subsequently exercised by the
 real multi-renderer build documented in `RTR-P10-9` and are now counted as verified.
+
+**What the P13 audit changes about how to read the ✅s above.** Four of them were true when written
+and had become false again, in each case because the rule was enforced by a one-time edit and
+nothing would run into it later — and in each case invisibly, because the default single-renderer
+build cannot express the difference. A ✅ in this plan should now be read as "implemented, verified,
+**and** guarded", and where it is not guarded, P13 says so. The mechanical gates are the durable
+part of that phase; the four fixes are not.
+
+---
+
+## Renderer descriptor integrity (2026-08-18)
+
+`scripts/check_runtime_renderer_discipline.py` reports "every family owns one descriptor unit and a
+family-namespaced factory". It does that with regular expressions and never parses the file, so
+three descriptors sat on `next` unable to compile at all while the gate stayed green:
+
+| File | Damage | Effect |
+|------|--------|--------|
+| `BgfxRendererDescriptor.cpp` | one `}` too many after `ResolvedWindowKind()` | `GetDescriptor()` fell outside `namespace ...::Bgfx` |
+| `LlglRendererDescriptor.cpp` | `namespace { return 0; }` | a `return` statement at namespace scope |
+| `OpenGL1RendererDescriptor.cpp` | two orphaned `}` after the factory declaration | an unmatched brace at file scope |
+
+All three were **born broken** in `f242134`, which added the files (`new file mode`); they are the
+orphaned tails of a deleted `prepareWindowFlags()` hook. `-DCNA_GRAPHICS_RENDERER=BGFX|LLGL|OPENGL1`
+therefore could not configure-and-build on `next` at all. Fixed by removing the orphaned fragments;
+`ResolvedWindowKind()` in the Bgfx file is real and kept.
+
+### The gate: compile every descriptor, in the build system
+
+A descriptor is the only file per family that a build needs whether or not that family is
+selected, and the only file per family that no ordinary configuration compiles -- a
+single-renderer build enters one family's directory, so 44 of the 45 descriptors are never seen by
+a compiler. Every gate the project had reads them as *text*. That is the whole defect class.
+
+**`cmake/RendererDescriptorGate.cmake` closes it with the real build system.**
+`cna_renderer_descriptor_gate` is an OBJECT library that nothing links -- the descriptors it
+compiles here would be duplicate definitions of symbols the real archives own, and compiling them
+is the entire point. It is part of `all`, so an ordinary build of *any* renderer now compiles
+every registered family's descriptor with the project's real flags, include roots and C++ standard.
+
+Its inventory comes from `cna_all_renderer_identities()`, i.e. from
+`cmake/RendererRegistry.cmake`'s identity map itself -- the map was hoisted into
+`_cna_renderer_identity_map()` for exactly this, so it is still written once and a family added
+there is gated on the same commit. There is no second list to fall behind, which is the property
+the identity checker had to be rewritten to gain (design decision 10). Configuration fails outright
+if a registered identity has no descriptor declaring `namespace CNA::Internal::Renderers::<Family>`,
+so a missing or misnamespaced descriptor is caught before a single object is built.
+
+Each descriptor is compiled by exactly one thing:
+
+| Family set | Compiled by | Why |
+|------------|-------------|-----|
+| in this configuration's renderer set | its own family target | already real, with that family's own dependencies |
+| `bgfx`, `directx9` | their own family target, in a BGFX / DIRECTX9 build | the descriptor consults that family's SDK: bgfx asks `bgfx::RendererType` which native API it will pick; D3D9's `adapterQueries` answer from real `D3DCAPS9`/`D3DFORMAT` values. Neither can be made self-contained without dropping behaviour. |
+| everything else | `cna_renderer_descriptor_gate` | needs nothing but CNA's own headers |
+
+That two-family exclusion is the only declared list, it is two entries long with a stated reason
+each, and it is fail-closed: a new family is gated by default and excusing it takes a deliberate
+edit.
+
+Measured: `-DCNA_GRAPHICS_RENDERER=OPENGL1` configures as "42 compiled here, 3 by their own family
+target", and the gate target builds 42/42. A multi-renderer build (`HEADLESS;SOFTWARE;STUB`) reports
+"40 compiled here, 5 by their own family target". Restoring the original `LlglRendererDescriptor.cpp`
+makes the gate target fail with three real compiler errors; renaming a descriptor's namespace makes
+`cmake` fail at configure time naming the identity.
+
+### The script beside it: `scripts/check_renderer_descriptors.py`
+
+Kept, with two jobs the CMake target does not have:
+
+1. **A pre-check that needs no configure.** `-fsyntax-only` per descriptor with the framework
+   include roots and that family's own `CNA_RENDERER_*` define, read out of
+   `cmake/RendererSelection.cmake` arm by arm so the defines are the build system's answer rather
+   than the script's. It runs as the first CI step, before anything is configured, and it also
+   covers the configuration's own selected family.
+2. **A structural rule a compiler cannot state.** Brace balance and "no statement directly inside a
+   namespace body", for every descriptor. This is not redundant: the Bgfx defect -- a stray `}`
+   closing the family namespace early -- still *compiles*. It fails only at link time, only in a
+   BGFX build, when the generated registry calls `Bgfx::GetDescriptor()`. A structural rule about
+   where a descriptor's declarations live catches it directly.
+
+Its two host-unreachable families are **discovered, not declared**: a family drops to
+structure-only when, and only when, the compiler reports a missing include naming a header this
+repository does not contain. Any other compiler error is a hard failure.
+
+Measured on the fix commit: 45 descriptors, 43 compiled, 2 structure-only, 0 problems. Run against
+the three original files it reports 6 problems and names each -- including the Bgfx one, which only
+layer 2 can see.

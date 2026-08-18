@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 
+#include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectAnnotationCollection.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -66,6 +67,20 @@ namespace Microsoft::Xna::Framework::Graphics
          * instead of undefined behavior.
          */
         void Apply();
+
+        /**
+         * @brief Gets the stable zero-based runtime pass index for a compiled effect.
+         *
+         * The position the compiled effect's own reflection assigned to this pass, which Apply()
+         * hands to the owning Effect to select the pass to activate. A pass constructed without
+         * one reports zero. This is the EffectPass counterpart of
+         * EffectTechnique::getIndexInternal().
+         *
+         * @return The zero-based runtime pass index.
+         *
+         * @note CNAEXT — FNA keeps the equivalent as an internal implementation detail.
+         */
+        CNAEXT [[nodiscard]] std::uint32_t getIndexInternal() const;
 
     private:
         Effect* owner_;

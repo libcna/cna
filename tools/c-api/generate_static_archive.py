@@ -31,7 +31,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-LINK_LINE = Path("modules/c-api/CMakeFiles/cna_c_api.dir/link.txt")
+# Relative to the *module's* binary directory, not the top-level one. Those are the same
+# directory only when CNA is the top-level project; a consumer that does
+# add_subdirectory(<cna> CNA) puts it at <build>/CNA/modules/c-api instead, which is why the
+# module binary directory is passed in rather than reconstructed from the build root.
+LINK_LINE = Path("CMakeFiles/cna_c_api.dir/link.txt")
 
 
 def require(tool: str) -> str:
@@ -48,13 +52,13 @@ def run(command: list[str], description: str) -> str:
     return completed.stdout
 
 
-def read_link_line(build_dir: Path) -> tuple[list[str], list[str], list[str]]:
+def read_link_line(module_dir: Path) -> tuple[list[str], list[str], list[str]]:
     """Split CMake's own link line into objects, archives and external libraries."""
-    path = build_dir / LINK_LINE
+    path = module_dir / LINK_LINE
     if not path.exists():
         raise SystemExit(
             f"{path} does not exist; build the cna_c_api target before the static archive.")
-    working = (build_dir / "modules" / "c-api").resolve()
+    working = module_dir.resolve()
     objects: list[str] = []
     archives: list[str] = []
     external: list[str] = []
@@ -92,18 +96,25 @@ def global_symbols(nm: str, path: Path) -> list[tuple[str, str]]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build-dir", required=True)
+    parser.add_argument(
+        "--module-binary-dir",
+        help="the C API module's own binary directory; defaults to <build-dir>/modules/c-api, "
+             "which is only correct when CNA is the top-level project")
     parser.add_argument("--output", required=True, help="the static archive to produce")
     parser.add_argument("--targets-file", help="a CMake file describing how to consume it")
     parser.add_argument("--work-dir", help="where the intermediate object goes")
     arguments = parser.parse_args()
 
     build_dir = Path(arguments.build_dir).resolve()
+    module_dir = (Path(arguments.module_binary_dir).resolve()
+                  if arguments.module_binary_dir
+                  else build_dir / "modules" / "c-api")
     output = Path(arguments.output).resolve()
     work = Path(arguments.work_dir).resolve() if arguments.work_dir else output.parent
     work.mkdir(parents=True, exist_ok=True)
 
     linker, objcopy, archiver, nm = (require(tool) for tool in ("ld", "objcopy", "ar", "nm"))
-    objects, archives, external = read_link_line(build_dir)
+    objects, archives, external = read_link_line(module_dir)
 
     combined = work / "cna_c_api_combined.o"
     run([linker, "-r", "--whole-archive", *archives, "--no-whole-archive", *objects,

@@ -133,7 +133,9 @@ struct TransferView final {
     return Texture::GetBlockSizeSquaredEXT(format) != 1;
 }
 
-[[nodiscard]] bool IsTransferTypeCompatible(
+// Its only caller is the SDL_RENDERER mip-level refusal below, so every other renderer compiles
+// this without using it.
+[[nodiscard, maybe_unused]] bool IsTransferTypeCompatible(
     const SurfaceFormat format,
     const CNA_TextureDataType dataType) noexcept
 {
@@ -226,7 +228,6 @@ struct TransferView final {
     const int levelWidth = std::max(1, texture.getWidthProperty() >> transfer->level);
     const int levelHeight = std::max(1, texture.getHeightProperty() >> transfer->level);
     Rectangle rectangle(0, 0, levelWidth, levelHeight);
-    const Rectangle* rectanglePointer = nullptr;
     if (transfer->has_rectangle == CNA_TRUE) {
         const CNA_Rectangle& requested = transfer->rectangle;
         if (requested.x < 0 || requested.y < 0 || requested.width <= 0 ||
@@ -236,7 +237,6 @@ struct TransferView final {
         }
         rectangle = Rectangle(
             requested.x, requested.y, requested.width, requested.height);
-        rectanglePointer = &rectangle;
     }
 
     uint64_t required = 0U;

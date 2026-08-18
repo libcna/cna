@@ -488,7 +488,8 @@ CNA_C_API CNA_Result cna_graphics_backend_maturity_copy_name(
  * @param out_type Receives the renderer identity.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
  *
- * Unlike `cna_graphics_device_get_info`, this needs no device and no graphics initialization: the
+ * Unlike `cna_graphics_device_get_renderer_info`, this needs no device and no graphics
+ * initialization: the
  * canonical query is a compile-time constant. An identity is not a capability claim — probe the
  * behavior a consumer actually depends on rather than branching on this value.
  */

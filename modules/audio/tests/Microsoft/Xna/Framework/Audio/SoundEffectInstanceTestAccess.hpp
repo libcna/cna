@@ -3,20 +3,30 @@
 
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 
+// plan_platform.md PLAT-SDL2-8: the mixer header, and the one accessor that needs its type, are
+// behind SOUND_ENABLED. Everything else in this struct reaches CNA-side state and pure XNA math
+// that exist in every audio profile, and three suites outside the mixer's own coverage
+// (WaveBankTests, SoundEffectContentTypeReaderTests, MediaLibraryTestAccess) use only those.
+// Including the mixer header unconditionally made all three fail to compile under
+// CNA_AUDIO_PLATFORM=SDL2 and =NULL, where the engine is deliberately absent from the archive.
+#ifdef SOUND_ENABLED
 #include <SDL3_mixer/SDL_mixer.h>
+#endif
 
 namespace Microsoft::Xna::Framework::Audio
 {
     // Test-only accessor for SoundEffectInstance's protected track_ handle, needed by multiple
     // test files (SoundEffectInstanceTests.cpp, CueTests.cpp, SoundBankTests.cpp) to verify
-    // SDL_mixer-level effects (Play() idempotency, Apply3D's track gain -- T-4B) without a
+    // mixer-level effects (Play() idempotency, Apply3D's track gain -- T-4B) without a
     // public API for it (see the friend declaration in SoundEffectInstance.hpp).
     struct SoundEffectInstanceTestAccess
     {
+#ifdef SOUND_ENABLED
         static MIX_Track* GetTrack(const SoundEffectInstance& instance)
         {
             return static_cast<MIX_Track*>(instance.track_);
         }
+#endif
 
         // CP-17: read back the loop region cached from the originating SoundEffect at
         // construction time, to verify it was captured correctly (SDL3_mixer exposes no way to

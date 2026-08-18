@@ -218,7 +218,7 @@ CNA_C_API CNA_Result cna_vibrate_controller_get_test_log_ext(
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when this build has no device extension
  *         layer, or a documented argument/handle/thread failure.
  *
- * This is the host machine's power, distinct from a controller's `cna_gamepad_get_battery_level_ext`.
+ * This is the host machine's power, distinct from a controller's `cna_gamepad_get_power_info_ext`.
  */
 CNA_C_API CNA_Result cna_power_get_state_ext(CNA_Handle game, CNA_PowerState* out_state);
 

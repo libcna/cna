@@ -8,53 +8,86 @@
 
 namespace CNA::Internal::Renderers::PixiJs
 {
-    /// Blend-mode codes CNA_PixiJs_SetBlendMode (PixiJsRenderer.cpp) understands. Kept as a
-    /// dedicated enum (mirroring CanvasCompositeOp's own reasoning) rather than passing the raw
-    /// PIXI.BLEND_MODES numeric value across the wasm/JS boundary directly, so C++-side blend-state
-    /// mapping (plan_pixijs.md Design decision 6) stays a pure, unit-testable function.
-    /// `Custom` (PIXIJS-52) covers any Blend/BlendFunction combination outside the 4 standard
-    /// presets -- its real GL blend factors/equations live on PixiJsRendererState's own
-    /// `customBlend*` fields, populated by `XnaBlendToGlFactor`/`XnaBlendFunctionToGlEquation`.
+    /// Classification of a `BlendState` against XNA's four standard presets. Kept as a dedicated
+    /// enum (mirroring `CanvasCompositeOp`'s own reasoning) so the classification stays a pure,
+    /// unit-testable C++ function with no EM_JS in it. `Custom` covers every other
+    /// `Blend`/`BlendFunction` combination.
+    ///
+    /// PIXIJS-87: this classification no longer decides how a batch is *rendered*. Every blend
+    /// state -- preset or not -- is rendered from its literal `XnaBlendToGlFactor`/
+    /// `XnaBlendFunctionToGlEquation` factors through a dedicated `renderer.state.blendModes` slot.
+    /// Mapping the presets onto PixiJS's own `PIXI.BLEND_MODES` values instead was the root cause
+    /// of PIXIJS-51: PixiJS rewrites `NORMAL` to `NORMAL_NPM` (a different factor tuple) whenever
+    /// the sampled texture is not premultiplied, so `BlendState::AlphaBlend` was silently rendered
+    /// with `BlendState::NonPremultiplied`'s factors. The enum survives because it is a genuinely
+    /// useful, tested description of a blend state, and because `Opaque` still selects PixiJS's
+    /// real "no GL blending at all" path.
     enum class PixiJsBlendMode { Opaque = 0, AlphaBlend = 1, NonPremultiplied = 2, Additive = 3, Custom = 4 };
 
-    /** @brief Blend state shared by one PixiJS renderer and the SpriteBatch instances it creates. */
+    /** @brief Graphics state shared by one PixiJS renderer and the SpriteBatch instances it creates. */
     struct PixiJsRendererState
     {
-        /** @brief Blend mode captured by a SpriteBatch when it begins. */
+        /** @brief Blend classification captured by a SpriteBatch when it begins. */
         PixiJsBlendMode blendMode = PixiJsBlendMode::AlphaBlend;
-        /// plan_pixijs.md PIXIJS-52: real WebGL blend-factor GL enum values, meaningful only when
-        /// `blendMode == PixiJsBlendMode::Custom`. Applied to a reserved, mutated-in-place slot in
-        /// PixiJS's own `renderer.state.blendModes` table at flush time (confirmed live, 2026-08-17,
-        /// that this table accepts arbitrary custom entries and that PixiJS's own `setBlendMode`
-        /// genuinely applies them via `gl.blendFuncSeparate`/`gl.blendEquationSeparate`).
-        int customBlendSrcRGB = 1;
-        int customBlendDstRGB = 0;
-        int customBlendSrcAlpha = 1;
-        int customBlendDstAlpha = 0;
-        int customBlendEquationRGB = 32774;   // GL_FUNC_ADD
-        int customBlendEquationAlpha = 32774; // GL_FUNC_ADD
+        /// Literal WebGL blend factors/equations for the active `BlendState`, resolved by
+        /// `XnaBlendToGlFactor`/`XnaBlendFunctionToGlEquation`. Populated for EVERY blend state,
+        /// not only non-preset ones (PIXIJS-87).
+        int blendSrcRGB = 1;
+        int blendDstRGB = 0;
+        int blendSrcAlpha = 1;
+        int blendDstAlpha = 0;
+        int blendEquationRGB = 32774;   // GL_FUNC_ADD
+        int blendEquationAlpha = 32774; // GL_FUNC_ADD
+        /// PIXIJS-88: `GraphicsDevice.BlendFactor` as WebGL's `gl.blendColor` constant, in 0..1.
+        /// Only observable through the `BlendFactor`/`InverseBlendFactor` blend factors, but it is
+        /// captured per batch so a later change cannot retroactively alter an already-submitted one.
+        float blendFactorR = 0.0f;
+        float blendFactorG = 0.0f;
+        float blendFactorB = 0.0f;
+        float blendFactorA = 0.0f;
+        /// PIXIJS-89: `BlendState.ColorWriteChannels` for render-target slot 0, as the raw XNA int
+        /// (bit0=R, 1=G, 2=B, 3=A; 15 = All). Applied through `gl.colorMask`.
+        int colorWriteChannels = 15;
     };
 
-    /// Pure mapping from raw BlendState factors/BlendFunction (see IGraphicsRenderer::ApplyBlendState's
-    /// own parameter doc) to a PixiJsBlendMode; returns `PixiJsBlendMode::Custom` for any
-    /// Blend/BlendFunction combination that isn't one of the 4 standard presets (plan_pixijs.md
-    /// PIXIJS-52 -- a real generic mapping, not a throw). Contains no EM_JS/JS calls -- exposed
+    /// Pure classification of raw BlendState factors/BlendFunction (see
+    /// IGraphicsRenderer::ApplyBlendState's own parameter doc) against XNA's four standard presets;
+    /// returns `PixiJsBlendMode::Custom` for anything else. Contains no EM_JS/JS calls -- exposed
     /// standalone so a native GTest run can unit test this mapping without a real PIXI.Application.
     PixiJsBlendMode BlendStateToPixiJsBlendMode(int colorSrcBlend, int alphaSrcBlend,
                                                 int colorDstBlend, int alphaDstBlend,
                                                 int colorBlendFunc, int alphaBlendFunc);
 
-    /// plan_pixijs.md PIXIJS-52: maps a raw XNA `Blend` enum value (0=One .. 12=SourceAlphaSaturation)
-    /// to the real WebGL blend-factor GL enum value PixiJS's `renderer.state.blendModes` table
-    /// expects (confirmed live against a real WebGL context, 2026-08-17). `BlendFactor`/
-    /// `InverseBlendFactor` map to `CONSTANT_COLOR`/`ONE_MINUS_CONSTANT_COLOR` -- the actual RGBA
-    /// constant itself (XNA's `GraphicsDevice.BlendFactor`) is not wired through in this v1 scope
-    /// (WebGL's `gl.blendColor` is never set), so those two values are a real but partial mapping.
+    /// Maps a raw XNA `Blend` enum value (0=One .. 12=SourceAlphaSaturation) to the real WebGL
+    /// blend-factor GL enum value PixiJS's `renderer.state.blendModes` table expects (confirmed
+    /// live against a real WebGL context). `BlendFactor`/`InverseBlendFactor` map to
+    /// `CONSTANT_COLOR`/`ONE_MINUS_CONSTANT_COLOR`, whose RGBA constant is supplied for real by
+    /// `PixiJsRenderer::SetBlendFactor` (PIXIJS-88).
+    ///
+    /// @throws std::runtime_error For a value outside the `Blend` enumeration.
     int XnaBlendToGlFactor(int xnaBlend);
 
-    /// plan_pixijs.md PIXIJS-52: maps a raw XNA `BlendFunction` enum value (0=Add .. 4=Min) to the
-    /// real WebGL blend-equation GL enum value PixiJS's blend-mode table expects (confirmed live).
+    /// Maps a raw XNA `BlendFunction` enum value (0=Add .. 4=Min) to the real WebGL blend-equation
+    /// GL enum value PixiJS's blend-mode table expects (confirmed live).
+    ///
+    /// @throws std::runtime_error For a value outside the `BlendFunction` enumeration.
     int XnaBlendFunctionToGlEquation(int xnaBlendFunction);
+
+    /// PIXIJS-90: maps a raw XNA `TextureAddressMode` (0=Wrap, 1=Clamp, 2=Mirror) to the real
+    /// `PIXI.WRAP_MODES` GL enum value (`gl.REPEAT`=10497, `gl.CLAMP_TO_EDGE`=33071,
+    /// `gl.MIRRORED_REPEAT`=33648). Exposed for host testing.
+    ///
+    /// @throws std::runtime_error For a value outside the `TextureAddressMode` enumeration -- this
+    ///         deliberately does not fall back to Clamp, which would silently render a state the
+    ///         caller never asked for.
+    int TextureAddressModeToPixiWrapMode(int addressMode);
+
+    /// PIXIJS-90: true when a raw XNA `TextureFilter` magnifies linearly, which is the component a
+    /// SpriteBatch draw actually observes (the same magnification-dominant grouping CANVAS-42
+    /// established). Maps to `PIXI.SCALE_MODES.LINEAR` vs `.NEAREST`.
+    ///
+    /// @throws std::runtime_error For a value outside the `TextureFilter` enumeration.
+    bool TextureFilterIsLinear(int textureFilter);
 
     /**
      * @brief PixiJS (pixijs.com) graphics renderer (Emscripten-only, 2D-only in v1 scope).
@@ -69,16 +102,31 @@ namespace CNA::Internal::Renderers::PixiJs
     {
     public:
         /**
-         * @brief Constructs the renderer against an existing SDL window (Design decision 2).
+         * @brief Constructs the renderer against the platform's presentation surface.
          *
-         * @param window Real SDL window already created by GraphicsDeviceManager; must not be null.
-         * @param virtualWidth Initial virtual (game-logic) resolution width.
-         * @param virtualHeight Initial virtual (game-logic) resolution height.
-         * @param mode Presentation/scaling policy for virtual-vs-physical resolution.
+         * The browser platform owns the `<canvas>` element; this renderer consumes only the
+         * platform-neutral surface snapshot (window id, drawable size, display scale) and does
+         * its drawing through PixiJS.
+         *
+         * @param args Construction arguments, already populated by GraphicsDevice.
+         * @throws std::runtime_error If no platform window backs the surface.
          */
-        PixiJsRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                       CnaPresentationMode mode);
-        /** @brief Unregisters this renderer from the window registry. */
+        explicit PixiJsRenderer(const GraphicsRendererCreateArgs& args);
+        /**
+         * @brief Releases every renderer-owned JS resource.
+         *
+         * PIXIJS-92: destroys the scratch container and sprite pool, the reusable clear sprite,
+         * every registered texture and render texture with their cached frame views, and removes
+         * CNA's own state object from `Module`.
+         *
+         * The `PIXI.Application` is deliberately NOT destroyed: it is scoped to the platform's
+         * `<canvas>`, not to this renderer. A canvas hands out exactly one WebGL context, and
+         * PixiJS's own `Renderer.destroy()` loses it on purpose -- so tearing the application down
+         * would leave the platform's canvas permanently unusable and make constructing a second
+         * `GraphicsDevice` on the same page fail inside PixiJS's batch setup. Verified by doing
+         * exactly that in a real browser. Every piece of state a later renderer could observe is
+         * released here, so nothing stale carries across.
+         */
         ~PixiJsRenderer() override;
 
         void Clear(float r, float g, float b, float a) override;
@@ -86,15 +134,23 @@ namespace CNA::Internal::Renderers::PixiJs
         void GetViewportSize(int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
+
+        /**
+         * @brief The platform surface snapshot this renderer is currently driving.
+         *
+         * PIXIJS-93: the drawable size here is the one PixiJS's own renderer has been sized to.
+         * Exposed so a caller constructing a follow-up snapshot (a resize) can keep the window
+         * identity the renderer was created with, rather than inventing one that
+         * `OnSurfaceChanged` would rightly reject.
+         *
+         * @return The current surface snapshot.
+         */
+        [[nodiscard]] const RendererSurfaceInfo& GetSurfaceInfo() const { return surface_; }
         bool TransformWindowToLogical(float windowX, float windowY,
                                       float& logX, float& logY) const override;
         bool TransformLogicalToWindow(float logX, float logY,
                                       float& windowX, float& windowY) const override;
-
-        /** @brief Returns the real SDL window this renderer was constructed with. */
-        SDL_Window* GetWindowInternal() const override { return window_; }
-        /** @brief Always null -- no SDL_Renderer exists on this renderer (PixiJS owns its own WebGL context). */
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
@@ -110,13 +166,38 @@ namespace CNA::Internal::Renderers::PixiJs
                               int count) override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
-        /// plan_pixijs.md PIXIJS-50/52: maps the 4 standard BlendState presets to a PixiJsBlendMode
-        /// (Design decision 6); any other Blend/BlendFunction combination gets a real, generic
-        /// mapping via a custom PixiJS blend-mode table entry (PIXIJS-52), not a throw.
+        /**
+         * @brief Applies a BlendState, honouring its write state or rejecting it explicitly.
+         *
+         * PIXIJS-87: every blend state is resolved to its literal WebGL factors/equations and
+         * rendered through its own `renderer.state.blendModes` slot, so `AlphaBlend` and
+         * `NonPremultiplied` are genuinely distinguished.
+         *
+         * @param writeState PIXIJS-89: `colorWriteChannels[0]` is honoured for real via
+         *        `gl.colorMask`. Slots 1..3 describe MRT outputs this renderer never binds --
+         *        `SetRenderTargets` rejects any count above one -- so they are inapplicable rather
+         *        than dropped. `multiSampleMask` is accepted whenever sample 0 is enabled, which on
+         *        this renderer's single-sample targets is exactly equivalent to the all-ones
+         *        default; a mask that disables sample 0 is rejected.
+         * @throws System::NotSupportedException If `multiSampleMask` disables sample 0.
+         */
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc,
                              const BlendWriteState& writeState) override;
+
+        /**
+         * @brief Sets the constant blend colour used by the BlendFactor/InverseBlendFactor factors.
+         *
+         * PIXIJS-88: reaches WebGL's own `gl.blendColor`. Captured per batch at `Begin()`, so a
+         * later change never retroactively alters an already-submitted draw.
+         *
+         * @param r Red component, 0..1.
+         * @param g Green component, 0..1.
+         * @param b Blue component, 0..1.
+         * @param a Alpha component, 0..1.
+         */
+        void SetBlendFactor(float r, float g, float b, float a) override;
 
         /// plan_pixijs.md PIXIJS-34: no PixiJS RenderTexture in this renderer's v1 scope carries a
         /// real depth/stencil attachment.
@@ -157,14 +238,14 @@ namespace CNA::Internal::Renderers::PixiJs
                                           PrimitiveType primitive, int primitiveCount) override;
 
     private:
-        // Derives the logical (virtual) viewport size from the real canvas/window's physical pixel
-        // size and virtualWidth_/virtualHeight_/presentationMode_ -- verbatim port of
-        // CanvasRenderer::getLogicalSize (plan_pixijs.md Phase P2/PIXIJS-23): this math is
-        // renderer-agnostic, only the underlying physical-size query is renderer-specific, and that
-        // query is just SDL_GetWindowSize() here too.
+        // Derives the logical (virtual) viewport size from the canvas/window's client pixel size
+        // and virtualWidth_/virtualHeight_/presentationMode_ -- the same FixedHeightDynamicWidth
+        // math CanvasRenderer::getLogicalSize uses (plan_pixijs.md Phase P2/PIXIJS-23): the math is
+        // renderer-agnostic, and the platform snapshot supplies the drawable size and density.
         void getLogicalSize(int& width, int& height) const;
+        void getWindowSize(int& width, int& height) const;
 
-        SDL_Window* window_ = nullptr;
+        RendererSurfaceInfo surface_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;

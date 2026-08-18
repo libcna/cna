@@ -14,13 +14,18 @@
 #
 # In a single-renderer build -- the default and recommended mode -- the table has exactly one entry.
 
-# Maps a CNA_GRAPHICS_RENDERER identity to the family that implements it, as
-# "<namespace>" or "<namespace>|<descriptor accessor>". The accessor defaults to GetDescriptor.
+# The identity -> family map, written exactly once and read by everything that needs either half
+# of it. Kept in its own accessor so that a gate iterating over EVERY registered renderer (see
+# cmake/RendererDescriptorGate.cmake) derives its inventory from this map rather than from a second
+# hand-maintained list that a newly added family could be left out of.
+#
+# Entries are "<identity>;<namespace>" or "<identity>;<namespace>|<descriptor accessor>"; the
+# accessor defaults to GetDescriptor.
 #
 # EasyGL is the one family serving several identities (plan_glbackends.md), and since
 # plan_runtimerenderer.md phase P11 made its GL profile a runtime value, all five can be compiled in
 # at once -- each reached through its own accessor on the single EasyGL target.
-function(cna_renderer_identity_to_namespace identity out_var)
+function(_cna_renderer_identity_map out_var)
     set(_map
         SDL_RENDERER SdlRenderer
         OPENGLES2    EasyGL|GetDescriptorOpenGLES2
@@ -69,7 +74,35 @@ function(cna_renderer_identity_to_namespace identity out_var)
         FNA3D        Fna3d
         OPENVG       OpenVg
         TINYGL       TinyGL
-        IGL          Igl)
+        IGL          Igl
+        PIXIJS       PixiJs)
+
+    set(${out_var} "${_map}" PARENT_SCOPE)
+endfunction()
+
+# Returns every renderer identity the registry knows how to map, in declaration order.
+#
+# This is the build's renderer inventory: cmake/RendererDescriptorGate.cmake walks it so that a
+# family added to the map above is covered by the descriptor gate on the same commit, with no
+# second list to keep in step.
+#
+# @param out_var Variable to receive the identity list, in the caller's scope.
+function(cna_all_renderer_identities out_var)
+    _cna_renderer_identity_map(_map)
+    set(_identities)
+    list(LENGTH _map _length)
+    math(EXPR _last "${_length} - 2")
+    foreach(_index RANGE 0 ${_last} 2)
+        list(GET _map ${_index} _identity)
+        list(APPEND _identities "${_identity}")
+    endforeach()
+    set(${out_var} "${_identities}" PARENT_SCOPE)
+endfunction()
+
+# Maps a CNA_GRAPHICS_RENDERER identity to the family that implements it, as
+# "<namespace>" or "<namespace>|<descriptor accessor>". The accessor defaults to GetDescriptor.
+function(cna_renderer_identity_to_namespace identity out_var)
+    _cna_renderer_identity_map(_map)
 
     list(FIND _map "${identity}" _index)
     if(_index EQUAL -1)

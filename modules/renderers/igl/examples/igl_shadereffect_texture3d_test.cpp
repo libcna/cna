@@ -33,6 +33,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+
 #include "common/PixelTestGame.hpp"
 
 #include <cstdint>
@@ -72,6 +74,39 @@ void main() {
     if (vTexCoord0.x > 1000.0) FragColor = vec4(0.0);
 }
 )";
+
+    // The SPIR-V variant (plan_igl.md IGL-43): explicit locations on every user in/out, the
+    // parameter in the std140 block CNA reserves for a custom effect, and the volume sampler bound
+    // by its own layout qualifier instead of by an int uniform naming its unit.
+    const char* kVulkanVertSrc = R"(#version 460
+layout(location = 0) in vec3 aPosition;
+layout(location = 3) in vec2 aTexCoord0;
+layout(location = 0) out vec2 vTexCoord0;
+void main() {
+    gl_Position = vec4(aPosition, 1.0);
+    vTexCoord0 = aTexCoord0;
+}
+)";
+
+    const char* kVulkanFragSrc = R"(#version 460
+layout(location = 0) in vec2 vTexCoord0;
+layout(location = 0) out vec4 FragColor;
+layout(set = 0, binding = 0) uniform sampler3D VolumeSampler;
+layout(set = 1, binding = 2, std140) uniform CnaCustom {
+    vec3 coord;
+};
+void main() {
+    FragColor = texture(VolumeSampler, coord);
+    if (vTexCoord0.x > 1000.0) FragColor = vec4(0.0);
+}
+)";
+
+    /// True when this process resolved IGL's Vulkan backend, asked through the supported query.
+    [[nodiscard]] bool IsVulkanDialect(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device)
+    {
+        return device.GetShaderDialectEXT() ==
+               CNA::Internal::Renderers::ShaderDialectEXT::GlslVulkan;
+    }
 }
 
 class IglShaderEffectTexture3DTest : public CNA::Examples::PixelTestGame
@@ -92,7 +127,11 @@ class IglShaderEffectTexture3DTest : public CNA::Examples::PixelTestGame
 
         effect_->Apply();
         effect_->SetTexture(0, *volumeTexture_);
-        effect_->SetUniformInt("VolumeSampler", 0);
+        // An int uniform naming a texture unit is an OpenGL idea; on a SPIR-V target the sampler
+        // is bound by its own layout(set, binding), so setting it would be a parameter with no
+        // member in the declared block -- which the renderer rejects by name rather than dropping.
+        if (!IsVulkanDialect(getGraphicsDeviceProperty()))
+            effect_->SetUniformInt("VolumeSampler", 0);
         effect_->SetUniformVec3("coord", u, v, w);
 
         device.SetVertexBuffer(vertexBuffer_.get());
@@ -110,7 +149,14 @@ protected:
     {
         auto& device = getGraphicsDeviceProperty();
 
-        effect_ = std::make_unique<ShaderEffect>(device, kVertSrc, kFragSrc);
+        const bool vulkan = IsVulkanDialect(device);
+        effect_ = std::make_unique<ShaderEffect>(device, vulkan ? kVulkanVertSrc : kVertSrc,
+                                                 vulkan ? kVulkanFragSrc : kFragSrc);
+        // Declared unconditionally; a backend with loose uniforms ignores it. A lone vec3 occupies
+        // a full 16-byte std140 slot.
+        static const char* const kNames[] = {"coord"};
+        static const int kOffsets[] = {0};
+        effect_->DeclareUniformBlockEXT(/*blockSizeBytes=*/16, kNames, kOffsets, 1);
         if (!effect_->IsEffectValid())
         {
             ExpectTrue("the custom ShaderEffect compiled", false);

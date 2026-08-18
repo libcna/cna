@@ -253,11 +253,7 @@ namespace Microsoft::Xna::Framework::Graphics
         catch (...)
         {
             destroyNativeResources();
-            if (videoSubsystemAcquired_)
-            {
-                platform_->ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Video);
-                videoSubsystemAcquired_ = false;
-            }
+            setVideoSubsystemAcquired(false);
             throw;
         }
     }
@@ -584,12 +580,9 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<System::IDisposable*>(res)->Dispose();
 
         Disposing.Raise(this, System::EventArgs::Empty);
+        // Order matters: the window goes first, because the video subsystem is what backs it.
         destroyNativeResources();
-        if (videoSubsystemAcquired_)
-        {
-            platform_->ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Video);
-            videoSubsystemAcquired_ = false;
-        }
+        setVideoSubsystemAcquired(false);
         isDisposed_ = true;
     }
 
@@ -2153,6 +2146,16 @@ namespace Microsoft::Xna::Framework::Graphics
         return *renderer_;
     }
 
+    CNA::Internal::Renderers::ShaderDialectEXT GraphicsDevice::GetShaderDialectEXT() const
+    {
+        // Not a throw when there is no renderer: asking which dialect to write for is exactly the
+        // question an application asks BEFORE it has committed to anything, and "unknown" is the
+        // truthful answer in that state rather than an error.
+        if (renderer_ == nullptr)
+            return CNA::Internal::Renderers::ShaderDialectEXT::Unknown;
+        return renderer_->GetShaderDialectEXT();
+    }
+
     bool GraphicsDevice::SupportsCapability(CNA::GraphicsCapability capability) const
     {
         // CompiledEffects was appended after many renderer-specific capability switches were
@@ -2265,8 +2268,11 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
-        platform_->AcquireSubsystem(CNA::Platform::PlatformSubsystem::Video);
-        videoSubsystemAcquired_ = true;
+        // A window needs the video subsystem, so state that here rather than relying on the caller
+        // having done it. Idempotent: resolveRenderer() has already asked for the same reference
+        // for this candidate (the two conditions coincide -- no descriptor sets needsWindow
+        // without needsVideoSubsystem), and this device holds one reference either way.
+        setVideoSubsystemAcquired(true);
 
         const auto requestedHandle = presentationParameters_.getDeviceWindowHandleProperty();
         if (requestedHandle != 0)
@@ -2372,6 +2378,43 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (renderer_)
             renderer_->SetStringMarkerEXT(marker.c_str());
+    }
+
+    void GraphicsDevice::setVideoSubsystemAcquired(const bool acquired)
+    {
+        // MERGE DEFECT (plan_platform.md PLAT-8 x plan_runtimerenderer.md RTR-P5-15), fixed here:
+        // both campaigns independently added an AcquireSubsystem(Video) -- `next` in
+        // createOrAttachWindow(), where a window is about to be created, and this plan in
+        // resolveRenderer(), per fallback candidate -- and the merge kept both while keeping the
+        // single Release in Dispose(). Their conditions coincide exactly (no descriptor sets
+        // needsWindow without needsVideoSubsystem), so EVERY windowed device took two references
+        // and gave back one. IPlatform::AcquireSubsystem is genuinely reference counted -- an
+        // implementation only really shuts a subsystem down once its own count reaches zero -- so
+        // the surplus reference was not cosmetic: the video subsystem stayed up for the rest of
+        // the process after the device that raised it had been disposed, and a fallback chain
+        // leaked one more per attempted candidate. The comment claiming "a second attempt that
+        // also needs video is harmless" was true only of the acquire, never of the balance.
+        //
+        // The repair is ownership rather than another Release call: this device's reference count
+        // is a bool, and this is the only thing allowed to change it. Every path -- success,
+        // creation failure, fallback A -> B -> C, window-creation failure, Dispose(), the
+        // constructor's catch -- therefore balances by construction, because there is exactly one
+        // place that can unbalance it and it cannot.
+        if (acquired == videoSubsystemAcquired_)
+            return;
+
+        if (acquired)
+        {
+            // Deliberately BEFORE the flag: AcquireSubsystem throws PlatformException when the
+            // subsystem cannot start (no display server), and recording a reference that was never
+            // taken would make the matching release drop someone else's.
+            platform_->AcquireSubsystem(CNA::Platform::PlatformSubsystem::Video);
+            videoSubsystemAcquired_ = true;
+            return;
+        }
+
+        videoSubsystemAcquired_ = false;
+        platform_->ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Video);
     }
 
     void GraphicsDevice::discardOwnedWindow()
@@ -2485,19 +2528,23 @@ namespace Microsoft::Xna::Framework::Graphics
                 // PresentationParameters::HeadlessEXT is the runtime opt-in equivalent of the
                 // descriptor's own needsVideoSubsystem: a renderer that normally wants a window
                 // (D3D12) can be asked for a genuinely off-screen device instead. Skipping
-                // Skipping the video subsystem is the point -- it is what lets such a device run
+                // the video subsystem is the point -- it is what lets such a device run
                 // with no display server at all, not merely without a visible window.
                 //
-                // RTR-P5-15: done per candidate, not once up front. A fallback chain can legitimately
-                // cross this boundary (VULKAN -> HEADLESS, or the reverse), and the answer belongs to
-                // whichever renderer is actually being attempted. Subsystem acquisition is
-                // reference counted, so a second attempt that also needs video is harmless.
-                if (candidate->needsVideoSubsystem
-                    && !presentationParameters_.getHeadlessEXTProperty())
-                {
-                    platform_->AcquireSubsystem(CNA::Platform::PlatformSubsystem::Video);
-                    videoSubsystemAcquired_ = true;
-                }
+                // RTR-P5-15: decided per candidate, not once up front. A fallback chain can
+                // legitimately cross this boundary (VULKAN -> HEADLESS, or the reverse), and the
+                // answer belongs to whichever renderer is actually being attempted -- which is why
+                // the reference MOVES with the candidate instead of only ever being taken.
+                //
+                // The `|| platformWindow_ != nullptr` is the one case where the candidate's own
+                // answer is not the whole answer: a caller-supplied window survives a failed
+                // attempt (CNA may not destroy what it did not create), and it still needs the
+                // subsystem that backs it even if the next candidate would not ask for one.
+                const bool needsVideo =
+                    (candidate->needsVideoSubsystem
+                     && !presentationParameters_.getHeadlessEXTProperty())
+                    || platformWindow_ != nullptr;
+                setVideoSubsystemAcquired(needsVideo);
 
                 if (platformWindow_ == nullptr)
                 {

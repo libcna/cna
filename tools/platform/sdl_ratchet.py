@@ -97,9 +97,24 @@ def load_budget(repo_root: Path) -> dict[str, object] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def write_budget(repo_root: Path, current: dict[str, object]) -> None:
+def load_floor(budget: dict[str, object]) -> tuple[int, int] | None:
+    """The lowest budget ever recorded, if PLAT-121's floor has been reached.
+
+    PLAT-121 calls 0/0 an *irreversible* floor, and until this existed that was only prose: the
+    budget was raised back to 4 files / 14 references by one `--update --allow-increase` when a
+    renderer arrived still coupled to SDL, and every gate went on passing against the raised
+    number. The floor is stored as data so the claim is enforced rather than asserted, and so
+    undoing it is a visible edit to a checked-in file rather than a command-line flag.
+    """
+    floor = budget.get("floor")
+    if not isinstance(floor, dict):
+        return None
+    return int(floor["max_files"]), int(floor["max_references"])
+
+
+def write_budget(repo_root: Path, current: dict[str, object], floor: tuple[int, int] | None) -> None:
     path = repo_root / BUDGET_FILE
-    payload = {
+    payload: dict[str, object] = {
         "_comment": (
             "PLAT-8 ratchet budget. Maximum SDL-referencing production files (and total "
             "references) allowed outside the PLAT-3 allowlist. This may go DOWN and never UP: "
@@ -110,6 +125,22 @@ def write_budget(repo_root: Path, current: dict[str, object]) -> None:
         "max_references": current["references"],
         "by_module_at_last_update": current["by_module"],
     }
+
+    # The floor only ever moves down, and once recorded it outlives every later --update.
+    lowest = (int(current["files"]), int(current["references"]))
+    if floor is not None:
+        lowest = (min(floor[0], lowest[0]), min(floor[1], lowest[1]))
+    payload["floor"] = {
+        "_comment": (
+            "PLAT-121's irreversible floor: the lowest budget this repository has ever reached. "
+            "--update refuses to write a budget above it, with or without --allow-increase, and "
+            "--check fails when the checked-in budget exceeds it. New SDL coupling outside the "
+            "PLAT-3 allowlist is fixed at the call site, never absorbed here."
+        ),
+        "max_files": lowest[0],
+        "max_references": lowest[1],
+    }
+
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
@@ -126,8 +157,23 @@ def main(argv: list[str] | None = None) -> int:
     repo_root: Path = args.repo.resolve()
     current = measure(repo_root)
     budget = load_budget(repo_root)
+    floor = load_floor(budget) if budget is not None else None
 
     if args.update:
+        # The floor outranks --allow-increase. That flag exists for a migration still in progress;
+        # once the floor is recorded the migration is finished, and the answer to new coupling is
+        # to remove it, not to buy room for it here.
+        if floor is not None and (int(current["files"]) > floor[0] or int(current["references"]) > floor[1]):
+            print(
+                "refusing to raise the ratchet budget above PLAT-121's recorded floor.\n"
+                f"  floor:      {floor[0]} files, {floor[1]} references\n"
+                f"  measured:   {current['files']} files, {current['references']} references\n"
+                "--allow-increase does NOT override this. Fix the new SDL coupling instead:\n"
+                "run 'python3 tools/platform/sdl_ratchet.py' to see which module it is in, and move\n"
+                "it behind CNA::Platform (see plan_platform.md and docs/platform-abstraction.md).",
+                file=sys.stderr,
+            )
+            return 1
         if budget is not None and not args.allow_increase:
             if int(current["files"]) > int(budget["max_files"]) or int(current["references"]) > int(budget["max_references"]):
                 print(
@@ -139,7 +185,7 @@ def main(argv: list[str] | None = None) -> int:
                     file=sys.stderr,
                 )
                 return 1
-        write_budget(repo_root, current)
+        write_budget(repo_root, current, floor)
         print(f"budget set: {current['files']} files, {current['references']} references")
         return 0
 
@@ -150,6 +196,21 @@ def main(argv: list[str] | None = None) -> int:
 
     over_files = int(current["files"]) - int(budget["max_files"])
     over_refs = int(current["references"]) - int(budget["max_references"])
+
+    # Checked before the measurement, because a budget above the floor makes every later
+    # comparison meaningless: it is the state in which real new coupling passes as "at budget".
+    if args.check and floor is not None and (
+        int(budget["max_files"]) > floor[0] or int(budget["max_references"]) > floor[1]
+    ):
+        print(
+            "CNA platform ratchet (PLAT-121): the checked-in budget is ABOVE its recorded floor.\n"
+            f"  budget: {budget['max_files']} files, {budget['max_references']} references\n"
+            f"  floor:  {floor[0]} files, {floor[1]} references\n"
+            "The floor is the lowest budget this repository has ever reached and it does not move\n"
+            "back up. Restore the budget and remove the coupling that motivated raising it.",
+            file=sys.stderr,
+        )
+        return 1 if args.strict else 0
 
     if not args.check:
         print(f"SDL coupling outside the allowlist: {current['files']} files, {current['references']} references")

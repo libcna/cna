@@ -189,4 +189,74 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
         COMMAND cna_test_igl_vulkan_backbuffer_bgr
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
+
+    # IGL-65: surface-format transfers against a real device -- one upload/readback round trip per
+    # byte class, which is what a `width * 4` row pitch cannot survive.
+    cna_igl_test(cna_test_igl_surfaceformat igl_surfaceformat_test.cpp)
+    cna_register_renderer_test(NAME Igl_SurfaceFormat COMMAND cna_test_igl_surfaceformat
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    # The same binary on the other backend: IGL's two backends have genuinely different format
+    # tables, so a format this renderer claims must survive both.
+    cna_register_renderer_test(NAME Igl_SurfaceFormat_Vulkan COMMAND cna_test_igl_surfaceformat
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
+
+    # IGL-60/IGL-67: the row order AND the row origin of every readback, with no draw calls at all.
+    # A rendering-based test cannot see this class of bug, because a readback flip and a projection
+    # flip cancel each other -- which is how it survived every pixel test this renderer already had.
+    cna_igl_test(cna_test_igl_readback_orientation igl_readback_orientation_test.cpp)
+    cna_register_renderer_test(NAME Igl_ReadbackOrientation
+        COMMAND cna_test_igl_readback_orientation
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    # Both backends: IGL's OpenGL and Vulkan paths measure a readback rectangle's y from OPPOSITE
+    # edges, so a fix that satisfied one by breaking the other must fail here.
+    cna_register_renderer_test(NAME Igl_ReadbackOrientation_Vulkan
+        COMMAND cna_test_igl_readback_orientation
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
+
+    # IGL-42/IGL-43: the custom ShaderEffect path on BOTH backends. The three existing custom-effect
+    # tests all set effect parameters, which design decision 8 refuses on Vulkan, so none of them
+    # could report anything about the path itself there. This one is deliberately uniform-free.
+    cna_igl_test(cna_test_igl_custom_effect_backend igl_custom_effect_backend_test.cpp)
+    cna_register_renderer_test(NAME Igl_CustomEffectBackend
+        COMMAND cna_test_igl_custom_effect_backend
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_renderer_test(NAME Igl_CustomEffectBackend_Vulkan
+        COMMAND cna_test_igl_custom_effect_backend
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
+
+    # IGL-65 follow-up: the conformance pass a SurfaceFormat must survive before this renderer
+    # promotes it to the public XNA texture API -- upload through the typed overload, sampling in a
+    # real draw, readback, and render-target use. Storage alone is what the earlier audit rightly
+    # refused to promote on.
+    cna_igl_test(cna_test_igl_public_surfaceformat igl_public_surfaceformat_test.cpp)
+    cna_register_renderer_test(NAME Igl_PublicSurfaceFormat
+        COMMAND cna_test_igl_public_surfaceformat
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_renderer_test(NAME Igl_PublicSurfaceFormat_Vulkan
+        COMMAND cna_test_igl_public_surfaceformat
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
+    # plan_igl.md IGL-43: the three custom-effect tests now carry a SPIR-V variant of their shaders
+    # and declare the std140 block their parameters live in, so they run on Vulkan too. Registered
+    # here rather than left to a manual run: the whole point of IGL-43 was that nothing guarded the
+    # Vulkan half of the custom-effect path.
+    cna_register_renderer_test(NAME Igl_ShaderEffectTexture3D_Vulkan
+        COMMAND cna_test_igl_shadereffect_texture3d
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
+    cna_register_renderer_test(NAME Igl_SpriteBatchShaderEffect_Vulkan
+        COMMAND cna_test_igl_spritebatch_shadereffect
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
+    cna_register_renderer_test(NAME Igl_Instancing_Vulkan
+        COMMAND cna_test_igl_instancing
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
 endif()
