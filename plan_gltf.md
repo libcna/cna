@@ -2034,6 +2034,16 @@ display) and either completed the draw or refused it by name. This tier is what 
 *reachable*, and it is the only tier that could have caught `SDL_GPU`'s and `DILIGENT`'s route
 defects.
 
+**Measured again on 2026-08-18 across every build tree this host has, and the tier is now twelve
+renderers**: the nine in `cmake-build-multi` (`HEADLESS`, `SOFTWARE`, `OPENGL2`, `OPENGL4`, `STUB`,
+`SDL_GPU`, `MAGNUM`, `LLGL`, `DILIGENT`) plus `OPENGLES3` (`cmake-build-opengles3`), `WEBGPU`
+(`cmake-build-webgpu`, a live wgpu-native device), `OPENGLES1` (`cmake-build-opengles1`, against the
+side-by-side ES 1.1 Mesa `scripts/opengles1-test-env.sh` selects) and `IGL` (`cmake-build-igl`,
+OpenGL/GLX). All three `RendererStrideConformance` tests pass on each. `VULKAN` runs the same three
+in CI on lavapipe. What remains outside the tier is `DIRECTX9` (the library cross-compiles under
+MinGW and its DXBC is compiled and disassembled offline, but no `CnaTests.exe` is built for Wine),
+`DIRECTX11`/`DIRECTX12`, `BGFX`, `WICKED` and `METAL`.
+
 *Source-verified only* for `DIRECTX12` (which shares DirectX11's pixel-proven HLSL, constant buffer
 and input-element table) and `BGFX` (whose offline-compiled blobs this host can rebuild but whose
 draw it cannot run).
