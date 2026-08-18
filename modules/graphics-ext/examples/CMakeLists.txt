@@ -174,6 +174,15 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_register_renderer_test(NAME CNAEXT_Showcase COMMAND cna_test_cnaext_showcase
         TIMEOUT 300 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_modern.md MOD-1810: a material that arrived through the runtime glTF importer, driven
+    # by the engine layer's IBL and shadows. The corpus path is a compile definition so the program
+    # does not depend on being launched from the repository root; --content overrides it.
+    cna_graphics_ext_test(cna_test_cnaext_gltf_pbr cnaext_gltf_pbr_test.cpp)
+    target_compile_definitions(cna_test_cnaext_gltf_pbr PRIVATE
+        CNAEXT_GLTF_PBR_CORPUS="${CMAKE_SOURCE_DIR}/tests/assets/gltf")
+    cna_register_renderer_test(NAME CNAEXT_GltfPbr COMMAND cna_test_cnaext_gltf_pbr
+        TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_graphics_ext_test(cna_test_cnaext_ssao cnaext_ssao_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_Ssao COMMAND cna_test_cnaext_ssao
         TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
