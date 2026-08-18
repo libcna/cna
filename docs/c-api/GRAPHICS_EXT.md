@@ -15,8 +15,9 @@ CNA_Bool available = CNA_FALSE;
 cna_graphics_ext_is_available(&available);
 ```
 
-- The **value** routes — the seven identities, `CNA_PbrMaterial`, `CNA_RenderPipelineSettings` and
-  their initializers — work in either build. They need no native extension object.
+- The **value** routes — the seven identities, `CNA_PbrMaterial`, `CNA_PbrMaterialEXT`,
+  `CNA_RenderPipelineSettings` and their initializers — work in either build. They need no native
+  extension object.
 - The **effect** routes return `CNA_RESULT_NOT_SUPPORTED` when the layer is absent, with the same
   diagnostic every time.
 
@@ -30,10 +31,19 @@ canonical constructor defaults:
 | Value | Canonical defaults |
 |---|---|
 | `CNA_PbrMaterial` | white albedo, metallic 0, roughness 0.5, opaque black emissive, unit normal scale and occlusion strength, no alpha blending, alpha cutoff 0.5, no textures |
+| `CNA_PbrMaterialEXT` | white albedo, metallic 1, roughness 1, zero emissive, unit normal scale and occlusion strength, IOR 1.5, unit specular factor and white specular colour, opaque coverage with cutoff 0.5, single-sided, all seven texture slots empty on UV channel 0 with the identity transform, sRGB decode and encode on |
 | `CNA_RenderPipelineSettings` | HDR off, exposure 1, gamma 2.2, no tonemapping, bloom off at intensity 1, SSAO off, medium render quality, disabled shadow quality, shadows off |
 
-PBR texture slots are handles and are **non-owning**, exactly like the canonical `Texture2D*`
-slots: storing one here does not keep that texture alive.
+`CNA_PbrMaterialEXT` is the current shape of the canonical `CNA::Graphics::PbrMaterial`: seven
+texture slots, the `KHR_materials_ior`/`specular` factors, a floating-point emissive factor,
+three-way alpha coverage with `doubleSided`, per-slot UV channels and `KHR_texture_transform`, and
+the four colour-management flags. `CNA_PbrMaterial` is its predecessor, frozen: an ABI major may
+not change what an existing name means, layout or defaults included, so the newer shape arrived
+under a new name (`docs/c-api/ABI_VERSIONING.md`). Existing consumers keep working; new code should
+use the `EXT` form.
+
+PBR texture slots are handles and are **non-owning** in both, exactly like the canonical
+`Texture2D*` slots: storing one here does not keep that texture alive.
 
 ## Post-process effects
 

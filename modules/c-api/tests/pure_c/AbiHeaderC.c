@@ -896,6 +896,18 @@ _Static_assert(sizeof(CNA_PbrMaterial) == 72U && _Alignof(CNA_PbrMaterial) == 8U
                    offsetof(CNA_PbrMaterial, alpha_blend_enabled) == 68U &&
                    offsetof(CNA_PbrMaterial, reserved) == 69U,
                "CNA_PbrMaterial layout must remain stable");
+_Static_assert(sizeof(CNA_PbrMaterialEXT) == 360U && _Alignof(CNA_PbrMaterialEXT) == 8U &&
+                   offsetof(CNA_PbrMaterialEXT, albedo_color) == 64U &&
+                   offsetof(CNA_PbrMaterialEXT, emissive_factor) == 68U &&
+                   offsetof(CNA_PbrMaterialEXT, specular_color_factor) == 80U &&
+                   offsetof(CNA_PbrMaterialEXT, metallic_factor) == 92U &&
+                   offsetof(CNA_PbrMaterialEXT, alpha_mode) == 120U &&
+                   offsetof(CNA_PbrMaterialEXT, double_sided) == 124U &&
+                   offsetof(CNA_PbrMaterialEXT, reserved) == 129U &&
+                   offsetof(CNA_PbrMaterialEXT, texture_coordinate_sets) == 132U &&
+                   offsetof(CNA_PbrMaterialEXT, texture_transforms) == 160U &&
+                   CNA_PBR_MATERIAL_EXT_VERSION == UINT32_C(1),
+               "CNA_PbrMaterialEXT layout must remain stable");
 _Static_assert(sizeof(CNA_RenderPipelineSettings) == 28U &&
                    _Alignof(CNA_RenderPipelineSettings) == 4U &&
                    offsetof(CNA_RenderPipelineSettings, tonemapping_mode) == 12U &&

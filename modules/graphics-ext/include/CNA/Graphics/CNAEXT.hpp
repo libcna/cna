@@ -48,10 +48,13 @@
 #include "CNA/Graphics/SpotLightEXT.hpp"
 #include "CNA/Graphics/SpotShadowMap.hpp"
 
-// ---- Sky -------------------------------------------------------------------------------------
+// ---- Sky and environment ---------------------------------------------------------------------
+#include "CNA/Graphics/EnvironmentProcessor.hpp"
 #include "CNA/Graphics/Skybox.hpp"
 
 // ---- Materials -----------------------------------------------------------------------------
+#include "CNA/Graphics/GltfMaterialBridge.hpp"
+#include "CNA/Graphics/MaterialBinding.hpp"
 #include "CNA/Graphics/PbrMaterial.hpp"
 
 // ---- Post-process effects ------------------------------------------------------------------

@@ -81,6 +81,42 @@ static int validate_values(void)
         return 0;
     }
 
+    CNA_PbrMaterialEXT full;
+    memset(&full, 0x5A, sizeof(full));
+    if (cna_pbr_material_ext_init(&full) != CNA_RESULT_SUCCESS ||
+        full.struct_size != (uint32_t)sizeof(CNA_PbrMaterialEXT) ||
+        full.struct_version != CNA_PBR_MATERIAL_EXT_VERSION ||
+        full.albedo_texture != CNA_INVALID_HANDLE ||
+        full.specular_texture != CNA_INVALID_HANDLE ||
+        full.specular_color_texture != CNA_INVALID_HANDLE ||
+        full.albedo_color.r != UINT8_C(255) || full.albedo_color.a != UINT8_C(255) ||
+        full.emissive_factor.x != 0.0F || full.emissive_factor.z != 0.0F ||
+        full.specular_color_factor.x != 1.0F ||
+        full.metallic_factor != 1.0F || full.roughness_factor != 1.0F ||
+        full.normal_scale != 1.0F || full.occlusion_strength != 1.0F ||
+        full.ior != 1.5F || full.specular_factor != 1.0F ||
+        full.alpha_cutoff != 0.5F || full.alpha_mode != CNA_ALPHA_MODE_OPAQUE_EXT ||
+        full.double_sided != CNA_FALSE ||
+        full.base_color_texture_srgb != CNA_TRUE ||
+        full.emissive_texture_srgb != CNA_TRUE ||
+        full.specular_color_texture_srgb != CNA_TRUE ||
+        full.output_encoded_to_srgb != CNA_TRUE ||
+        full.reserved[0] != 0U || full.reserved[1] != 0U || full.reserved[2] != 0U ||
+        full.texture_coordinate_sets[0] != 0 || full.texture_coordinate_sets[6] != 0 ||
+        full.texture_transforms[0].scale.x != 1.0F ||
+        full.texture_transforms[6].rotation != 0.0F ||
+        cna_pbr_material_ext_init(0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    full.alpha_mode = CNA_ALPHA_MODE_BLEND_EXT;
+    full.double_sided = CNA_TRUE;
+    full.texture_coordinate_sets[3] = 1;
+    if (full.alpha_mode != CNA_ALPHA_MODE_BLEND_EXT || full.double_sided != CNA_TRUE ||
+        full.texture_coordinate_sets[3] != 1) {
+        return 0;
+    }
+
     CNA_RenderPipelineSettings settings;
     memset(&settings, 0x5A, sizeof(settings));
     if (cna_render_pipeline_settings_init(&settings) != CNA_RESULT_SUCCESS ||

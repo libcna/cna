@@ -2828,6 +2828,7 @@
   "cna_pbr_effect_set_texture_coordinate_set_ext",
   "cna_pbr_effect_set_texture_is_srgb_ext",
   "cna_pbr_effect_set_texture_transform_ext",
+  "cna_pbr_material_ext_init",
   "cna_pbr_material_init",
   "cna_picture_album_collection_copy_type_name",
   "cna_picture_album_collection_destroy",
@@ -4630,6 +4631,7 @@
   "CNA_PACKED_VECTOR_FORMAT_RGBA64": 14,
   "CNA_PACKED_VECTOR_FORMAT_SHORT2": 15,
   "CNA_PACKED_VECTOR_FORMAT_SHORT4": 16,
+  "CNA_PBR_MATERIAL_EXT_VERSION": 1,
   "CNA_PBR_TEXTURE_BASE_COLOR": 0,
   "CNA_PBR_TEXTURE_EMISSIVE": 3,
   "CNA_PBR_TEXTURE_MAXIMUM": 6,
@@ -9420,6 +9422,124 @@
     ]
    },
    "size": 72
+  },
+  "CNA_PbrMaterialEXT": {
+   "align": 8,
+   "fields": {
+    "albedo_color": [
+     64,
+     4
+    ],
+    "albedo_texture": [
+     8,
+     8
+    ],
+    "alpha_cutoff": [
+     116,
+     4
+    ],
+    "alpha_mode": [
+     120,
+     4
+    ],
+    "ambient_occlusion_texture": [
+     32,
+     8
+    ],
+    "base_color_texture_srgb": [
+     125,
+     1
+    ],
+    "double_sided": [
+     124,
+     1
+    ],
+    "emissive_factor": [
+     68,
+     12
+    ],
+    "emissive_texture": [
+     40,
+     8
+    ],
+    "emissive_texture_srgb": [
+     126,
+     1
+    ],
+    "ior": [
+     108,
+     4
+    ],
+    "metallic_factor": [
+     92,
+     4
+    ],
+    "metallic_roughness_texture": [
+     24,
+     8
+    ],
+    "normal_scale": [
+     100,
+     4
+    ],
+    "normal_texture": [
+     16,
+     8
+    ],
+    "occlusion_strength": [
+     104,
+     4
+    ],
+    "output_encoded_to_srgb": [
+     128,
+     1
+    ],
+    "reserved": [
+     129,
+     3
+    ],
+    "roughness_factor": [
+     96,
+     4
+    ],
+    "specular_color_factor": [
+     80,
+     12
+    ],
+    "specular_color_texture": [
+     56,
+     8
+    ],
+    "specular_color_texture_srgb": [
+     127,
+     1
+    ],
+    "specular_factor": [
+     112,
+     4
+    ],
+    "specular_texture": [
+     48,
+     8
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "texture_coordinate_sets": [
+     132,
+     28
+    ],
+    "texture_transforms": [
+     160,
+     196
+    ]
+   },
+   "size": 360
   },
   "CNA_Plane": {
    "align": 4,
