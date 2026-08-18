@@ -2,11 +2,21 @@
 """Renderer-identity registry gate (MODULARIZATION_PLAN.md §2.3).
 
 CNA has exactly 49 public renderer identities. This check mechanically compares
-the two authoritative registries -- the public GraphicsRendererType enum and the
-CNA_GRAPHICS_RENDERER cmake selection list -- against the canonical identity
-table below. Any addition, removal or rename of a public identity fails here
-until the table (and therefore the documented public count) is deliberately
-updated.
+the authoritative registries -- the public GraphicsRendererType enum, the
+CNA_GRAPHICS_RENDERER cmake selection list, and the runtime renderer registry --
+against the canonical identity table below. Any addition, removal or rename of a
+public identity fails here until the table (and therefore the documented public
+count) is deliberately updated.
+
+The RUNTIME registry (cmake/RendererRegistry.cmake plus each family's descriptor
+translation unit) is checked because being a valid identity in the first two
+lists says nothing about whether a build can actually instantiate the renderer.
+PIXIJS was added to the enum and the cmake STRINGS list, and this check reported
+all 49 identities as fine, while cna_renderer_identity_to_namespace("PIXIJS")
+was a hard configure error -- so `-DCNA_GRAPHICS_RENDERER=PIXIJS` could not be
+configured at all. A list that only says a name is spelled the same in two places
+cannot catch that; check_runtime_registry() below closes it by following each
+identity through to the C++ accessor that is supposed to return its descriptor.
 
 It also checks the DOCUMENTED count, in the handful of documents that state one
 (plan_runtimerenderer.md RTR-P13-8). A count written into prose is a fact with no
@@ -164,6 +174,98 @@ def family_count():
                if os.path.isdir(os.path.join(renderers, name, "src")))
 
 
+def registry_map():
+    """The identity -> "<namespace>[|<accessor>]" map from cmake/RendererRegistry.cmake."""
+    path = os.path.join(REPO, "cmake", "RendererRegistry.cmake")
+    text = open(path, encoding="utf-8").read()
+    body = re.search(r"set\(_map\n(.*?)\)\n", text, re.S)
+    if not body:
+        sys.exit("cannot locate the _map set() in cmake/RendererRegistry.cmake")
+    stripped = re.sub(r"#[^\n]*", "", body.group(1))
+    tokens = stripped.split()
+    if len(tokens) % 2 != 0:
+        sys.exit("cmake/RendererRegistry.cmake's _map has an odd number of tokens")
+    return dict(zip(tokens[0::2], tokens[1::2]))
+
+
+def renderer_sources():
+    """Every production translation unit under modules/renderers/<family>/src, read once."""
+    root = os.path.join(REPO, "modules", "renderers")
+    sources = {}
+    for family in sorted(os.listdir(root)):
+        src = os.path.join(root, family, "src")
+        if not os.path.isdir(src):
+            continue
+        for base, _dirs, names in os.walk(src):
+            for name in names:
+                if name.endswith((".cpp", ".mm")):
+                    path = os.path.join(base, name)
+                    sources[path] = open(path, encoding="utf-8", errors="replace").read()
+    return sources
+
+
+def check_runtime_registry(identities):
+    """Follows every identity into the runtime registry and the C++ that has to back it.
+
+    Three things have to line up before a build can instantiate a renderer at runtime, and each
+    has been wrong independently in this repo's history:
+
+      1. cmake/RendererRegistry.cmake maps the identity to an implementing namespace. Missing, this
+         is a FATAL_ERROR at configure time for anyone selecting that identity.
+      2. Some renderer translation unit DEFINES that namespace's descriptor accessor. Without it
+         the generated registry names a symbol nothing provides and the link fails.
+      3. The same namespace declares its own CreateGraphicsRenderer. plan_runtimerenderer.md
+         design decision 4 moved the factory out of the shared CNA::Internal::Renderers namespace
+         precisely so several renderer archives can link into one binary; a family left behind in
+         the shared namespace both fails to satisfy its own descriptor and collides with every
+         other such family in a multi-renderer build.
+    """
+    problems = []
+    mapping = registry_map()
+    sources = renderer_sources()
+
+    for cmake_name, _enum_name in identities:
+        entry = mapping.get(cmake_name)
+        if entry is None:
+            problems.append(
+                f"{cmake_name}: cmake/RendererRegistry.cmake has no implementing namespace. "
+                f"Configuring -DCNA_GRAPHICS_RENDERER={cmake_name} is a hard CMake error until it "
+                f"is registered there, whatever the enum and the STRINGS list say.")
+            continue
+        namespace, _, accessor = entry.partition("|")
+        accessor = accessor or "GetDescriptor"
+
+        definition = re.compile(
+            r"const\s+GraphicsRendererDescriptor\s*&\s*" + re.escape(accessor) + r"\s*\(\s*\)")
+        factory = re.compile(
+            r"std::unique_ptr\s*<\s*IGraphicsRenderer\s*>\s*CreateGraphicsRenderer\s*\(")
+        namespace_open = re.compile(
+            r"namespace\s+CNA::Internal::Renderers::" + re.escape(namespace) + r"\b")
+
+        in_namespace = [text for text in sources.values() if namespace_open.search(text)]
+        if not in_namespace:
+            problems.append(
+                f"{cmake_name}: cmake/RendererRegistry.cmake maps it to "
+                f"CNA::Internal::Renderers::{namespace}, but no renderer translation unit opens "
+                f"that namespace.")
+            continue
+        if not any(definition.search(text) for text in in_namespace):
+            problems.append(
+                f"{cmake_name}: no translation unit in CNA::Internal::Renderers::{namespace} "
+                f"defines {accessor}(), which the generated registry calls.")
+        if not any(factory.search(text) for text in in_namespace):
+            problems.append(
+                f"{cmake_name}: CNA::Internal::Renderers::{namespace} has no family-scoped "
+                f"CreateGraphicsRenderer. plan_runtimerenderer.md design decision 4 requires the "
+                f"factory to live in the family's own namespace, not the shared one.")
+
+    for cmake_name in sorted(set(mapping) - {c for c, _ in identities}):
+        problems.append(
+            f"{cmake_name}: cmake/RendererRegistry.cmake maps an identity that is not in the "
+            f"canonical table. Remove it, or add it to IDENTITIES here and to both registries.")
+    return problems
+
+
 def documented_counts(identities, families):
     """Reports every stated count that disagrees with the registry, and every one gone invisible."""
     problems = []
@@ -219,6 +321,13 @@ def main():
         print(f"  expected ({len(expected_cmake)}): {sorted(expected_cmake)}")
         print(f"  actual   ({len(actual_cmake)}): {sorted(actual_cmake)}")
 
+    runtime = check_runtime_registry(IDENTITIES)
+    if runtime:
+        ok = False
+        print("Runtime renderer registry does not back every public identity:")
+        for problem in runtime:
+            print(f"  - {problem}")
+
     families = family_count()
     stale = documented_counts(len(IDENTITIES), families)
     if stale:
@@ -228,8 +337,9 @@ def main():
             print(f"  - {problem}")
 
     if ok:
-        print(f"OK: {len(IDENTITIES)} public renderer identities preserved in both registries, "
-              f"over {families} implementation families; every documented count agrees")
+        print(f"OK: {len(IDENTITIES)} public renderer identities preserved in the enum, the cmake "
+              f"selection list and the runtime registry, over {families} implementation families; "
+              f"every documented count agrees")
         return 0
     return 1
 

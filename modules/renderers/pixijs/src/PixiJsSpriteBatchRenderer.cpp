@@ -7,6 +7,8 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
 
+#include "System/NotSupportedException.hpp"
+
 #include <stdexcept>
 
 #if defined(__EMSCRIPTEN__)
@@ -14,8 +16,16 @@
 
 // plan_pixijs.md Design decisions 5/7: one EM_JS call per SpriteBatch::End() flush, walking a
 // packed DrawCommand array (14 int32-words/command, matching CanvasSpriteBatchRenderer's own
-// word-indexed HEAP32/HEAPF32 walk) and updating a pooled array of PIXI.Sprite objects via their
-// native anchor/position/scale/rotation/tint/alpha properties -- no manual transform-stack math.
+// word-indexed HEAP32/HEAPF32 walk) and driving a pooled array of PIXI.Sprite objects through
+// their native anchor/position/scale/rotation/tint/alpha properties -- no manual transform math.
+//
+// PIXIJS-87: this call also COMMITS. It fills the scratch container from the pool, renders that
+// container into the active target with `clear:false`, and empties it again -- see
+// PixiJsRenderer.cpp's own submission-model comment for why a retained pool parented to the
+// active container was unsound. Everything the batch's state affects (blend factors, the constant
+// blend colour, the colour write mask, the sampled textures' sampler state) is therefore applied
+// to the GL context immediately before the one render that consumes it, and can never be
+// retroactively rewritten by a later batch.
 //
 // Per-command word layout (all 4-byte fields, stride=14):
 //   0 textureId (int32)          1 sourceX (int32)        2 sourceY (int32)
@@ -24,153 +34,196 @@
 //   7 destinationWidth (float32) 8 destinationHeight (float32)
 //   9 rotation (float32)         10 originX (float32)      11 originY (float32)
 //   12 flags (int32, bit0=flipH bit1=flipV)  13 packedColor (uint32, R|G<<8|B<<16|A<<24)
-// plan_pixijs.md PIXIJS-46/PIXIJS-53: wrapMode/scaleMode are real PIXI.WRAP_MODES/SCALE_MODES
-// numeric (GL) values, applied to each drawn texture's shared baseTexture -- these are
-// SpriteBatch-level sampler state (set once per Begin()/SetSampler* call, same as XNA's own
-// SamplerState application), not per-command, so every sprite in one flush gets the same value.
-// A baseTexture's wrapMode/scaleMode are properties of the GPU texture OBJECT, not of any one
-// PIXI.Texture "view" onto it (Design decision 8's own per-draw frame views all share one
-// baseTexture) -- setting them here is genuinely global to that texture, matching how a real
-// WebGL sampler parameter would behave too.
+//
 // plan_pixijs.md PIXIJS-45: transformA/B/C/D/tx/ty are the batch's Begin(transformMatrix), applied
 // AFTER each sprite's own local placement matrix (position/rotation/scale) -- matching FNA's own
 // SpriteEffect vertex shader, which multiplies the per-sprite local quad by this matrix as a
-// separate world/view step. Composition and PIXI.Transform.setFromMatrix's own decomposition back
-// into position/scale/rotation/skew were confirmed correct via a standalone browser probe (identity,
-// pure translation, and pure scale cases all landed at the exact expected pixel bounding box) before
-// this code was written.
-// plan_pixijs.md PIXIJS-52: when blendMode === -1 (PixiBlendModeToPixiJsCode's own sentinel for
-// PixiJsBlendMode::Custom), customBlendSrcRGB/DstRGB/SrcAlpha/DstAlpha/EquationRGB/EquationAlpha are
-// real WebGL blend-factor/equation GL enum values applied to a reserved, mutated-in-place slot in
-// PIXI's own `renderer.state.blendModes` table -- confirmed live, 2026-08-17, that this table
-// accepts arbitrary custom entries (`[srcRGB,dstRGB,srcAlpha,dstAlpha,eqRGB,eqAlpha]`, 6 elements)
-// and that `state.setBlendMode` genuinely applies them via `gl.blendFuncSeparate`/
-// `gl.blendEquationSeparate` (verified with a real multiply-style blend producing the exact expected
-// composited pixel, not just that the table accepted the write).
-EM_JS(void, CNA_PixiJs_FlushSprites, (const void* commands, int count, int stride, int blendMode, int wrapMode, int scaleMode,
-                                       float transformA, float transformB, float transformC, float transformD,
-                                       float transformTx, float transformTy,
-                                       int customBlendSrcRGB, int customBlendDstRGB,
-                                       int customBlendSrcAlpha, int customBlendDstAlpha,
-                                       int customBlendEquationRGB, int customBlendEquationAlpha), {
-    const isIdentityTransform = transformA === 1 && transformB === 0 && transformC === 0 &&
-                                 transformD === 1 && transformTx === 0 && transformTy === 0;
-    const app = Module['cnaPixiApp'];
-    if (!app) return;
-    if (!Module['cnaPixiSpritePool']) Module['cnaPixiSpritePool'] = [];
-    const pool = Module['cnaPixiSpritePool'];
-    const container = Module['cnaPixiActiveContainer'] || app.stage;
-    const textures = Module['cnaPixiTextures'] || {};
+// separate world/view step.
+EM_JS(int, CNA_PixiJs_FlushSprites, (const void* commands, int count, int stride,
+                                      int opaqueNoBlend, int wrapMode, int scaleMode,
+                                      float transformA, float transformB, float transformC, float transformD,
+                                      float transformTx, float transformTy,
+                                      int blendSrcRGB, int blendDstRGB,
+                                      int blendSrcAlpha, int blendDstAlpha,
+                                      int blendEquationRGB, int blendEquationAlpha,
+                                      float blendFactorR, float blendFactorG,
+                                      float blendFactorB, float blendFactorA,
+                                      int colorWriteChannels), {
+    const state = Module['cnaPixi'];
+    if (!state || !state.app) return 0;
+    try {
+        const app = state.app;
+        const gl = state.gl;
+        const pool = state.pool;
+        const scratch = state.scratch;
+        const textures = state.textures;
+        const isIdentityTransform = transformA === 1 && transformB === 0 && transformC === 0 &&
+                                     transformD === 1 && transformTx === 0 && transformTy === 0;
 
-    let resolvedBlendMode = blendMode;
-    if (blendMode === -1) {
-        const state = app.renderer.state;
-        if (Module['cnaPixiCustomBlendSlot'] === undefined) {
-            Module['cnaPixiCustomBlendSlot'] = state.blendModes.length;
-        }
-        const slot = Module['cnaPixiCustomBlendSlot'];
-        state.blendModes[slot] = [customBlendSrcRGB, customBlendDstRGB, customBlendSrcAlpha,
-                                   customBlendDstAlpha, customBlendEquationRGB, customBlendEquationAlpha];
-        resolvedBlendMode = slot;
-    }
-
-    const base = commands >> 2;
-    for (let i = 0; i < count; ++i) {
-        const o = base + i * stride;
-        const textureId     = HEAP32[o + 0];
-        const sourceX        = HEAP32[o + 1];
-        const sourceY        = HEAP32[o + 2];
-        const sourceWidth    = HEAP32[o + 3];
-        const sourceHeight   = HEAP32[o + 4];
-        const destinationX      = HEAPF32[o + 5];
-        const destinationY      = HEAPF32[o + 6];
-        const destinationWidth  = HEAPF32[o + 7];
-        const destinationHeight = HEAPF32[o + 8];
-        const rotation = HEAPF32[o + 9];
-        const originX  = HEAPF32[o + 10];
-        const originY  = HEAPF32[o + 11];
-        const flags = HEAP32[o + 12];
-        const color = HEAPU32[o + 13];
-
-        const entry = textures[textureId];
-        if (!entry) continue;
-
-        const drawnBaseTexture = entry.texture.baseTexture || entry.texture;
-        if (drawnBaseTexture.wrapMode !== wrapMode) drawnBaseTexture.wrapMode = wrapMode;
-        if (drawnBaseTexture.scaleMode !== scaleMode) { drawnBaseTexture.scaleMode = scaleMode; drawnBaseTexture.update(); }
-
-        let sprite = pool[i];
-        if (!sprite) {
-            sprite = new PIXI.Sprite();
-            pool[i] = sprite;
-        }
-        if (sprite.parent !== container) container.addChild(sprite);
-
-        // plan_pixijs.md PIXIJS-44 / REMED-PIXIJS-2: flip via the texture's own GroupD8 `rotate` (mirrors WHICH
-        // texel samples which corner), never via negative sprite.scale. Empirically verified
-        // (2026-08-17, live browser probe against known RGBY texel data, independent of this
-        // build): negative scale composed with an off-center anchor visibly SHIFTS the sprite's
-        // on-screen footprint instead of mirroring content in place (anchor=(0,0), scale=(-4,4)
-        // moved a destRect(20,8,8,8) draw's visible content to x=[12,20) instead of leaving it at
-        // x=[20,28) -- a real bug the original, unverified "negative scale" design got wrong).
-        // GroupD8 rotate values, also confirmed empirically against the same fixture (E=0 is
-        // identity): 12 = pure horizontal mirror, 8 = pure vertical mirror, 4 = both (== 12 XOR 8)
-        // -- all three leave the destination rectangle exactly where destinationX/Y/Width/Height
-        // says it should be, matching XNA's real contract (flip changes sampling, never position).
-        const flipH = (flags & 1) !== 0;
-        const flipV = (flags & 2) !== 0;
-        const pixiRotate = (flipH ? 12 : 0) ^ (flipV ? 8 : 0);
-
-        // A fresh PIXI.Texture "view" per draw, sharing the entry's baseTexture/GPU resource but
-        // carrying its own frame rectangle -- mutating a shared texture's own .frame in place would
-        // corrupt every other sprite currently sampling the same atlas with a different sub-rect.
-        sprite.texture = new PIXI.Texture(drawnBaseTexture, new PIXI.Rectangle(sourceX, sourceY, sourceWidth, sourceHeight), undefined, undefined, pixiRotate);
-
-        // plan_pixijs.md PIXIJS-43: anchor is PixiJS's own normalized (0..1 of the frame) pivot --
-        // XNA's origin is source-pixel space, so divide through by the source rectangle's own size.
-        // Anchor is a vertex-generation-time pivot, independent of the transform below (matches
-        // FNA's own origin subtraction happening before the transformMatrix multiply).
-        sprite.anchor.set(sourceWidth ? originX / sourceWidth : 0, sourceHeight ? originY / sourceHeight : 0);
-
-        const scaleX = sourceWidth ? destinationWidth / sourceWidth : 1;
-        const scaleY = sourceHeight ? destinationHeight / sourceHeight : 1;
-        if (isIdentityTransform) {
-            // Fast path: byte-identical to this renderer's pre-PIXIJS-45 behavior.
-            sprite.position.set(destinationX, destinationY);
-            sprite.scale.set(scaleX, scaleY);
-            sprite.rotation = rotation;
+        // PIXIJS-87: a DISTINCT slot per distinct factor tuple. PixiJS's StateSystem skips
+        // setBlendMode() when the incoming id equals the one already set, so mutating a single
+        // reserved slot's factors would leave a later batch rendering with the PREVIOUS batch's
+        // blend -- confirmed empirically in a real browser before this was written. Opaque takes
+        // PixiJS's own BLEND_MODES.NONE instead: (ONE, ZERO) is arithmetically identical to no
+        // blending at all, and NONE is the path PixiJS optimizes.
+        let resolvedBlendMode;
+        if (opaqueNoBlend) {
+            resolvedBlendMode = PIXI.BLEND_MODES.NONE;
         } else {
-            // plan_pixijs.md PIXIJS-45: compose the batch's transform (a1,b1,c1,d1,tx1,ty1) with this
-            // sprite's own local placement matrix (a2,b2,c2,d2,tx2,ty2 -- translate*rotate*scale, the
-            // same matrix PixiJS's own updateLocalTransform would build from position/rotation/scale),
-            // then hand the combined 2x3 affine matrix to PIXI.Transform's own decomposition rather
-            // than re-deriving rotation/scale/skew by hand.
-            const cosR = Math.cos(rotation), sinR = Math.sin(rotation);
-            const a2 = cosR * scaleX, b2 = sinR * scaleX;
-            const c2 = -sinR * scaleY, d2 = cosR * scaleY;
-            const tx2 = destinationX, ty2 = destinationY;
-            const ca = transformA * a2 + transformC * b2;
-            const cb = transformB * a2 + transformD * b2;
-            const cc = transformA * c2 + transformC * d2;
-            const cd = transformB * c2 + transformD * d2;
-            const ctx = transformA * tx2 + transformC * ty2 + transformTx;
-            const cty = transformB * tx2 + transformD * ty2 + transformTy;
-            sprite.transform.setFromMatrix(new PIXI.Matrix(ca, cb, cc, cd, ctx, cty));
+            const key = blendSrcRGB + ',' + blendDstRGB + ',' + blendSrcAlpha + ',' + blendDstAlpha +
+                        ',' + blendEquationRGB + ',' + blendEquationAlpha;
+            let slot = state.blendSlots[key];
+            if (slot === undefined) {
+                slot = app.renderer.state.blendModes.length;
+                app.renderer.state.blendModes[slot] = [blendSrcRGB, blendDstRGB, blendSrcAlpha,
+                                                        blendDstAlpha, blendEquationRGB, blendEquationAlpha];
+                // PIXIJS-51: PixiJS rewrites a sprite's blend mode through
+                // utils.premultiplyBlendMode[isPremultiplied][mode] before applying it, which is
+                // how BLEND_MODES.NORMAL silently became NORMAL_NPM -- a DIFFERENT factor tuple --
+                // for every non-premultiplied texture, making BlendState::AlphaBlend render as
+                // BlendState::NonPremultiplied. Registering an identity entry for each of this
+                // renderer's own slots is what keeps the literal XNA factors literal. It is also
+                // required for correctness once a build allocates more than 32 slots, where the
+                // stock table has no entry at all and the lookup would yield undefined.
+                PIXI.utils.premultiplyBlendMode[0][slot] = slot;
+                PIXI.utils.premultiplyBlendMode[1][slot] = slot;
+                state.blendSlots[key] = slot;
+            }
+            resolvedBlendMode = slot;
         }
 
-        // plan_pixijs.md PIXIJS-42: native sprite.tint is RGB-only (same split CANVAS-32 already
-        // has for Canvas2D) -- alpha is the separate sprite.alpha property.
-        const r = color & 0xFF, g = (color >>> 8) & 0xFF, b = (color >>> 16) & 0xFF, a = (color >>> 24) & 0xFF;
-        sprite.tint = (r << 16) | (g << 8) | b;
-        sprite.alpha = a / 255;
-        sprite.blendMode = resolvedBlendMode;
-        sprite.visible = true;
-    }
-    // Hide pooled sprites left over from an earlier flush within the same frame (Clear() already
-    // removes every child on a fresh frame -- this only matters for a second Begin/End before the
-    // next Clear()).
-    for (let i = count; i < pool.length; ++i) {
-        if (pool[i] && pool[i].parent === container) pool[i].visible = false;
+        const base = commands >> 2;
+        let used = 0;
+        for (let i = 0; i < count; ++i) {
+            const o = base + i * stride;
+            const textureId      = HEAP32[o + 0];
+            const sourceX        = HEAP32[o + 1];
+            const sourceY        = HEAP32[o + 2];
+            const sourceWidth    = HEAP32[o + 3];
+            const sourceHeight   = HEAP32[o + 4];
+            const destinationX      = HEAPF32[o + 5];
+            const destinationY      = HEAPF32[o + 6];
+            const destinationWidth  = HEAPF32[o + 7];
+            const destinationHeight = HEAPF32[o + 8];
+            const rotation = HEAPF32[o + 9];
+            const originX  = HEAPF32[o + 10];
+            const originY  = HEAPF32[o + 11];
+            const flags = HEAP32[o + 12];
+            const color = HEAPU32[o + 13];
+
+            const entry = textures[textureId];
+            if (!entry) continue;
+
+            // Sampler state belongs to the GPU texture object, and this flush is rasterized before
+            // the call returns, so applying it here genuinely scopes it to THIS batch: a later
+            // batch drawing the same texture with a different SamplerState sets it again before its
+            // own render. dirtyStyleId is the same mechanism PIXI.BaseTexture.setStyle uses -- it
+            // re-applies the sampler parameters at bind time without re-uploading the pixels, which
+            // an update() call would have forced.
+            const drawnBaseTexture = entry.texture.baseTexture || entry.texture;
+            if (drawnBaseTexture.wrapMode !== wrapMode || drawnBaseTexture.scaleMode !== scaleMode) {
+                drawnBaseTexture.wrapMode = wrapMode;
+                drawnBaseTexture.scaleMode = scaleMode;
+                drawnBaseTexture.dirtyStyleId++;
+            }
+
+            let sprite = pool[used];
+            if (!sprite) {
+                sprite = new PIXI.Sprite();
+                pool[used] = sprite;
+            }
+            ++used;
+
+            // plan_pixijs.md PIXIJS-44 / REMED-PIXIJS-2: flip via the texture's own GroupD8
+            // `rotate` (which texel samples which corner), never via negative sprite.scale.
+            // Empirically verified: negative scale composed with an off-center anchor visibly
+            // SHIFTS the sprite's on-screen footprint instead of mirroring content in place.
+            // GroupD8 values, also confirmed empirically: 12 = horizontal mirror, 8 = vertical,
+            // 4 = both -- all three leave the destination rectangle exactly where
+            // destinationX/Y/Width/Height says it should be, matching XNA's real contract.
+            const flipH = (flags & 1) !== 0;
+            const flipV = (flags & 2) !== 0;
+            const pixiRotate = (flipH ? 12 : 0) ^ (flipV ? 8 : 0);
+
+            // PIXIJS-94: a PIXI.Texture "view" per (frame, rotate), CACHED on the registry entry
+            // rather than constructed fresh for every draw of every frame. A view is a cheap
+            // descriptor over the entry's shared baseTexture, but it is still a real object with
+            // event wiring, and allocating one per sprite per frame was exactly the GC pressure
+            // Design decision 7's sprite pooling exists to avoid. The cache is owned by the entry
+            // and dies with it, so a view can never outlive the base texture it describes.
+            const viewKey = sourceX + ',' + sourceY + ',' + sourceWidth + ',' + sourceHeight + ',' + pixiRotate;
+            let view = entry.views[viewKey];
+            if (!view) {
+                view = new PIXI.Texture(drawnBaseTexture,
+                                        new PIXI.Rectangle(sourceX, sourceY, sourceWidth, sourceHeight),
+                                        undefined, undefined, pixiRotate);
+                entry.views[viewKey] = view;
+            }
+            sprite.texture = view;
+
+            // plan_pixijs.md PIXIJS-43: anchor is PixiJS's own normalized (0..1 of the frame) pivot
+            // -- XNA's origin is source-pixel space, so divide through by the source rectangle.
+            sprite.anchor.set(sourceWidth ? originX / sourceWidth : 0, sourceHeight ? originY / sourceHeight : 0);
+
+            const scaleX = sourceWidth ? destinationWidth / sourceWidth : 1;
+            const scaleY = sourceHeight ? destinationHeight / sourceHeight : 1;
+            if (isIdentityTransform) {
+                sprite.position.set(destinationX, destinationY);
+                sprite.scale.set(scaleX, scaleY);
+                sprite.rotation = rotation;
+                sprite.skew.set(0, 0);
+            } else {
+                // plan_pixijs.md PIXIJS-45: compose the batch's transform with this sprite's own
+                // local placement matrix (translate*rotate*scale, the same matrix PixiJS's own
+                // updateLocalTransform would build), then let PIXI.Transform decompose the result
+                // rather than re-deriving rotation/scale/skew by hand.
+                const cosR = Math.cos(rotation), sinR = Math.sin(rotation);
+                const a2 = cosR * scaleX, b2 = sinR * scaleX;
+                const c2 = -sinR * scaleY, d2 = cosR * scaleY;
+                const tx2 = destinationX, ty2 = destinationY;
+                const ca = transformA * a2 + transformC * b2;
+                const cb = transformB * a2 + transformD * b2;
+                const cc = transformA * c2 + transformC * d2;
+                const cd = transformB * c2 + transformD * d2;
+                const ctx = transformA * tx2 + transformC * ty2 + transformTx;
+                const cty = transformB * tx2 + transformD * ty2 + transformTy;
+                sprite.transform.setFromMatrix(new PIXI.Matrix(ca, cb, cc, cd, ctx, cty));
+            }
+
+            // plan_pixijs.md PIXIJS-42: sprite.tint is RGB-only; alpha is sprite.alpha. Because
+            // every texture uploads with ALPHA_MODES.NPM, PixiJS packs a STRAIGHT vertex colour
+            // (tint untouched, alpha in the high byte) rather than premultiplying it -- which is
+            // exactly XNA's own straight tint semantics.
+            const r = color & 0xFF, g = (color >>> 8) & 0xFF, b = (color >>> 16) & 0xFF, a = (color >>> 24) & 0xFF;
+            sprite.tint = (r << 16) | (g << 8) | b;
+            sprite.alpha = a / 255;
+            sprite.blendMode = resolvedBlendMode;
+            sprite.visible = true;
+            scratch.addChild(sprite);
+        }
+
+        if (used > 0) {
+            // PIXIJS-88/89: the constant blend colour and the colour write mask are plain GL state
+            // that PixiJS neither owns nor resets, so setting them immediately before the render
+            // scopes them to exactly this batch.
+            gl.blendColor(blendFactorR, blendFactorG, blendFactorB, blendFactorA);
+            gl.colorMask((colorWriteChannels & 1) !== 0, (colorWriteChannels & 2) !== 0,
+                         (colorWriteChannels & 4) !== 0, (colorWriteChannels & 8) !== 0);
+            if (state.activeTarget)
+                app.renderer.render(scratch, { renderTexture: state.activeTarget, clear: false });
+            else
+                app.renderer.render(scratch, { clear: false });
+            gl.colorMask(true, true, true, true);
+        }
+        // Emptied unconditionally: a sprite that stayed parented here would be re-rendered by the
+        // next flush, which is the retained-mode duplication this model exists to remove.
+        scratch.removeChildren();
+        return 1;
+    } catch (e) {
+        console.error('[CNA] PixiJS: SpriteBatch flush failed:', e);
+        // Leave nothing parented behind: the next flush must not inherit this one's sprites.
+        try { state.scratch.removeChildren(); } catch (ignored) { /* the scene graph is unusable */ }
+        return 0;
     }
 });
 #endif
@@ -188,55 +241,6 @@ namespace CNA::Internal::Renderers::PixiJs
             if (const auto* rt = dynamic_cast<const PixiJsRenderTargetRenderer*>(&texture)) return rt->GetPixiTextureId();
             return 0;
         }
-
-        // REMED-PIXIJS-3: single source of truth for the PixiJsBlendMode -> real PIXI.BLEND_MODES
-        // numeric value mapping, matching CNA_PixiJs_SetBlendMode's own table exactly (PixiJsRenderer.cpp)
-        // -- kept as one function rather than duplicated inline so the two never drift apart.
-        int PixiBlendModeToPixiJsCode(PixiJsBlendMode mode)
-        {
-            switch (mode)
-            {
-                case PixiJsBlendMode::Opaque: return 20; // PIXI.BLEND_MODES.NONE
-                case PixiJsBlendMode::Additive: return 1; // PIXI.BLEND_MODES.ADD
-                // plan_pixijs.md PIXIJS-52: -1 is a sentinel, not a real PIXI.BLEND_MODES value --
-                // CNA_PixiJs_FlushSprites (below) reads it as "mutate and use the reserved custom
-                // blend-mode slot instead" rather than one of the built-in numeric codes.
-                case PixiJsBlendMode::Custom: return -1;
-                case PixiJsBlendMode::AlphaBlend:
-                case PixiJsBlendMode::NonPremultiplied:
-                default: return 0; // PIXI.BLEND_MODES.NORMAL
-            }
-        }
-
-        // plan_pixijs.md PIXIJS-46: raw TextureAddressMode int (0=Wrap, 1=Clamp, 2=Mirror) -> real
-        // WebGL wrap-mode GL enum values PIXI.WRAP_MODES exposes directly (confirmed live,
-        // 2026-08-17: PIXI.WRAP_MODES.CLAMP===33071/CLAMP_TO_EDGE, .REPEAT===10497,
-        // .MIRRORED_REPEAT===33648 -- real gl.* constants, not small ordinal indices).
-        //
-        // Known boundary (found via a live browser probe, 2026-08-17, before writing a smoke-test
-        // assertion that would have been untestable): this value is genuinely applied to the
-        // baseTexture's own WebGL sampler (`baseTexture.wrapMode`), so it is real, not a stub -- but
-        // XNA/D3D's classic "one Draw() call with a source rectangle larger than the texture tiles
-        // automatically under TextureAddressMode.Wrap" trick cannot be reproduced through it. Each
-        // Draw() builds a fresh `new PIXI.Texture(baseTexture, frameRect, ...)` "view" (see
-        // CNA_PixiJs_FlushSprites above), and PixiJS's Texture constructor throws
-        // ("frame does not fit inside the base Texture dimensions") for any frameRect that exceeds
-        // the base texture's own pixel bounds -- confirmed live: `new PIXI.Texture(base2x2,
-        // new PIXI.Rectangle(0,0,4,4))` throws even with wrapMode already set to REPEAT. A source
-        // rect stays within the base texture's bounds by construction in every other test in this
-        // file, so wrapMode currently only affects the subtler linear-filter edge-bleed case (a
-        // sampler reading half a texel past a frame's edge), not visible large-scale tiling --
-        // that would need a `PIXI.TilingSprite`-based draw path, which is out of this v1 scope.
-        int TextureAddressModeToPixiWrapMode(int addressMode)
-        {
-            switch (addressMode)
-            {
-                case 0: return 10497; // Wrap -> PIXI.WRAP_MODES.REPEAT
-                case 2: return 33648; // Mirror -> PIXI.WRAP_MODES.MIRRORED_REPEAT
-                case 1:
-                default: return 33071; // Clamp -> PIXI.WRAP_MODES.CLAMP
-            }
-        }
     }
 
     PixiJsSpriteBatchRenderer::PixiJsSpriteBatchRenderer()
@@ -252,38 +256,52 @@ namespace CNA::Internal::Renderers::PixiJs
     void PixiJsSpriteBatchRenderer::Begin()
     {
         commands_.clear();
+        // PIXIJS-87/88/89: the whole graphics state a flush needs is captured HERE, at Begin(),
+        // not read from the shared renderer state at flush time. SpriteBatch::Begin applies the
+        // BlendState to the device immediately before calling this, so what is captured is exactly
+        // the state this batch was begun with -- a later batch changing the device's BlendState,
+        // BlendFactor or ColorWriteChannels can no longer reach back into this one.
         activeBlendMode_ = state_->blendMode;
-        // plan_pixijs.md PIXIJS-52: mirrors how activeBlendMode_ itself is captured -- only
-        // meaningful when activeBlendMode_ == PixiJsBlendMode::Custom, but copied unconditionally
-        // since PixiJsRendererState always holds a valid (if stale/unused) value.
-        customBlendSrcRGB_ = state_->customBlendSrcRGB;
-        customBlendDstRGB_ = state_->customBlendDstRGB;
-        customBlendSrcAlpha_ = state_->customBlendSrcAlpha;
-        customBlendDstAlpha_ = state_->customBlendDstAlpha;
-        customBlendEquationRGB_ = state_->customBlendEquationRGB;
-        customBlendEquationAlpha_ = state_->customBlendEquationAlpha;
+        blendSrcRGB_ = state_->blendSrcRGB;
+        blendDstRGB_ = state_->blendDstRGB;
+        blendSrcAlpha_ = state_->blendSrcAlpha;
+        blendDstAlpha_ = state_->blendDstAlpha;
+        blendEquationRGB_ = state_->blendEquationRGB;
+        blendEquationAlpha_ = state_->blendEquationAlpha;
+        blendFactorR_ = state_->blendFactorR;
+        blendFactorG_ = state_->blendFactorG;
+        blendFactorB_ = state_->blendFactorB;
+        blendFactorA_ = state_->blendFactorA;
+        colorWriteChannels_ = state_->colorWriteChannels;
         begun_ = true;
+    }
+
+    void PixiJsSpriteBatchRenderer::Flush(const DrawCommand* commands, int count)
+    {
+#if defined(__EMSCRIPTEN__)
+        if (count <= 0) return;
+        const int pixiWrapMode = TextureAddressModeToPixiWrapMode(addressU_);
+        const int pixiScaleMode = linearFilter_ ? 1 : 0; // PIXI.SCALE_MODES.LINEAR/.NEAREST
+        const int opaqueNoBlend = activeBlendMode_ == PixiJsBlendMode::Opaque ? 1 : 0;
+        if (CNA_PixiJs_FlushSprites(commands, count, 14,
+                                    opaqueNoBlend, pixiWrapMode, pixiScaleMode,
+                                    transformA_, transformB_, transformC_, transformD_,
+                                    transformTx_, transformTy_,
+                                    blendSrcRGB_, blendDstRGB_, blendSrcAlpha_, blendDstAlpha_,
+                                    blendEquationRGB_, blendEquationAlpha_,
+                                    blendFactorR_, blendFactorG_, blendFactorB_, blendFactorA_,
+                                    colorWriteChannels_) == 0)
+            throw std::runtime_error(
+                "PixiJS: SpriteBatch flush failed; see the browser console for the underlying error.");
+#else
+        (void)commands; (void)count;
+#endif
     }
 
     void PixiJsSpriteBatchRenderer::End()
     {
-#if defined(__EMSCRIPTEN__)
-        if (!commands_.empty())
-        {
-            // PIXI.BLEND_MODES.NORMAL=0 / .ADD=1 in PixiJS v7 -- see
-            // PixiJsRenderer.cpp's CNA_PixiJs_SetBlendMode for the same table.
-            const int pixiBlendModeCode = PixiBlendModeToPixiJsCode(activeBlendMode_);
-            const int pixiWrapMode = TextureAddressModeToPixiWrapMode(addressU_);
-            const int pixiScaleMode = linearFilter_ ? 1 : 0; // PIXI.SCALE_MODES.LINEAR/.NEAREST
-            CNA_PixiJs_FlushSprites(commands_.data(), static_cast<int>(commands_.size()), 14,
-                                    pixiBlendModeCode, pixiWrapMode, pixiScaleMode,
-                                    transformA_, transformB_, transformC_, transformD_,
-                                    transformTx_, transformTy_,
-                                    customBlendSrcRGB_, customBlendDstRGB_,
-                                    customBlendSrcAlpha_, customBlendDstAlpha_,
-                                    customBlendEquationRGB_, customBlendEquationAlpha_);
-        }
-#endif
+        Flush(commands_.data(), static_cast<int>(commands_.size()));
+        commands_.clear();
         begun_ = false;
     }
 
@@ -317,28 +335,28 @@ namespace CNA::Internal::Renderers::PixiJs
 
     void PixiJsSpriteBatchRenderer::SetSamplerFilter(int textureFilter)
     {
-        // plan_pixijs.md PIXIJS-53: same magnification-dominant TextureFilter grouping
-        // CANVAS-42/CanvasSpriteBatchRenderer::SetSamplerFilter already established -- SpriteBatch
-        // draws are near-universally magnification-dominant, so the "expand" component of
-        // TextureFilter is what visibly matters. Linear=0, Anisotropic=2, LinearMipPoint=3,
-        // MinLinearMagPointMipLinear/MipPoint... -- reusing the exact {0,2,3,7,8} set Canvas's own
-        // Task 701 derivation settled on, applied here as PIXI.SCALE_MODES.LINEAR vs .NEAREST.
-        switch (textureFilter)
-        {
-            case 0: case 2: case 3: case 7: case 8:
-                linearFilter_ = true;
-                break;
-            default:
-                linearFilter_ = false;
-                break;
-        }
+        // plan_pixijs.md PIXIJS-53. Throws for a value outside the enumeration rather than
+        // defaulting, so an unrecognized filter is never silently rendered as Point.
+        linearFilter_ = TextureFilterIsLinear(textureFilter);
     }
 
     void PixiJsSpriteBatchRenderer::SetSamplerAddressMode(int addressU, int addressV)
     {
-        // plan_pixijs.md PIXIJS-46: PIXI.BaseTexture exposes one wrapMode for both axes -- addressU
-        // is applied at flush time as the representative value (addressV is stored but currently
-        // unused); mixed per-axis U/V modes are a known, documented boundary, not silently dropped.
+        // PIXIJS-90: PIXI.BaseTexture carries ONE wrapMode covering both axes, so a mixed
+        // per-axis request genuinely cannot be represented. It used to be stored and then
+        // half-applied (addressU won, addressV was dropped), which rendered a sampler state the
+        // caller never asked for while reporting success. Rejecting says so.
+        //
+        // Both arguments are validated before the comparison, so an out-of-range value is reported
+        // as such rather than as a mismatch.
+        const int wrapU = TextureAddressModeToPixiWrapMode(addressU);
+        const int wrapV = TextureAddressModeToPixiWrapMode(addressV);
+        if (wrapU != wrapV)
+            throw System::NotSupportedException(
+                "PixiJS: SamplerState.AddressU and AddressV differ (" + std::to_string(addressU) +
+                " vs " + std::to_string(addressV) + "). A PIXI.BaseTexture exposes a single "
+                "wrapMode for both axes, so independent per-axis addressing cannot be expressed by "
+                "this renderer. Use the same TextureAddressMode for both axes.");
         addressU_ = addressU;
         addressV_ = addressV;
     }
@@ -376,21 +394,14 @@ namespace CNA::Internal::Renderers::PixiJs
             packedColor
         };
 
-#if defined(__EMSCRIPTEN__)
         if (immediateMode_)
         {
-            const int pixiBlendModeCode = PixiBlendModeToPixiJsCode(activeBlendMode_);
-            const int pixiWrapMode = TextureAddressModeToPixiWrapMode(addressU_);
-            const int pixiScaleMode = linearFilter_ ? 1 : 0; // PIXI.SCALE_MODES.LINEAR/.NEAREST
-            CNA_PixiJs_FlushSprites(&command, 1, 14, pixiBlendModeCode, pixiWrapMode, pixiScaleMode,
-                                    transformA_, transformB_, transformC_, transformD_,
-                                    transformTx_, transformTy_,
-                                    customBlendSrcRGB_, customBlendDstRGB_,
-                                    customBlendSrcAlpha_, customBlendDstAlpha_,
-                                    customBlendEquationRGB_, customBlendEquationAlpha_);
+            // SpriteSortMode::Immediate: this ONE sprite is rasterized before Draw() returns, which
+            // is what makes immediate mode observably immediate. It used to overwrite pool[0] and
+            // paint nothing, so a batch of N immediate draws left only the last sprite visible.
+            Flush(&command, 1);
             return;
         }
-#endif
         commands_.push_back(command);
     }
 
