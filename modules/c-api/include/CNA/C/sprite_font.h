@@ -119,6 +119,37 @@ CNA_C_API CNA_Result cna_sprite_font_copy_characters(
     uint64_t* out_count);
 
 /**
+ * @brief Copies the complete glyph table this SpriteFont was built from.
+ *
+ * @param sprite_font Owned SpriteFont handle.
+ * @param destination Array of @p capacity `CNA_SpriteFontGlyph` elements, or null only when
+ *        @p capacity is zero. Every element is written by the call, `struct_size` and
+ *        `struct_version` included, so the caller need not pre-initialize them.
+ * @param capacity Number of elements available at @p destination.
+ * @param out_count Always receives the glyph count, which equals
+ *        `CNA_SpriteFontInfo::character_count`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**, or a
+ *         documented argument/handle/thread failure.
+ *
+ * The inverse of `cna_sprite_font_create`: the array this returns is exactly the array that
+ * constructor accepts, in the same order, so a font can be read back and rebuilt without loss.
+ * Element `i` describes the character `cna_sprite_font_copy_characters` returns at index `i`.
+ *
+ * This exists because measuring is not drawing. `cna_sprite_font_measure_utf8` answers the size of
+ * a whole string, which is enough to lay out a text box and not enough to place a glyph: a
+ * consumer implementing `SpriteBatch.DrawString` above this ABI needs each glyph's atlas
+ * rectangle, its cropping offset and its three kerning values, and without them a native-owned
+ * font could be measured and never drawn. The atlas texture completing the picture is the handle
+ * the caller passed to `cna_sprite_font_create`, or the one
+ * `cna_content_manager_load_sprite_font` reports.
+ */
+CNA_C_API CNA_Result cna_sprite_font_copy_glyphs(
+    CNA_Handle sprite_font,
+    CNA_SpriteFontGlyph* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/**
  * @brief Sets or clears the fallback character.
  *
  * @param sprite_font Owned SpriteFont handle.

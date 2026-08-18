@@ -50,6 +50,26 @@ namespace Microsoft::Xna::Framework::Graphics
         return characterMap_;
     }
 
+    const Texture2D& SpriteFont::getTextureEXT() const
+    {
+        return textureValue_;
+    }
+
+    const std::vector<Rectangle>& SpriteFont::getGlyphBoundsEXT() const
+    {
+        return glyphData_;
+    }
+
+    const std::vector<Rectangle>& SpriteFont::getCroppingEXT() const
+    {
+        return croppingData_;
+    }
+
+    const std::vector<Vector3>& SpriteFont::getKerningEXT() const
+    {
+        return kerning_;
+    }
+
     std::optional<charcs> SpriteFont::getDefaultCharacterProperty() const
     {
         return defaultCharacter_;

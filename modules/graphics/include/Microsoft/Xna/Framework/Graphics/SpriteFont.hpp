@@ -59,6 +59,41 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] const std::vector<charcs>& getCharactersProperty() const;
 
         /**
+         * @brief Gets the glyph atlas texture this font draws from.
+         *
+         * XNA keeps the atlas internal because `SpriteBatch` is the only thing that needs it. A
+         * consumer that has to re-implement text layout above this class -- a language binding
+         * whose own `SpriteBatch.DrawString` places each glyph itself -- needs the same four
+         * tables `SpriteBatch` reads, and this is the first of them. Together with
+         * getGlyphBoundsEXT(), getCroppingEXT(), getKerningEXT() and getCharactersProperty() they
+         * round-trip exactly what the constructor accepts.
+         *
+         * @return Read-only reference to the atlas texture, valid while this font is.
+         */
+        CNAEXT [[nodiscard]] const Texture2D& getTextureEXT() const;
+
+        /**
+         * @brief Gets each glyph's source rectangle within the atlas texture.
+         * @return Read-only reference, one entry per character in getCharactersProperty(), in the
+         *         same order.
+         */
+        CNAEXT [[nodiscard]] const std::vector<Rectangle>& getGlyphBoundsEXT() const;
+
+        /**
+         * @brief Gets each glyph's cropping/offset rectangle.
+         * @return Read-only reference, one entry per character in getCharactersProperty(), in the
+         *         same order.
+         */
+        CNAEXT [[nodiscard]] const std::vector<Rectangle>& getCroppingEXT() const;
+
+        /**
+         * @brief Gets each glyph's left bearing, width and right bearing.
+         * @return Read-only reference, one entry per character in getCharactersProperty(), in the
+         *         same order.
+         */
+        CNAEXT [[nodiscard]] const std::vector<Vector3>& getKerningEXT() const;
+
+        /**
          * @brief Gets the fallback character used when a requested character is not in the font.
          * @return Optional fallback character; std::nullopt if unset (throws on miss).
          */

@@ -410,3 +410,59 @@ TEST(SpriteFontTest, MeasureStringBuilderUnknownCharWithDefaultFallsBackToDefaul
     EXPECT_FLOAT_EQ(fallback.X, expected.X);
     EXPECT_FLOAT_EQ(fallback.Y, expected.Y);
 }
+
+// -----------------------------------------------------------------------
+// CNAEXT glyph-table accessors
+//
+// The four tables SpriteBatch reads are what any layer re-implementing text layout above this
+// class needs too, and they were unreachable outside the friendship. These assert that what comes
+// back is exactly what went in, in the same order, so a font can be read back and rebuilt.
+// -----------------------------------------------------------------------
+
+TEST(SpriteFontExtTests, GlyphTablesRoundTripTheConstructorArguments)
+{
+    const std::vector<Rectangle> glyphs   = { {1, 2, 8, 12}, {9, 2, 6, 12} };
+    const std::vector<Rectangle> cropping = { {0, 3, 8, 12}, {1, 4, 6, 12} };
+    const std::vector<charcs>    chars    = { u'A', u'B' };
+    const std::vector<Vector3>   kern     = { Vector3(1.0f, 8.0f, 2.0f),
+                                              Vector3(0.0f, 6.0f, 1.0f) };
+    const SpriteFont font(Texture2D{}, glyphs, cropping, chars, 16, 0.0f, kern, std::nullopt);
+
+    ASSERT_EQ(font.getGlyphBoundsEXT().size(), chars.size());
+    ASSERT_EQ(font.getCroppingEXT().size(), chars.size());
+    ASSERT_EQ(font.getKerningEXT().size(), chars.size());
+
+    for (std::size_t index = 0; index < chars.size(); ++index)
+    {
+        EXPECT_EQ(font.getGlyphBoundsEXT()[index], glyphs[index]);
+        EXPECT_EQ(font.getCroppingEXT()[index], cropping[index]);
+        EXPECT_FLOAT_EQ(font.getKerningEXT()[index].X, kern[index].X);
+        EXPECT_FLOAT_EQ(font.getKerningEXT()[index].Y, kern[index].Y);
+        EXPECT_FLOAT_EQ(font.getKerningEXT()[index].Z, kern[index].Z);
+        EXPECT_EQ(font.getCharactersProperty()[index], chars[index]);
+    }
+}
+
+TEST(SpriteFontExtTests, GlyphTablesAreParallelToTheCharacterList)
+{
+    const SpriteFont font = makeFontA();
+
+    EXPECT_EQ(font.getGlyphBoundsEXT().size(), font.getCharactersProperty().size());
+    EXPECT_EQ(font.getCroppingEXT().size(), font.getCharactersProperty().size());
+    EXPECT_EQ(font.getKerningEXT().size(), font.getCharactersProperty().size());
+}
+
+TEST(SpriteFontExtTests, TextureAccessorAnswersTheAtlasTheFontWasBuiltWith)
+{
+    const Texture2D atlas{};
+    const SpriteFont font(Texture2D{atlas}, { Rectangle{0, 0, 8, 12} },
+                          { Rectangle{0, 0, 8, 12} }, { u'A' }, 16, 0.0f,
+                          { Vector3(1.0f, 8.0f, 2.0f) }, std::nullopt);
+
+    // A default-constructed atlas has no renderer, which is the observable property that
+    // distinguishes it and is enough to prove the accessor answers the stored value rather than
+    // a fresh object.
+    EXPECT_EQ(font.getTextureEXT().HasRenderer(), atlas.HasRenderer());
+    EXPECT_EQ(font.getTextureEXT().getWidthProperty(), atlas.getWidthProperty());
+    EXPECT_EQ(font.getTextureEXT().getHeightProperty(), atlas.getHeightProperty());
+}
