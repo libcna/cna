@@ -1947,6 +1947,21 @@ colour-carrying fixtures through a **live device** and requires the draw to succ
 diagnostic that names the semantic. Two renderers passed every text audit while being unable to draw
 the asset at all (`GLTF-472`), which is precisely the gap a text audit cannot see.
 
+**A third check exists since `GLTF-476`, and the reason it had to be added is a correction to this
+section's own history.** Both checks above are about **`COLOR_0`**, and this section stated the
+partition for "the core feature" in general — a claim wider than its evidence. On 2026-08-18 `IGL`
+was found to be in the forbidden third state for four *different* core semantics at once
+(`normalTexture.scale`, `occlusionTexture.strength`, the sRGB encoding of base colour and emissive,
+and per-map `KHR_texture_transform`): it neither applied them nor refused them, transporting 6 of
+the 20 PBR draw parameters and substituting shader constants for the rest. Nothing detected it,
+because every audit in the repository asked whether a renderer *declared* the PBR maps, and it did.
+`GltfRendererPbrFallbackPolicy.EveryPbrRendererConsumesEveryUniversalPbrDrawParameter` now requires
+every PBR renderer to consume every universal PBR material input by name. It is a cheap necessary
+condition rather than a proof of correct pixels, and it is worth having for one empirical reason:
+the condition was already being violated, by one renderer, for fourteen parameters at once, while
+three separate inventories called that renderer complete. `IGL` was fixed the same day and the
+partition holds again — but the claim below is now backed by evidence of the same width.
+
 > **`GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT`** — the importer, the `.cnj` path, the shared vertex
 > ABI and the effect/`GpuDrawParams` runtime model implement core glTF 2.0 correctly, and **every one
 > of the seventeen PBR renderers either renders the feature or refuses the draw by name**.
