@@ -56,6 +56,8 @@ orchestration that pulls in extra render targets and GPU memory lives in the gat
 | `ShadowMap`, `DirectionalLightEXT` | `CNA/Graphics/ShadowMap.hpp` | Directional shadow-map generation: fits the light's volume to the scene, opens a pass the app draws its casters into. |
 | `CascadedShadowMap` | `CNA/Graphics/CascadedShadowMap.hpp` | The same, split into 2-4 depth ranges so a large scene keeps resolution near the camera. |
 | `CubeShadowMap`, `SpotShadowMap`, `PointLightEXT`, `SpotLightEXT` | `CNA/Graphics/CubeShadowMap.hpp`, `SpotShadowMap.hpp` | Punctual-light shadows: six cube faces for a point light, one perspective map for a spot. |
+| `ComputeShader`, `StorageBuffer`, `StorageBufferT<T>` | `CNA/Graphics/ComputeShader.hpp`, `StorageBuffer.hpp` | Compute programs and the buffers they read and write. |
+| `AutoExposureEXT` | `CNA/Graphics/AutoExposureEXT.hpp` | Compute log-average luminance reduction, and the adaptation that turns it into an exposure. |
 | `InstancedRendererEXT` | `CNA/Graphics/InstancedRendererEXT.hpp` | Draws one mesh part many times in a single call, owning the per-instance transform stream. |
 | `LodGroupEXT` (+ `LodSelectionMode`) | `CNA/Graphics/LodGroupEXT.hpp` | Levels of detail selected by distance or projected screen size, with optional hysteresis. |
 | `FrustumCullerEXT` | `CNA/Graphics/FrustumCullerEXT.hpp` | Filters bounds — or transforms — down to what a camera can see. |
@@ -477,6 +479,60 @@ renderer.draw(effect);                                       // one draw call
 - **Cost** (`cnaext_instancing_lod_test --benchmark`, 128×128, Mesa llvmpipe): 1 000 cubes
   instanced **0.96 ms** against **51.5 ms** looped (**54×**); 10 000 cubes instanced **22.7 ms**
   against **538 ms** looped (**24×**).
+
+### Compute shaders and storage buffers
+
+```cpp
+if (device.SupportsCapability(GraphicsCapability::ComputeShaders)) {
+    CNA::Graphics::StorageBufferT<float> values(device, 1024);
+    values.setData(input);
+
+    CNA::Graphics::ComputeShader doubler(device, source);   // GLSL ES 3.10 on EasyGL
+    doubler.bindStorageBuffer(0, values.getBuffer());
+    doubler.setUniform("uCount", 1024);
+    doubler.dispatch(1024 / 64);                            // local_size_x = 64
+    const std::vector<float> result = values.getData();
+}
+```
+
+| Capability | Where |
+|---|---|
+| `GraphicsCapability::ComputeShaders` | GL ES ≥ 3.1, desktop GL ≥ 4.3. Never WebGL — no version of it has compute. Decided by the **runtime** context, so an EasyGL build that asked for ES 3.0 and received 3.2 gets compute. |
+| Storage buffers, dispatch, barriers | Everywhere compute is. |
+| `Texture2D` as a compute **image** | Desktop GL only (`ComputeShader::isImageBindingSupported`). GL ES requires an immutable texture (`glTexStorage2D`) and CNA allocates textures mutably, so the binding is refused with that reason rather than issued and silently dropped. |
+| Sampling a `Texture2D` **from** compute | Everywhere compute is — sampling has no immutability requirement. This is the route auto-exposure takes. |
+
+- **Nothing is silent.** A renderer without compute makes both wrappers throw
+  `System::NotSupportedException` naming it, at construction rather than at some later dispatch that
+  quietly did nothing. A dispatch past the device's own work-group limit throws before submission,
+  naming the axis and the number.
+- **Barriers**: `dispatch` already issues `ShaderStorage | ShaderImageAccess | BufferUpdate`, so a
+  read-back or a following dispatch needs nothing from the caller. What the wrapper cannot know is
+  how the *rest of the pipeline* will read the data — a buffer about to be drawn as vertices needs
+  `VertexAttribArray`, a texture about to be sampled needs `TextureFetch` — and that is
+  `ComputeShader::barrier`.
+- **`Texture2D::GetData` never shows compute writes.** It answers from the CPU pixels the texture
+  was uploaded with. Compute output reaches the CPU through a storage buffer, or reaches the screen
+  by being sampled in a draw.
+- **The gap worth naming**: a storage buffer cannot be bound as a vertex stream, so a
+  GPU-resident particle system has to come back through the CPU. Measured at 100 000 particles on
+  llvmpipe: GPU step **0.881 ms**, CPU step **2.401 ms**, read-back **0.806 ms**.
+
+**Auto-exposure** (`AutoExposureEXT`) is the first consumer inside the engine layer, and the reason
+`MOD-308` deferred auto-exposure until compute existed:
+
+```cpp
+CNA::Graphics::AutoExposureEXT exposure(device);
+exposure.update(*pipeline.getSceneTarget(), elapsedSeconds);
+exposure.applyTo(pipeline.getSettings());     // TonemapPass already reads getExposure()
+```
+
+It reduces a 64×64 sample grid in shared memory to 64 partials and finishes the sum on the CPU —
+64 floats cost less to fetch than a second kernel launch costs to start. The average is a
+**log**-average, so a handful of very bright pixels cannot crush the frame, and adaptation is
+exponential and **asymmetric**: adapting to a brighter scene is fast, to a darker one slow, as an
+eye is. The speeds are named for the scene, not the exposure — a brighter scene means a *lower*
+exposure, and getting that comparison backwards is invisible until something moves.
 
 Legend: ✅ implemented and verified · 🟨 partial · ⬜ not implemented · ⛔ deliberately unsupported.
 

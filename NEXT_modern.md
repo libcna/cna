@@ -39,6 +39,7 @@ do not reconstruct the layer's state from the general `NEXT.md`.
 | ✅ | **Phase 12 — image-based lighting, complete** (`MOD-1200`–`1248`; 4 rows ⛔ with reasons, 1 🟨) |
 | ✅ | **Phase 13 — material system reconciliation, complete** (`MOD-1300`–`1315`, 16/16) |
 | ✅ | **Phase 14 — instancing, LOD and culling, complete** (`MOD-1400`–`1414`, 15/15) |
+| ✅ | **Phase 15 — compute shaders and storage buffers, complete** (`MOD-1500`–`1555`; 2 rows 🟨, 1 ⛔ with its measurement) |
 
 **The HDR spine is complete and verified end to end.** A game can wrap its draw calls in
 `RenderPipeline::begin`/`end`, enable HDR, bloom, a tonemapping operator and FXAA, and get them --
@@ -174,7 +175,29 @@ instance is a different program rather than a slower one; and `LodGroupEXT` orde
 finest first, which is ascending distance in one mode and *descending* pixel size in the other, so
 changing mode re-sorts.
 
-Next: Phase 15 (compute shaders and storage buffers), then 16 (per-renderer rollout) and 17-19.
+**Compute is real, and it runs here.** `IComputeShaderRenderer`/`IStorageBufferRenderer` sit
+beside the other renderer interfaces with inert defaults, EasyGL implements them against the
+*runtime* context version, and `CNA::Graphics::ComputeShader`/`StorageBuffer` are the engine-layer
+face. Verified on Mesa llvmpipe's ES 3.2 context, not by inspection: 1024 floats doubled, a 1 MB
+buffer round-tripped byte-exact, GPU frustum culling agreeing with `FrustumCullerEXT` on 625 boxes
+with zero disagreements, and 100 000 particles integrating at 0.881 ms against 2.401 ms on the CPU
+with an exact match.
+
+`AutoExposureEXT` is the first consumer inside the engine layer, and closes `MOD-308`: a log-average
+luminance reduction in shared memory, asymmetric adaptation, one line to apply to the pipeline.
+
+Three limits found and written down rather than worked around:
+
+- **Image bindings are desktop-GL only.** GL ES needs an immutable texture (`glTexStorage2D`) and
+  CNA allocates mutably, so `ComputeShader::bindImage` refuses with the reason instead of issuing a
+  binding the driver drops. Making CNA's textures immutable is a change to the path every draw goes
+  through — an owner decision, not a side effect of this phase.
+- **A storage buffer cannot be bound as a vertex stream**, so GPU-resident particles come back
+  through the CPU at 0.806 ms per 1.6 MB. That number is what a `StorageBuffer`/`VertexBuffer`
+  aliasing API would save.
+- **`Texture2D::GetData` never shows compute writes** — it answers from the CPU shadow copy.
+
+Next: Phase 16 (per-renderer rollout), then 17-19 (tests/CI, docs, stabilization).
 
 Smaller open rows: `MOD-203` (restore-on-exception around a pass), `MOD-209`/`MOD-210`,
 `MOD-405`/`407`/`409`/`413`/`415`–`417` (bloom quality presets, perf, goldens),
@@ -247,6 +270,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-18 | same, with all of Phase 12 (IBL consumption, shader and tests) | same | 7769 ran · 7705 pass · 64 skip · **0 fail** |
 | 2026-08-18 | same, with all of Phase 13 (the material reconciliation) | same | 7787 ran · 7723 pass · 64 skip · **0 fail** |
 | 2026-08-18 | same, with all of Phase 14 (instancing, LOD and culling) | same | 7806 ran · 7742 pass · 64 skip · **0 fail** |
+| 2026-08-18 | same, with all of Phase 15 (compute, storage buffers, auto-exposure) | same | 7824 ran · 7758 pass · 66 skip · **0 fail** |
 
 The `CNA_CNAEXT=OFF` row is the one that answers "can this break what already works". It configures,
 builds and passes with the whole engine layer compiled out. Its lower test count is expected and not

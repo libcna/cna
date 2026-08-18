@@ -714,10 +714,10 @@ implementation precedes its per‑renderer follow‑ups.
 
 | # | Task | Status |
 |---|---|---|
-| N70 | `IComputeShaderRenderer`/`IStorageBufferRenderer` + EasyGL (GLES 3.1) impl | ⬜ |
-| N71 | `ComputeShader` / `StorageBuffer<T>` public wrappers | ⬜ |
+| N70 | `IComputeShaderRenderer`/`IStorageBufferRenderer` + EasyGL (GLES 3.1) impl | ✅ (support is decided by the **runtime** context, not the compile-time profile — EasyGL asks for ES 3.0 and Mesa hands it 3.2. Verified for real: 1024 floats doubled, a 1 MB buffer round-tripped byte-exact. Binding a `Texture2D` as an image is desktop-GL only and says so, because GL ES needs an immutable texture and CNA allocates mutably — see `plan_modern.md` MOD-1500..1525) |
+| N71 | `ComputeShader` / `StorageBuffer<T>` public wrappers | ✅ (`StorageBuffer` is byte-oriented and non-template with its implementation in a `.cpp`; `StorageBufferT<T>` is the typed view. A dispatch is validated against the device's real limits before submission, and `System::NotSupportedException` — not a new `EngineException` — is the refusal, since CNA already maps that .NET type for this meaning) |
 | N72 | Compute on Vulkan / D3D11 / D3D12 | ⬜ |
-| N73 | GPU particle system + GPU frustum culling demos | ⬜ |
+| N73 | GPU particle system + GPU frustum culling demos | 🟨 (GPU culling agrees with `FrustumCullerEXT` on 625 boxes with zero disagreements. The particle demo integrates 100 000 particles at 0.881 ms against 2.401 ms on the CPU and matches it exactly — but a storage buffer cannot be bound as a vertex stream, so the positions must be read back at 0.806 ms before they can be drawn. That missing aliasing API is the follow-up) |
 
 ### Already shipped (do not re‑plan — tracked in `plan_cnj.md` Phases 13–14)
 
