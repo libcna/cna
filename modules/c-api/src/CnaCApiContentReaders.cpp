@@ -7,10 +7,12 @@
 
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Content/KnownUnsupportedContentTypeReader.hpp"
+#include "CNA/Content/ForeignContentObjectEXT.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -50,6 +52,7 @@ using Microsoft::Xna::Framework::Content::ContentTypeReaderBase;
 using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
 using Microsoft::Xna::Framework::Content::KnownUnsupportedContentTypeReader;
 using Microsoft::Xna::Framework::Content::UnsupportedContentReaderReason;
+using CNA::Content::ForeignContentObjectEXT;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
 
@@ -67,10 +70,16 @@ static_assert(
 // The canonical reader keeps raw pointers to both the stream and the manager, so the C resource
 // keeps the borrow records that own them and gives them back only when the handle is released.
 struct ContentReaderResource final {
-    std::unique_ptr<ContentReader> value;
+    // shared_ptr rather than unique_ptr so the same resource shape can describe both an owned
+    // reader and one this ABI merely borrows for the duration of a callback: the borrowed form
+    // uses a no-op deleter, and every accessor below is written once for both.
+    std::shared_ptr<ContentReader> value;
     BorrowedStorageStream stream;
     BorrowedContentManager contentManager;
     CNA_Handle contentManagerHandle = CNA_INVALID_HANDLE;
+    // A borrowed reader belongs to the load in progress. Destroying its handle would take a
+    // reader out from under CNA's own content pipeline, so the destroy route refuses it.
+    bool isBorrowed = false;
 
     ContentReaderResource() = default;
     ContentReaderResource(const ContentReaderResource&) = delete;
@@ -230,7 +239,7 @@ CNA_Result cna_content_reader_create(
             return result;
         }
 
-        resource->value = std::make_unique<ContentReader>(
+        resource->value = std::make_shared<ContentReader>(
             resource->contentManager.value,
             resource->stream.value,
             std::move(assetName),
@@ -624,6 +633,13 @@ CNA_Result cna_content_reader_destroy(const CNA_ContentReaderHandle readerHandle
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
+        if (reader->isBorrowed) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "A callback-scoped borrowed ContentReader handle cannot be destroyed; it is "
+                "released when the callback that received it returns.");
+        }
         const CNA_Result releaseResult = GetRuntimeHandles().Release(readerHandle);
         if (releaseResult == CNA_RESULT_SUCCESS) {
             return CNA_RESULT_SUCCESS;
@@ -632,6 +648,220 @@ CNA_Result cna_content_reader_destroy(const CNA_ContentReaderHandle readerHandle
             releaseResult,
             ErrorCategoryForResult(releaseResult),
             "The owned ContentReader handle could not be released.");
+    });
+}
+
+namespace {
+
+/// One registered caller-supplied factory, kept alive by its registration handle.
+///
+/// The table is copied so a caller may free its own storage; the `context` pointer inside it is
+/// not, which the header states, because copying what it points at is impossible from here.
+struct ForeignReaderRegistration final {
+    std::string canonicalName;
+    CNA_ContentTypeReaderCallbacks callbacks;
+    std::string targetTypeName;
+};
+
+/// The adapter that makes a C callback table look like a canonical reader.
+///
+/// One instance per compiled asset file that names the registration, matching the built-in
+/// readers. It holds the registration by shared_ptr rather than by reference: withdrawing a
+/// registration mid-load must not leave a live reader pointing at freed callbacks.
+class ForeignContentTypeReader final : public ContentTypeReaderBase {
+public:
+    explicit ForeignContentTypeReader(std::shared_ptr<ForeignReaderRegistration> registration)
+        : ContentTypeReaderBase(registration->targetTypeName)
+        , registration_(std::move(registration))
+    {
+        const CNA_Result result =
+            registration_->callbacks.create(registration_->callbacks.context, &readerContext_);
+        if (result != CNA_RESULT_SUCCESS) {
+            throw Microsoft::Xna::Framework::Content::ContentLoadException(
+                "A caller-supplied content type reader for '" + registration_->canonicalName +
+                "' refused to be constructed (CNA_Result " + std::to_string(result) + ").");
+        }
+        constructed_ = true;
+    }
+
+    ForeignContentTypeReader(const ForeignContentTypeReader&) = delete;
+    ForeignContentTypeReader& operator=(const ForeignContentTypeReader&) = delete;
+
+    ~ForeignContentTypeReader() override
+    {
+        if (constructed_ && registration_->callbacks.destroy != nullptr) {
+            registration_->callbacks.destroy(readerContext_);
+        }
+    }
+
+    [[nodiscard]] bool getCanDeserializeIntoExistingObjectProperty() const override
+    {
+        return registration_->callbacks.can_deserialize_into_existing_object == CNA_TRUE;
+    }
+
+    [[nodiscard]] int getTypeVersionProperty() const override
+    {
+        return static_cast<int>(registration_->callbacks.type_version);
+    }
+
+    std::any ReadUntyped(ContentReader& input, std::any existingInstance) override
+    {
+        // The reader is CNA's, positioned mid-stream, and must not outlive this call: the handle
+        // wraps it with a no-op deleter and is released before returning, on every path.
+        const auto resource = std::make_shared<ContentReaderResource>();
+        resource->value = std::shared_ptr<ContentReader>(&input, [](ContentReader*) {});
+        resource->isBorrowed = true;
+        CNA_Handle readerHandle = CNA_INVALID_HANDLE;
+        if (GetRuntimeHandles().Create(ObjectKind::ContentReader, resource, &readerHandle) !=
+            CNA_RESULT_SUCCESS) {
+            throw Microsoft::Xna::Framework::Content::ContentLoadException(
+                "A borrowed ContentReader handle could not be created for the caller-supplied "
+                "reader registered as '" + registration_->canonicalName + "'.");
+        }
+
+        void* existingObject = nullptr;
+        if (existingInstance.has_value()) {
+            // Anything else in the box came from a different reader, and handing its address to a
+            // C callback that expects its own object would be a type confusion, not a read.
+            const auto* existing = std::any_cast<ForeignContentObjectEXT>(&existingInstance);
+            if (existing == nullptr) {
+                static_cast<void>(GetRuntimeHandles().Release(readerHandle));
+                throw Microsoft::Xna::Framework::Content::ContentLoadException(
+                    "The existing instance offered to the caller-supplied reader registered as '" +
+                    registration_->canonicalName + "' was produced by a different reader.");
+            }
+            existingObject = existing->value;
+        }
+
+        void* object = nullptr;
+        const CNA_Result result = registration_->callbacks.read(
+            readerContext_, readerHandle, existingObject, &object);
+        static_cast<void>(GetRuntimeHandles().Release(readerHandle));
+        if (result != CNA_RESULT_SUCCESS) {
+            throw Microsoft::Xna::Framework::Content::ContentLoadException(
+                "The caller-supplied content type reader registered as '" +
+                registration_->canonicalName + "' failed to read (CNA_Result " +
+                std::to_string(result) + ").");
+        }
+        return std::any(ForeignContentObjectEXT{object});
+    }
+
+private:
+    std::shared_ptr<ForeignReaderRegistration> registration_;
+    void* readerContext_ = nullptr;
+    bool constructed_ = false;
+};
+
+[[nodiscard]] CNA_Result GetForeignRegistration(
+    const CNA_Handle handle,
+    std::shared_ptr<ForeignReaderRegistration>* const outRegistration)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::ContentTypeReaderRegistration, outRegistration);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The owned content type-reader registration handle is invalid for this call.");
+}
+
+} // namespace
+
+CNA_Result cna_content_type_reader_manager_register(
+    const CNA_StringView canonicalName,
+    const CNA_ContentTypeReaderCallbacks* const callbacks,
+    CNA_Handle* const outRegistration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRegistration == nullptr) {
+            return InvalidArgument("The reader registration output handle is null.");
+        }
+        *outRegistration = CNA_INVALID_HANDLE;
+        if (callbacks == nullptr ||
+            callbacks->struct_size < sizeof(CNA_ContentTypeReaderCallbacks) ||
+            callbacks->struct_version != StructureVersion ||
+            callbacks->reserved[0] != 0U || callbacks->reserved[1] != 0U ||
+            callbacks->reserved[2] != 0U ||
+            callbacks->create == nullptr || callbacks->read == nullptr ||
+            (callbacks->can_deserialize_into_existing_object != CNA_FALSE &&
+             callbacks->can_deserialize_into_existing_object != CNA_TRUE)) {
+            return InvalidArgument("The content type-reader callback table is invalid.");
+        }
+
+        const auto registration = std::make_shared<ForeignReaderRegistration>();
+        registration->callbacks = *callbacks;
+        if (const CNA_Result result =
+                CopyStringView(canonicalName, true, &registration->canonicalName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The canonical reader name is not valid UTF-8.");
+        }
+        if (registration->canonicalName.empty()) {
+            return InvalidArgument("The canonical reader name must not be empty.");
+        }
+        if (const CNA_Result result = CopyStringView(
+                callbacks->target_type_name, true, &registration->targetTypeName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The reader target type name is not valid UTF-8.");
+        }
+        if (registration->targetTypeName.empty()) {
+            return InvalidArgument("The reader target type name must not be empty.");
+        }
+        // The copied name owns the storage the adapter reads; the caller's view does not outlive
+        // this call.
+        registration->callbacks.target_type_name.data = nullptr;
+        registration->callbacks.target_type_name.byte_length = 0U;
+
+        if (ContentTypeReaderManager::IsRegistered(registration->canonicalName)) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "A content type-reader factory is already registered under that canonical name.");
+        }
+
+        if (const CNA_Result result = GetRuntimeHandles().Create(
+                ObjectKind::ContentTypeReaderRegistration, registration, outRegistration);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The content type-reader registration handle could not be created.");
+        }
+
+        ContentTypeReaderManager::AddTypeCreator(
+            registration->canonicalName,
+            [registration]() -> std::unique_ptr<ContentTypeReaderBase> {
+                return std::make_unique<ForeignContentTypeReader>(registration);
+            });
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_content_type_reader_manager_unregister(const CNA_Handle registrationHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ForeignReaderRegistration> registration;
+        if (const CNA_Result result = GetForeignRegistration(registrationHandle, &registration);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        static_cast<void>(
+            ContentTypeReaderManager::RemoveTypeCreatorEXT(registration->canonicalName));
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(registrationHandle);
+        if (releaseResult == CNA_RESULT_SUCCESS) {
+            return CNA_RESULT_SUCCESS;
+        }
+        return Fail(
+            releaseResult,
+            ErrorCategoryForResult(releaseResult),
+            "The content type-reader registration handle could not be released.");
     });
 }
 

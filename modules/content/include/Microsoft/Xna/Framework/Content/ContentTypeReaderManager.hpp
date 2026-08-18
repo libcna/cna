@@ -52,6 +52,21 @@ namespace Microsoft::Xna::Framework::Content
         CNAEXT static void ClearTypeCreators();
 
         /**
+         * @brief CNAEXT single-key removal, which FNA has no counterpart for.
+         *
+         * FNA's registry is populated once by static initialization and only ever cleared
+         * wholesale, so it never needed one. A registration that belongs to something with a
+         * *lifetime* does: a caller-supplied reader registered from outside this library -- a
+         * language binding's custom content type, for one -- has to be withdrawn when its owner
+         * goes away, and ClearTypeCreators() would take every built-in reader with it.
+         *
+         * @param canonicalName The XNB-5 canonical reader name to withdraw.
+         * @return True when a factory was registered under that name and has now been removed;
+         *         false when nothing was registered, which is not an error.
+         */
+        CNAEXT static bool RemoveTypeCreatorEXT(const std::string& canonicalName);
+
+        /**
          * @brief CNAEXT convenience wrapping the registered factory lookup: constructs a fresh
          *        reader instance for @p canonicalName, or returns null if nothing is registered
          *        under that name.

@@ -449,6 +449,257 @@ static int validate_type_readers(const ReaderFixture* const fixture)
         flag == CNA_FALSE;
 }
 
+/* --------------------------------------------------------------------------------------------
+   CBIND-056: a caller-supplied content type reader, driven end to end.
+
+   The registry could previously only hand back readers this library was built with, which made
+   the canonical content pipeline extensible in name only. What is asserted here is the whole
+   contract: registration and its refusals, one fresh instance per creation, the reader answering
+   its own declared identity, the read callback receiving a usable borrowed ContentReader and
+   being able to *fail* the read, and unregistration really freeing the name.
+   -------------------------------------------------------------------------------------------- */
+
+#define ForeignReaderName "CNA.Test.ForeignReader"
+#define ForeignTargetName "CNA.Test.ForeignType"
+
+typedef struct ForeignReaderState {
+    int create_calls;
+    int read_calls;
+    int destroy_calls;
+    int refuse_read;
+    int borrowed_reader_usable;
+    int instance_seal;
+} ForeignReaderState;
+
+static CNA_Result foreign_create(void* const context, void** const out_reader_context)
+{
+    ForeignReaderState* const state = (ForeignReaderState*)context;
+    ++state->create_calls;
+    *out_reader_context = context;
+    return CNA_RESULT_SUCCESS;
+}
+
+static CNA_Result foreign_read(
+    void* const reader_context,
+    const CNA_ContentReaderHandle input,
+    void* const existing_object,
+    void** const out_object)
+{
+    ForeignReaderState* const state = (ForeignReaderState*)reader_context;
+    int32_t version = -1;
+    (void)existing_object;
+    ++state->read_calls;
+    /* The handle is real and callback-scoped: an ordinary read route answers through it, and it
+       refuses to be destroyed from in here. */
+    state->borrowed_reader_usable =
+        cna_content_reader_get_version(input, &version) == CNA_RESULT_SUCCESS &&
+        cna_content_reader_destroy(input) == CNA_RESULT_INVALID_STATE;
+    if (state->refuse_read) {
+        return CNA_RESULT_IO;
+    }
+    *out_object = &state->instance_seal;
+    return CNA_RESULT_SUCCESS;
+}
+
+static void foreign_destroy(void* const reader_context)
+{
+    ++((ForeignReaderState*)reader_context)->destroy_calls;
+}
+
+static CNA_ContentTypeReaderCallbacks make_foreign_callbacks(ForeignReaderState* const state)
+{
+    CNA_ContentTypeReaderCallbacks callbacks;
+    memset(&callbacks, 0, sizeof(callbacks));
+    callbacks.struct_size = (uint32_t)sizeof(callbacks);
+    callbacks.struct_version = UINT32_C(1);
+    callbacks.target_type_name = view(ForeignTargetName);
+    callbacks.type_version = INT32_C(3);
+    callbacks.can_deserialize_into_existing_object = CNA_FALSE;
+    callbacks.create = foreign_create;
+    callbacks.read = foreign_read;
+    callbacks.destroy = foreign_destroy;
+    callbacks.context = state;
+    return callbacks;
+}
+
+static int validate_foreign_registration_refusals(ForeignReaderState* const state)
+{
+    CNA_Handle rejected = UINT64_C(9);
+    CNA_ContentTypeReaderCallbacks callbacks = make_foreign_callbacks(state);
+
+    if (cna_content_type_reader_manager_register(view(ForeignReaderName), &callbacks, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_content_type_reader_manager_register(view(ForeignReaderName), 0, &rejected) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        rejected != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    callbacks.struct_version = UINT32_C(0);
+    if (cna_content_type_reader_manager_register(view(ForeignReaderName), &callbacks, &rejected) !=
+        CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    callbacks.struct_version = UINT32_C(1);
+    callbacks.reserved[1] = 1U;
+    if (cna_content_type_reader_manager_register(view(ForeignReaderName), &callbacks, &rejected) !=
+        CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    callbacks.reserved[1] = 0U;
+    callbacks.create = 0;
+    if (cna_content_type_reader_manager_register(view(ForeignReaderName), &callbacks, &rejected) !=
+        CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    callbacks.create = foreign_create;
+    callbacks.read = 0;
+    if (cna_content_type_reader_manager_register(view(ForeignReaderName), &callbacks, &rejected) !=
+        CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    callbacks.read = foreign_read;
+    if (cna_content_type_reader_manager_register(view(""), &callbacks, &rejected) !=
+        CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    callbacks.target_type_name = view("");
+    if (cna_content_type_reader_manager_register(view(ForeignReaderName), &callbacks, &rejected) !=
+        CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    /* Not one of those refusals may leave a registration behind. */
+    return rejected == CNA_INVALID_HANDLE && state->create_calls == 0;
+}
+
+static int validate_foreign_reader(const ReaderFixture* const fixture)
+{
+    ForeignReaderState state;
+    CNA_ContentTypeReaderCallbacks callbacks;
+    CNA_Handle registration = CNA_INVALID_HANDLE;
+    CNA_Handle duplicate = UINT64_C(9);
+    CNA_ContentTypeReaderHandle type_reader = CNA_INVALID_HANDLE;
+    CNA_StorageStreamHandle stream = CNA_INVALID_HANDLE;
+    CNA_ContentReaderHandle reader = CNA_INVALID_HANDLE;
+    CNA_ContentReaderCreateInfo create_info;
+    CNA_Bool flag = CNA_TRUE;
+    CNA_Bool has_value = CNA_FALSE;
+    char buffer[128];
+    uint64_t bytes = 0U;
+    int32_t version = -1;
+
+    memset(&state, 0, sizeof(state));
+    if (!validate_foreign_registration_refusals(&state)) {
+        return 0;
+    }
+
+    callbacks = make_foreign_callbacks(&state);
+    if (cna_content_type_reader_manager_get_is_registered(view(ForeignReaderName), &flag) !=
+            CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_content_type_reader_manager_register(
+            view(ForeignReaderName), &callbacks, &registration) != CNA_RESULT_SUCCESS ||
+        registration == CNA_INVALID_HANDLE ||
+        cna_content_type_reader_manager_get_is_registered(view(ForeignReaderName), &flag) !=
+            CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE) {
+        return 0;
+    }
+    /* A second registration of a live name is refused rather than silently ignored: a caller
+       whose factory is never called would otherwise find out only from wrongly-typed assets. */
+    if (cna_content_type_reader_manager_register(
+            view(ForeignReaderName), &callbacks, &duplicate) != CNA_RESULT_INVALID_STATE ||
+        duplicate != CNA_INVALID_HANDLE) {
+        (void)cna_content_type_reader_manager_unregister(registration);
+        return 0;
+    }
+
+    /* Creating by name runs the factory and produces a reader that answers its own identity. */
+    memset(buffer, 0, sizeof(buffer));
+    if (cna_content_type_reader_manager_create_reader(view(ForeignReaderName), &type_reader) !=
+            CNA_RESULT_SUCCESS ||
+        type_reader == CNA_INVALID_HANDLE || state.create_calls != 1 ||
+        cna_content_type_reader_get_target_type_name_size(type_reader, &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        bytes != (uint64_t)strlen(ForeignTargetName) ||
+        cna_content_type_reader_copy_target_type_name(
+            type_reader, buffer, (uint64_t)sizeof(buffer), &bytes) != CNA_RESULT_SUCCESS ||
+        strcmp(buffer, ForeignTargetName) != 0 ||
+        cna_content_type_reader_get_type_version(type_reader, &version) != CNA_RESULT_SUCCESS ||
+        version != INT32_C(3) ||
+        cna_content_type_reader_supports_version(type_reader, INT32_C(3), &flag) !=
+            CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_content_type_reader_supports_version(type_reader, INT32_C(2), &flag) !=
+            CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_content_type_reader_get_can_deserialize_into_existing_object(type_reader, &flag) !=
+            CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE) {
+        (void)cna_content_type_reader_destroy(type_reader);
+        (void)cna_content_type_reader_manager_unregister(registration);
+        return 0;
+    }
+
+    /* Reading drives the callback with a real, borrowed ContentReader. */
+    if (!open_asset_stream(fixture, &stream)) {
+        (void)cna_content_type_reader_destroy(type_reader);
+        (void)cna_content_type_reader_manager_unregister(registration);
+        return 0;
+    }
+    create_info = make_create_info(stream);
+    if (cna_content_reader_create(&create_info, &reader) != CNA_RESULT_SUCCESS ||
+        cna_content_type_reader_read_untyped(type_reader, reader, &has_value) !=
+            CNA_RESULT_SUCCESS ||
+        has_value != CNA_TRUE || state.read_calls != 1 || state.borrowed_reader_usable != 1) {
+        (void)cna_content_reader_destroy(reader);
+        (void)cna_storage_stream_close(stream);
+        (void)cna_content_type_reader_destroy(type_reader);
+        (void)cna_content_type_reader_manager_unregister(registration);
+        return 0;
+    }
+    /* A refusing read fails the operation rather than producing an object, which is the whole
+       reason this callback returns a result. */
+    state.refuse_read = 1;
+    if (cna_content_type_reader_read_untyped(type_reader, reader, &has_value) ==
+        CNA_RESULT_SUCCESS) {
+        (void)cna_content_reader_destroy(reader);
+        (void)cna_storage_stream_close(stream);
+        (void)cna_content_type_reader_destroy(type_reader);
+        (void)cna_content_type_reader_manager_unregister(registration);
+        return 0;
+    }
+    state.refuse_read = 0;
+
+    if (cna_content_reader_destroy(reader) != CNA_RESULT_SUCCESS ||
+        cna_storage_stream_close(stream) != CNA_RESULT_SUCCESS) {
+        (void)cna_content_type_reader_destroy(type_reader);
+        (void)cna_content_type_reader_manager_unregister(registration);
+        return 0;
+    }
+    /* Destroying the reader instance releases the caller's per-instance context exactly once. */
+    if (cna_content_type_reader_destroy(type_reader) != CNA_RESULT_SUCCESS ||
+        state.destroy_calls != 1) {
+        (void)cna_content_type_reader_manager_unregister(registration);
+        return 0;
+    }
+
+    /* Unregistering frees the name and the handle, and is not repeatable. */
+    if (cna_content_type_reader_manager_unregister(registration) != CNA_RESULT_SUCCESS ||
+        cna_content_type_reader_manager_unregister(registration) != CNA_RESULT_INVALID_HANDLE ||
+        cna_content_type_reader_manager_get_is_registered(view(ForeignReaderName), &flag) !=
+            CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE) {
+        return 0;
+    }
+    /* And the freed name really is free, which a shadowed registration would not be. */
+    if (cna_content_type_reader_manager_register(
+            view(ForeignReaderName), &callbacks, &registration) != CNA_RESULT_SUCCESS ||
+        cna_content_type_reader_manager_unregister(registration) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    return 1;
+}
+
 static int validate_identities(void)
 {
     return CNA_UNSUPPORTED_CONTENT_READER_REASON_COMPILED_PLATFORM_SHADER_BYTECODE ==
@@ -473,8 +724,12 @@ int main(void)
         (void)destroy_fixture(&fixture);
         return 4;
     }
-    if (!destroy_fixture(&fixture)) {
+    if (!validate_foreign_reader(&fixture)) {
+        (void)destroy_fixture(&fixture);
         return 5;
+    }
+    if (!destroy_fixture(&fixture)) {
+        return 6;
     }
     return 0;
 }
