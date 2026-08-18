@@ -68,6 +68,8 @@ dx7-spike/*.exe
 dx7-spike/*.o
 dx8-spike/*.exe
 dx8-spike/*.o
+mingw-cnaext-spike/*.exe
+mingw-cnaext-spike/*.o
 __pycache__/
 *.pyc
 

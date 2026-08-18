@@ -414,6 +414,29 @@ none of which are present either. Installing a full 32-bit sysroot to satisfy on
 proportionate; the row stays 🟨 with the blocker named rather than being marked done on a
 64-bit-only measurement.
 
+### What a Windows compiler would have said (`MOD-1719`)
+
+`mingw-cnaext-spike/` cross-compiles the whole engine layer with `x86_64-w64-mingw32-g++` and, more
+usefully, includes `<windows.h>` before every public header the way a D3D translation unit does. Two
+things came out of it that were not visible from Linux:
+
+- **`near` and `far` are live macros** in `windef.h`. Nothing in the layer trips over them today --
+  `DepthNormalPrepass::begin` takes `nearPlane`/`farPlane` -- but that was luck rather than policy,
+  and `begin(…, float near, float far)` is the name a reviewer would have suggested. The probe now
+  fails loudly if anyone writes it, and it `#error`s if the macros turn out *not* to be defined, so
+  it cannot quietly stop testing anything.
+- **MinGW cannot reproduce the `min`/`max` hazard at all.** Its `windef.h` guards those two with
+  `#ifndef __cplusplus`; MSVC's does not. Reinstating them by hand shows the engine layer's own
+  headers are clean and that **sharp-runtime** is not: `SharpRuntimeHelper.hpp` writes
+  `std::numeric_limits<T>::max()` unparenthesised in five places, which a real MSVC D3D build would
+  reject. That is a different repository, so it is recorded here rather than fixed; the script
+  scores the probe on "nothing originating under `modules/graphics-ext`" and prints who is still
+  failing, so it will announce the fix if it ever lands.
+
+The spike does not link. SDL3, GL and FFmpeg pre-built for Windows are not in this container, and
+installing them to satisfy one row is not proportionate; the row is about the engine layer's paths,
+which are header- and source-level.
+
 ### Closing Phases 0–3: what the leftover rows were actually hiding
 
 The plan's early phases had been reported as done while 60-odd of their rows were still ⬜. Most were
