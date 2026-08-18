@@ -548,12 +548,17 @@ it does not delegate rendering to EasyGL and does not advertise 3D/depth/MSAA/MR
 Use `plan_skia.md`, `NEXT_skia.md`, `docs/skia-renderer.md`, and
 `docs/skia-developer-build.md` for that subsystem; do not reconstruct its state from the general
 `NEXT.md`.
-`PIXIJS` is the newest and most experimental renderer, Emscripten-only, rendering `SpriteBatch`
-output through a pooled `PIXI.Sprite` scene graph (pixijs.com) rather than raw WebGL calls or
-Canvas2D/DOM primitives. As of its initial authoring it has not been built or run on any real
-Emscripten toolchain in any session -- see `plan_pixijs.md` and `docs/pixijs-renderer.md` for its
-own honest status legend and capability boundary; do not describe it as verified or usable until
-`plan_pixijs.md`'s own PIXIJS-84 (a real Emscripten toolchain build) actually happens.
+`PIXIJS` is the newest renderer, Emscripten-only and 2D-only in its v1 scope, rendering
+`SpriteBatch` output through pooled `PIXI.Sprite` objects (pixijs.com) rather than raw WebGL calls
+or Canvas2D/DOM primitives. It builds under a real Emscripten toolchain and its draw path is
+pixel-verified in a real browser (`scripts/run_pixijs_browser_tests.mjs`); its
+browser-independent contracts also build and run natively via `CNA_BUILD_PIXIJS_HOST_TESTS=ON`.
+Because PixiJS is a retained scene graph and `SpriteBatch` is not, this renderer **commits at every
+submission point** -- `End()` (and each `Draw()` in `SpriteSortMode::Immediate`) rasterizes into
+the active target rather than leaving sprites parented for a later `Present()`. Preserve that when
+changing it: ordering, per-batch blend/sampler state and texture lifetime all depend on it. See
+`plan_pixijs.md` and `docs/pixijs-renderer.md` for the current status and the capability boundary
+(no 3D, no custom `Effect`, no MRT, no depth/stencil).
 
 ---
 

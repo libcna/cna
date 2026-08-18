@@ -39,10 +39,19 @@ set(CNA_RENDERER_EMSCRIPTEN_ONLY WEBGL1 WEBGL2 CANVAS HTML_DOM SVG_DOM PIXIJS)
 set(CNA_RENDERER_MACOS_ONLY METAL)
 
 # Rejects an unbuildable combination with a specific, actionable reason.
-function(_cna_reject_combination first second reason)
+#
+# The reason is taken from ARGN rather than a named third parameter, and joined. Every call site
+# below writes its reason as several adjacent string literals so it can be wrapped at a readable
+# width -- CMake passes those as SEPARATE arguments, so a named `reason` parameter captured only the
+# first fragment and silently discarded the rest. That is not cosmetic: a PIXIJS + DIRECTX11 request
+# reported "PIXIJS builds only for Emscripten and DIRECTX11 only for" and stopped mid-sentence,
+# naming neither the second platform nor the fact that one toolchain cannot target both, which is
+# the entire content of the explanation.
+function(_cna_reject_combination first second)
+    string(JOIN "" _reason ${ARGN})
     message(FATAL_ERROR
         "CNA: renderers ${first} and ${second} cannot be built into the same binary.\n"
-        "  Reason: ${reason}\n"
+        "  Reason: ${_reason}\n"
         "  See docs/runtime-renderer-selection.md for the full combination table.")
 endfunction()
 
@@ -112,9 +121,11 @@ function(cna_validate_renderer_combination)
             _cna_renderer_platform("${_second}" _second_platform)
             if(NOT _first_platform STREQUAL "ANY" AND NOT _second_platform STREQUAL "ANY"
                     AND NOT _first_platform STREQUAL _second_platform)
+                # No literal ';' in a reason fragment: CMake's own list semantics split ARGN on it,
+                # so it would be lost on the way to the message.
                 _cna_reject_combination("${_first}" "${_second}"
                     "${_first} builds only for ${_first_platform} and ${_second} only for "
-                    "${_second_platform}; one toolchain cannot target both.")
+                    "${_second_platform} -- one toolchain cannot target both.")
             endif()
         endforeach()
     endforeach()

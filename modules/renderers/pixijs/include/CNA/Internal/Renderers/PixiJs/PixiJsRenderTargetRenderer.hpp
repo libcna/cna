@@ -6,13 +6,16 @@ namespace CNA::Internal::Renderers::PixiJs
 {
     /**
      * @brief Off-screen render target backed by a real `PIXI.RenderTexture` (Design decision 8),
-     * plus Bind/UnbindAsRenderTarget() to switch which container/RenderTexture pair subsequent
-     * Clear()/Draw() calls target (`Module['cnaPixiActiveContainer']`/
-     * `Module['cnaPixiActiveRenderTexture']`).
+     * plus Bind/UnbindAsRenderTarget() to switch which target subsequent Clear()/Draw() calls
+     * render into (`Module['cnaPixi'].activeTarget`).
+     *
+     * PIXIJS-87: a target owns no pending scene nodes of its own. Every submitted batch is
+     * rasterized into this target's RenderTexture before the submitting call returns, so binding
+     * only has to redirect the next render -- which is what makes A -> B -> A switching safe.
      *
      * Deliberately does NOT reuse PixiJsTextureRenderer's buffer-backed upload path: a
      * `PIXI.RenderTexture` is a GPU-framebuffer-backed resource, not a `PIXI.BufferResource` one --
-     * they are registered under the same `Module['cnaPixiTextures']` id space (so
+     * they are registered under the same `Module['cnaPixi'].textures` id space (so
      * PixiJsSpriteBatchRenderer can sample either uniformly by id) but created differently.
      */
     class PixiJsRenderTargetRenderer final : public IRenderTargetRenderer
@@ -66,7 +69,7 @@ namespace CNA::Internal::Renderers::PixiJs
         /// construction (same reasoning/precedent as CANVAS-23).
         [[nodiscard]] bool HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const override { return false; }
 
-        /** @brief Id into `Module['cnaPixiTextures']` for this target's backing PIXI.RenderTexture. */
+        /** @brief Id into `Module['cnaPixi'].textures` for this target's backing PIXI.RenderTexture. */
         [[nodiscard]] int GetPixiTextureId() const { return id_; }
 
     private:
