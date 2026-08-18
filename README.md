@@ -116,6 +116,23 @@ ctest --test-dir build --output-on-failure
   approximation and every unsupported feature next to the report field that names the loss at run
   time. `CNAEXT.md` §3.2 carries the same information as a per-capability status table.
 
+### The CNAEXT Engine Layer (opt-in, `CNA::Graphics`)
+
+- Everything above the XNA API — HDR render targets and tonemapping, a post-process chain
+  (bloom, SSAO, FXAA), directional/cascaded/point/spot shadows, skybox and image-based lighting,
+  a PBR material bound straight to the effect, instancing with LOD and frustum culling, and
+  compute shaders with storage buffers — lives in `modules/graphics-ext/` behind the `CNA_CNAEXT`
+  CMake option, which is **OFF by default**. With it off the layer does not exist and a game
+  renders exactly what it rendered before; a ctest enforces that every file in the module is
+  guarded.
+- Read [`CNAEXT.md`](CNAEXT.md) for the design, [`docs/cnaext-engine-layer.md`](docs/cnaext-engine-layer.md)
+  for the capability boundary per subsystem and per renderer,
+  [`docs/cnaext-getting-started.md`](docs/cnaext-getting-started.md) to try it, and `plan_modern.md`
+  / `NEXT_modern.md` for the task backlog and the running ledger.
+- EasyGL (`OPENGLES3`/`OPENGL33`) is the reference renderer. Every other renderer is measured, not
+  assumed: the per-identity matrix in `docs/cnaext-engine-layer.md` names all 49 with a status, and
+  a ctest fails if one is missing from it.
+
 ### Cross-Platform Direction
 
 - SDL3-based platform foundation for windowing/input/audio integration.

@@ -21,6 +21,13 @@ on it) rather than assuming either way.
 - **[`renderer-registry.md`](renderer-registry.md)** — the canonical list of the **47** public
   renderer identities (enum, CMake selector, compile definition, factory, platform/dependency
   gate). Start here for "which renderers does CNA have."
+- **[`cnaext-engine-layer.md`](cnaext-engine-layer.md)** — the `CNA::Graphics` engine layer (HDR
+  pipeline, post-process passes, shadows, sky, image-based lighting, materials, instancing/LOD,
+  compute), which lives behind the `CNA_CNAEXT` CMake option and is **OFF by default**. Start here
+  for "what does the engine layer do on renderer X"; the design is `../CNAEXT.md`, the task backlog
+  `../plan_modern.md`, the running ledger `../NEXT_modern.md`, the measurements
+  [`cnaext-perf.md`](cnaext-perf.md), and the fifteen-minute introduction
+  [`cnaext-getting-started.md`](cnaext-getting-started.md).
 - **[`tinygl-renderer.md`](tinygl-renderer.md)** — capability boundary for `TINYGL`, the
   fixed-function CPU OpenGL renderer (C-Chads/tinygl); task breakdown in `../plan_tinygl.md`, and
   the pre-implementation probe in `../tinygl-spike/README.md`.

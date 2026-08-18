@@ -577,6 +577,28 @@ reference renderer; other renderers pick each subsystem up in `plan_modern.md` P
 they do they report `false` from the matching capability and take a documented fallback rather than
 failing.
 
+Two house rules that differ from the XNA layer, because there is no XNA name to preserve here
+(`plan_modern.md` `MOD-6`, `MOD-15`):
+
+- **Naming.** Verbs are `lowerCamelCase` (`apply`, `resize`, `begin`); properties are
+  `getX()`/`setX()`, or `isX()` for booleans. Types and enum values stay `UpperCamelCase`. The
+  `EXT` suffix marks a type that names an XNA concept CNA extended (`DirectionalLightEXT`), not
+  everything in the layer.
+- **Shader profile.** Every engine-layer shader is written to **GLSL ES 3.00**, and the compute
+  shaders to **GLSL ES 3.10**. `ShaderEffect` owns the `#version` line and the down-level
+  transformations, so a pass never writes one; what a pass author must respect is the floor
+  itself — see `docs/cnaext-engine-layer.md` for what ES 1.00 costs a shader that has to run
+  there.
+
+**Asking a renderer what it will actually do.** `GraphicsCapability::CustomEffects` means the
+renderer *accepts* an effect, not that it runs your shader source: SOFTWARE and HEADLESS accept any
+source and keep rendering with their own fixed path, and Vulkan's `ShaderEffect` takes SPIR-V rather
+than the GLSL this layer writes. Four `GraphicsDevice` queries answer the question the capability
+cannot — `ExecutesShaderEffectSourceEXT()`, `SupportsShadowSamplingEXT()`,
+`SupportsImageBasedLightingEXT()`, `SupportsComputeShadersEXT()`. New shader-based code asks the
+capability **and** the matching query; asking only the capability is how a pass reports success
+while drawing nothing.
+
 ---
 
 ## WebGPU Is Active (Experimental)

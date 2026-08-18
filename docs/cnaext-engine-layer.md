@@ -83,6 +83,21 @@ which must instead match XNA 4.0 exactly.
 - **Capability-gated, never crashing.** Each subsystem checks
   `GraphicsDevice::SupportsCapability()` and documents its fallback. No renderer is mandatory, and
   no subsystem may make one so.
+- **Shader profile: GLSL ES 3.00, and ES 3.10 for compute.** `plan_modern.md` `MOD-15`. Every pass,
+  caster and lighting shader in this layer is written to that floor, and `ShaderEffect` owns the
+  `#version` line and the down-level rewriting — a pass never writes one and never branches on the
+  profile. The floor is ES 3.00 rather than desktop GL because the WebGL2 and OpenGL ES 3 renderers
+  are in the committed scope and desktop GL 3.3 accepts everything ES 3.00 expresses, so the
+  cheapest common denominator is also the widest. Compute is a separate, higher floor because
+  ES 3.10 is where compute shaders and storage buffers first exist at all.
+
+  Two consequences a pass author has to live with. **Below the floor**, on the ES 1.00 renderers
+  (`OpenGLES2`, `WebGL1`), `ShaderEffect`'s transformation is real but not total: there is no
+  `textureLod` (so a rough IBL reflection reads the base mip instead of its roughness mip), no
+  dynamic indexing of a uniform array, and loops must be statically countable. A shader that needs
+  any of those does not silently degrade — it fails to compile, and the subsystem reports `false`.
+  **Above the floor**, nothing in this layer may *require* a higher profile without a capability to
+  ask about first; that is what keeps ES 3.00 a floor rather than a fiction.
 
 ## Per-renderer support matrix
 
