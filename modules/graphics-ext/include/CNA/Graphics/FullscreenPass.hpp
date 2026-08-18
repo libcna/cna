@@ -6,6 +6,7 @@
 #include <memory>
 
 namespace Microsoft::Xna::Framework::Graphics {
+    class SamplerState;
     class Effect;
     class GraphicsDevice;
     class RenderTarget2D;
@@ -61,11 +62,17 @@ namespace CNA::Graphics {
          * @param effect      The effect to draw with, or null for a plain copy.
          * @param width       Destination width in pixels.
          * @param height      Destination height in pixels.
+         * @param sampler     How the source is sampled, or null for the device default. A pass with
+         *                    a filtering or addressing requirement states it here (`MOD-220`) rather
+         *                    than leaving its caller to set the right `SamplerState` first: a bloom
+         *                    pyramid read with point filtering still produces an image, just a
+         *                    blockier one, and nothing in the frame says why.
          */
         void draw(Microsoft::Xna::Framework::Graphics::Texture2D* source,
                   Microsoft::Xna::Framework::Graphics::RenderTarget2D* destination,
                   Microsoft::Xna::Framework::Graphics::Effect* effect,
-                  int width, int height);
+                  int width, int height,
+                  Microsoft::Xna::Framework::Graphics::SamplerState* sampler = nullptr);
 
         /**
          * @brief Draws across whatever target is already bound, without rebinding anything.
@@ -75,14 +82,17 @@ namespace CNA::Graphics {
          * scene target inside a frame and the back buffer outside one. Passing the bound target
          * back in would mean the caller had to know which of the two it currently was.
          *
-         * @param source The image to sample. Must not be null.
-         * @param effect The effect to draw with, or null for a plain copy.
-         * @param width  Target width in pixels.
-         * @param height Target height in pixels.
+         * @param source  The image to sample. Must not be null.
+         * @param effect  The effect to draw with, or null for a plain copy.
+         * @param width   Target width in pixels.
+         * @param height  Target height in pixels.
+         * @param sampler How the source is sampled, or null for the device default.
          */
         void drawOverCurrentTarget(Microsoft::Xna::Framework::Graphics::Texture2D* source,
                                    Microsoft::Xna::Framework::Graphics::Effect* effect,
-                                   int width, int height);
+                                   int width, int height,
+                                   Microsoft::Xna::Framework::Graphics::SamplerState* sampler
+                                       = nullptr);
 
     private:
         Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;

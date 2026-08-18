@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -24,6 +25,7 @@ namespace CNA::Graphics {
     using Microsoft::Xna::Framework::Graphics::Effect;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
     using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
     using Microsoft::Xna::Framework::Graphics::SpriteBatch;
     using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
     using Microsoft::Xna::Framework::Graphics::Texture2D;
@@ -36,7 +38,7 @@ namespace CNA::Graphics {
     FullscreenPass::~FullscreenPass() = default;
 
     void FullscreenPass::draw(Texture2D* source, RenderTarget2D* destination, Effect* effect,
-                              const int width, const int height)
+                              const int width, const int height, SamplerState* sampler)
     {
         if (source == nullptr)
             throw std::invalid_argument("CNA::Graphics::FullscreenPass::draw: source must not be null");
@@ -47,11 +49,11 @@ namespace CNA::Graphics {
         // will not link, a SpriteBatch already inside a Begin -- the destination does not stay
         // bound, so the next thing to render does not silently draw into a pass's intermediate.
         ScopedRenderTarget bound(device_, destination);
-        drawOverCurrentTarget(source, effect, width, height);
+        drawOverCurrentTarget(source, effect, width, height, sampler);
     }
 
     void FullscreenPass::drawOverCurrentTarget(Texture2D* source, Effect* effect, const int width,
-                                               const int height)
+                                               const int height, SamplerState* sampler)
     {
         if (source == nullptr)
             throw std::invalid_argument(
@@ -63,8 +65,10 @@ namespace CNA::Graphics {
         // Opaque, not AlphaBlend: a post-process pass replaces the destination rather than
         // compositing onto it, and blending a pass's own output against whatever the target held
         // is a source of results that look almost right.
+        // A null sampler means the device default, which is what every pass wanted before
+        // MOD-220 and still wants unless it says otherwise.
         spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque,
-                            nullptr, nullptr, nullptr, effect);
+                            sampler, nullptr, nullptr, effect);
         spriteBatch_->Draw(*source, Rectangle(0, 0, width, height), Color::White);
         spriteBatch_->End();
     }

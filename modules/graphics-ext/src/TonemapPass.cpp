@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/TonemapPass.hpp"
+#include "CNA/Graphics/ShaderDiagnostics.hpp"
 
 #ifdef CNA_CNAEXT
 
@@ -113,6 +114,10 @@ void main() {
         : fullscreen_(std::make_unique<FullscreenPass>(device))
     {
         effect_ = std::make_unique<ShaderEffect>(device, kVertexSource, kFragmentSource);
+        // plan_modern.md MOD-219: a failed compile makes this pass copy its input through, which is
+        // correct and completely silent. This names the pass and prints the compiler's log once.
+        bool logged = false;
+        detail::ReportShaderCompileFailure(device, "TonemapPass", effect_.get(), logged);
     }
 
     TonemapPass::~TonemapPass() = default;

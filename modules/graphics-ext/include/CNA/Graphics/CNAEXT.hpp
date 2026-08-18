@@ -54,6 +54,8 @@
 #include "CNA/Graphics/RenderPipeline.hpp"
 #include "CNA/Graphics/RenderTargetPool.hpp"
 #include "CNA/Graphics/ScopedRenderTarget.hpp"
+#include "CNA/Graphics/ShaderDiagnostics.hpp"
+#include "CNA/Graphics/ShaderEffectFactory.hpp"
 #include "CNA/Graphics/SsaoPass.hpp"
 #include "CNA/Graphics/TonemapPass.hpp"
 

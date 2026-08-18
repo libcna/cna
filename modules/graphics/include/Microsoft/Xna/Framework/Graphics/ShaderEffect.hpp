@@ -45,6 +45,21 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Returns true while the native compiled-program renderer is still alive. */
         CNAEXT [[nodiscard]] bool HasRenderer() const { return effectRenderer_ != nullptr; }
 
+        /**
+         * @brief Returns the compiler/linker log from a failed compile, empty when it succeeded.
+         *
+         * plan_modern.md `MOD-219`. `IsEffectValid()` says *that* a shader did not compile; this
+         * says why. The two are separate on purpose: a failed compile is not an exception here,
+         * because on several renderers `GraphicsCapability::CustomEffects` is true while GLSL source
+         * is never compiled at all (Vulkan takes SPIR-V; SOFTWARE and HEADLESS accept and ignore),
+         * and throwing would turn a documented capability boundary into a crash. Callers that need
+         * to *report* the failure — the engine-layer passes do, naming themselves — read it here.
+         *
+         * @return The renderer's log, or an empty string when the program linked or the renderer
+         *         keeps no log.
+         */
+        CNAEXT [[nodiscard]] std::string GetCompileErrorEXT() const;
+
         /** @brief Sets a column-major 4×4 matrix uniform by name. */
         CNAEXT void SetUniformMat4(const char* name, const float* matrix);
         /** @brief Sets a vec4 uniform by name (x, y, z, w). */

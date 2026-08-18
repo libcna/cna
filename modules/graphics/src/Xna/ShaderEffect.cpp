@@ -30,6 +30,13 @@ namespace Microsoft::Xna::Framework::Graphics
         return effectRenderer_ && effectRenderer_->IsValid();
     }
 
+    std::string ShaderEffect::GetCompileErrorEXT() const
+    {
+        if (effectRenderer_ == nullptr) return {};
+        if (effectRenderer_->IsValid()) return {};
+        return effectRenderer_->GetCompileError();
+    }
+
     void ShaderEffect::SetUniformMat4(const char* name, const float* matrix)
     {
         if (effectRenderer_) effectRenderer_->SetUniformMat4(name, matrix);

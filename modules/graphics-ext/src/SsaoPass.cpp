@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/SsaoPass.hpp"
+#include "CNA/Graphics/ShaderDiagnostics.hpp"
 
 #ifdef CNA_CNAEXT
 
@@ -159,6 +160,14 @@ void main() {
     {
         occlusionEffect_ = std::make_unique<ShaderEffect>(device, kVertexSource, kOcclusionSource);
         composeEffect_   = std::make_unique<ShaderEffect>(device, kVertexSource, kComposeSource);
+
+        // plan_modern.md MOD-219: a failed compile makes this pass copy its input through, which is
+        // correct and completely silent. This names the pass and prints the compiler's log once.
+        bool logged = false;
+        detail::ReportShaderCompileFailure(device, "SsaoPass (occlusion)", occlusionEffect_.get(),
+                                           logged);
+        detail::ReportShaderCompileFailure(device, "SsaoPass (compose)", composeEffect_.get(),
+                                           logged);
 
         generateKernel();
 

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/BloomPass.hpp"
+#include "CNA/Graphics/ShaderDiagnostics.hpp"
 
 #ifdef CNA_CNAEXT
 
@@ -7,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 
 #include <algorithm>
@@ -17,6 +19,7 @@ namespace CNA::Graphics {
     using Microsoft::Xna::Framework::Graphics::DepthFormat;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
     using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
     using Microsoft::Xna::Framework::Graphics::ShaderEffect;
 
     namespace {
@@ -111,6 +114,17 @@ void main() {
         extractEffect_ = std::make_unique<ShaderEffect>(device, kVertexSource, kExtractSource);
         blurEffect_    = std::make_unique<ShaderEffect>(device, kVertexSource, kBlurSource);
         combineEffect_ = std::make_unique<ShaderEffect>(device, kVertexSource, kCombineSource);
+
+        // plan_modern.md MOD-219, reported here rather than in apply(): the failure happens once,
+        // at construction, and a pass that discovered it per frame would either spam the log or
+        // need a flag to avoid doing so. Falling back to a copy is silent by design, and this is
+        // what turns "bloom looks weak" into a line naming the pass and the compiler's own log.
+        bool logged = false;
+        detail::ReportShaderCompileFailure(device, "BloomPass (extract)", extractEffect_.get(),
+                                           logged);
+        detail::ReportShaderCompileFailure(device, "BloomPass (blur)", blurEffect_.get(), logged);
+        detail::ReportShaderCompileFailure(device, "BloomPass (combine)", combineEffect_.get(),
+                                           logged);
     }
 
     BloomPass::~BloomPass() = default;
@@ -147,6 +161,22 @@ void main() {
 
         iterations = std::clamp(iterations, kMinIterations, kMaxIterations);
 
+        // plan_modern.md MOD-220: bloom's requirement, stated by the pass. Every stage here reads a
+        // target at a *different* resolution from the one it writes, so point filtering would
+        // sample one texel of four and turn the pyramid into a mosaic -- an image that still looks
+        // like bloom, just wrong, with nothing in the frame to say why. Clamp matters at the edges
+        // for the same reason: wrapping pulls the opposite side of the screen into the blur.
+        //
+        // This does not *change* behaviour: SpriteBatch::Begin already documents a null sampler as
+        // meaning LinearClamp, so bloom was getting the right filtering by inheritance. That is the
+        // point of stating it -- the requirement was being met by a default nothing tied to bloom,
+        // and a change to that default would have degraded the pyramid silently.
+        //
+        // The const_cast is forced by the XNA-shaped API: SamplerState::LinearClamp is a static
+        // const, and SpriteBatch::Begin takes a non-const pointer. Nothing writes through it.
+        SamplerState* const linearClamp =
+            const_cast<SamplerState*>(&SamplerState::LinearClamp);
+
         // Intermediates carry the source's format so an HDR scene stays HDR through the chain;
         // clamping here would remove exactly the highlights bloom exists to spread.
         const auto format = context.source->getFormatProperty();
@@ -159,7 +189,8 @@ void main() {
             pool_.acquire(chainWidth, chainHeight, format, DepthFormat::None, 0);
         extractEffect_->Apply();
         extractEffect_->SetUniformFloat("uThreshold", threshold);
-        fullscreen_->draw(context.source, extracted, extractEffect_.get(), chainWidth, chainHeight);
+        fullscreen_->draw(context.source, extracted, extractEffect_.get(), chainWidth, chainHeight,
+                          linearClamp);
 
         // Stage 2: alternate horizontal and vertical blurs, halving the resolution each iteration.
         RenderTarget2D* current = extracted;
@@ -172,13 +203,13 @@ void main() {
                 pool_.acquire(nextWidth, nextHeight, format, DepthFormat::None, 1);
             blurEffect_->Apply();
             blurEffect_->SetUniformVec2("uTexelDirection", 1.0f / static_cast<float>(nextWidth), 0.0f);
-            fullscreen_->draw(current, horizontal, blurEffect_.get(), nextWidth, nextHeight);
+            fullscreen_->draw(current, horizontal, blurEffect_.get(), nextWidth, nextHeight, linearClamp);
 
             RenderTarget2D* vertical =
                 pool_.acquire(nextWidth, nextHeight, format, DepthFormat::None, 2);
             blurEffect_->Apply();
             blurEffect_->SetUniformVec2("uTexelDirection", 0.0f, 1.0f / static_cast<float>(nextHeight));
-            fullscreen_->draw(horizontal, vertical, blurEffect_.get(), nextWidth, nextHeight);
+            fullscreen_->draw(horizontal, vertical, blurEffect_.get(), nextWidth, nextHeight, linearClamp);
 
             current     = vertical;
             chainWidth  = nextWidth;
@@ -194,7 +225,7 @@ void main() {
         combineEffect_->SetTexture(1, *current);
         combineEffect_->SetUniformFloat("uIntensity", intensity);
         fullscreen_->draw(context.source, context.destination, combineEffect_.get(),
-                          context.width, context.height);
+                          context.width, context.height, linearClamp);
     }
 
     const std::string& BloomPass::getName() const
