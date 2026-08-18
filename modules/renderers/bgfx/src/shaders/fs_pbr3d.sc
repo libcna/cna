@@ -1,4 +1,4 @@
-$input v_texcoord0, v_texcoord1, v_normal, v_tangent, v_worldPos, v_fogFactor
+$input v_texcoord0, v_texcoord1, v_normal, v_tangent, v_worldPos, v_fogFactor, v_vertexColor0
 
 #include <bgfx_shader.sh>
 
@@ -18,6 +18,8 @@ SAMPLER2D(s_texSpecular, 5);
 SAMPLER2D(s_texSpecularColor, 6);
 
 uniform vec4 u_diffuseColor;
+// plan_gltf.md GLTF-465: the shared VertexColorEnabled gate every other CNA bgfx program uses.
+uniform vec4 u_vertexColorEnabled3D;
 uniform vec4 u_ambientColor;
 uniform vec4 u_emissiveColor;
 /// PbrEffect: x = MetallicFactor, y = RoughnessFactor, z = normal scale,
@@ -109,8 +111,12 @@ void main()
     vec4 baseColorTex = texture2D(s_texColor, rtFlipUV(
         pbrTransformUV(pbrUV(v_texcoord0, v_texcoord1, 0), 0), u_rtFlipV.x));
     vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), u_srgb.x);
-    vec3 albedo = baseColor * u_diffuseColor.rgb;
-    float alpha = baseColorTex.a * u_diffuseColor.a;
+    // plan_gltf.md GLTF-465: COLOR_0 multiplies the base colour product, ALPHA INCLUDED -- the
+    // alpha half is where a BLEND-mode vertex-coloured primitive's transparency comes from. The
+    // colour is linear, so unlike the base-colour texture it is not sRGB-decoded.
+    vec4 cnaVertexColor = u_vertexColorEnabled3D.x > 0.5 ? v_vertexColor0 : vec4(1.0, 1.0, 1.0, 1.0);
+    vec3 albedo = baseColor * u_diffuseColor.rgb * cnaVertexColor.rgb;
+    float alpha = baseColorTex.a * u_diffuseColor.a * cnaVertexColor.a;
 
     vec3 N = normalize(v_normal);
     vec3 T = normalize(v_tangent.xyz - N * dot(N, v_tangent.xyz));

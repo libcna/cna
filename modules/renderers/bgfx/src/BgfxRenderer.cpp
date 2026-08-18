@@ -1,5 +1,4 @@
 #include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
-#include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -3282,13 +3281,15 @@ namespace CNA::Internal::Renderers::Bgfx
         else if (stride == 60)
         {
             // GLTF-182/344: rigid PBR with the importer-appended TEXCOORD_1 at offset 48.
-            // The public vertex declaration includes four bytes of tail padding.
+            // plan_gltf.md GLTF-462/GLTF-465: the four trailing bytes this used to `skip` are a
+            // packed COLOR_0 -- the authored colour, or opaque white, which is the multiplier's
+            // identity -- and glTF 3.9.2 makes it a term in the base-colour product.
             layout.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float);
             layout.add(bgfx::Attrib::Normal,    3, bgfx::AttribType::Float);
             layout.add(bgfx::Attrib::Tangent,   4, bgfx::AttribType::Float);
             layout.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float);
             layout.add(bgfx::Attrib::TexCoord1, 2, bgfx::AttribType::Float);
-            layout.skip(4);
+            layout.add(bgfx::Attrib::Color0,    4, bgfx::AttribType::Uint8, true);
         }
         else if (stride == 56)
         {
@@ -3325,6 +3326,19 @@ namespace CNA::Internal::Renderers::Bgfx
             layout.add(bgfx::Attrib::Weight,    4, bgfx::AttribType::Float);
             layout.add(bgfx::Attrib::Indices,   4, bgfx::AttribType::Uint8);
             layout.add(bgfx::Attrib::TexCoord1, 2, bgfx::AttribType::Float);
+        }
+        else if (stride == 80)
+        {
+            // plan_gltf.md GLTF-463: stride 76's skinned PBR record with a packed COLOR_0 appended
+            // at offset 76 -- the skinned counterpart of stride 60's own colour slot.
+            layout.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Normal,    3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Tangent,   4, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Weight,    4, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Indices,   4, bgfx::AttribType::Uint8);
+            layout.add(bgfx::Attrib::TexCoord1, 2, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Color0,    4, bgfx::AttribType::Uint8, true);
         }
         else
         {
@@ -3953,11 +3967,6 @@ namespace CNA::Internal::Renderers::Bgfx
                                                const GpuDrawParams& params)
     {
         auto& vb = static_cast<const BgfxVertexBufferRenderer&>(vb_in);
-
-        // plan_gltf.md GLTF-465: this renderer's PBR fragment shader is precompiled bgfx bytecode
-        // that reads no colour attribute, and its stride-60 layout would otherwise accept the draw and
-        // render the surface with the opaque-white identity in place of the authored COLOR_0.
-        RequireVertexColourPbrSupportEXT(params, vb.stride, "BGFX");
         if (!bgfx::isValid(vb.handle)) return;
 
         ApplyViewportOverride();
@@ -4099,6 +4108,11 @@ namespace CNA::Internal::Renderers::Bgfx
             float normalMatrixSkin[9];
             ComputeNormalMatrix3x3(params.worldColMajor, normalMatrixSkin);
             bgfx::setUniform(normalMatrix3DUnif_, normalMatrixSkin);
+            // plan_gltf.md GLTF-465: stride 80 carries a COLOR_0 the fragment stage multiplies in.
+            {
+                const float vcePbr[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+                bgfx::setUniform(vertexColorEn3DUnif_, vcePbr);
+            }
             BindPbrTextures(params);
             SubmitViewProgram(pbrSkinned3DProgram_);
         }
@@ -4148,6 +4162,13 @@ namespace CNA::Internal::Renderers::Bgfx
                                  params.eyePositionWorld[2], 0.0f };
             bgfx::setUniform(eyePos3DUnif_, eyePos);
             bgfx::setUniform(alphaTestUnif_, params.alphaTest);
+            // plan_gltf.md GLTF-465: the same shared gate every other VertexColorEnabled-aware
+            // branch uses. Strides 60 and 80 always carry a colour slot, so the shader has to be
+            // told whether it means anything.
+            {
+                const float vcePbr[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+                bgfx::setUniform(vertexColorEn3DUnif_, vcePbr);
+            }
             BindPbrTextures(params);
             SubmitViewProgram(pbr3DProgram_);
         }
@@ -4420,11 +4441,6 @@ namespace CNA::Internal::Renderers::Bgfx
         // per-branch comments -- with an index buffer bound instead of a plain vertex draw.
         auto& vb = static_cast<const BgfxVertexBufferRenderer&>(vb_in);
         auto& ib = static_cast<const BgfxIndexBufferRenderer&>(ib_in);
-
-        // plan_gltf.md GLTF-465: this renderer's PBR fragment shader is precompiled bgfx bytecode
-        // that reads no colour attribute, and its stride-60 layout would otherwise accept the draw and
-        // render the surface with the opaque-white identity in place of the authored COLOR_0.
-        RequireVertexColourPbrSupportEXT(params, vb.stride, "BGFX");
         if (!bgfx::isValid(vb.handle) || !bgfx::isValid(ib.handle)) return;
 
         ApplyViewportOverride();
@@ -4569,6 +4585,11 @@ namespace CNA::Internal::Renderers::Bgfx
             float normalMatrixSkin[9];
             ComputeNormalMatrix3x3(params.worldColMajor, normalMatrixSkin);
             bgfx::setUniform(normalMatrix3DUnif_, normalMatrixSkin);
+            // plan_gltf.md GLTF-465: stride 80 carries a COLOR_0 the fragment stage multiplies in.
+            {
+                const float vcePbr[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+                bgfx::setUniform(vertexColorEn3DUnif_, vcePbr);
+            }
             BindPbrTextures(params);
             SubmitViewProgram(pbrSkinned3DProgram_);
         }
@@ -4618,6 +4639,13 @@ namespace CNA::Internal::Renderers::Bgfx
                                  params.eyePositionWorld[2], 0.0f };
             bgfx::setUniform(eyePos3DUnif_, eyePos);
             bgfx::setUniform(alphaTestUnif_, params.alphaTest);
+            // plan_gltf.md GLTF-465: the same shared gate every other VertexColorEnabled-aware
+            // branch uses. Strides 60 and 80 always carry a colour slot, so the shader has to be
+            // told whether it means anything.
+            {
+                const float vcePbr[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+                bgfx::setUniform(vertexColorEn3DUnif_, vcePbr);
+            }
             BindPbrTextures(params);
             SubmitViewProgram(pbr3DProgram_);
         }

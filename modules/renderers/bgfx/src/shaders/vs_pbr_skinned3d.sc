@@ -1,5 +1,5 @@
-$input a_position, a_normal, a_tangent, a_texcoord0, a_texcoord1, a_weight, a_indices
-$output v_texcoord0, v_texcoord1, v_normal, v_tangent, v_worldPos, v_fogFactor
+$input a_position, a_normal, a_tangent, a_texcoord0, a_texcoord1, a_weight, a_indices, a_color0
+$output v_texcoord0, v_texcoord1, v_normal, v_tangent, v_worldPos, v_fogFactor, v_vertexColor0
 
 #include <bgfx_shader.sh>
 
@@ -73,6 +73,12 @@ void main()
                          * cnaDirectionHandedness(skinDirectionMat));
 
     v_texcoord0 = a_texcoord0;
+    // plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
+    // colour. Carried in v_vertexColor0 rather than v_color0 for the same reason the stride-56
+    // skinned path does: v_color0 already carries u_diffuseColor for other fragment shaders. Its
+    // varying default is opaque white, the multiplier's identity, so a stride without a colour slot
+    // is unaffected even before u_vertexColorEnabled3D gates it.
+    v_vertexColor0 = a_color0;
     v_texcoord1 = a_texcoord1;
     v_worldPos = mul(u_world, skinnedPos).xyz;
     // Task 899: fog factor from raw PRE-SKIN object-space Z, unchanged from vs_skinned3d.sc.

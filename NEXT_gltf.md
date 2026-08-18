@@ -11,12 +11,12 @@ session needs to start work without re-deriving the state.
 - **Working document:** `plan_gltf.md`, **471** numbered rows. **Five remain open: `GLTF-344` and
   `GLTF-465` (both `✅/⬜`), and `GLTF-459`, `GLTF-460`, `GLTF-464` (`⬜`).** `GLTF-463` closed on
   2026-08-17. `GLTF-465` is half closed: **no renderer draws a `COLOR_0` asset with different core
-  semantics any more** (ten apply the product, seven refuse the draw), and what remains is
+  semantics any more** (eleven apply the product, six refuse the draw), and what remains is
   implementing it in those eight. §27.2 carries a row-by-row ROBUST assessment; that section, not this
   file, is the record of what the milestone still needs.
 
 - **The milestone in force is `GLTF CORE 2.0 CORRECT` (§27.1.3, 2026-08-18), and it is stated with
-  its renderer coverage beside it: `PBR renderer coverage: 10/17 apply COLOR_0, 7 refuse such a draw by
+  its renderer coverage beside it: `PBR renderer coverage: 11/17 apply COLOR_0, 6 refuse such a draw by
   name`.** The name was written on 2026-08-17, rejected by the owner the next day, held for a day as
   `GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT`, and taken back only when the owner's own condition was
   met. **Read §27.1.3 before §27.1, and §27.1.2 before either.**
@@ -263,12 +263,21 @@ Rewritten 2026-08-17 after the re-audit. Ordered by cost, cheapest first.
 1. **`GLTF-465`: carry `COLOR_0` into the remaining seven PBR renderers' fragment paths.** Ten are
    done (EasyGL, SOFTWARE, IGL, OpenGL 2, OpenGL 4, Vulkan, DirectX 11, DirectX 12, Magnum, Diligent)
    and the other seven refuse such a draw, so nothing renders wrongly meanwhile — this is coverage
-   work now, not correctness work. **`bgfx` is next**: build its own `shaderc` from
-   `~/deps/bgfx-cmake` (CLAUDE.md's note about `cmake-build-bgfx/_deps` still applies), then the
-   change is one varying plus the product in `pbr3d`'s fragment source. Then `llgl` — decide whether
-   an all-blob SPIR-V refresh is acceptable, or find the glslang that produced the committed ones —
-   and `directx9`, which needs the pinned `d3dcompiler_47.dll` prefix. `metal`, `sdl-gpu`, `webgpu`
-   and `wicked` need a stride-60/80 layout first, which is a bigger job than the product itself.
+   work now, not correctness work. **`llgl` is next, and it needs a decision rather than an
+   implementation**: its `.glsl` sources are easy, but the committed SPIR-V was produced by a glslang
+   this environment cannot reproduce, so regenerating rewrites **every** blob in a renderer with no
+   pixel coverage here. Either find that glslang, or take the all-blob refresh deliberately and say so
+   in the commit. Then `directx9`, which needs the pinned native `d3dcompiler_47.dll` Wine prefix
+   (`~/.wine-cna-d3d9-spike`, SHA-256 gated). `metal`, `sdl-gpu`, `webgpu` and `wicked` need a
+   stride-60/80 layout first, which is a bigger job than the product itself.
+
+   **`bgfx` is done and its recipe is worth reusing**: `cmake -S . -B cmake-build-multi
+   -DCNA_BGFX_BUILD_SHADERC=ON -DBGFX_BUILD_TOOLS=ON` then `cmake --build cmake-build-multi --target
+   shaderc` builds the tool (~15 min, mostly glslang/SPIRV-Tools), and
+   `modules/renderers/bgfx/src/shaders/compile_shaders.py <shaderc> ~/deps/bgfx-cmake/bgfx/src`
+   regenerates the header. That rebuilt `shaderc` reproduces every committed blob byte-for-byte, so
+   the diff was exactly the 12 blobs of the three PBR shaders — which is what a shader-toolchain
+   change should look like.
 
    Whichever one you take: implement **both halves** of §3.9.2's product — RGB *and* alpha — and
    remove that renderer's `RequireVertexColourPbrSupportEXT` call in the same commit, then move its

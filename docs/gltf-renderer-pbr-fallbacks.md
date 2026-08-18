@@ -508,7 +508,7 @@ Three dispositions, all machine-checked — read the tests, not this table, whic
 | DirectX 12 | yes | yes | **applies** — same shared HLSL and constant as DirectX 11 |
 | Magnum | yes (`GLTF-465` added the colour attribute **and** the program selection: its `SelectStockProgram` had accepted only strides 48/68, so a stride-60 draw was refused outright) | yes (`GLTF-465` added the layout) | **applies** — generated GLSL, so the product is in the source that is compiled at runtime; `BindDrawParams` raises the flag only for strides 60/80, because one program serves 48/60 and an unsupplied attribute would read GL's generic default `(0,0,0,1)` |
 | Diligent | yes | yes (`GLTF-465` added the stride-80 variant) | **applies** — its HLSL is a per-variant template expanded at pipeline creation, so the colour attribute, its interpolant and the product exist **only** in the variants whose input layout supplies them; `g_Flags.y` is the effect's switch |
-| Bgfx | binds it | refuses | **refuses** (`GLTF-465`): shaders are precompiled bgfx bytecode; regenerating them needs bgfx's own `shaderc` |
+| Bgfx | yes (its stride-60 `skip(4)` **was** the colour slot) | yes (`GLTF-465` added the layout) | **applies** — the `.sc` sources are compiled offline into all four backend bytecodes; only the three PBR shaders' 12 blobs changed, every other blob byte-identical, which is also the proof the rebuilt `shaderc` matches the one the committed header came from |
 | DirectX 9 | binds it for non-PBR routes; its PBR path accepts only strides 48/68 | refuses | **refuses** (`GLTF-465`): `vs_3_0`/`ps_3_0` bytecode is regenerated only through the pinned native `d3dcompiler_47.dll` Wine prefix, which this environment does not have |
 | LLGL | binds it | refuses | **refuses** (`GLTF-465`): its committed SPIR-V was produced by a glslang this environment cannot reproduce — regenerating with the available one rewrites **every** blob in a renderer with no pixel coverage here |
 | Metal | no layout | refuses | **refuses** (`GLTF-465`): no stride-60/80 pipeline, and Metal cannot be built or run on this host |
@@ -547,17 +547,17 @@ makes the identity an explicit decision instead of a silent substitution. Everyt
 material survives everywhere: the authored `NORMAL`, the tangent basis, every PBR factor and every PBR
 map, which is strictly more than the stride-24 fallback carried before `GLTF-462`.
 
-**How far each "applies" is verified, precisely.** Four of the ten are proven at the pixel level,
+**How far each "applies" is verified, precisely.** Four of the eleven are proven at the pixel level,
 because they are the four renderers the L7 corpus oracle has policies for: **EasyGL/OPENGLES3**,
 **Vulkan** (lavapipe), **SOFTWARE** and **DirectX11** (Wine + DXVK) each rendered all 146 corpus assets
 twice on this revision and their `skin-vertex-color-pbr` captures carry the authored per-vertex alpha
-product. **OpenGL 2**, **OpenGL 4**, **DirectX 12**, **Magnum** and **Diligent** are compiled and source-verified but have no L7
+product. **OpenGL 2**, **OpenGL 4**, **DirectX 12**, **Magnum**, **Diligent** and **Bgfx** are compiled and source-verified but have no L7
 policy, so their colour product is asserted from their shader text and their layout rows rather than
 from pixels — DirectX 12 additionally shares its HLSL, its constant buffer and its input-element table
 with DirectX 11, which *is* pixel-proven. **IGL** is verified by construction and by its own generated
 shader library, and Magnum's four generated PBR sources additionally compile under a real GLSL
 compiler (`glslangValidator`) rather than only being grepped. That distinction is worth keeping in
-mind before treating this table as ten equal rows.
+mind before treating this table as eleven equal rows.
 
 **The rendered product itself is verified numerically, not by reading shader source.**
 `GltfFixtureCorpus.EveryL7GoldenCarriesTheVertexColourAlphaProductRatherThanTheWhiteIdentity` reads
