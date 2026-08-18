@@ -13,6 +13,7 @@
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL, 77 = SKIP.
 
+#include "CNA/Graphics/BloomPass.hpp"
 #include "CNA/Graphics/RenderPipeline.hpp"
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
 #include "CNA/GraphicsCapability.hpp"
@@ -108,10 +109,16 @@ protected:
         const Color white = Color::White;
         sprite_->SetData(&white, 1);
 
-        if (!device.SupportsCapability(GraphicsCapability::CustomEffects))
+        // `CustomEffects` is necessary but not sufficient, and the difference is worth stating:
+        // the Vulkan renderer reports it true and its ShaderEffect takes SPIR-V bytecode rather
+        // than the GLSL source these passes hand it, so every pass compiles nothing and copies
+        // through. Asking the pass itself is the only question with a reliable answer.
+        CNA::Graphics::BloomPass probe(device);
+        if (!device.SupportsCapability(GraphicsCapability::CustomEffects) ||
+            !probe.isSupported(device))
         {
-            std::printf("SKIP: this renderer cannot compile the post-process shaders (a documented "
-                        "capability boundary, not a defect)\n");
+            std::printf("SKIP: this renderer compiles no post-process pass, so the chain copies "
+                        "its input through (a documented capability boundary, not a defect)\n");
             std::exit(77);
         }
 

@@ -2021,6 +2021,20 @@ namespace CNA::Internal::Renderers
         /// bitmask, which each renderer translates into its own native bits.
         virtual void MemoryBarrierEXT(int /*barrierBits*/) {}
 
+        /// plan_modern.md MOD-1699: whether this renderer's lit shaders actually SAMPLE the
+        /// shadow state an effect carries (`IShadowReceiverEXT`: single map, cascades, punctual).
+        /// The state itself is accepted and ignored everywhere -- that convention is what keeps a
+        /// draw working on a renderer with no shadow shader -- but "accepted and ignored" and
+        /// "honoured" are different promises, and a caller that wants to know which it is getting
+        /// has no way to ask otherwise. False by default: a renderer that has not implemented the
+        /// sampling must not claim it.
+        [[nodiscard]] virtual bool SupportsShadowSamplingEXT() const { return false; }
+
+        /// plan_modern.md MOD-1699: whether this renderer's PBR shader honours the image-based
+        /// lighting group of `GpuDrawParams` (`iblIrradiance`, `iblPrefilteredSpecular`,
+        /// `iblBrdfLut`). Same reasoning as `SupportsShadowSamplingEXT`, and the same default.
+        [[nodiscard]] virtual bool SupportsImageBasedLightingEXT() const { return false; }
+
         /// plan_modern.md MOD-1500: whether this renderer really implements compute. False by
         /// default, and consulted by GraphicsDevice for GraphicsCapability::ComputeShaders rather
         /// than that capability being answered by a renderer's own switch -- many of those end in

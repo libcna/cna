@@ -223,6 +223,12 @@ protected:
             GTEST_SKIP() << "this renderer does not raster 3D triangles";
         if (!device.SupportsCapability(GraphicsCapability::CustomEffects))
             GTEST_SKIP() << "this renderer cannot compile the cascade caster's shader";
+        // MOD-1699: compiling the caster's shader is not the same promise as SAMPLING the shadow.
+        // The Vulkan renderer answers true to the first (its ShaderEffect exists) and false to the
+        // second (its lit shaders ignore the state), so without this the cascade case did not skip
+        // there -- it failed, describing a feature that renderer never claimed to have.
+        if (!device.SupportsShadowSamplingEXT())
+            GTEST_SKIP() << "this renderer's lit shaders do not sample shadow maps";
     }
 };
 

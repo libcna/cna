@@ -2158,6 +2158,16 @@ namespace Microsoft::Xna::Framework::Graphics
         return GetRenderer().SupportsCapability(capability);
     }
 
+    bool GraphicsDevice::SupportsShadowSamplingEXT() const
+    {
+        return GetRenderer().SupportsShadowSamplingEXT();
+    }
+
+    bool GraphicsDevice::SupportsImageBasedLightingEXT() const
+    {
+        return GetRenderer().SupportsImageBasedLightingEXT();
+    }
+
     int GraphicsDevice::GetMaxComputeWorkGroupCountEXT(const int axis) const
     {
         if (axis < 0 || axis > 2) return 0;

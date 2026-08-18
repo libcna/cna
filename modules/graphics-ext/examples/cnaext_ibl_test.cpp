@@ -208,11 +208,17 @@ protected:
     {
         auto& device = getGraphicsDeviceProperty();
 
+        // MOD-1699: the third question is the one that matters here -- a renderer can raster 3D
+        // and compile effects and still carry the image-based-lighting group without shading from
+        // it, which is what the Vulkan renderer does today. Asking produces a SKIP; not asking
+        // produced five failures that said nothing about this layer.
         if (!device.SupportsCapability(GraphicsCapability::ThreeD) ||
-            !device.SupportsCapability(GraphicsCapability::CustomEffects))
+            !device.SupportsCapability(GraphicsCapability::CustomEffects) ||
+            !device.SupportsImageBasedLightingEXT())
         {
-            std::printf("SKIP: this renderer does not raster 3D or cannot compile the PBR shader "
-                        "(a documented capability boundary, not a defect)\n");
+            std::printf("SKIP: this renderer does not raster 3D, cannot compile the PBR shader, or "
+                        "does not shade from an image-based light (a documented capability "
+                        "boundary, not a defect)\n");
             std::exit(77);
         }
 

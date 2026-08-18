@@ -264,11 +264,17 @@ protected:
     {
         auto& device = getGraphicsDeviceProperty();
 
+        // MOD-1699: `CustomEffects` says a renderer can compile *a* custom effect, not that it
+        // takes this layer's shader language or that its lit shaders sample a shadow at all. The
+        // Vulkan renderer answers true to the first and false to both of the others, and without
+        // this second question a shadow test there does not fail -- it crashes, mid-draw, with no
+        // effect applied.
         if (!device.SupportsCapability(GraphicsCapability::ThreeD) ||
-            !device.SupportsCapability(GraphicsCapability::CustomEffects))
+            !device.SupportsCapability(GraphicsCapability::CustomEffects) ||
+            !device.SupportsShadowSamplingEXT())
         {
-            std::printf("SKIP: this renderer does not raster 3D or cannot compile the caster's "
-                        "shader (a documented capability boundary, not a defect)\n");
+            std::printf("SKIP: this renderer does not raster 3D, cannot compile the caster's "
+                        "shader, or does not sample shadows (a documented capability boundary, not a defect)\n");
             std::exit(77);
         }
 

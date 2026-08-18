@@ -747,7 +747,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 
 | ID | Renderer | Status | Note |
 |---|---|---|---|
-| MOD-1600 | Vulkan | ⬜ | Real `VK_FORMAT_R16G16B16A16_SFLOAT` attachments; watch the render-pass-compatibility cache noted in `IGraphicsRenderer.hpp` (Task 911). |
+| MOD-1600 | Vulkan | 🟨 | **Measured, not implemented.** A real Vulkan build now exists in this environment (`cmake-build-vulkan`, Mesa lavapipe reporting Vulkan 1.4), and the renderer's own capability dump says `SurfaceFormat: Color only (Task 176)` — so float render targets are genuinely absent rather than untested, and `RenderTarget2D` refuses the format instead of substituting `Color`, which is the documented fallback working. Implementing `VK_FORMAT_R16G16B16A16_SFLOAT` attachments is still the open work. |
 | MOD-1601 | SdlGpu | ⬜ | |
 | MOD-1602 | Bgfx | ⬜ | |
 | MOD-1603 | WebGPU | ⬜ | `rgba16float` is core in WebGPU; likely the easiest after EasyGL. |
@@ -770,7 +770,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 
 | ID | Renderer | Status | Note |
 |---|---|---|---|
-| MOD-1620 | Vulkan | ⬜ | GLSL→SPIR-V path already exists for `ShaderEffect`. |
+| MOD-1620 | Vulkan | 🟨 | **Measured; blocked by a concrete mismatch.** The Vulkan renderer reports `CustomEffects` true, but `VulkanEffectRenderer::CompileProgram` takes **SPIR-V bytecode**, while every engine-layer pass hands it GLSL source — so all of them fail to compile with `SPIR-V size must be a multiple of 4 bytes` and the chain copies through. The frame is still correct (`cnaext_bloom_test` asserts the inert path pixel for pixel), and the example now SKIPs with that reason instead of reporting four failures. Unblocking this needs either GLSL→SPIR-V compilation in that renderer or a shader-language question the passes can ask. |
 | MOD-1621 | SdlGpu | ⬜ | |
 | MOD-1622 | Bgfx | ⬜ | Needs `shaderc` regeneration — see CLAUDE.md's bgfx note. |
 | MOD-1623 | WebGPU | ⬜ | Depends on `WEBGPU-76` (`ShaderEffect` custom WGSL), which is still open. |
@@ -793,7 +793,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 
 | ID | Renderer | Status | Note |
 |---|---|---|---|
-| MOD-1640 | Vulkan | ⬜ | All 4 lit effects. |
+| MOD-1640 | Vulkan | 🟨 | **Measured; same blocker as `MOD-1620`.** The caster's shader is a `ShaderEffect`, so it cannot compile on the Vulkan renderer today. Before `MOD-1699` this did not merely fail: the example crashed mid-draw, because the effect silently failed to compile and the draw went ahead anyway. It now SKIPs with the reason. The lit shaders' sampling side is unimplemented and correctly reports `SupportsShadowSamplingEXT() == false`. |
 | MOD-1641 | SdlGpu | ⬜ | |
 | MOD-1642 | Bgfx | ⬜ | |
 | MOD-1643 | WebGPU | ⬜ | Unskinned first (no skinning path yet, per CNAEXT.md §3.1). |
@@ -815,7 +815,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 
 | ID | Renderer | Status | Note |
 |---|---|---|---|
-| MOD-1660 | Vulkan | ⬜ | Precompute + sampling. |
+| MOD-1660 | Vulkan | 🟨 | **Measured; the precompute already works, the shading does not.** `EnvironmentProcessor` is CPU-side (`MOD-1200`), so irradiance, prefiltered specular and the BRDF LUT are produced correctly on Vulkan today. What is missing is the shading half: the Vulkan PBR shader ignores the IBL group, which it now says with `SupportsImageBasedLightingEXT() == false`, and `cnaext_ibl_test` SKIPs rather than reporting five failures. |
 | MOD-1661 | SdlGpu | ⬜ | |
 | MOD-1662 | Bgfx | ⬜ | |
 | MOD-1663 | WebGPU | ⬜ | |
@@ -835,7 +835,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 
 | ID | Renderer | Status | Note |
 |---|---|---|---|
-| MOD-1680 | Vulkan | ⬜ | Native compute queues. |
+| MOD-1680 | Vulkan | 🟨 | **Measured.** The Vulkan renderer implements none of `CreateComputeShader`/`CreateStorageBuffer`/`DispatchCompute`, so `SupportsComputeShadersEXT()` is false and both wrappers refuse by name — verified by running `cnaext_compute_particles_test` against the real Vulkan device, which SKIPs. Native compute queues are the open work. |
 | MOD-1681 | D3D11 | ⬜ | CS 5.0 + UAV. |
 | MOD-1682 | D3D12 | ⬜ | |
 | MOD-1683 | WebGPU | ⬜ | Compute is core in WebGPU; gated on the backend's own maturity. |
@@ -855,6 +855,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1695 | DirectX 1–8, OpenGL1, OpenGLES1, TinyGL | ⬜ | Same; these are fixed-function/legacy by identity (TinyGL has no shaders, render targets, stencil or scissor at all). |
 | MOD-1696 | Headless | ⬜ | Same; the canonical "everything false" reference used by the unit tests. |
 | MOD-1697 | Stub | ⬜ | Accepts and ignores per its existing contract. |
+| MOD-1699 | Two capability queries so a renderer's *promise* about shadows and IBL is askable, not inferred | ✅ | Added while measuring the Vulkan rollout, and not optional in hindsight. `GraphicsDevice::SupportsShadowSamplingEXT()` and `SupportsImageBasedLightingEXT()` (renderer virtuals, false by default, true on EasyGL) answer the question `GraphicsCapability::CustomEffects` cannot: whether the state an effect *accepts* everywhere is actually *used* here. Without them the shadow example did not fail on Vulkan, it **crashed** — its caster effect silently failed to compile and the draw went ahead with no effect applied. With them, four examples SKIP with a reason instead. |
 | MOD-1698 | Support-matrix completeness check | ⬜ | A test (or script) asserts every identity in `CNA::GraphicsRendererType` (49 on `next`, and growing — derive the list, never hardcode the count) appears in the matrix with an explicit status — no silent omissions. |
 
 ---
@@ -865,13 +866,13 @@ Cross-cutting verification that does not belong to a single subsystem.
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| MOD-1700 | Test fixture: an offscreen `GraphicsDevice` usable without a display for engine-layer unit tests | ⬜ | Reuses the repo's existing headless/test-display convention; documented. |
-| MOD-1701 | Fake `IGraphicsRenderer` for pure-logic tests (counts draws, target switches, allocations) | ⬜ | Lives in `tests/`, never in `src/`; used by the pass-ordering and allocation assertions throughout the plan. |
-| MOD-1702 | Fake `PostProcessPass` (records order, forces throw) | ⬜ | Used by `MOD-208`/`MOD-704`/`MOD-713`. |
-| MOD-1703 | Golden-image harness for the engine layer (naming, tolerance, regeneration command) | ⬜ | Follows the existing EasyGL golden convention; documented in one place. |
-| MOD-1704 | Deterministic test scene definition (fixed camera, meshes, lights, materials) shared by all goldens | ⬜ | One header; every golden in this plan uses it so cross-subsystem comparisons are meaningful. |
-| MOD-1705 | Float-image comparison utility (per-channel epsilon, HDR-aware) | ⬜ | Unit-tested; used by every HDR golden. |
-| MOD-1706 | Tolerance policy documented per subsystem (why SSAO's is looser than tonemap's) | ⬜ | Written; prevents tolerance drift by taste. |
+| MOD-1700 | Test fixture: an offscreen `GraphicsDevice` usable without a display for engine-layer unit tests | ✅ | **Nothing new was needed, which is the finding.** The repo's existing convention — a default-constructed `GraphicsDevice` in a gtest fixture, run from the repo root with a real display (`Xvfb :99`) — is exactly this fixture, and every engine-layer suite in this plan uses it. Documented in `NEXT_modern.md` §3 (the two run conditions that matter) and in `docs/cnaext-perf.md`'s recipe. Inventing a second fixture beside it would have given the layer a test path nothing else in the repository uses. |
+| MOD-1701 | Fake `IGraphicsRenderer` for pure-logic tests (counts draws, target switches, allocations) | ⛔ | **Not written, because it would have no consumer.** `IGraphicsRenderer` has 55 pure virtuals; a fake implementing them exists to serve assertions, and the assertions it was meant to serve are already made against the real renderer through `RenderPipeline::getGpuMemoryEstimateBytes()` (allocation), `getLastFramePassCount()` (pass count) and `RecordingPass` (ordering) — see `MOD-1713`'s hundred-resize test and `MOD-208`'s ordering tests. Adding 55 stub methods with nothing left to prove is the dead code `MOD-1901` exists to remove. |
+| MOD-1702 | Fake `PostProcessPass` (records order, forces throw) | ✅ | `RecordingPass` in `PostProcessChainTests.cpp`: records its name and its source/destination pointers, which is what the ordering and ping-pong assertions need. **Deviation:** no throw-forcing variant — `MOD-208`'s exception behaviour is asserted against the built-in passes and the pipeline's own frame-state errors instead, so a pass that exists only to throw would be a second way of testing the same thing. |
+| MOD-1703 | Golden-image harness for the engine layer (naming, tolerance, regeneration command) | ⛔ | No golden harness, because this plan has no goldens: every row that proposed one (`MOD-852`, `MOD-912`, `MOD-1009`, `MOD-1112`, `MOD-1242`, `MOD-1243`, `MOD-1244`, `MOD-1313`) was met by a measured property instead, each with its reason recorded in the row. A harness for a category with no members is infrastructure nobody runs. |
+| MOD-1704 | Deterministic test scene definition (fixed camera, meshes, lights, materials) shared by all goldens | ⛔ | Same reason. The deterministic scene it would have shared is instead each example's own scene, built to make one property measurable — a shadow test's scene is a caster and a floor because that is what makes a shadow's *area* countable, and it would be a worse skybox test. |
+| MOD-1705 | Float-image comparison utility (per-channel epsilon, HDR-aware) | ⛔ | Same reason: no HDR golden exists to compare. The float comparisons this plan does make are numeric and local — luminance sums, per-channel bounds, worst-case differences — and each is stated in the assertion that uses it. |
+| MOD-1706 | Tolerance policy documented per subsystem (why SSAO's is looser than tonemap's) | ✅ | **Reinterpreted, and satisfied.** With no goldens there are no image tolerances to drift; what does need explaining is why each measured property's bound is what it is, and that is written where the bound is — the 1/255 on an 8-bit round trip, the 0.01 on a GPU-versus-CPU float integration, the `EXPECT_EQ` on a culled frame that must be *identical*. `docs/cnaext-perf.md` carries the same discipline for measurements. |
 | MOD-1707 | CTest labels: `CnaExt`, `CnaExtDisplay`, `CnaExtGolden` | ✅ | `CnaExt` and `CnaExtDisplay` labels on every engine-layer ctest (`ctest -L CnaExt` runs all nine, `-L CnaExtDisplay` the seven that need a device). **`CnaExtGolden` is not created**: this plan committed to measured properties instead of golden images everywhere it could (`MOD-1242`, `MOD-1313`, `MOD-852`, …), so a label for a category with no members would be decoration. |
 | MOD-1708 | ASan/LSan run of the whole engine-layer suite | ⬜ | Clean beyond the repo's recorded external residuals. |
 | MOD-1709 | A `CNA_CNAEXT=OFF` regression suite run (the layer must not affect anything) | ✅ | Run: `cmake-build-debug` (`CNA_CNAEXT=OFF`), full `CnaTests` from the repo root under Xvfb — **7556 ran, 7492 passed, 64 skipped, 0 failed** after one real regression this run caught and fixed. `plan_modern.md`'s own `MOD-1309` rows had added two engine-layer suites to a glTF conformance rung unconditionally, and the ladder checks both directions, so with the layer compiled out the rung named suites that did not exist. They now join the Draco pair's existing exclusion mechanism, which verifies their source presence instead. That is precisely what this row is for: a regression invisible in the build the work was done in. |
@@ -886,7 +887,7 @@ Cross-cutting verification that does not belong to a single subsystem.
 | MOD-1718 | Android build check (GLES3 profile) | ⬜ | Same standard as `MOD-1717`. |
 | MOD-1719 | MinGW cross-compile check for the D3D renderers' engine-layer paths | ⬜ | Uses the repo's existing MinGW+ccache convention. |
 | MOD-1740 | Wire `scripts/check_cnaext_guards.sh` (`MOD-3`) into the test suite | ✅ | `CNAEXT_GuardDiscipline` runs `scripts/check_cnaext_guards.sh` as a ctest — pure text, no device, no display, and it runs in **every** configuration including `CNA_CNAEXT=OFF`, where an unguarded file would otherwise not even be compiled. |
-| MOD-1741 | Coverage report for `modules/graphics-ext/` | ⬜ | Recorded in `docs/coverage.md` alongside the existing numbers. |
+| MOD-1741 | Coverage report for `modules/graphics-ext/` | ⬜ | Not done. `docs/coverage.md`'s numbers come from a tooling run this environment has not reproduced; adding a hand-counted figure beside measured ones would be worse than leaving the row open. |
 
 ---
 

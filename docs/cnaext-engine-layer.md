@@ -97,17 +97,31 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 
 | Subsystem | EasyGL (reference) | Vulkan | D3D11 | Other renderers |
 |---|---|---|---|---|
-| Post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ⬜ | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |
-| Float/HDR render targets | ✅ RGBA16F + RGBA32F, runtime-probed | ⬜ | ⬜ | ⬜ — each reports `false` and `RenderTarget2D` refuses the format rather than substituting `Color` |
-| `RenderPipeline` + post-process passes | ✅ | ⬜ | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
-| Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ⬜ | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
+| Post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ⛔ its `ShaderEffect` takes SPIR-V, not the passes' GLSL | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |
+| Float/HDR render targets | ✅ RGBA16F + RGBA32F, runtime-probed | ⬜ measured: `Color` only today | ⬜ | ⬜ — each reports `false` and `RenderTarget2D` refuses the format rather than substituting `Color` |
+| `RenderPipeline` + post-process passes | ✅ | 🟨 runs and copies through — measured, frame identical to no pipeline | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
+| Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ⬜ `SupportsShadowSamplingEXT()` false | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
 | Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ⬜ | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Point / spot lights + shadows | ✅ punctual lighting and its cube/spot lookup on all four lit programs | ⬜ | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Skybox | ✅ one fullscreen pass; needs `CustomEffects` | ⬜ | ⬜ | ⬜ — where the shader will not compile the sky is skipped and logged once |
-| Image-based lighting | ✅ CPU precompute (works on every renderer) + split-sum shading | ⬜ | ⬜ | ⬜ — the precompute runs anywhere; the shading needs the renderer's own shader path |
+| Image-based lighting | ✅ CPU precompute (works on every renderer) + split-sum shading | 🟨 precompute works; `SupportsImageBasedLightingEXT()` false | ⬜ | ⬜ — the precompute runs anywhere; the shading needs the renderer's own shader path |
 | Materials (`PbrMaterial` ↔ `PbrEffect`) | ✅ | ✅ | ✅ | ✅ — no renderer code at all: it moves values between two existing objects |
-| Instancing / LOD / culling | ✅ | ⬜ | ⬜ | ⬜ — `LodGroupEXT` and `FrustumCullerEXT` are renderer-free and run everywhere; `InstancedRendererEXT` needs `GraphicsCapability::Instancing` and otherwise refuses (or falls back, on request) |
-| Compute / storage buffers | ✅ GL ES ≥ 3.1 / GL ≥ 4.3, runtime-probed; image bindings desktop-GL only | ⬜ | ⬜ | ⬜ — both wrappers throw `System::NotSupportedException` naming the renderer |
+| Instancing / LOD / culling | ✅ | ✅ measured — `cnaext_instancing_lod_test` passes 5/5 on a real Vulkan device | ⬜ | ⬜ — `LodGroupEXT` and `FrustumCullerEXT` are renderer-free and run everywhere; `InstancedRendererEXT` needs `GraphicsCapability::Instancing` and otherwise refuses (or falls back, on request) |
+| Compute / storage buffers | ✅ GL ES ≥ 3.1 / GL ≥ 4.3, runtime-probed; image bindings desktop-GL only | ⬜ not implemented; reports false and both wrappers refuse | ⬜ | ⬜ — both wrappers throw `System::NotSupportedException` naming the renderer |
+
+**Asking a renderer what it will actually do.** Three questions, and they are not the same question:
+
+| Question | Answers |
+|---|---|
+| `SupportsCapability(GraphicsCapability::CustomEffects)` | whether the renderer can compile *some* custom effect — not that it takes this layer's shader language |
+| `SupportsShadowSamplingEXT()` | whether its lit shaders really *sample* the shadow state every effect accepts |
+| `SupportsImageBasedLightingEXT()` | whether its PBR shader really shades from a bound environment |
+
+The distinction is not academic: the Vulkan renderer answers **true** to the first and **false** to
+the other two, because its `ShaderEffect` takes SPIR-V bytecode while this layer's passes and
+shadow casters hand it GLSL source. Before those two queries existed, the shadow example on Vulkan
+did not fail — it crashed, because the caster's effect failed to compile and the draw proceeded with
+no effect applied. Ask all three.
 
 ### Using it
 

@@ -246,10 +246,18 @@ TEST(ShadowMapTest, AnUnsupportedRendererIsReportedRatherThanFailing)
         EXPECT_FALSE(shadowMap.isSupported());
         EXPECT_EQ(shadowMap.getCasterEffect(), nullptr);
     }
-    else
+    else if (gd.SupportsShadowSamplingEXT())
     {
         EXPECT_TRUE(shadowMap.isSupported());
         EXPECT_NE(shadowMap.getCasterEffect(), nullptr);
+    }
+    else
+    {
+        // MOD-1699: `CustomEffects` and "this layer's caster shader compiles here" are different
+        // claims, and the Vulkan renderer is where they come apart -- it compiles custom effects
+        // from SPIR-V bytecode, not from the GLSL the caster is written in. What must hold on such
+        // a renderer is not that the map works, but that it says so consistently.
+        EXPECT_EQ(shadowMap.isSupported(), shadowMap.getCasterEffect() != nullptr);
     }
 
     // Either way a pass opens and closes without throwing, which is the property that lets a game

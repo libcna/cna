@@ -1056,6 +1056,28 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param axis 0 for x, 1 for y, 2 for z.
          * @return The limit, or 0 where compute is unsupported or the axis is out of range.
          */
+        /**
+         * @brief Returns whether this renderer's lit shaders really sample the shadow state.
+         *
+         * plan_modern.md `MOD-1699`. An effect accepts `IShadowReceiverEXT`'s state on every
+         * renderer -- that is what keeps a shadow-configured draw working where there is no shadow
+         * shader -- but only some renderers *use* it. This is the difference, asked of the
+         * renderer rather than inferred from a frame that came out unshadowed.
+         *
+         * @return True when a shadow-configured draw will actually be shadowed.
+         */
+        CNAEXT [[nodiscard]] bool SupportsShadowSamplingEXT() const;
+
+        /**
+         * @brief Returns whether this renderer's PBR shader honours an `ImageBasedLightEXT`.
+         *
+         * plan_modern.md `MOD-1699`. Same distinction as @ref SupportsShadowSamplingEXT: the
+         * bundle is carried everywhere and shaded with in some places.
+         *
+         * @return True when a bound environment will actually light the surface.
+         */
+        CNAEXT [[nodiscard]] bool SupportsImageBasedLightingEXT() const;
+
         CNAEXT [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const;
 
         /**

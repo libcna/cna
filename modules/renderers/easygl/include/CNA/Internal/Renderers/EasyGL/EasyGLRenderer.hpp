@@ -1135,6 +1135,11 @@ namespace CNA::Internal::Renderers::EasyGL
         /// answer is the *runtime* context's version, not the compile-time profile: this renderer
         /// asks for ES 3.0 and routinely receives 3.2, and refusing compute on a context that has
         /// it would be as wrong as claiming it on one that does not.
+        /// plan_modern.md MOD-1699: this renderer's four lit programs really do sample the shadow
+        /// state, and its two PBR programs really do shade from an image-based light -- Phases 8-12
+        /// implemented both here first.
+        [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return true; }
+        [[nodiscard]] bool SupportsImageBasedLightingEXT() const override { return true; }
         [[nodiscard]] bool SupportsComputeShadersEXT() const override;
         [[nodiscard]] bool SupportsComputeImageBindingEXT() const override;
         [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const override;

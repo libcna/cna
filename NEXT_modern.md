@@ -197,7 +197,21 @@ Three limits found and written down rather than worked around:
   aliasing API would save.
 - **`Texture2D::GetData` never shows compute writes** — it answers from the CPU shadow copy.
 
-Next: Phase 16 (per-renderer rollout), then 17-19 (tests/CI, docs, stabilization).
+**The second renderer changed what the layer knows about itself.** Running everything against a
+real Vulkan device measured five Phase 16 rows and produced one addition that was not optional:
+`GraphicsCapability::CustomEffects` says a renderer can compile *some* custom effect, not that it
+takes this layer's shader language — the Vulkan renderer's `ShaderEffect` consumes SPIR-V bytecode
+while every pass and caster here hands it GLSL source. Before `MOD-1699` added
+`SupportsShadowSamplingEXT()` and `SupportsImageBasedLightingEXT()`, the shadow example on Vulkan
+did not fail, it **crashed**: the caster's effect silently failed to compile and the draw went ahead
+with no effect applied. Six examples and three test suites now SKIP there with a reason.
+
+The eight Vulkan failures in the row above are pre-existing renderer issues, not engine-layer ones —
+two custom-GLSL `Cnj` tests (the same SPIR-V mismatch), one stdout diagnostic, and five
+`IndexedDrawDeferred` cases. No Vulkan renderer code was touched this session.
+
+Next: the rest of Phase 16 (the other renderers, and implementing rather than measuring Vulkan),
+then what remains of 17-19.
 
 Smaller open rows: `MOD-203` (restore-on-exception around a pass), `MOD-209`/`MOD-210`,
 `MOD-405`/`407`/`409`/`413`/`415`–`417` (bloom quality presets, perf, goldens),
@@ -272,7 +286,8 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-18 | same, with all of Phase 14 (instancing, LOD and culling) | same | 7806 ran · 7742 pass · 64 skip · **0 fail** |
 | 2026-08-18 | same, with all of Phase 15 (compute, storage buffers, auto-exposure) | same | 7824 ran · 7758 pass · 66 skip · **0 fail** |
 | 2026-08-18 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`** again, after Phases 11-15 (`MOD-1709`) | same | 7556 ran · 7492 pass · 64 skip · **0 fail** |
-| 2026-08-18 | `cmake-build-cnaext`, with the Phase 17/18 verification and documentation work | same | 7829 ran · 7763 pass · 66 skip · **0 fail** |
+| 2026-08-18 | `cmake-build-cnaext`, with the Phase 17/18 verification and documentation work | same | 7829 ran · 7765 pass · 64 skip · **0 fail** |
+| 2026-08-18 | **`cmake-build-vulkan`** — the same branch on a real Vulkan device (Mesa lavapipe 1.4) | Xvfb :99 | 7824 ran · 7652 pass · 164 skip · **8 fail**, none of them the engine layer |
 
 The `CNA_CNAEXT=OFF` row is the one that answers "can this break what already works". It configures,
 builds and passes with the whole engine layer compiled out. Its lower test count is expected and not
@@ -306,6 +321,13 @@ Two things about how the suite is run matter more than they look:
 - **Run it from the repository root**, not from the build directory. Content/media/audio tests
   resolve fixtures like `tests/assets/xnb/...` relative to the CWD; from `cmake-build-cnaext/` that
   is 116 failures of pure path noise.
+- **A real Vulkan build now exists here** (`cmake-build-vulkan`, `-DCNA_CNAEXT=ON
+  -DCNA_GRAPHICS_RENDERER=VULKAN`). It needed three packages this container did not have:
+  `libvulkan-dev mesa-vulkan-drivers glslang-tools`. Mesa's **lavapipe** provides a software Vulkan
+  1.4 device, so the whole suite and every engine-layer example run against a second renderer for
+  real. That is what turned Phase 16's Vulkan rows from guesses into measurements — and what found
+  the crash described in `MOD-1699`.
+
 - **`CNA_TEST_DISPLAY` is now `:99` in `cmake-build-cnaext`.** It defaulted to `:0`, which does not
   exist here, so every registered engine-layer ctest skipped and the label suites looked green
   without running. Reconfigured with `-DCNA_TEST_DISPLAY=:99`; `ctest -L CnaExt` now runs all nine
