@@ -173,13 +173,18 @@ side of it; `docs/gltf-renderer-pbr-fallbacks.md` records the renderer matrix an
 importer carries it in full (stride 60 for a rigid primitive, stride 80 for a skinned one since
 `GLTF-463`), `PbrEffect::VertexColorEnabledEXT` and `SkinnedPbrEffect::VertexColorEnabledEXT` carry the
 switch, and §3.9.2's product — `baseColorFactor` × `baseColorTexture` × `COLOR_0`, alpha included — is
-evaluated by **eight of the seventeen** PBR renderers. The other nine multiply by **opaque white**, the
-multiplier's identity, so they lose the vertex colour and nothing else: every factor, every map, the
-authored `NORMAL` and the tangent basis all still arrive, and an uncoloured primitive is bit-identical
-to what it was before the slot existed. A renderer with no stride-80 layout **refuses** a skinned
-vertex-coloured PBR draw rather than mis-reading it. There is no importer report field for this because
-there is no importer loss; the per-renderer state, the specific blocker for each open one, and the
-numerical golden-pixel witness are in `docs/gltf-renderer-pbr-fallbacks.md` (`GLTF-465`).
+evaluated by **nine of the seventeen** PBR renderers. The other eight do **not** substitute the
+identity and draw the surface anyway: they **refuse the draw** through the shared
+`RequireVertexColourPbrSupportEXT`, naming the renderer, the specification section and the way out.
+Accepting a valid asset and rendering it with different core semantics would be a wrong picture
+reported as success; refusing it is limited backend coverage, which is what it actually is.
+
+An **uncoloured** primitive is unaffected everywhere — its slot holds opaque white, the multiplier's
+identity, and the effect's switch is false — so nothing that rendered before this rule stops
+rendering. An application that wants the identity on coloured geometry can say so explicitly with
+`VertexColorEnabledEXT = false`, and the draw is then permitted. Which renderers apply the product,
+which refuse it, and the specific missing toolchain behind each refusal are in
+`docs/gltf-renderer-pbr-fallbacks.md` (`GLTF-465`).
 
 ---
 

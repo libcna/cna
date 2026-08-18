@@ -8,20 +8,31 @@ session needs to start work without re-deriving the state.
 
 - **Branch:** `feature/gltf`, with local commits. The owner explicitly requested a push when the
   current autonomous run reaches its weekly-limit cutoff; no pull request has been requested.
-- **Working document:** `plan_gltf.md`, **471** numbered rows. **Five remain open: `GLTF-344`
-  (`✅/⬜`, the specular texture pair on 3 of 15 PBR renderers), `GLTF-459`, `GLTF-460`, `GLTF-464` and
-  `GLTF-465`.** `GLTF-463` closed on 2026-08-17. Everything else is closed. §27.2 carries a row-by-row
-  ROBUST assessment; that section, not this file, is the record of what the milestone still needs.
+- **Working document:** `plan_gltf.md`, **471** numbered rows. **Five remain open: `GLTF-344` and
+  `GLTF-465` (both `✅/⬜`), and `GLTF-459`, `GLTF-460`, `GLTF-464` (`⬜`).** `GLTF-463` closed on
+  2026-08-17. `GLTF-465` is half closed: **no renderer draws a `COLOR_0` asset with different core
+  semantics any more** (nine apply the product, eight refuse the draw), and what remains is
+  implementing it in those eight. §27.2 carries a row-by-row ROBUST assessment; that section, not this
+  file, is the record of what the milestone still needs.
 
-- **`GLTF CORE 2.0 CORRECT` was re-declared on 2026-08-17 (§27.1.3), and the re-declaration states
-  its exclusion in the same breath: `GLTF-465`'s nine remaining renderers.** Read §27.1.3 before
-  §27.1, and read §27.1.2 before either. All four divergences the re-audit found are fixed, and the
-  evidence was recaptured whole rather than argued from the old run: 146 assets / 734 files
-  byte-identical across two generator runs, and **all four** L7 policies (EasyGL, Vulkan on lavapipe,
-  SOFTWARE, DirectX11 under Wine + DXVK) re-captured at 146 dispositions = 138 PNG pairs + 8 safe
-  rejections. Eight of the seventeen PBR renderers multiply `COLOR_0` into base colour and alpha; the
-  nine that do not are each blocked on a shader toolchain or SDK absent here, named row by row in
-  `GLTF-465`, and multiply by opaque white (the identity) meanwhile.
+- **The milestone in force is `GLTF CORE 2.0 CORRECT` (§27.1.3, 2026-08-18), and it is stated with
+  its renderer coverage beside it: `PBR renderer coverage: 9/17 apply COLOR_0, 8 refuse such a draw by
+  name`.** The name was written on 2026-08-17, rejected by the owner the next day, held for a day as
+  `GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT`, and taken back only when the owner's own condition was
+  met. **Read §27.1.3 before §27.1, and §27.1.2 before either.**
+
+  The rejected argument is the rule this campaign now works to: a renderer that **accepts** a valid
+  `COLOR_0` metallic-roughness asset and substitutes the opaque-white identity renders a visibly wrong
+  picture, and a correct importer plus eight correct renderers does not make CNA as a whole correct.
+  A renderer that **explicitly refuses** the combination is limited coverage, not wrong output. So the
+  bar is a two-way partition — render it correctly, or refuse it — with **no third state**, and that
+  partition is machine-checked over all seventeen PBR renderers by
+  `GltfRendererPbrFallbackPolicy.EveryPbrRendererEitherAppliesVertexColourOrRefusesTheDrawExplicitly`.
+
+  Evidence for the import/runtime half was recaptured whole rather than argued from the old run: 146
+  assets / 734 files byte-identical across two generator runs, and **all four** L7 policies (EasyGL,
+  Vulkan on lavapipe, SOFTWARE, DirectX11 under Wine + DXVK) re-captured at 146 dispositions = 138 PNG
+  pairs + 8 safe rejections.
 
 - **⚠ The 2026-08-15 declaration (`GLTF-458`) was premature.** A 2026-08-17 re-audit against the pinned specification found **four core divergences
   that no §27.1 row asks about**, each sitting inside a row that was green. All four are fixed
@@ -241,27 +252,26 @@ found by *running the thing that was said to be impossible* rather than by reaso
 | Boundary | Rows | Note |
 |---|---|---|
 | **format/material breadth** | `GLTF-344` | `KHR_materials_specular`'s two texture inputs reach **12 of the 16** PBR renderers. `igl`, `metal`, `webgpu` and `wicked` sample neither, and none of the four carries a second UV stream at all, so the dual-UV foundation comes first. Machine-checked by `GltfRendererPbrFallbackPolicy.SpecularTextureInventoryClassifiesEveryPbrRenderer` — read it rather than any prose count. |
-| **renderer shader toolchains** | `GLTF-465` | The nine PBR renderers that still multiply `COLOR_0` by opaque white. Each is blocked on something this environment does not have, not on a decision: `bgfx` needs bgfx's own `shaderc`; `directx9` needs the pinned native `d3dcompiler_47.dll` Wine prefix; `llgl` needs `glslangValidator`; `diligent` and `magnum` have tractable runtime-compiled shaders but are not built here; `metal`, `sdl-gpu`, `webgpu` and `wicked` have no stride-60/80 layout at all. `GLTF-157`'s rule applies — a renderer change nobody can verify is not a fix — so none was written blind. |
+| **renderer shader toolchains** | `GLTF-465` | The eight PBR renderers that **refuse** a `COLOR_0` draw rather than applying the product. Each is blocked on something this environment does not have: `bgfx` needs bgfx's own `shaderc`; `directx9` needs the pinned native `d3dcompiler_47.dll` Wine prefix; `llgl`'s committed SPIR-V was produced by a glslang this environment cannot reproduce (regenerating with the available one rewrites every blob in a renderer with no pixel coverage here); `diligent` is now buildable and its runtime-substituted HLSL is tractable, so it is the next one to implement; `metal`, `sdl-gpu`, `webgpu` and `wicked` have no stride-60/80 layout at all. None of them draws such an asset wrongly meanwhile — that is what the shared `RequireVertexColourPbrSupportEXT` guard buys. |
 | **corpus asset count** | `GLTF-464` | The corpus is pinned at **146** assets by four L7 provenance reports that enumerate every asset, so a new fixture fails each report's completeness assertion until every policy is re-captured. `GLTF-463` did exactly that and all four were re-captured on 2026-08-17, which is what makes `GLTF-464` (promoting `GLTF-461`/`468`/`470`'s inline probes to real fixtures) ordinary work rather than blocked work — budget ~40 minutes for the recapture, most of it DirectX11. |
-| **milestone chain** | `GLTF-459`–`460` | ROBUST is **9 of 12** green in §27.2 (rows 3, 6 and 12 open). `CORE` was re-declared on 2026-08-17 (§27.1.3) with `GLTF-465`'s nine remaining renderers excluded **by name**; §27.1.2 remains the record of why the first declaration was premature. |
+| **milestone chain** | `GLTF-459`–`460` | ROBUST is **9 of 12** green in §27.2 (rows 3, 6 and 12 open). `CORE` is declared (§27.1.3, 2026-08-18) with its renderer coverage stated beside it, after a day held under a narrower name; §27.1.2 remains the record of why the 2026-08-15 declaration was premature, and §27.1.3 of why the 2026-08-17 one was renamed. |
 
 ## Suggested next clusters
 
 Rewritten 2026-08-17 after the re-audit. Ordered by cost, cheapest first.
 
-1. **`GLTF-465`: carry `COLOR_0` into the remaining nine PBR renderers' fragment paths.** Eight are
-   done (EasyGL, SOFTWARE, IGL, OpenGL 2, OpenGL 4, Vulkan, DirectX 11, DirectX 12); each remaining one
-   needs its PBR fragment path to multiply the attribute under the `vertexColorEnabled` gate, **and its
-   alpha too** — §3.9.2's product includes alpha, which is what a BLEND-mode vertex-coloured primitive's
-   transparency comes from. The cheapest next ones are the two whose shaders are compiled at runtime,
-   `magnum` (generated GLSL) and `diligent` (placeholder-substituted HLSL) — both are one edit plus a
-   dependency build (`~/deps/magnum`, `~/deps/DiligentCore` are already cloned). `bgfx`, `directx9` and
-   `llgl` each need an offline shader compiler first (bgfx `shaderc`, the pinned native
-   `d3dcompiler_47.dll` prefix, `glslangValidator`). Follow `GLTF-157`'s rule and move the row in
-   `GltfRendererPbrFallbackPolicy.VertexColourReachesTheBaseColourProductOnlyWhereItIsImplemented` as
-   each lands — that test now checks the RGB product, the alpha product, the enable gate and the
-   uniform/constant upload separately, so a partial implementation fails on the specific half it
-   missed.
+1. **`GLTF-465`: carry `COLOR_0` into the remaining eight PBR renderers' fragment paths.** Nine are
+   done (EasyGL, SOFTWARE, IGL, OpenGL 2, OpenGL 4, Vulkan, DirectX 11, DirectX 12, Magnum) and the
+   other eight refuse such a draw, so nothing renders wrongly meanwhile — this is coverage work now,
+   not correctness work. **`diligent` is next**: its shaders are placeholder-substituted HLSL compiled
+   at runtime (the same shape as Magnum's generated GLSL, which took about an hour end to end), and
+   the renderer builds here since this session added it to `cmake-build-multi`. Then `bgfx` (build
+   bgfx's own `shaderc` from `~/deps/bgfx-cmake`), then `llgl` (decide whether an all-blob SPIR-V
+   refresh is acceptable, or find the glslang that produced the committed ones), then `directx9` (the
+   pinned `d3dcompiler_47.dll` prefix). Whichever one you take: implement **both halves** of §3.9.2's
+   product — RGB *and* alpha — and remove that renderer's `RequireVertexColourPbrSupportEXT` call in
+   the same commit, then move its rows in the three inventories. The tests check the halves separately,
+   so a partial implementation fails on the one it missed.
 
 2. **`GLTF-464`: promote the three inline spec-rule probes to corpus fixtures.** `GLTF-461`'s two and
    `GLTF-468`/`GLTF-470`'s three are conformance statements living as C++ string literals only because
