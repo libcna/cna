@@ -243,4 +243,20 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
         COMMAND cna_test_igl_public_surfaceformat
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
+    # plan_igl.md IGL-43: the three custom-effect tests now carry a SPIR-V variant of their shaders
+    # and declare the std140 block their parameters live in, so they run on Vulkan too. Registered
+    # here rather than left to a manual run: the whole point of IGL-43 was that nothing guarded the
+    # Vulkan half of the custom-effect path.
+    cna_register_renderer_test(NAME Igl_ShaderEffectTexture3D_Vulkan
+        COMMAND cna_test_igl_shadereffect_texture3d
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
+    cna_register_renderer_test(NAME Igl_SpriteBatchShaderEffect_Vulkan
+        COMMAND cna_test_igl_spritebatch_shadereffect
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
+    cna_register_renderer_test(NAME Igl_Instancing_Vulkan
+        COMMAND cna_test_igl_instancing
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
 endif()

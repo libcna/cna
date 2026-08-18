@@ -619,15 +619,61 @@ namespace CNA::Internal::Renderers::Igl
     {
         if (IsVulkanBackend())
         {
-            // Loose (non-block) uniforms do not exist in Vulkan GLSL, and IGL's Vulkan encoder
-            // deliberately leaves bindUniform unimplemented. A ShaderEffect that relies on them is
-            // refused by name rather than drawn with stale or default values.
-            if (!effect.GetUniforms().empty())
+            // plan_igl.md IGL-43. Loose (non-block) uniforms do not exist in Vulkan GLSL and IGL's
+            // Vulkan encoder leaves bindUniform unimplemented, so a parameter has to travel in a
+            // std140 block -- and reaching a member of one means knowing its byte offset.
+            //
+            // That mapping is DECLARED by the application, not reflected out of the shader, and
+            // that is a finding rather than a preference: IGL v1.1.1 returns an empty reflection on
+            // Vulkan (vulkan::RenderPipelineState builds a default RenderPipelineReflection, and
+            // its getIndexByName is IGL_DEBUG_ASSERT_NOT_IMPLEMENTED), so there is no name-to-offset
+            // information to be had. An application already supplies a separate Vulkan source here;
+            // declaring the block it wrote is smaller and more honest than parsing that source to
+            // guess at it.
+            const int blockSize = effect.GetUniformBlockSizeEXT();
+            if (blockSize <= 0)
             {
+                if (!effect.GetUniforms().empty())
+                {
+                    throw std::runtime_error(
+                        "IGL renderer: this ShaderEffect sets parameters, and the Vulkan backend "
+                        "has no loose uniforms to put them in. Declare the std140 block the shader "
+                        "uses with ShaderEffect::DeclareUniformBlockEXT, or select "
+                        "CNA_IGL_BACKEND=opengl.");
+                }
+                return;
+            }
+
+            std::vector<std::uint8_t> block(static_cast<std::size_t>(blockSize));
+            const std::vector<std::string> unmapped = effect.PackUniformBlockEXT(block.data());
+            if (!unmapped.empty())
+            {
+                // A parameter the shader can never see. Silently dropping it would draw with a zero
+                // where the caller set a value, which is the class of bug this whole path exists to
+                // avoid, so it fails by the parameter's own name.
+                std::string names;
+                for (const std::string& name : unmapped)
+                    names += (names.empty() ? "" : ", ") + name;
                 throw std::runtime_error(
-                    "IGL renderer: ShaderEffect parameters are only supported on the OpenGL "
-                    "backend. Write the shader with a std140 uniform block, or select "
-                    "CNA_IGL_BACKEND=opengl.");
+                    "IGL renderer: ShaderEffect parameter(s) " + names +
+                    " are set but absent from the declared std140 block, so the shader could never "
+                    "read them");
+            }
+
+            const IglDynamicBufferPool::Allocation allocation = dynamicUniformPool_->Upload(
+                block.data(), block.size(), kUniformAlignment);
+            encoder.bindBuffer(UniformBufferBinding::CustomEffect, allocation.buffer,
+                               allocation.offset, block.size());
+
+            const std::array<igl::ITexture*, igl::IGL_TEXTURE_SAMPLERS_MAX>& vulkanTextures =
+                effect.GetBoundTextures();
+            for (std::size_t unit = 0; unit < vulkanTextures.size(); ++unit)
+            {
+                if (vulkanTextures[unit] == nullptr)
+                    continue;
+                encoder.bindTexture(unit, igl::BindTarget::kFragment, vulkanTextures[unit]);
+                encoder.bindSamplerState(unit, igl::BindTarget::kFragment,
+                                         AcquireSamplerState(static_cast<int>(unit)).get());
             }
             return;
         }

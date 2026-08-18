@@ -66,6 +66,11 @@ namespace Microsoft::Xna::Framework::Graphics
 namespace CNA::Internal::Renderers
 {
     class IGraphicsRenderer;
+
+    // Mirrors the definition in CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp. Declared here
+    // rather than including that header, which this one deliberately does not pull into every
+    // consumer of the public GraphicsDevice API; the underlying type is fixed so the two agree.
+    enum class ShaderDialectEXT : int;
     struct GpuDrawParams;
 }
 
@@ -989,6 +994,19 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /** @brief Returns a reference to the active graphics renderer. */
         CNAEXT [[nodiscard]] CNA::Internal::Renderers::IGraphicsRenderer& GetRenderer() const;
+
+        /**
+         * @brief The shading dialect a custom `ShaderEffect`'s sources must be written in. CNAEXT.
+         *
+         * A `ShaderEffect` is renderer-specific source text, and until now an application had no
+         * supported way to ask which dialect to supply -- it had to infer one from the build's
+         * renderer identity, which is wrong in a multi-renderer build and meaningless for a
+         * renderer that chooses its native API per process (IGL, LLGL, Diligent).
+         *
+         * @return The active renderer's dialect, or `ShaderDialectEXT::Unknown` where the renderer
+         *         has not declared one -- which means "do not guess", not "no shaders".
+         */
+        CNAEXT [[nodiscard]] CNA::Internal::Renderers::ShaderDialectEXT GetShaderDialectEXT() const;
 
         /**
          * @brief Returns which graphics renderer THIS DEVICE is using.

@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <vector>
 
 namespace CNA::Internal::Renderers::Igl
 {
@@ -146,6 +147,63 @@ namespace CNA::Internal::Renderers::Igl
         }
 
         return true;
+    }
+
+    void IglEffectRenderer::DeclareUniformBlockEXT(const int blockSizeBytes,
+                                                   const char* const* names, const int* offsets,
+                                                   const int count)
+    {
+        uniformBlockOffsets_.clear();
+        uniformBlockSize_ = 0;
+        if (count <= 0 || blockSizeBytes <= 0 || names == nullptr || offsets == nullptr)
+            return;
+
+        for (int i = 0; i < count; ++i)
+        {
+            if (names[i] == nullptr || offsets[i] < 0 || offsets[i] >= blockSizeBytes)
+            {
+                // A member the caller cannot have meant. Refusing the whole declaration rather than
+                // silently keeping the good half: a partially applied layout would write some
+                // parameters and drop others, which is exactly the failure a declared layout exists
+                // to avoid.
+                uniformBlockOffsets_.clear();
+                uniformBlockSize_ = 0;
+                throw std::runtime_error(
+                    "IGL renderer: ShaderEffect uniform block member " + std::to_string(i) +
+                    " has no name or an offset outside the declared block");
+            }
+            uniformBlockOffsets_[names[i]] = offsets[i];
+        }
+        uniformBlockSize_ = blockSizeBytes;
+    }
+
+    std::vector<std::string> IglEffectRenderer::PackUniformBlockEXT(std::uint8_t* const bytes) const
+    {
+        std::vector<std::string> unmapped;
+        if (bytes == nullptr || uniformBlockSize_ <= 0)
+            return unmapped;
+
+        std::memset(bytes, 0, static_cast<std::size_t>(uniformBlockSize_));
+        for (const auto& [name, value] : uniforms_)
+        {
+            const auto it = uniformBlockOffsets_.find(name);
+            if (it == uniformBlockOffsets_.end())
+            {
+                unmapped.push_back(name);
+                continue;
+            }
+            const std::size_t byteCount = value.data.size() * sizeof(float);
+            if (it->second + static_cast<int>(byteCount) > uniformBlockSize_)
+            {
+                // The declaration says this member starts here, and the value does not fit before
+                // the block ends. Writing it would corrupt whatever follows, so report it as
+                // unmapped rather than trust the arithmetic over the declaration.
+                unmapped.push_back(name);
+                continue;
+            }
+            std::memcpy(bytes + it->second, value.data.data(), byteCount);
+        }
+        return unmapped;
     }
 
     void IglEffectRenderer::Bind()

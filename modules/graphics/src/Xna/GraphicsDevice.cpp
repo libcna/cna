@@ -2124,6 +2124,16 @@ namespace Microsoft::Xna::Framework::Graphics
         return *renderer_;
     }
 
+    CNA::Internal::Renderers::ShaderDialectEXT GraphicsDevice::GetShaderDialectEXT() const
+    {
+        // Not a throw when there is no renderer: asking which dialect to write for is exactly the
+        // question an application asks BEFORE it has committed to anything, and "unknown" is the
+        // truthful answer in that state rather than an error.
+        if (renderer_ == nullptr)
+            return CNA::Internal::Renderers::ShaderDialectEXT::Unknown;
+        return renderer_->GetShaderDialectEXT();
+    }
+
     bool GraphicsDevice::SupportsCapability(CNA::GraphicsCapability capability) const
     {
         // CompiledEffects was appended after many renderer-specific capability switches were

@@ -119,16 +119,16 @@
 >   says so (`GL_INVALID_OPERATION … invalid textarget GL_TEXTURE_3D`). The three suites that
 >   asserted it now assert the refusal instead — the per-renderer table the previous audit said did
 >   not exist.
-> * **IGL-43** — a custom `ShaderEffect` cannot take parameters on Vulkan. This is now the *only*
->   reason any IGL example test fails there (3 of 26 binaries). The effect path itself is verified
->   on Vulkan by `Igl_CustomEffectBackend`. Closing it means packing parameters into a uniform
->   buffer whose std140 layout CNA defines and the author's shader declares — a change to the
->   CNAEXT `ShaderEffect` contract, not a bug fix.
-> * **A custom `ShaderEffect`'s GLSL is not portable between the two IGL backends**, and cannot be:
->   SPIR-V requires explicit locations on every user in/out and the two backends do not accept the
->   same `#version`. An application targeting both must supply two sources.
->   `igl_custom_effect_backend_test.cpp` is the worked example; a violation is now reported with
->   glslang's own diagnostic instead of "glslang_shader_parse() failed" (IGL-70).
+> * **IGL-43 and IGL-72 — DONE.** A custom `ShaderEffect` now works on Vulkan with parameters, and
+>   the contract was decided rather than patched. Loose uniforms do not exist there, so parameters
+>   travel in a std140 block whose layout the application **declares** —
+>   `ShaderEffect::DeclareUniformBlockEXT` — because IGL `v1.1.1` returns an empty Vulkan reflection
+>   and there is genuinely nothing to discover the offsets from. A parameter with no member in the
+>   declaration fails by name; dropping it would render a zero where the caller set a value.
+>   `GraphicsDevice::GetShaderDialectEXT()` is the renderer-neutral half: an application can now ask
+>   which dialect to supply instead of inferring it from the build's renderer identity, which is
+>   wrong in a multi-renderer build and meaningless for a renderer that picks its API per process.
+>   All three legacy custom-effect tests carry SPIR-V variants and are registered on Vulkan.
 > * **IGL-53 — DONE.** `docs/graphics-renderer-feature-matrix.md` now carries an `IGL` column across
 >   all five per-renderer tables, 21 rows, each backed by a named test. The row was held open on a
 >   real condition and the condition was met, not waived: its two blockers (IGL-60's unexplained

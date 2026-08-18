@@ -46,6 +46,25 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT [[nodiscard]] bool HasRenderer() const { return effectRenderer_ != nullptr; }
 
         /** @brief Sets a column-major 4×4 matrix uniform by name. */
+        /**
+         * @brief Declares the std140 uniform block this effect's parameters live in. CNAEXT.
+         *
+         * Required on a renderer whose shading dialect has no loose (non-block) uniforms -- every
+         * SPIR-V target, which today means IGL's Vulkan backend. Harmlessly ignored everywhere
+         * else, so the same call can sit unconditionally beside the effect's construction.
+         *
+         * Ask @ref GraphicsDevice::GetShaderDialectEXT which dialect the active renderer wants;
+         * an application that needs both generally supplies two shader sources and one of these
+         * declarations describing the Vulkan one.
+         *
+         * @param blockSizeBytes Size of the whole block in bytes, std140-padded.
+         * @param names          Member names, `count` of them.
+         * @param offsets        Each member's byte offset from the start of the block.
+         * @param count          Number of members; zero clears any previous declaration.
+         */
+        CNAEXT void DeclareUniformBlockEXT(int blockSizeBytes, const char* const* names,
+                                           const int* offsets, int count);
+
         CNAEXT void SetUniformMat4(const char* name, const float* matrix);
         /** @brief Sets a vec4 uniform by name (x, y, z, w). */
         CNAEXT void SetUniformVec4(const char* name, float x, float y, float z, float w);

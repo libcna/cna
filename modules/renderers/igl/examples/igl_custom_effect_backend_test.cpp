@@ -39,6 +39,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Igl/IglRendererSelection.hpp"
 
 #include "common/PixelTestGame.hpp"
@@ -103,6 +104,45 @@ void main() {
     FragColor = vec4(vColor.g, vColor.b, vColor.r, 1.0);
 }
 )";
+
+    // --- The same pair again, with a PARAMETER (plan_igl.md IGL-43) ---
+    //
+    // OpenGL takes a loose uniform. Vulkan cannot: its parameters must be members of a std140
+    // block, and the block's binding is the one CNA reserves for a custom effect
+    // (UniformBufferBinding::CustomEffect, set 1 binding 2). The application declares the layout it
+    // wrote through ShaderEffect::DeclareUniformBlockEXT, because IGL v1.1.1 has no Vulkan
+    // reflection to discover it from.
+    const char* kOpenGlParamVertSrc = R"(#version 410 core
+layout(location = 0) in vec3 aPosition;
+void main() {
+    gl_Position = vec4(aPosition.xy * 0.5, 0.0, 1.0);
+}
+)";
+
+    const char* kOpenGlParamFragSrc = R"(#version 410 core
+out vec4 FragColor;
+uniform vec4 tint;
+void main() {
+    FragColor = tint;
+}
+)";
+
+    const char* kVulkanParamVertSrc = R"(#version 460
+layout(location = 0) in vec3 aPosition;
+void main() {
+    gl_Position = vec4(aPosition.xy * 0.5, 0.0, 1.0);
+}
+)";
+
+    const char* kVulkanParamFragSrc = R"(#version 460
+layout(location = 0) out vec4 FragColor;
+layout(set = 1, binding = 2, std140) uniform CnaCustom {
+    vec4 tint;
+};
+void main() {
+    FragColor = tint;
+}
+)";
 }
 
 class IglCustomEffectBackendTest : public CNA::Examples::PixelTestGame
@@ -153,7 +193,67 @@ protected:
                     Rectangle(2, 2, 1, 1),
                     Color(static_cast<bytecs>(255), static_cast<bytecs>(0),
                           static_cast<bytecs>(0), static_cast<bytecs>(255)));
+
+        RunParameterChecks(vulkan);
     }
+
+    /// IGL-43: a custom effect's PARAMETERS, on both backends, through the public API only.
+    void RunParameterChecks(const bool vulkan)
+    {
+        auto& device = getGraphicsDeviceProperty();
+
+        // The dialect is asked for through the supported query rather than inferred from the
+        // build's renderer identity, which is the whole point of GetShaderDialectEXT: in a
+        // multi-renderer build the identity is not the active renderer, and IGL picks its native
+        // API per process anyway.
+        const CNA::Internal::Renderers::ShaderDialectEXT dialect = device.GetShaderDialectEXT();
+        ExpectTrue("GraphicsDevice reports the dialect this process actually resolved",
+                   dialect == (vulkan ? CNA::Internal::Renderers::ShaderDialectEXT::GlslVulkan
+                                      : CNA::Internal::Renderers::ShaderDialectEXT::GlslDesktop));
+
+        device.Clear(Color(static_cast<bytecs>(255), static_cast<bytecs>(0),
+                           static_cast<bytecs>(0), static_cast<bytecs>(255)));
+
+        ShaderEffect effect(device,
+                            vulkan ? kVulkanParamVertSrc : kOpenGlParamVertSrc,
+                            vulkan ? kVulkanParamFragSrc : kOpenGlParamFragSrc);
+        if (!ExpectTrue("a custom ShaderEffect with a parameter compiles on this backend",
+                        effect.IsEffectValid()))
+            return;
+
+        // Declared unconditionally: a renderer whose uniforms are loose ignores it, so the same
+        // application code runs on both backends.
+        static const char* const kNames[] = {"tint"};
+        static const int kOffsets[] = {0};
+        effect.DeclareUniformBlockEXT(/*blockSizeBytes=*/16, kNames, kOffsets, 1);
+
+        // A decoy first, overwritten before the draw: a stale-parameter false positive would show
+        // up as the decoy colour rather than the one asked for last.
+        effect.SetUniformVec4("tint", 1.0f, 1.0f, 0.0f, 1.0f);
+        effect.SetUniformVec4("tint", 0.0f, 0.0f, 1.0f, 1.0f);
+
+        const Color vertexColor(static_cast<bytecs>(255), static_cast<bytecs>(255),
+                                static_cast<bytecs>(255), static_cast<bytecs>(255));
+        const std::vector<VertexPositionColor> vertices{
+            VertexPositionColor(Vector3(-1.0f, -1.0f, 0.0f), vertexColor),
+            VertexPositionColor(Vector3(1.0f, -1.0f, 0.0f), vertexColor),
+            VertexPositionColor(Vector3(-1.0f, 1.0f, 0.0f), vertexColor),
+            VertexPositionColor(Vector3(1.0f, 1.0f, 0.0f), vertexColor)};
+        const std::vector<std::uint16_t> indices{0, 1, 2, 2, 1, 3};
+
+        effect.Apply();
+        device.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vertices.data(), 0,
+                                         static_cast<int>(vertices.size()), indices.data(), 0, 2);
+
+        // Blue is neither the clear colour, nor white, nor the decoy: only the parameter set last
+        // can produce it.
+        ExpectPixel("the effect's own parameter reached the shader on this backend",
+                    Rectangle(kSize / 2, kSize / 2, 1, 1),
+                    Color(static_cast<bytecs>(0), static_cast<bytecs>(0),
+                          static_cast<bytecs>(255), static_cast<bytecs>(255)));
+    }
+
+private:
 
 public:
     IglCustomEffectBackendTest()

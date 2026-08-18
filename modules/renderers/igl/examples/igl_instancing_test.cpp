@@ -42,6 +42,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+
 #include "common/PixelTestGame.hpp"
 
 #include <cstdint>
@@ -70,6 +72,32 @@ void main() {
 }
 )";
 
+    // The SPIR-V variant (plan_igl.md IGL-43). This effect takes no parameters, so the only
+    // difference is the one SPIR-V forces: an explicit location on every user input and output.
+    // The attribute locations are IGL's own usage-to-slot table, the same one the shader above
+    // reaches by name, so the instanced vertex layout is unchanged between backends.
+    const char* kVulkanVertSrc = R"(#version 460
+layout(location = 0) in vec3 aPosition;
+layout(location = 4) in vec2 aTexCoord1;
+void main() {
+    gl_Position = vec4(aPosition.xy + aTexCoord1, aPosition.z, 1.0);
+}
+)";
+
+    const char* kVulkanFragSrc = R"(#version 460
+layout(location = 0) out vec4 FragColor;
+void main() {
+    FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+}
+)";
+
+    /// True when this process resolved IGL's Vulkan backend, asked through the supported query.
+    [[nodiscard]] bool IsVulkanDialect(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device)
+    {
+        return device.GetShaderDialectEXT() ==
+               CNA::Internal::Renderers::ShaderDialectEXT::GlslVulkan;
+    }
+
 #pragma pack(push, 1)
     struct QuadVertex { float x, y, z; };
     struct InstanceOffset { float x, y; };
@@ -89,7 +117,9 @@ protected:
     {
         auto& device = getGraphicsDeviceProperty();
 
-        effect_ = std::make_unique<ShaderEffect>(device, kVertSrc, kFragSrc);
+        const bool vulkan = IsVulkanDialect(device);
+        effect_ = std::make_unique<ShaderEffect>(device, vulkan ? kVulkanVertSrc : kVertSrc,
+                                                 vulkan ? kVulkanFragSrc : kFragSrc);
         if (!effect_->IsEffectValid())
         {
             ExpectTrue("the custom ShaderEffect compiled", false);

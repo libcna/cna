@@ -971,6 +971,33 @@ namespace CNA::Internal::Renderers::Igl
             return uniforms_;
         }
 
+        /**
+         * @brief Records the std140 layout of the block this effect's parameters live in. CNAEXT.
+         *
+         * See the base declaration for why the layout is declared by the application rather than
+         * reflected out of the shader: IGL `v1.1.1` has no Vulkan reflection to ask.
+         *
+         * @param blockSizeBytes Size of the whole block, std140-padded.
+         * @param names          Member names.
+         * @param offsets        Each member's byte offset from the start of the block.
+         * @param count          Number of members; zero clears the declaration.
+         */
+        void DeclareUniformBlockEXT(int blockSizeBytes, const char* const* names,
+                                    const int* offsets, int count) override;
+
+        /** @brief Returns the declared block's size in bytes, or 0 if none was declared. */
+        [[nodiscard]] int GetUniformBlockSizeEXT() const { return uniformBlockSize_; }
+
+        /**
+         * @brief Packs the recorded uniforms into the declared block. CNAEXT.
+         *
+         * @param bytes Destination, at least @ref GetUniformBlockSizeEXT bytes.
+         * @return The names that were set but do not appear in the declaration, if any -- a
+         *         parameter the shader can never see, which is worth reporting rather than
+         *         dropping silently.
+         */
+        [[nodiscard]] std::vector<std::string> PackUniformBlockEXT(std::uint8_t* bytes) const;
+
     private:
         void RecordUniform(const char* name, igl::UniformType type, int numElements,
                            const float* values, int floatCount);
@@ -981,6 +1008,8 @@ namespace CNA::Internal::Renderers::Igl
         std::uint64_t programId_ = 0;
         std::unordered_map<std::string, UniformValue> uniforms_;
         std::array<igl::ITexture*, igl::IGL_TEXTURE_SAMPLERS_MAX> boundTextures_{};
+        int uniformBlockSize_ = 0;
+        std::unordered_map<std::string, int> uniformBlockOffsets_;
     };
 
     /** @brief A GPU occlusion query. CNAEXT. */
@@ -1663,6 +1692,9 @@ namespace CNA::Internal::Renderers::Igl
          * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.
          * @return `Unsupported` for a format this renderer cannot store, `Defer` otherwise.
          */
+        /** @brief Returns GlslVulkan or GlslDesktop, from the backend this process resolved. */
+        CNAEXT [[nodiscard]] ShaderDialectEXT GetShaderDialectEXT() const override;
+
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
 
         /**

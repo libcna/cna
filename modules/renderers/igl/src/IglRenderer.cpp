@@ -1391,6 +1391,14 @@ namespace CNA::Internal::Renderers::Igl
         return surface_->GetBackBufferDepthFormat() != igl::TextureFormat::Invalid;
     }
 
+    ShaderDialectEXT IglRenderer::GetShaderDialectEXT() const
+    {
+        // Answered from the backend this process actually resolved, not from the build. IGL is
+        // itself an abstraction over two native APIs and the choice is made per process by
+        // CNA_IGL_BACKEND, so a build-time answer would be wrong for half of them.
+        return IsVulkanBackend() ? ShaderDialectEXT::GlslVulkan : ShaderDialectEXT::GlslDesktop;
+    }
+
     RendererFormatVerdict IglRenderer::ClassifySurfaceFormatEXT(const int surfaceFormat) const
     {
         // Three-way, and each answer means something different. Unsupported: IGL cannot represent

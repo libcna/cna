@@ -30,6 +30,13 @@ namespace Microsoft::Xna::Framework::Graphics
         return effectRenderer_ && effectRenderer_->IsValid();
     }
 
+    void ShaderEffect::DeclareUniformBlockEXT(const int blockSizeBytes, const char* const* names,
+                                              const int* offsets, const int count)
+    {
+        if (effectRenderer_)
+            effectRenderer_->DeclareUniformBlockEXT(blockSizeBytes, names, offsets, count);
+    }
+
     void ShaderEffect::SetUniformMat4(const char* name, const float* matrix)
     {
         if (effectRenderer_) effectRenderer_->SetUniformMat4(name, matrix);

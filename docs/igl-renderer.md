@@ -10,12 +10,11 @@
 > session since. What is *verified* is narrower than what is *implemented*, and `plan_igl.md` §1
 > is the per-phase record of which is which. The short version: the OpenGL/GLX backend is verified
 > across the whole example suite; the Vulkan backend brings up a device, renders 3D, depth and
-> render targets, `SpriteBatch` and MSAA correctly, and its one remaining shortfall is that a custom
-> `ShaderEffect` cannot take parameters there (`plan_igl.md` IGL-43). As of the 2026-08-18 row-order
-> repair the registered suite is 65/65 green (34 host-portable unit cases plus 31 example tests), and
-> running all 26 example binaries explicitly on each backend gives 26/26 on OpenGL and 23/26 on
-> Vulkan — the three Vulkan shortfalls are all that one gap, and are in the gap table below and in
-> `plan_igl.md` §1.
+> render targets, `SpriteBatch`, MSAA and custom `ShaderEffect`s — parameters included — correctly.
+> As of 2026-08-18 the registered suite is 70/70 green (34 host-portable unit cases plus 36 example
+> tests), and running all 27 example binaries explicitly on each backend gives **27/27 on OpenGL and
+> 27/27 on Vulkan**. The remaining boundaries are upstream limits of IGL `v1.1.1` rather than
+> unfinished work, and each is in the gap table below with the evidence that established it.
 
 ## What this renderer is
 
@@ -74,7 +73,7 @@ own display connection and leaves the drawable unset, which cannot present to a 
 | `MultipleRenderTargets` | Yes, 2–4 `RenderTarget2D` slots (`IGL_COLOR_ATTACHMENTS_MAX`) |
 | `MultiStreamVertexInput` | Yes — `igl::VertexAttribute::bufferIndex` expresses it natively |
 | `Instancing` | Yes — `VertexSampleFunction::Instance` |
-| `CustomEffects` | Yes on OpenGL; parameters are refused on Vulkan (see below) |
+| `CustomEffects` | Yes on both backends, parameters included — Vulkan needs the shader's std140 block declared through `ShaderEffect::DeclareUniformBlockEXT` (see *Writing a custom ShaderEffect* below) |
 | `Texture3D` | Yes (real volume storage, sampling verified); voxels cannot be read back — see the gap table |
 | `AnisotropicFiltering` | Yes |
 | `MultiSampleAntiAliasing` | Yes on render targets; on the back buffer only via the OpenGL visual |
@@ -133,8 +132,63 @@ row pitch is shorter than one packed row is refused rather than read past.
 | `Texture3D.GetData` (volume readback) | IGL `v1.1.1` cannot attach a 3D texture to a framebuffer, which is its only readback route. `opengl::TextureBufferBase::attach` falls through to `glFramebufferTexture2D` for a volume — `getNumLayers()` counts array layers, of which a volume has one — and the driver answers `GL_INVALID_OPERATION … invalid textarget GL_TEXTURE_3D`; the Vulkan copy is 2D-only in the same way | `GetData` returns false and the shared layer raises `NotSupportedException` rather than fabricating voxels. Upload and sampling are unaffected (`plan_igl.md` IGL-17) |
 | Cube render-target MSAA | `igl::FramebufferDesc` cannot express a multisampled cube attachment with a per-face resolve | applied count reported as 1 |
 | Non-`Color` surface formats in the public API, beyond `Rg32` and `Single` | Promotion promises a whole path — the typed `SetData`/`GetData` overloads, sampling, render-target use, and the framework's four-byte colour-transfer rule — so each format needs that verified end to end on both backends. `Rg32` and `Single` now have it (`Igl_PublicSurfaceFormat`); the rest do not. `ByteEXT`, `UShortEXT` and `HalfSingle` additionally have texels that are not a multiple of four bytes, so they would be admitted by the renderer gate and then mishandled by the layer above it | the renderer refuses what IGL cannot store, accepts the two verified formats, and defers the rest to the framework's `Color`-only rule (see *Surface formats* above) |
-| A custom `ShaderEffect`'s parameters on Vulkan | Loose non-block uniforms do not exist in Vulkan GLSL, and IGL's Vulkan encoder leaves `bindUniform` unimplemented | Refused by name at draw time rather than drawn with stale values. The effect itself compiles, binds and draws on Vulkan (`plan_igl.md` IGL-42/IGL-43) |
-| A custom `ShaderEffect`'s GLSL is not portable between the two backends | SPIR-V requires an explicit `layout(location = N)` on every user input and output — the varyings between stages included — and `layout(set = N, binding = N)` on samplers; desktop GLSL 4.10 requires neither, and the two backends do not accept the same `#version` | Supply two sources and pick by backend. A shader that violates this is refused with glslang's own line-and-reason text plus the requirement in words (`plan_igl.md` IGL-70); `igl_custom_effect_backend_test.cpp` is the worked example of both variants |
+| A custom `ShaderEffect`'s sampler-unit uniform on Vulkan | An int uniform naming a texture UNIT is an OpenGL idea; on a SPIR-V target the sampler is bound by its own `layout(set, binding)` qualifier | `SetUniformInt("SomeSampler", 0)` is OpenGL-only. Setting it on Vulkan is a parameter with no member in the declared block, and is refused by name (`plan_igl.md` IGL-43) |
+| A custom `ShaderEffect`'s GLSL is not portable between the two backends | SPIR-V requires an explicit `layout(location = N)` on every user input and output — the varyings between stages included — and `layout(set = N, binding = N)` on samplers; desktop GLSL 4.10 requires neither, and the two backends do not accept the same `#version` | Ask `GraphicsDevice::GetShaderDialectEXT()` and supply two sources. A shader that violates this is refused with glslang's own line-and-reason text plus the requirement in words (`plan_igl.md` IGL-70); `igl_custom_effect_backend_test.cpp` is the worked example of both variants |
+
+## Writing a custom `ShaderEffect` for this renderer
+
+`ShaderEffect` is renderer-specific source text, and this renderer is two renderers. Ask which
+dialect the process resolved rather than inferring it from the build:
+
+```cpp
+const bool vulkan = device.GetShaderDialectEXT() ==
+                    CNA::Internal::Renderers::ShaderDialectEXT::GlslVulkan;
+ShaderEffect effect(device, vulkan ? kVulkanVert : kGlVert,
+                            vulkan ? kVulkanFrag : kGlFrag);
+```
+
+A single source cannot serve both, and that is a property of SPIR-V rather than of CNA: it requires
+an explicit `layout(location = N)` on every user input and output, the varyings between stages
+included, which desktop GLSL 4.10 does not; and the two backends do not accept the same `#version`
+(llvmpipe reports GL 4.5 here, so `#version 460` is unavailable on the OpenGL side).
+
+**Parameters.** On OpenGL they are loose uniforms and nothing else is needed. On Vulkan they must be
+members of a std140 block, at the binding this renderer reserves for a custom effect — set 1,
+binding 2, the generated shaders using only 0 and 1:
+
+```glsl
+layout(set = 1, binding = 2, std140) uniform CnaCustom {
+    vec2 screenSize;
+    vec2 cnaPad0;      // std140: a vec4 that follows a vec2 starts at 16
+    vec4 tint;
+};
+```
+
+Tell CNA that layout once. It is a no-op on OpenGL, so the call can sit unconditionally beside the
+effect's construction:
+
+```cpp
+static const char* const kNames[]   = {"screenSize", "tint"};
+static const int         kOffsets[] = {0, 16};
+effect.DeclareUniformBlockEXT(/*blockSizeBytes=*/32, kNames, kOffsets, 2);
+```
+
+The layout is declared rather than discovered because there is nothing to discover it from: IGL
+`v1.1.1` returns an empty reflection on Vulkan (`vulkan::RenderPipelineState` builds a default
+`RenderPipelineReflection`, and its `getIndexByName` is `IGL_DEBUG_ASSERT_NOT_IMPLEMENTED`). Having
+CNA parse your GLSL to guess at the offsets would be a worse contract than asking for them.
+
+A parameter you set that has no member in the declaration is **refused by name** at draw time.
+Dropping it silently would render a zero where you set a value, which is the failure this whole
+path exists to prevent.
+
+One asymmetry is real: `SetUniformInt("SomeSampler", 0)` — an int uniform naming a texture unit — is
+an OpenGL idea. On Vulkan the sampler is bound by its own `layout(set, binding)` qualifier, so make
+that call only on the OpenGL side.
+
+`modules/renderers/igl/examples/igl_custom_effect_backend_test.cpp` is the worked example of all of
+the above, and the three custom-effect tests beside it (`Igl_ShaderEffectTexture3D`,
+`Igl_SpriteBatchShaderEffect`, `Igl_Instancing`) each carry both variants and run on both backends.
 
 ## IGL's debug trap is turned off deliberately
 
