@@ -34,9 +34,25 @@ namespace CNA::Graphics {
           fxaaPass_(std::make_unique<FxaaPass>(device)),
           ssaoPass_(std::make_unique<SsaoPass>(device))
     {
+        // plan_modern.md MOD-715. After a context loss every GPU object this pipeline holds names
+        // storage the driver has already destroyed; rendering into one is undefined rather than
+        // merely wrong. The device announces the reset, so the pipeline does not have to be told.
+        deviceResetToken_ = device_.DeviceReset.Add(
+            [this](System::Object*, const System::EventArgs&) {
+                // A reset cannot arrive mid-frame in a single-threaded pipeline (the frame is
+                // between begin() and end(), and neither pumps events), but if it somehow did,
+                // dropping the bound target would be worse than keeping a stale one until end().
+                if (frameOpen_) return;
+                releaseDeviceResourcesEXT();
+            });
     }
 
-    RenderPipeline::~RenderPipeline() = default;
+    RenderPipeline::~RenderPipeline()
+    {
+        // The handler captures `this`. A device outliving a pipeline -- which is the normal case,
+        // since Game owns the device -- would otherwise call into freed memory on the next reset.
+        device_.DeviceReset.Remove(deviceResetToken_);
+    }
 
     RenderPipelineSettings& RenderPipeline::getSettings()             { return settings_; }
     const RenderPipelineSettings& RenderPipeline::getSettings() const { return settings_; }
@@ -176,6 +192,7 @@ namespace CNA::Graphics {
         if (!usingSceneTarget_)
         {
             lastFramePassCount_ = 0;
+            lastFrameTargetSwitches_ = 0;
             return;
         }
 
@@ -221,6 +238,10 @@ namespace CNA::Graphics {
 
         chain_.apply(context);
         lastFramePassCount_ = static_cast<int>(chain_.getPassCount());
+        // One bind for the scene target in begin(), one to unbind it above, and one per pass --
+        // each pass binds its own destination through FullscreenPass. Derived rather than counted
+        // by a hook in the device, because a hook would make every renderer pay for a diagnostic.
+        lastFrameTargetSwitches_ = 2 + lastFramePassCount_;
     }
 
     void RenderPipeline::addUserPass(PostProcessPass* pass)
@@ -292,6 +313,32 @@ namespace CNA::Graphics {
                          Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(sceneFormat_));
         }
         return total;
+    }
+
+
+    RenderPipeline::FrameStatistics RenderPipeline::getStatistics() const
+    {
+        FrameStatistics statistics;
+        statistics.passesRun              = lastFramePassCount_;
+        statistics.targetSwitches         = lastFrameTargetSwitches_;
+        statistics.usedSceneTarget        = usingSceneTarget_;
+        statistics.drewSkybox             = didSkyboxDraw();
+        statistics.gpuMemoryEstimateBytes = getGpuMemoryEstimateBytes();
+        return statistics;
+    }
+
+    void RenderPipeline::releaseDeviceResourcesEXT()
+    {
+        if (frameOpen_)
+            throw std::logic_error("CNA::Graphics::RenderPipeline::releaseDeviceResourcesEXT: a "
+                                   "frame is open -- releasing the scene target while it is bound "
+                                   "is the situation this exists to avoid");
+
+        sceneTarget_.reset();
+        chain_.getTargetPool().reset();
+        lastFramePassCount_      = 0;
+        lastFrameTargetSwitches_ = 0;
+        usingSceneTarget_        = false;
     }
 
 } // namespace CNA::Graphics

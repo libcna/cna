@@ -94,6 +94,17 @@ namespace CNA::Graphics {
          */
         [[nodiscard]] const RenderTargetPool& getTargetPool() const;
 
+        /**
+         * @brief The chain's intermediate-target pool, for a caller that must release it.
+         *
+         * plan_modern.md `MOD-715`: after a device reset every pooled target names storage the
+         * driver has destroyed, and `RenderPipeline` has to drop them. The const overload above
+         * stays for the ordinary read-only uses.
+         *
+         * @return The pool.
+         */
+        [[nodiscard]] RenderTargetPool& getTargetPool();
+
     private:
         Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
         RenderTargetPool pool_;

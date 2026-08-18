@@ -95,6 +95,8 @@ namespace CNA::Graphics {
         return pool_;
     }
 
+    RenderTargetPool& PostProcessChain::getTargetPool() { return pool_; }
+
 } // namespace CNA::Graphics
 
 #endif // CNA_CNAEXT

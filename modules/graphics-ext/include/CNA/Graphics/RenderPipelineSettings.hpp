@@ -6,6 +6,8 @@
 #include "CNA/Graphics/TonemappingMode.hpp"
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Graphics/RenderQuality.hpp"
+
+#include <string>
 #include "CNA/Graphics/ShadowQuality.hpp"
 
 namespace CNA::Graphics {
@@ -20,7 +22,13 @@ namespace CNA::Graphics {
      * The active renderer reads these settings and adjusts its render passes
      * accordingly (once renderer support is implemented for each feature).
      *
-     * Construct via `GraphicsDevice::GetRenderPipelineSettings()` or standalone.
+     * Owned by a `RenderPipeline` (`getSettings()`), or constructed standalone and handed to a
+     * pass through `PostProcessContext::settings`.
+     *
+     * plan_modern.md `MOD-728`/`MOD-729`: this used to say "construct via
+     * `GraphicsDevice::GetRenderPipelineSettings()`", which never existed and is not going to.
+     * Exposing this type from `GraphicsDevice` would give an XNA type a member whose type only
+     * exists under a compile option.
      */
     class RenderPipelineSettings
     {
@@ -156,6 +164,45 @@ namespace CNA::Graphics {
          * a guessed mapping; tonemapping has none at all and never will (`MOD-320`).
          */
         CNAEXT void applyRenderQualityPresetEXT();
+
+        /**
+         * @brief The smallest gamma this bag will store.
+         *
+         * plan_modern.md `MOD-730`. Gamma is applied as `pow(colour, 1/gamma)`, so zero is a
+         * division by zero and the frame comes back as infinities. Clamped rather than rejected,
+         * because a settings file with a stale zero in it should still produce a picture.
+         */
+        static constexpr float kMinimumGamma = 0.01f;
+
+        /** @brief The smallest FXAA edge threshold this bag will store; zero would blur every texel. */
+        static constexpr float kMinimumFxaaEdgeThreshold = 0.001f;
+
+        /**
+         * @brief Writes every field as `key=value;` text.
+         *
+         * plan_modern.md `MOD-731`. For demos, for tests that need a scene's look pinned in one
+         * line, and for a settings file. Deliberately the simplest format that round-trips: no
+         * quoting, no nesting, no escapes — a value here is a number or an enum name, and adding a
+         * parser that could fail in interesting ways would be a worse trade than the format's
+         * limits.
+         *
+         * @return The serialized settings.
+         */
+        CNAEXT [[nodiscard]] std::string toStringEXT() const;
+
+        /**
+         * @brief Reads fields written by @ref toStringEXT, leaving unmentioned fields alone.
+         *
+         * Unknown keys are **ignored rather than refused**, which is what lets an older build read
+         * a newer settings string. Malformed values are ignored the same way — a settings string is
+         * a convenience, and refusing to load a whole look because one field is `bloomIntensity=x`
+         * helps nobody. Every value it does accept goes through the ordinary setters, so the
+         * clamping above applies.
+         *
+         * @param text The serialized settings.
+         * @return How many fields were recognised and applied.
+         */
+        CNAEXT int applyFromStringEXT(const std::string& text);
 
         /** @brief Returns the shadow quality preset. */
         [[nodiscard]] ShadowQuality getShadowQuality() const;

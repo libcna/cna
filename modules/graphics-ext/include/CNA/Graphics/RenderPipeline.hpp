@@ -6,6 +6,9 @@
 #include "CNA/Graphics/DirectionalLightEXT.hpp"
 #include "CNA/Graphics/PostProcessChain.hpp"
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
+
+#include "System/EventArgs.hpp"
+#include "System/EventHandler.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
@@ -266,6 +269,56 @@ namespace CNA::Graphics {
          */
         [[nodiscard]] std::size_t getGpuMemoryEstimateBytes() const;
 
+        /**
+         * @brief What the last frame actually did.
+         *
+         * plan_modern.md `MOD-717`. The four numbers a reader needs to answer "why is this frame
+         * slower than I expected", gathered where the pipeline already knows them. A POD rather
+         * than a set of accessors, so a caller can snapshot a frame and compare it with another.
+         *
+         * Deliberately **not** a general profiler: there are no timings here. Timing a pass
+         * meaningfully needs a GPU query the renderer contracts do not have, and a CPU-side stopwatch
+         * around a call that only queues work would report a number that looks precise and means
+         * nothing. `docs/cnaext-perf.md` has the measurements, taken with a readback that forces
+         * the work to happen.
+         */
+        struct FrameStatistics
+        {
+            /** @brief How many post-process passes ran. */
+            int passesRun = 0;
+            /** @brief How many times a render target was bound, including the back buffer. */
+            int targetSwitches = 0;
+            /** @brief Whether the frame went through an off-screen scene target. */
+            bool usedSceneTarget = false;
+            /** @brief Whether the sky was drawn inside `begin()`. */
+            bool drewSkybox = false;
+            /** @brief Bytes the pipeline's own targets are estimated to occupy. */
+            std::size_t gpuMemoryEstimateBytes = 0;
+        };
+
+        /**
+         * @brief Returns the statistics for the most recently completed frame.
+         *
+         * @return The statistics; all zero before the first `end()`.
+         */
+        [[nodiscard]] FrameStatistics getStatistics() const;
+
+        /**
+         * @brief Drops every target the pipeline owns, so the next frame allocates fresh ones.
+         *
+         * plan_modern.md `MOD-715`. Called automatically when the device raises `DeviceReset`, and
+         * exposed because a game that recreates its device by some other route needs the same
+         * effect. After a context loss every GPU object the pipeline held names storage the driver
+         * has already destroyed, and rendering into one is undefined rather than merely wrong.
+         *
+         * Cheap to call when nothing was allocated, and safe at any time **except** inside a frame,
+         * which it refuses — releasing the scene target while it is bound is exactly the situation
+         * this exists to avoid.
+         *
+         * @throws std::logic_error If a frame is open.
+         */
+        void releaseDeviceResourcesEXT();
+
     private:
         /// Draws the skybox, if one is set. Called by begin(), never by the caller.
         void DrawSkybox();
@@ -303,6 +356,10 @@ namespace CNA::Graphics {
         bool frameOpen_        = false;
         bool usingSceneTarget_ = false;
         int  lastFramePassCount_ = 0;
+        int  lastFrameTargetSwitches_ = 0;
+        /// Token for the DeviceReset subscription, so the destructor can unsubscribe: the handler
+        /// captures `this`, and a device outliving a pipeline would otherwise call into freed memory.
+        System::EventHandler<System::EventArgs>::Token deviceResetToken_ = 0;
         Microsoft::Xna::Framework::Graphics::SurfaceFormat sceneFormat_ =
             Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color;
     };
