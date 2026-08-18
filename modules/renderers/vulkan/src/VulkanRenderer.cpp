@@ -5,6 +5,12 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/Vulkan/VulkanCompiledEffect.hpp"
+namespace {
+    /// plan_fx.md FX-112: the stream descriptor is spelled often enough in this file that the
+    /// fully-qualified nested name is noise.
+    using VkFxStreamEXT =
+        CNA::Internal::Renderers::Vulkan::VulkanCompiledEffect::CompiledVertexStreamEXT;
+}
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
@@ -6257,12 +6263,15 @@ namespace CNA::Internal::Renderers::Vulkan
                 "CNA Vulkan: a compiled-effect draw needs the vertex buffer's own "
                 "VertexDeclaration; this renderer does not infer one from stride for this route.");
         }
-        PrepareCompiledEffectDrawEXT(d, declaration.GetElements(), params.compiledEffectRuntime);
+        const std::vector<VkFxStreamEXT> streams{
+            {&declaration.GetElements(), static_cast<std::uint32_t>(d.stride), false}};
+        PrepareCompiledEffectDrawEXT(d, streams, params.compiledEffectRuntime);
     }
 
     void VulkanRenderer::PrepareCompiledEffectDrawEXT(
         Pending3DDraw& d,
-        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
+        const std::vector<CNA::Internal::Renderers::Vulkan::VulkanCompiledEffect::
+                              CompiledVertexStreamEXT>& streams,
         ICompiledEffectRuntime* runtime)
     {
         using Microsoft::Xna::Framework::Graphics::Texture2D;
@@ -6278,7 +6287,7 @@ namespace CNA::Internal::Renderers::Vulkan
         }
 
         auto& compiled = d.compiledEffect;
-        compiled.pass = effect->LinkAndGetShadersEXT(declaredElements);
+        compiled.pass = effect->LinkAndGetShadersEXT(streams);
 
         VkFx::VulkanCompiledShaderEXT* vertexShader = nullptr;
         VkFx::VulkanCompiledShaderEXT* pixelShader = nullptr;
@@ -6364,12 +6373,13 @@ namespace CNA::Internal::Renderers::Vulkan
             }
             else if (texture3D != nullptr)
             {
-                throw System::NotSupportedException(
-                    "CNA Vulkan: this compiled effect binds a Texture3D to pixel sampler slot " +
-                    std::to_string(slot) +
-                    ". This renderer's compiled-effect draw route has no volume-sampler binding "
-                    "yet; the limitation is specific to compiled Effects, not to the renderer "
-                    "(plan_fx.md FX-110).");
+                // plan_fx.md FX-110: VulkanTexture3DRenderer's image already carries
+                // VK_IMAGE_USAGE_SAMPLED_BIT and a VK_IMAGE_VIEW_TYPE_3D view, and SetData leaves
+                // it in SHADER_READ_ONLY_OPTIMAL, so sampling a volume needed an accessor rather
+                // than any new resource handling.
+                const auto* volume =
+                    dynamic_cast<const IVulkanVolumeSamplable*>(&texture3D->GetRenderer());
+                if (volume != nullptr) view = volume->GetVkVolumeImageView();
             }
             else if (texture2D != nullptr)
             {
@@ -6463,7 +6473,9 @@ namespace CNA::Internal::Renderers::Vulkan
         d.depthBias = 0.0f;
         d.slopeScaleDepthBias = 0.0f;
         d.rt = currentRT_;
-        PrepareCompiledEffectDrawEXT(d, kSpriteDeclaration, runtime);
+        const std::vector<VkFxStreamEXT> streams{
+            {&kSpriteDeclaration, static_cast<std::uint32_t>(sizeof(Sprite2DVertex)), false}};
+        PrepareCompiledEffectDrawEXT(d, streams, runtime);
 
         // plan_fx.md FX-103. FNA's SpriteBatch.DrawPrimitives sets GraphicsDevice.Textures[0] =
         // texture immediately AFTER pass.Apply(), with the comment "Set this _after_ Apply,
@@ -6683,12 +6695,12 @@ namespace CNA::Internal::Renderers::Vulkan
         auto it = compiledEffectPipelines_.find(key);
         if (it != compiledEffectPipelines_.end()) return it->second;
 
-        VkVertexInputBindingDescription bind{
-            0, static_cast<uint32_t>(draw.stride), VK_VERTEX_INPUT_RATE_VERTEX };
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        vis.vertexBindingDescriptionCount = 1;
-        vis.pVertexBindingDescriptions = &bind;
+        vis.vertexBindingDescriptionCount =
+            static_cast<uint32_t>(compiled.pass.vertexBindings.size());
+        vis.pVertexBindingDescriptions = compiled.pass.vertexBindings.empty()
+                                             ? nullptr : compiled.pass.vertexBindings.data();
         vis.vertexAttributeDescriptionCount =
             static_cast<uint32_t>(compiled.pass.vertexAttributes.size());
         vis.pVertexAttributeDescriptions = compiled.pass.vertexAttributes.empty()
@@ -11377,10 +11389,26 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         // REMED-GFX-202: one stream of each rate (REMED-GFX-203 tracks widening it).
         RejectUnsupportedStreamCombination(params, "The Vulkan renderer");
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+        const bool compiledEffectDraw = params.compiledEffectRuntime != nullptr;
+#else
+        constexpr bool compiledEffectDraw = false;
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            throw System::NotSupportedException(
+                "CNA Vulkan: this build has no compiled-effect support "
+                "(CNA_VULKAN_COMPILED_EFFECTS is off); this instanced draw would silently use a "
+                "stock shader instead.");
+        }
+#endif
         // REMED-GFX-DECL-GUARD: the geometry stream's declaration, against the Instanced3D
         // module's own inferred layout -- which binds a packed colour only at the two strides
-        // PackedColorOffsetForStride lists and is position-only everywhere else.
-        RequireFaithfulDeclarationEXT(vb_in, "instanced", /*positionOnlyFallback=*/true);
+        // PackedColorOffsetForStride lists and is position-only everywhere else. plan_fx.md
+        // FX-112: not applied to a compiled draw, which builds its vertex input from the
+        // declarations rather than from the stride, so any declaration it can satisfy is faithful
+        // by construction.
+        RequireFaithfulDeclarationEXT(vb_in, "instanced", /*positionOnlyFallback=*/true,
+                                      compiledEffectDraw);
 
         // REMED-GFX-151: as in the two Ex draws above. The `instanceVb == nullptr` branch already
         // returned through DrawIndexedPrimitivesEx, which notes them itself.
@@ -11502,6 +11530,31 @@ namespace CNA::Internal::Renderers::Vulkan
         d.baseVertex   = static_cast<int32_t>(params.baseVertex + perVertexOffset);
         d.useInstanced = true;
         d.descSet      = defaultWhiteDescSet_;  // no per-draw texture for now
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+        // plan_fx.md FX-112: two streams, per-vertex first, so binding 0 is the geometry and
+        // binding 1 the per-instance records this route has already expanded to divisor 1 (see the
+        // REMED-GFX-213 copy above -- the frequency is a data-copy concern here, never a pipeline
+        // one). Everything else the compiled draw needs was captured by the block above; the
+        // replay path already binds binding 1 and passes instanceCount for `useInstanced` draws,
+        // so nothing there changes.
+        if (compiledEffectDraw)
+        {
+            const auto& pvDeclaration = vb.GetDeclarationEXT();
+            const auto& instDeclaration = instVb.GetDeclarationEXT();
+            if (pvDeclaration.IsEmpty() || instDeclaration.IsEmpty())
+            {
+                throw System::NotSupportedException(
+                    "CNA Vulkan: a compiled-effect instanced draw needs both bound buffers' own "
+                    "VertexDeclarations; this renderer does not infer one from stride for this "
+                    "route.");
+            }
+            const std::vector<VkFxStreamEXT> streams{
+                {&pvDeclaration.GetElements(), static_cast<std::uint32_t>(pvStride), false},
+                {&instDeclaration.GetElements(), static_cast<std::uint32_t>(instStride), true},
+            };
+            PrepareCompiledEffectDrawEXT(d, streams, params.compiledEffectRuntime);
+        }
+#endif
         PushPending3DDraw(std::move(d));
     }
 

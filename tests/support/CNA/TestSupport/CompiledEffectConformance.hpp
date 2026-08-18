@@ -56,6 +56,9 @@
 #include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -1043,8 +1046,15 @@ namespace CNA::TestSupport
      */
     inline void RunCompiledEffectInstancingDrawContract(GraphicsDevice& device)
     {
-        if (!device.SupportsCapability(CNA::GraphicsCapability::Instancing) ||
-            !device.SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput))
+        // plan_fx.md FX-112: gated on `Instancing` ALONE. This shape binds one per-vertex stream
+        // and one per-instance stream, which is not what `MultiStreamVertexInput` describes --
+        // that capability is about binding SEVERAL streams of the SAME rate, and
+        // `GraphicsDevice::SetVertexBuffers` lets one-of-each through without consulting it. Gating
+        // on it as well silently excused every renderer that draws instanced primitives perfectly
+        // well from one of the two streams-related contracts, which reads as coverage and is not.
+        // A renderer that genuinely cannot do this must now say so, and gets skipped for what it
+        // actually said.
+        if (!device.SupportsCapability(CNA::GraphicsCapability::Instancing))
         {
             GTEST_SKIP() << "this renderer does not draw instanced primitives";
         }
@@ -1089,13 +1099,33 @@ namespace CNA::TestSupport
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);
         pass.Apply();
-        device.SetVertexBuffers({VertexBufferBinding(&positionBuffer, 0, 0),
-                                 VertexBufferBinding(&instanceBuffer, 0, 1)});
-        device.setIndicesProperty(&indexBuffer);
-        device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 6, 0, 2, 2);
+        // plan_fx.md FX-112: a backend whose compiled route cannot draw instanced primitives must
+        // REFUSE here rather than fall through to a stock shader, and a named refusal skips the
+        // rest -- the same shape the SpriteBatch contracts use. Silence is the one unacceptable
+        // answer, and it is what an unwired route produces.
+        bool refused = false;
+        std::string refusal;
+        try
+        {
+            device.SetVertexBuffers({VertexBufferBinding(&positionBuffer, 0, 0),
+                                     VertexBufferBinding(&instanceBuffer, 0, 1)});
+            device.setIndicesProperty(&indexBuffer);
+            device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 6, 0, 2, 2);
+        }
+        catch (const std::exception& error)
+        {
+            refused = true;
+            refusal = error.what();
+        }
         device.setIndicesProperty(nullptr);
         device.SetVertexBuffer(nullptr);
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        if (refused)
+        {
+            EXPECT_FALSE(refusal.empty())
+                << "a refusal must name what is unsupported, so a port can act on it";
+            GTEST_SKIP() << "this renderer refuses a compiled instanced draw: " << refusal;
+        }
 
         Color left(0, 0, 0, 0);
         Color right(0, 0, 0, 0);
@@ -1174,6 +1204,15 @@ namespace CNA::TestSupport
         // 0's offset and the geometry stops depending on the stream at all. With StreamMix on and
         // a per-VERTEX stream whose values differ per vertex, that is visible: only a per-vertex
         // divisor moves the two halves apart.
+        //
+        // plan_fx.md FX-112: this section, and only this section, binds TWO PER-VERTEX streams, so
+        // it is the one part of this contract that genuinely needs MultiStreamVertexInput. It used
+        // to gate the whole contract, which excused every instancing-capable renderer without
+        // multi-stream input from the two sections above as well.
+        if (!device.SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput))
+        {
+            return;
+        }
         {
             const OffsetVertex perVertexShift[6] = {
                 {1.0f, 0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f, 0.0f},
@@ -1457,6 +1496,165 @@ namespace CNA::TestSupport
         EXPECT_NEAR(flipped.getGProperty(), 255, 3)
             << "SpriteEffects must reach the compiled shader as texture coordinates";
         EXPECT_NEAR(flipped.getRProperty(), 0, 3);
+    }
+
+    /**
+     * @brief Contract: no truncation of a real effect wedges, crashes, or half-builds a runtime.
+     *
+     * plan_fx.md FX-112. Every backend parses the effect container through the same pinned
+     * MojoShader, so this is shared rather than per-backend. Three outcomes are possible for a
+     * truncated input and only two are acceptable. Refusing is the usual one. Parsing successfully
+     * is also legitimate -- the last few lengths drop only trailing bytes MojoShader does not need
+     * -- but then the runtime has to be WHOLE rather than a half-built object that fails at the
+     * next call. Crashing, wedging, or handing back a usable-looking half is the third.
+     *
+     * Measured while writing this, and worth knowing before reading too much into a pass: going
+     * through the public `Effect` constructor, NO truncation of this fixture reaches the assertion
+     * inside MojoShader's own parser (`mojoshader_effects.c` `readvalue`) -- CNA's own container
+     * validation refuses first. That makes this a contract about the public boundary's robustness,
+     * not a proof of the harness assertion policy. The proof of that policy is the sweep that goes
+     * at a renderer's compiled-effect runtime DIRECTLY, below the public validation, where the
+     * assertion is genuinely reachable (`VulkanCompiledEffectTest.
+     * MalformedBytecodeIsRejectedWithoutCrashing`, plan_fx.md FX-111).
+     *
+     * Sweeping every 4-byte length rather than pinning one keeps it honest across fixture changes,
+     * and under a sanitizer the sweep is the real question: a parser walking off the end of a
+     * truncated buffer must be caught here rather than in a game.
+     *
+     * @param device Device whose renderer claims CompiledEffects.
+     */
+    inline void RunCompiledEffectTruncationContract(GraphicsDevice& device)
+    {
+        // The COMPILER-PRODUCED fixture, not the synthetic builder's output, and the difference is
+        // load-bearing rather than cosmetic: only the real container has the nested value tables
+        // whose truncation reaches `readvalue`'s assertion, which is the case the assertion policy
+        // exists for. The synthetic effect is refused earlier every time, so a sweep over it would
+        // pass without ever exercising the thing being claimed. Falls back to the synthetic effect
+        // only if the fixture is missing, and says so rather than silently covering less.
+        const std::filesystem::path fixture = std::filesystem::path(__FILE__).parent_path() /
+            "../../../../modules/renderers/fna3d/effects/CnaConformanceEffect.fxb";
+        std::vector<std::uint8_t> whole;
+        {
+            std::ifstream input(fixture, std::ios::binary);
+            if (input)
+            {
+                whole.assign(std::istreambuf_iterator<char>(input),
+                             std::istreambuf_iterator<char>());
+            }
+        }
+        if (whole.empty())
+        {
+            ADD_FAILURE() << "the committed CnaConformanceEffect.fxb fixture was not found at "
+                          << fixture << "; this contract would otherwise silently cover less than "
+                             "it claims";
+            return;
+        }
+        ASSERT_GT(whole.size(), 64u) << "the fixture is too small to truncate meaningfully";
+
+        for (std::size_t bytes = 4; bytes < whole.size(); bytes += 4)
+        {
+            const std::vector<std::uint8_t> truncated(
+                whole.begin(), whole.begin() + static_cast<std::ptrdiff_t>(bytes));
+            std::unique_ptr<Effect> parsed;
+            try
+            {
+                parsed = std::make_unique<Effect>(device, truncated);
+            }
+            catch (const std::exception&)
+            {
+                continue;  // refused: the expected outcome for almost every length
+            }
+            ASSERT_NE(parsed, nullptr) << "truncated to " << bytes << " bytes";
+            // Accepted, so it must be usable: reflection present, and the parameter and technique
+            // collections reachable without throwing.
+            EXPECT_GT(parsed->getTechniquesProperty().getCountProperty(), 0)
+                << "truncated to " << bytes << " bytes: accepted, but reflects no technique";
+            EXPECT_NO_THROW((void)parsed->getParametersProperty().getCountProperty())
+                << "truncated to " << bytes << " bytes";
+        }
+    }
+
+    /**
+     * @brief Contract: many compiled draws in one frame each keep their own uniform values.
+     *
+     * plan_fx.md FX-112. Every backend has to park each draw's constant values somewhere until the
+     * draw is actually submitted, and the natural shape -- one buffer, sliced per draw -- has a
+     * fixed capacity. What happens at the end of it is the interesting part: a ring that WRAPS
+     * hands two draws in one frame the same slice, so the earlier one silently renders with the
+     * later one's constants, and the failure looks like nothing at all until a scene grows past
+     * the ring. A compiled sprite effect makes one draw per sprite per pass, so a few hundred
+     * compiled draws in a frame is ordinary rather than exceptional.
+     *
+     * 600 draws, each covering one cell of a 32x32 target with its own `Tint`, then three cells
+     * read back. The tint of draw i is deliberately NOT periodic in any power of two: with a
+     * `% 256` colour the draw at i and the draw at i + 256 are equal by construction, so a
+     * 256-slice ring that wrapped would look correct and this contract would pass against the very
+     * defect it exists to catch. Prime moduli make all 600 distinct.
+     *
+     * @param device Device whose renderer claims CompiledEffects.
+     */
+    inline void RunCompiledEffectManyDrawsContract(GraphicsDevice& device)
+    {
+        constexpr int kSize = 32;
+        constexpr int kDraws = 600;
+
+        Effect effect(device, BuildSyntheticDrawableEffect());
+        auto& parameters = effect.getParametersProperty();
+        parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+        EffectPass& pass = effect.getTechniquesProperty()[0].getPassesProperty()[1];
+
+        struct ClipVertex { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+
+        const auto tintFor = [](int i) {
+            return Vector4(static_cast<float>((i * 7) % 251) / 255.0f,
+                           static_cast<float>((i * 13) % 241) / 255.0f,
+                           static_cast<float>((i * 31) % 239) / 255.0f, 1.0f);
+        };
+
+        RenderTarget2D target(device, kSize, kSize);
+        device.SetRenderTarget(&target);
+        device.Clear(Color(9, 19, 29, 255));
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        for (int i = 0; i < kDraws; ++i)
+        {
+            const int cellX = i % kSize;
+            const int cellY = i / kSize;
+            const float x0 = -1.0f + 2.0f * static_cast<float>(cellX) / kSize;
+            const float x1 = -1.0f + 2.0f * static_cast<float>(cellX + 1) / kSize;
+            const float y0 = -1.0f + 2.0f * static_cast<float>(cellY) / kSize;
+            const float y1 = -1.0f + 2.0f * static_cast<float>(cellY + 1) / kSize;
+            const ClipVertex cell[6] = {
+                {x0, y0, 0.0f}, {x0, y1, 0.0f}, {x1, y1, 0.0f},
+                {x0, y0, 0.0f}, {x1, y1, 0.0f}, {x1, y0, 0.0f},
+            };
+            parameters["Tint"]->SetValue(tintFor(i));
+            pass.Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList, cell, 0, 2, declaration);
+        }
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        // One draw early, and one just past each of the two 256-slice boundaries a ring of that
+        // size would have. A backend whose ring is a different size is covered too: 600 distinct
+        // colours in one frame cannot survive ANY wrap that reuses a slice these three read.
+        for (const int i : {5, 256, 512})
+        {
+            SCOPED_TRACE("draw " + std::to_string(i));
+            const Vector4 tint = tintFor(i);
+            Color pixel(0, 0, 0, 0);
+            // Clip-space y = -1 is the target's LAST row, so cellY counts up from the bottom.
+            const Rectangle cell(i % kSize, kSize - 1 - (i / kSize), 1, 1);
+            target.GetData(0, &cell, &pixel, 0, 1);
+            const auto channel = [](float value) { return static_cast<int>(value * 255.0f + 0.5f); };
+            EXPECT_NEAR(pixel.getRProperty(), channel(tint.X), 2)
+                << "this draw rendered with another draw's uniform values";
+            EXPECT_NEAR(pixel.getGProperty(), channel(tint.Y), 2);
+            EXPECT_NEAR(pixel.getBProperty(), channel(tint.Z), 2);
+        }
     }
 
     /**
@@ -2680,6 +2878,8 @@ namespace CNA::TestSupport
      * - `RunCompiledEffectStockDrawIsolationContract` -- no state leaks into a later stock draw
      * - `RunCompiledEffectOrientationContract` -- compiled geometry lands where stock geometry does
      * - `RunCompiledEffectSwitchingContract` -- effects, clones and stock draws interleave cleanly
+     * - `RunCompiledEffectManyDrawsContract` -- 600 draws in one frame keep their own uniforms
+     * - `RunCompiledEffectTruncationContract` -- every truncation refuses or parses whole
      *
      * This list is the single place the drawing sections are enumerated; anything that needs to
      * describe the suite's breadth should point here rather than repeat a count.

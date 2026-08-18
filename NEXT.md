@@ -262,17 +262,26 @@ task.
 
 ### What is still open
 
-- **Vulkan (`FX-065`) landed 2026-08-18**: CNA's own MojoShader SPIR-V backend plus a real draw
-  route, `SupportsCompiledEffects()` true, 19 of the 22 shared contract sections passing on a real
-  device and the other three refusing by name. **DirectX 11 (`FX-063`), Metal (`FX-066`) and
-  DirectX 9 (`FX-070`)** remain unwritten, and none of the three can be verified on this machine.
+- **Vulkan (`FX-065`, finished by `FX-112`) landed 2026-08-18**: CNA's own MojoShader SPIR-V
+  backend plus a real draw route, `SupportsCompiledEffects()` true, **24 shared-contract tests
+  passing on a real device and 1 skipped**. The skip is multi-stream vertex input, which is
+  renderer-wide (its stock pipelines derive input elements from a byte stride) rather than an FX
+  gap. **DirectX 11 (`FX-063`), DirectX 9 (`FX-070`) and Metal (`FX-066`)** remain unwritten. None
+  of the three can be built, run or verified on this Linux machine, so they were deliberately NOT
+  written blind behind a capability gate; each carries a concrete requirements note in `plan_fx.md`
+  for a session on a machine that can execute it. `FX-069`'s final matrix is blocked on exactly
+  those three and nothing else.
 - **Vertex-stage sampling** is refused by name on SDL_GPU, EasyGL and Vulkan. A real functional gap,
-  not a design choice -- an effect using it cannot run. **3D/cube sampler bindings**: cube now works
-  on all four backends (`FX-110`); `Texture3D` works on FNA3D and is refused, each for its own
-  recorded reason, on the other three.
-- **SDL_GPU and Vulkan each bind one vertex stream and have no compiled-effect instanced draw
-  path**, for stock and compiled effects alike on SDL_GPU. Renderer-wide, not
-  compiled-effect-specific.
+  not a design choice -- an effect using it cannot run. **3D/cube sampler bindings**: cube works on
+  all four backends, and `Texture3D` now works on FNA3D **and Vulkan** (`FX-110`). It is refused on
+  SDL_GPU, which samples a volume in no route at all, and on EasyGL's GLSL ES profiles only, where
+  MojoShader's own emitted source omits the required `sampler3D` precision qualifier.
+- **Multi-stream and instancing**: SDL_GPU binds one vertex stream and has no instanced draw path,
+  both renderer-wide. Vulkan binds one per-vertex stream (also renderer-wide) but **does** draw
+  instanced with a compiled Effect since `FX-112`. The shared suite's instancing contract used to be
+  gated on `Instancing && MultiStreamVertexInput` and so excused every renderer that could actually
+  run the shape; it is now gated on `Instancing` alone, with the one section that really does bind
+  two per-vertex streams keeping its own guard.
 - **`SamplerState.AddressW`** is carried through the neutral contract and consumed by FNA3D, EasyGL
   and Vulkan.
 - **`MipMapLevelOfDetailBias`** is unrepresentable on the OpenGL ES profiles (no
@@ -283,6 +292,16 @@ task.
 - **SpriteBatch multi-pass**: EasyGL and SDL_GPU now draw once per pass of the current technique,
   matching FNA. No other CNA SpriteBatch renderer does this for a `ShaderEffect`; that inconsistency
   predates this work.
+- **Two shared contracts were promoted from one backend to all four** (`FX-112`):
+  `RunCompiledEffectManyDrawsContract` (600 compiled draws in one frame, each keeping its own
+  uniform values -- the shape that catches a constant ring which wraps instead of growing) and
+  `RunCompiledEffectTruncationContract` (every 4-byte truncation of the committed fixture must
+  refuse or parse whole). Both exist so a future DX11/DX9/Metal backend inherits the check rather
+  than needing its own.
+- **The test harness's assertion policy is non-interactive** (`FX-111`,
+  `tests/HarnessAssertionPolicy.cpp`). It cannot reach production: no production translation unit in
+  this repository uses `SDL_assert`/`SDL_SetAssertionHandler` at all, CNA's own assertions are plain
+  `<cassert>`, and the file's only undefined symbol is `setenv`.
 - `plan_fx.md`'s global definition of done (section 10.2) is **not** satisfied, and says so.
 
 ## The 2026-08-17 merge of `next`, and what it exposed

@@ -224,6 +224,25 @@ namespace CNA::Internal::Renderers::Vulkan
             bool* samplerAssigned = nullptr) const;
 
         /**
+         * @brief CNAEXT. One vertex stream a compiled draw reads its attributes from.
+         *
+         * plan_fx.md FX-112. A compiled effect derives its vertex input from the DECLARATIONS the
+         * draw supplies rather than from a byte stride, so it can bind a per-instance stream
+         * alongside the per-vertex one without the renderer's stock stride-to-layout table having
+         * anything to say about it.
+         */
+        struct CompiledVertexStreamEXT
+        {
+            /** @brief This stream's declared elements; offsets are relative to this stream. */
+            const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>* elements =
+                nullptr;
+            /** @brief This stream's byte stride. */
+            std::uint32_t stride = 0;
+            /** @brief True for a per-instance stream (VK_VERTEX_INPUT_RATE_INSTANCE). */
+            bool perInstance = false;
+        };
+
+        /**
          * @brief CNAEXT. What one compiled-effect draw needs from the applied pass.
          *
          * plan_fx.md FX-065. Produced by @ref LinkAndGetShadersEXT and stored by value on the
@@ -242,6 +261,8 @@ namespace CNA::Internal::Renderers::Vulkan
             const char* pixelEntryPoint = "main";
             /** @brief One attribute per shader input, in the shader's own location order. */
             std::vector<VkVertexInputAttributeDescription> vertexAttributes;
+            /** @brief One binding per supplied stream, in the order the caller supplied them. */
+            std::vector<VkVertexInputBindingDescription> vertexBindings;
             /** @brief Reflected pixel-stage samplers, in ascending register order. */
             std::vector<MOJOSHADER_sampler> pixelSamplers;
             /** @brief Whether the vertex shader declares a uniform block. */
@@ -262,15 +283,15 @@ namespace CNA::Internal::Renderers::Vulkan
          * has run are the modules meaningful, which is why they are created here rather than at
          * parse time.
          *
-         * @param declaredElements The caller's `VertexDeclaration` elements for this draw.
+         * @param streams The caller's bound streams, per-vertex first. A shader input is claimed
+         *        by the first stream whose declaration carries its usage and usage index.
          * @return The linked pass.
          * @throws std::runtime_error if no pass is applied or linking fails.
-         * @throws System::NotSupportedException if @p declaredElements does not supply an input the
-         *         vertex shader consumes.
+         * @throws System::NotSupportedException if no stream supplies an input the vertex shader
+         *         consumes.
          */
         CNAEXT [[nodiscard]] LinkedPassEXT LinkAndGetShadersEXT(
-            const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>&
-                declaredElements) const;
+            const std::vector<CompiledVertexStreamEXT>& streams) const;
 
     private:
         VulkanCompiledEffect(VulkanRenderer& renderer, const VulkanCompiledEffect& cloneSource);

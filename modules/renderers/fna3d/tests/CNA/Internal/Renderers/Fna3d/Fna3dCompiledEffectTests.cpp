@@ -1695,3 +1695,19 @@ TEST(Fna3dCompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);
 }
+
+TEST(Fna3dCompiledEffectDrawTest, SharedManyDrawsContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectManyDrawsContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedTruncationContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectTruncationContract(device);
+}

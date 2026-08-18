@@ -414,84 +414,90 @@ TEST(VulkanCompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
     CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);
 }
 
-// plan_fx.md FX-065. This renderer records a compiled draw at Present(), so each draw's packed
-// uniform block has to survive in a slice of its own until then. The slices come from per-frame
-// chunks of `kCompiledEffectUBODrawsPerChunk` (256) that are APPENDED on demand rather than being
-// one fixed ring: a compiled sprite effect makes a draw per sprite per pass, so a few hundred
-// compiled draws in one frame is ordinary. A fixed ring would either wrap -- handing two draws the
-// same slice, so the second silently renders with the first's constants -- or refuse a frame the
-// game is entitled to. This crosses the boundary twice and reads back three of the draws.
-TEST(VulkanCompiledEffectDrawTest, CompiledDrawsPastOneUniformChunkKeepTheirOwnConstants)
+TEST(VulkanCompiledEffectDrawTest, SharedManyDrawsContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    // plan_fx.md FX-112: this renderer's own per-frame uniform chunks are what this contract was
+    // written against -- 600 compiled draws cross two of them -- but the shape is not Vulkan's,
+    // so it lives in the shared suite where a fifth backend's own ring gets the same check.
+    CNA::TestSupport::RunCompiledEffectManyDrawsContract(device);
+}
+
+TEST(VulkanCompiledEffectDrawTest, SharedTruncationContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectTruncationContract(device);
+}
+
+// plan_fx.md FX-112. The compiled SpriteBatch route leaves the stock sprite pipeline entirely and
+// takes an early return out of End(), so the sequence that can break is returning to a compiled
+// batch after a stock one has run between them: a pending-sprite list that survived, or batch state
+// the early return skipped, would show up here and nowhere else. The three batches draw into
+// separate thirds of one target so all three results are readable at once.
+TEST(VulkanCompiledEffectDrawTest, SpriteBatchAlternatesCompiledAndStockAcrossBatches)
 {
     using Microsoft::Xna::Framework::Vector4;
     GraphicsDevice device;
-    if (RendererOf(device) == nullptr)
-        GTEST_SKIP() << "this build did not select the Vulkan renderer";
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
 
+    constexpr int kSize = 12;
     Effect effect(device, CNA::TestSupport::BuildSyntheticDrawableEffect());
     auto& parameters = effect.getParametersProperty();
-    parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
-    EffectPass& pass = effect.getTechniquesProperty()[0].getPassesProperty()[1];
+    parameters["Transform"]->SetValue(Matrix::CreateOrthographicOffCenter(
+        0.0f, static_cast<float>(kSize), static_cast<float>(kSize), 0.0f, -1.0f, 1.0f));
 
-    struct ClipVertex { float x, y, z; };
-    const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
-        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
-    });
+    // A green sprite texture, so a stock batch is unmistakable against either compiled Tint.
+    Texture2D sprite(device, 1, 1);
+    const Color green[1] = {Color(0, 255, 0, 255)};
+    sprite.SetData(green, 1);
 
-    // 600 draws, so the cursor crosses a chunk boundary at 256 and again at 512. Each covers one
-    // cell of a 32x32 target and carries its own Tint, so a shared slice shows up as the wrong
-    // colour in the cell rather than as nothing at all.
-    constexpr int kSize = 32;
-    constexpr int kDraws = 600;
     RenderTarget2D target(device, kSize, kSize);
     device.SetRenderTarget(&target);
     device.Clear(Color(9, 19, 29, 255));
-    device.setRasterizerStateProperty(RasterizerState::CullNone);
-    device.setDepthStencilStateProperty(DepthStencilState::None);
-    device.setBlendStateProperty(BlendState::Opaque);
 
-    // Deliberately NOT periodic modulo the chunk size: with `% 256` the colour of draw i and of
-    // draw i + 256 are equal by construction, so two draws sharing a slice would look correct and
-    // the test would pass against the very bug it exists to catch. Prime moduli make every one of
-    // these 600 draws its own colour.
-    const auto tintFor = [](int i) {
-        return Vector4(static_cast<float>((i * 7) % 251) / 255.0f,
-                       static_cast<float>((i * 13) % 241) / 255.0f,
-                       static_cast<float>((i * 31) % 239) / 255.0f, 1.0f);
+    const auto compiledBatch = [&](const Vector4& tint, const Rectangle& where) {
+        parameters["Tint"]->SetValue(tint);
+        SpriteBatch batch(device);
+        batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, nullptr, nullptr, nullptr,
+                    &effect);
+        batch.Draw(sprite, where, Color::White);
+        batch.End();
     };
-    for (int i = 0; i < kDraws; ++i)
+
+    compiledBatch(Vector4(1.0f, 0.0f, 0.0f, 1.0f), Rectangle(0, 0, kSize, 4));
     {
-        const int cellX = i % kSize;
-        const int cellY = i / kSize;
-        const float x0 = -1.0f + 2.0f * static_cast<float>(cellX) / kSize;
-        const float x1 = -1.0f + 2.0f * static_cast<float>(cellX + 1) / kSize;
-        const float y0 = -1.0f + 2.0f * static_cast<float>(cellY) / kSize;
-        const float y1 = -1.0f + 2.0f * static_cast<float>(cellY + 1) / kSize;
-        const ClipVertex cell[6] = {
-            {x0, y0, 0.0f}, {x0, y1, 0.0f}, {x1, y1, 0.0f},
-            {x0, y0, 0.0f}, {x1, y1, 0.0f}, {x1, y0, 0.0f},
-        };
-        parameters["Tint"]->SetValue(tintFor(i));
-        pass.Apply();
-        device.DrawUserPrimitives(PrimitiveType::TriangleList, cell, 0, 2, declaration);
+        SpriteBatch stock(device);
+        stock.Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+        stock.Draw(sprite, Rectangle(0, 4, kSize, 4), Color::White);
+        stock.End();
     }
+    compiledBatch(Vector4(0.0f, 0.0f, 1.0f, 1.0f), Rectangle(0, 8, kSize, 4));
+
     device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-    // One draw inside the first chunk, one just past each boundary.
-    for (const int i : {5, 256, 512})
-    {
-        SCOPED_TRACE("draw " + std::to_string(i));
-        const Vector4 tint = tintFor(i);
+    const auto readRow = [&](int y) {
         Color pixel(0, 0, 0, 0);
-        // The target's row 0 is the clip-space y = -1 edge, which this quad's cellY 0 covers.
-        const Rectangle cell(i % kSize, kSize - 1 - (i / kSize), 1, 1);
-        target.GetData(0, &cell, &pixel, 0, 1);
-        const auto channel = [](float value) { return static_cast<int>(value * 255.0f + 0.5f); };
-        EXPECT_NEAR(pixel.getRProperty(), channel(tint.X), 2)
-            << "this draw rendered with another draw's uniform slice";
-        EXPECT_NEAR(pixel.getGProperty(), channel(tint.Y), 2);
-        EXPECT_NEAR(pixel.getBProperty(), channel(tint.Z), 2);
-    }
+        const Rectangle probe(kSize / 2, y, 1, 1);
+        target.GetData(0, &probe, &pixel, 0, 1);
+        return pixel;
+    };
+    const Color first = readRow(2);
+    const Color middle = readRow(6);
+    const Color last = readRow(10);
+
+    EXPECT_NEAR(first.getRProperty(), 255, 3) << "the first compiled batch must write its Tint";
+    EXPECT_NEAR(first.getGProperty(), 0, 3);
+    EXPECT_NEAR(middle.getGProperty(), 255, 3)
+        << "the stock batch between them must sample its own texture, not run the Effect";
+    EXPECT_NEAR(middle.getRProperty(), 0, 3);
+    EXPECT_NEAR(last.getBProperty(), 255, 3)
+        << "a compiled batch after a stock one must run the Effect again, with its own Tint";
+    EXPECT_NEAR(last.getRProperty(), 0, 3);
 }
 
 #endif  // CNA_VULKAN_COMPILED_EFFECTS

@@ -175,6 +175,22 @@ namespace CNA::Internal::Renderers::Vulkan
     };
 
     // -------------------------------------------------------------------------
+    // IVulkanVolumeSamplable -- the Texture3D counterpart of the two above.
+    //
+    // plan_fx.md FX-110. Kept as its own interface rather than folded into
+    // IVulkanSamplable because a VkImageView carries its own view type: a
+    // VK_IMAGE_VIEW_TYPE_3D view bound where the shader declared sampler2D is
+    // undefined behaviour, so the three kinds must stay distinguishable by type
+    // rather than by convention.
+    // -------------------------------------------------------------------------
+
+    struct IVulkanVolumeSamplable
+    {
+        virtual ~IVulkanVolumeSamplable() = default;
+        virtual VkImageView GetVkVolumeImageView() const = 0;
+    };
+
+    // -------------------------------------------------------------------------
     // VulkanTextureRenderer
     // -------------------------------------------------------------------------
 
@@ -682,9 +698,12 @@ namespace CNA::Internal::Renderers::Vulkan
     // VulkanTexture3DRenderer
     // -------------------------------------------------------------------------
 
-    class VulkanTexture3DRenderer : public ITexture3DRenderer
+    class VulkanTexture3DRenderer : public ITexture3DRenderer, public IVulkanVolumeSamplable
     {
     public:
+        /** @brief The VK_IMAGE_VIEW_TYPE_3D view this volume is sampled through. */
+        [[nodiscard]] VkImageView GetVkVolumeImageView() const override { return imageView_; }
+
         VulkanTexture3DRenderer(VulkanRenderer* owner, int w, int h, int depth, bool mipMap);
         ~VulkanTexture3DRenderer() override;
 
@@ -2044,7 +2063,7 @@ namespace CNA::Internal::Renderers::Vulkan
         /// so describes with its own fixed declaration rather than a caller-supplied one.
         void PrepareCompiledEffectDrawEXT(
             Pending3DDraw& d,
-            const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
+            const std::vector<VulkanCompiledEffect::CompiledVertexStreamEXT>& streams,
             ICompiledEffectRuntime* runtime);
         /// Queues one SpriteBatch quad to be drawn with a compiled Effect, as a deferred 3D draw
         /// rather than through the stock sprite pipeline -- the compiled pass owns the whole

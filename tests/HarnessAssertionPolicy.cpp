@@ -17,6 +17,13 @@
 // unaffected. Nothing here includes an SDL header or references an SDL symbol -- the name below is
 // an environment variable, spelled as text.
 //
+// It cannot hide a CNA assertion, and that is a checkable fact rather than an intention: no
+// production translation unit in this repository uses `SDL_assert`, `SDL_TriggerBreakpoint` or
+// `SDL_SetAssertionHandler` at all. CNA's own internal assertions are plain `<cassert>` `assert`,
+// which this hint does not reach. The only assertions it changes the handling of are the ones
+// raised inside third-party code that assert through SDL -- pinned MojoShader being the one that
+// actually does.
+//
 // `always_ignore` rather than `abort`, and the trade-off is real rather than obvious. `abort` gives
 // a clean stack but kills the entire run for one bad input, which is only marginally better than
 // today's hang. `always_ignore` returns from the assertion and lets the caller continue, so the

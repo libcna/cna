@@ -279,13 +279,18 @@ Vulkan joined the supported set on 2026-08-18 (`CNA_VULKAN_COMPILED_EFFECTS=ON`)
 backend with no MojoShader-provided adapter -- there is no `mojoshader_vulkan.c` -- so the
 nine-function effect context is CNA's own, written against the portable SPIR-V profile, and the
 renderer builds a pipeline per linked shader pair and vertex layout, binds the four descriptor sets
-that profile fixes, and replays the draw from a per-frame uniform ring at `Present()`. It refuses by
-name: vertex-stage sampling, multi-stream vertex input, instancing, and a `Texture3D` on a pixel
-sampler.
+that profile fixes, and replays the draw from growable per-frame uniform chunks at `Present()`. It
+draws buffered, user, indexed and instanced geometry, and samples 2D, cube and volume textures. The
+one thing it refuses that is specific to compiled Effects is vertex-stage sampling; multi-stream
+vertex input is refused renderer-wide, for stock draws equally.
 
-DirectX 11, Metal and DirectX 9 are the planned next waves; each becomes true only after it passes
-the same shared suite. Fixed-function, 2D-only and CPU renderers stay intentionally unsupported.
-`plan_fx.md` Phase G tracks the rollout, and section 10.3 there classifies every renderer identity.
+DirectX 11, DirectX 9 and Metal are the planned next waves; each becomes true only after it passes
+the same shared suite **on hardware that can execute it**. None of the three has been written, and
+that is deliberate rather than pending: writing a backend that cannot be run would put a capability
+behind unexecuted code, which is the one thing this page's own rule forbids. `plan_fx.md` carries a
+concrete requirements note for each. Fixed-function, 2D-only and CPU renderers stay intentionally
+unsupported. `plan_fx.md` Phase G tracks the rollout, and section 10.3 there classifies every
+renderer identity.
 
 ### What "passes the shared contract" means
 

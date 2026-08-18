@@ -556,4 +556,20 @@ TEST(EasyGLCompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
     CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, SharedManyDrawsContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectManyDrawsContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedTruncationContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectTruncationContract(device);
+}
+
 #endif  // CNA_EASYGL_COMPILED_EFFECTS

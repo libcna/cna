@@ -432,15 +432,6 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         if (texture != nullptr && !renderer_.OwnsSampleableTextureEXT(texture))
         {
-            // Two genuinely different causes, and a caller can only act on the one it hit.
-            if (dynamic_cast<Microsoft::Xna::Framework::Graphics::Texture3D*>(texture) != nullptr)
-            {
-                throw System::NotSupportedException(
-                    "Vulkan compiled effect: a Texture3D cannot be bound to a compiled effect's "
-                    "sampler. This renderer's Texture3D has no sampleable image view of its own, "
-                    "so the compiled-effect draw route has nothing to bind; the limitation is "
-                    "specific to compiled Effects, not to the renderer (plan_fx.md FX-110).");
-            }
             throw std::invalid_argument(
                 "Vulkan compiled effect: texture was not created by the active Vulkan renderer.");
         }
@@ -591,8 +582,7 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     VulkanCompiledEffect::LinkedPassEXT VulkanCompiledEffect::LinkAndGetShadersEXT(
-        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements)
-        const
+        const std::vector<CompiledVertexStreamEXT>& streams) const
     {
         VulkanCompiledShaderEXT* vertex = nullptr;
         VulkanCompiledShaderEXT* pixel = nullptr;
@@ -612,6 +602,20 @@ namespace CNA::Internal::Renderers::Vulkan
         // nothing there would sample undefined vertex data, which is the silent-corruption shape
         // every other backend refuses too.
         LinkedPassEXT linked;
+        // plan_fx.md FX-112: one binding per supplied stream, in the caller's order, so binding
+        // index and stream index are the same number everywhere below and at record time.
+        linked.vertexBindings.reserve(streams.size());
+        for (std::size_t streamIndex = 0; streamIndex < streams.size(); ++streamIndex)
+        {
+            VkVertexInputBindingDescription binding{};
+            binding.binding = static_cast<std::uint32_t>(streamIndex);
+            binding.stride = streams[streamIndex].stride;
+            binding.inputRate = streams[streamIndex].perInstance
+                                    ? VK_VERTEX_INPUT_RATE_INSTANCE
+                                    : VK_VERTEX_INPUT_RATE_VERTEX;
+            linked.vertexBindings.push_back(binding);
+        }
+
         std::vector<MOJOSHADER_vertexAttribute> mojoAttributes;
         mojoAttributes.reserve(static_cast<std::size_t>(std::max(vertexData->attribute_count, 0)));
         linked.vertexAttributes.reserve(mojoAttributes.capacity());
@@ -619,14 +623,21 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             const MOJOSHADER_attribute& shaderInput = vertexData->attributes[i];
             const Microsoft::Xna::Framework::Graphics::VertexElement* match = nullptr;
-            for (const auto& element : declaredElements)
+            std::size_t matchStream = 0;
+            for (std::size_t streamIndex = 0;
+                 streamIndex < streams.size() && match == nullptr; ++streamIndex)
             {
-                if (ToMojoShaderUsage(element.getVertexElementUsageProperty()) ==
-                        shaderInput.usage &&
-                    element.getUsageIndexProperty() == shaderInput.index)
+                if (streams[streamIndex].elements == nullptr) continue;
+                for (const auto& element : *streams[streamIndex].elements)
                 {
-                    match = &element;
-                    break;
+                    if (ToMojoShaderUsage(element.getVertexElementUsageProperty()) ==
+                            shaderInput.usage &&
+                        element.getUsageIndexProperty() == shaderInput.index)
+                    {
+                        match = &element;
+                        matchStream = streamIndex;
+                        break;
+                    }
                 }
             }
             if (match == nullptr)
@@ -637,7 +648,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     std::string(name) + "' (usage " +
                     std::to_string(static_cast<int>(shaderInput.usage)) + ", index " +
                     std::to_string(shaderInput.index) +
-                    "), but the vertex declaration supplied to this draw has no element with that "
+                    "), but no vertex declaration supplied to this draw has an element with that "
                     "usage and usage index.");
             }
             MOJOSHADER_vertexAttribute attribute{};
@@ -652,7 +663,7 @@ namespace CNA::Internal::Renderers::Vulkan
             // order, which is the order this loop walks -- the same correspondence FX-064's probe
             // confirmed by dumping the emitted OpDecorate Location decorations.
             description.location = static_cast<std::uint32_t>(i);
-            description.binding = 0;
+            description.binding = static_cast<std::uint32_t>(matchStream);
             description.format = ToVkVertexFormat(match->getVertexElementFormatProperty());
             description.offset = static_cast<std::uint32_t>(match->getOffsetProperty());
             linked.vertexAttributes.push_back(description);
@@ -720,8 +731,15 @@ namespace CNA::Internal::Renderers::Vulkan
         for (const VkVertexInputAttributeDescription& attribute : linked.vertexAttributes)
         {
             mix(attribute.location);
+            mix(attribute.binding);
             mix(static_cast<std::uint64_t>(attribute.format));
             mix(attribute.offset);
+        }
+        for (const VkVertexInputBindingDescription& binding : linked.vertexBindings)
+        {
+            mix(binding.binding);
+            mix(binding.stride);
+            mix(static_cast<std::uint64_t>(binding.inputRate));
         }
         linked.pipelineKey = key;
         return linked;
@@ -759,7 +777,8 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         if (auto* texture3D = dynamic_cast<Texture3D*>(texture))
         {
-            return dynamic_cast<const IVulkanSamplable*>(&texture3D->GetRenderer()) != nullptr;
+            return dynamic_cast<const IVulkanVolumeSamplable*>(&texture3D->GetRenderer()) !=
+                   nullptr;
         }
         if (auto* texture2D = dynamic_cast<Texture2D*>(texture))
         {
