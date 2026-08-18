@@ -34,6 +34,7 @@ do not reconstruct the layer's state from the general `NEXT.md`.
 | ✅ | Phase 5 — `SsaoPass` and its pipeline wiring (`MOD-505`/`506`/`515`–`524`, `MOD-711`); depth and normals are caller-supplied |
 | ✅ | **Phase 8 — directional shadows, complete end to end** (`MOD-800`–`861`, all but `MOD-854`) |
 | ✅ | **Phase 9 — cascaded shadow maps, complete** (`MOD-900`–`917`, 18/18) |
+| ✅ | **Phase 10 — point and spot shadows, complete** (`MOD-1000`–`1012`, 13/13) |
 
 **The HDR spine is complete and verified end to end.** A game can wrap its draw calls in
 `RenderPipeline::begin`/`end`, enable HDR, bloom, a tonemapping operator and FXAA, and get them --
@@ -82,8 +83,36 @@ keeping:
 - **Cost** (`cnaext_csm_test --benchmark`, 6 casting triangles, Mesa llvmpipe): single Medium map
   0.12 ms, 2 cascades 0.20, 3 cascades 0.49, 4 cascades 0.43 per frame.
 
-Next: Phase 10 (point and spot shadows), then Phase 11/12 (skybox and IBL) and Phase 14
-(instancing/LOD helpers, independent of all of it).
+**Punctual lights work too**, and they needed more than a shadow: XNA's lit effects carry three
+*directional* lights and nothing else, so a point light's shadow had nothing to attenuate. The four
+lit effects therefore gained a punctual lighting term (`PunctualLightEXT`, always compiled) and its
+cube/spot lookup. Facts worth keeping:
+
+- Both punctual maps store **distance from the light over its range**, not projected depth. A cube
+  face's projected depth is defined by that face's own projection; distance is face-independent, so
+  the receiver samples the cube by direction and compares directly. The range used to light must be
+  the range the map was generated with.
+- A cube render target needs `PreserveContents`, same trap as the cascade atlas.
+- The cube face size is **capped at 1024** whatever the quality asks: six faces at 4096 is a hundred
+  million texels for one light.
+- The spot PCF needs **its own texel size**. Borrowing the directional map's meant a draw with no
+  sun attached filtered with a texel of 1.0, clamped every tap to a corner, and produced a spot
+  shadow that silently never appeared.
+- **Cost** (`cnaext_pointshadow_test --benchmark`, 2 casting triangles, Mesa llvmpipe): directional
+  1 map 0.05 ms, spot 1 map 0.04 ms, **point 6 faces 5.42 ms** -- a hundred times a single map, not
+  six, because each face rebinds a cube attachment and clears it. That ratio is why point shadows
+  are opt-in per light.
+
+**One earlier defect fixed on the way** (`MOD-520`): SSAO produced *no* occlusion at all on this
+container's Mesa build, at every radius, silently. The occlusion test offset the comparison depth by
+the sample's z times `uRadius` -- a view-space formulation in a pass that has no view space, where
+`uRadius` is a UV offset and the depths are a normalized texture. The offset swamped the difference
+it was compared against. Only a narrow band of radii made both terms work at once, which is why it
+had passed before. `AHigherIntensityDarkensMore` used `EXPECT_LE` and so passed throughout; it is
+strict now.
+
+Next: Phase 11/12 (skybox and IBL), then Phase 13 (materials) and Phase 14 (instancing/LOD helpers,
+independent of all of it).
 
 Smaller open rows: `MOD-203` (restore-on-exception around a pass), `MOD-209`/`MOD-210`,
 `MOD-405`/`407`/`409`/`413`/`415`–`417` (bloom quality presets, perf, goldens),
@@ -151,6 +180,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-17 | same, with shadow generation and reception | same | 7659 ran · 7595 pass · 64 skip · **0 fail** |
 | 2026-08-17 | same, with all of Phase 8 (visible shadows, skinned casters, pipeline integration) | same | 7679 ran · 7615 pass · 64 skip · **0 fail** |
 | 2026-08-17 | same, with all of Phase 9 (cascaded shadow maps) | same | 7708 ran · 7644 pass · 64 skip · **0 fail** |
+| 2026-08-17 | same, with all of Phase 10 (point and spot shadows) and the SSAO fix | same | 7730 ran · 7666 pass · 64 skip · **0 fail** |
 
 The `CNA_CNAEXT=OFF` row is the one that answers "can this break what already works". It configures,
 builds and passes with the whole engine layer compiled out. Its lower test count is expected and not
