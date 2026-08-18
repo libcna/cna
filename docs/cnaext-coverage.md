@@ -87,10 +87,11 @@ Where a low branch figure does mean something, it is called out per file below.
    general caveat, not a one-file one: **anything this module proves through an example program
    rather than a GTest case reads as uncovered here.** Whether those checks should migrate into
    `CnaTests` is a separate question from whether they exist.
-2. **`BlitPass.cpp` — `getName()` and `isSupported()` are never called.** `apply()` is well covered
-   through `PostProcessChainTests`, but nothing asks the pass to name itself or to answer the
+2. **`BlitPass.cpp` — `getName()` and `isSupported()` were never called.** `apply()` is well covered
+   through `PostProcessChainTests`, but nothing asked the pass to name itself or to answer the
    support question, even though both are public API and both are required to be tested by
-   `CLAUDE.md`'s test rules.
+   `CLAUDE.md`'s test rules. **Closed by `MOD-1742`**; the percentages in the table above are the
+   pre-fix measurement and this file will read differently when it is next regenerated.
 3. **`ScopedRenderTarget.cpp` — both `catch` blocks are unreached.** Deliberately: they exist for a
    renderer that throws from `GetRenderTargets()` or from a restore on the unwind path, and EasyGL
    does neither. Reaching them needs a device double rather than a real renderer.

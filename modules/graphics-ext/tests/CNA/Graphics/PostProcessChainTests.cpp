@@ -290,6 +290,34 @@ TEST(PostProcessChainTest, OwnedAndBorrowedPassesRunTogether)
     EXPECT_EQ(log[1].name, "owned");
 }
 
+// ── The two accessors nothing else calls ─────────────────────────────────────
+//
+// plan_modern.md MOD-1742. MOD-1741's coverage run found getName() and isSupported() unreached by
+// the whole suite: apply() is exercised heavily below, but nothing ever asked the pass to identify
+// itself. Both are public API, so both get a case.
+
+TEST(BlitPassTest, ThePassNamesItselfStablyAndByReference)
+{
+    GraphicsDevice gd;
+    const BlitPass blit(gd);
+
+    EXPECT_EQ(blit.getName(), "Blit");
+    // The name is a reference to storage the pass owns, not a temporary -- a caller keeping it
+    // across frames (a profiler labelling its timings, say) must not be left holding a dangling one.
+    EXPECT_EQ(&blit.getName(), &blit.getName());
+}
+
+TEST(BlitPassTest, TheCopyIsSupportedOnEveryRenderer)
+{
+    // Unconditionally true, and that is the claim worth pinning: a plain copy needs no capability,
+    // so a chain can always fall back to it. If this ever starts depending on the device, whatever
+    // relied on the copy always being available needs to be revisited.
+    GraphicsDevice gd;
+    const BlitPass blit(gd);
+
+    EXPECT_TRUE(blit.isSupported(gd));
+}
+
 // ── The identity round trip, which is what actually proves the mechanism ──────
 
 TEST(BlitPassTest, ACopyReproducesItsSourceExactly)
