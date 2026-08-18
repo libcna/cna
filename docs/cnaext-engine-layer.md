@@ -55,7 +55,7 @@ orchestration that pulls in extra render targets and GPU memory lives in the gat
 | `CascadedShadowMap` | `CNA/Graphics/CascadedShadowMap.hpp` | The same, split into 2-4 depth ranges so a large scene keeps resolution near the camera. |
 | `CubeShadowMap`, `SpotShadowMap`, `PointLightEXT`, `SpotLightEXT` | `CNA/Graphics/CubeShadowMap.hpp`, `SpotShadowMap.hpp` | Punctual-light shadows: six cube faces for a point light, one perspective map for a spot. |
 | `Skybox` | `CNA/Graphics/Skybox.hpp` | Draws an environment cube map as the sky, in one fullscreen pass. |
-| `EnvironmentProcessor` | `CNA/Graphics/EnvironmentProcessor.hpp` | Turns an equirectangular panorama into a cube map. |
+| `EnvironmentProcessor` | `CNA/Graphics/EnvironmentProcessor.hpp` | Turns an equirectangular panorama into a cube map, and an environment cube into the three IBL products (irradiance, prefiltered specular, BRDF LUT). |
 | `CNAEXT.hpp` | `CNA/Graphics/CNAEXT.hpp` | Master include — pulls in every public type above. |
 
 ## Conventions for this layer
@@ -302,6 +302,41 @@ pipeline.setSkyboxCamera(view, projection);  // the pipeline has no camera of it
   are tested as inverses, so the converter cannot disagree with itself.
 - **Cost** (`cnaext_skybox_test --benchmark`, 128×128, Mesa llvmpipe): 0.020 ms per frame against
   0.005 ms for a clear alone — one fullscreen pass, which is what it should be.
+
+### Image-based lighting: the precompute
+
+The same `EnvironmentProcessor` turns an environment cube into the three products the split-sum
+approximation needs. All three are load-time work, generated once and reused for the run:
+
+```cpp
+CNA::Graphics::EnvironmentProcessor processor(device);
+auto cube = processor.convertEquirectangular(panoramaTexture, 512);
+
+auto irradiance  = processor.generateIrradiance(cube.get(), 32, 32);          // diffuse
+auto specular    = processor.generatePrefilteredSpecular(cube.get(), 128, 5, 64);  // one mip per roughness
+auto brdfLut     = processor.generateBrdfLut(128, 128);                       // scene-independent
+```
+
+- **Owned by the caller.** Each generator returns a `std::unique_ptr`; the processor keeps no state
+  and can be destroyed the moment loading finishes.
+- **CPU, not render-to-cube.** A GPU implementation would need float render targets, cube render
+  targets and custom effects all present at once — a combination no renderer in the committed scope
+  offers. Doing it on the CPU makes the precompute work identically on every renderer, including
+  Headless, and removes the capability gate entirely. The price is the time below.
+- **Quality is `sampleCount`, and the cost is quadratic** for irradiance (it is a sweep over two
+  angles) and linear for the other two. The defaults are chosen for quality, not speed.
+- **Roughness ↔ mip is one function.** `mipForRoughness` and `roughnessForMip` are public statics
+  and are inverses; generation calls one, the sampling shader calls the other, so the two cannot
+  drift apart.
+- **Seamless by construction.** The sampler picks the cube face *from the direction*, so a filter
+  kernel crossing a face edge reads the neighbour rather than clamping to a border. There are no
+  seams at any mip, on any renderer, with no `SeamlessCubeMapFilter` capability required.
+- **8 bits, and that is a real limit.** CNA's `Texture2D`/`TextureCube` accept
+  `SurfaceFormat::Color` only, so the BRDF table is quantised to 8 bits per term and an environment
+  brighter than 1.0 has to carry its intensity as a separate scalar rather than in its texels.
+- **Cost** (Debug build, single thread, `GenerationCostIsLoadTimeWork`): irradiance 32/32 **3.31 s**,
+  prefilter 128/5/64 **2.38 s**, BRDF LUT 128/128 **0.49 s**. An optimised build is several times
+  faster. Generate at load, never per frame; halve `sampleCount` where a load screen is unwelcome.
 
 Legend: ✅ implemented and verified · 🟨 partial · ⬜ not implemented · ⛔ deliberately unsupported.
 
