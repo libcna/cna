@@ -49,16 +49,14 @@ namespace CNA::Internal::Renderers::Vulkan
      *
      * plan_fx.md FX-065. MojoShader's other adapters own a type like this; the Vulkan one does not
      * exist, so the reference counting the effect parser expects (`shaderAddRef`/`deleteShader`)
-     * lives here. `VkShaderModule` creation is deferred to the first draw that needs it, because
-     * parsing happens while the effect is built and a module is only useful once a pipeline wants
-     * one.
+     * lives here. There is deliberately no `VkShaderModule` on this type: linking patches the
+     * SPIR-V in place, so a module belongs to the patched BYTES rather than to the shader, and the
+     * renderer owns one per distinct body (`GetOrCreateCompiledEffectShaderModuleEXT`).
      */
     struct VulkanCompiledShaderEXT
     {
         /** @brief MojoShader's reflection and SPIR-V output for this shader. */
         const MOJOSHADER_parseData* parseData = nullptr;
-        /** @brief Lazily created module over @ref parseData's SPIR-V words. */
-        VkShaderModule module = VK_NULL_HANDLE;
         /** @brief Effect-parser reference count; the shader dies at zero. */
         int refcount = 1;
     };

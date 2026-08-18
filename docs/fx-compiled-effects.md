@@ -275,10 +275,17 @@ have elsewhere -- a `Texture3D` bound to a compiled sampler, say, which both SDL
 sample perfectly well in their ordinary draw families. The second kind is a debt of this feature and
 carries a task ID. `plan_fx.md` section 10.5 is the full table.
 
-DirectX 11, Vulkan, Metal and DirectX 9 are the planned next waves; each becomes true only after it
-passes the same shared suite. Fixed-function, 2D-only and CPU renderers stay intentionally
-unsupported. `plan_fx.md` Phase G tracks the rollout, and section 10.3 there classifies every
-renderer identity.
+Vulkan joined the supported set on 2026-08-18 (`CNA_VULKAN_COMPILED_EFFECTS=ON`). It is the one
+backend with no MojoShader-provided adapter -- there is no `mojoshader_vulkan.c` -- so the
+nine-function effect context is CNA's own, written against the portable SPIR-V profile, and the
+renderer builds a pipeline per linked shader pair and vertex layout, binds the four descriptor sets
+that profile fixes, and replays the draw from a per-frame uniform ring at `Present()`. It refuses by
+name: vertex-stage sampling, multi-stream vertex input, instancing, and a `Texture3D` on a pixel
+sampler.
+
+DirectX 11, Metal and DirectX 9 are the planned next waves; each becomes true only after it passes
+the same shared suite. Fixed-function, 2D-only and CPU renderers stay intentionally unsupported.
+`plan_fx.md` Phase G tracks the rollout, and section 10.3 there classifies every renderer identity.
 
 ### What "passes the shared contract" means
 

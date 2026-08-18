@@ -203,11 +203,8 @@ struct CapabilityExpectation
 // capability true for any of those three.
 #if defined(CNA_RENDERER_FNA3D) || \
     (defined(CNA_RENDERER_SDL_GPU) && defined(CNA_SDL_GPU_COMPILED_EFFECTS)) || \
-    (defined(CNA_RENDERER_EASYGL) && defined(CNA_EASYGL_COMPILED_EFFECTS))
-// Vulkan is deliberately NOT in this list yet even with CNA_VULKAN_COMPILED_EFFECTS on: plan_fx.md
-// FX-065's runtime exists and passes the shared contract's non-drawing sections, but its draw route
-// does not, and a capability that says true while a compiled draw silently renders with a stock
-// shader is the exact defect FX-080 removed elsewhere.
+    (defined(CNA_RENDERER_EASYGL) && defined(CNA_EASYGL_COMPILED_EFFECTS)) || \
+    (defined(CNA_RENDERER_VULKAN) && defined(CNA_VULKAN_COMPILED_EFFECTS))
 constexpr bool kExpectCompiledEffects = true;
 #else
 constexpr bool kExpectCompiledEffects = false;

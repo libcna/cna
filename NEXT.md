@@ -262,13 +262,19 @@ task.
 
 ### What is still open
 
-- **DirectX 11 (`FX-063`), Vulkan (`FX-065`), Metal (`FX-066`) and DirectX 9 (`FX-070`)** remain
-  unwritten. Three of the four cannot be verified on this machine at all.
-- **Vertex-stage sampling** and **3D/cube sampler bindings** are refused by name on both SDL_GPU and
-  EasyGL. Real functional gaps, not design choices -- an effect using either cannot run.
-- **SDL_GPU binds one vertex stream and has no instanced draw path**, for stock and compiled effects
-  alike. Renderer-wide, not compiled-effect-specific.
-- **`SamplerState.AddressW`** is carried through the neutral contract and consumed only by FNA3D.
+- **Vulkan (`FX-065`) landed 2026-08-18**: CNA's own MojoShader SPIR-V backend plus a real draw
+  route, `SupportsCompiledEffects()` true, 19 of the 22 shared contract sections passing on a real
+  device and the other three refusing by name. **DirectX 11 (`FX-063`), Metal (`FX-066`) and
+  DirectX 9 (`FX-070`)** remain unwritten, and none of the three can be verified on this machine.
+- **Vertex-stage sampling** is refused by name on SDL_GPU, EasyGL and Vulkan. A real functional gap,
+  not a design choice -- an effect using it cannot run. **3D/cube sampler bindings**: cube now works
+  on all four backends (`FX-110`); `Texture3D` works on FNA3D and is refused, each for its own
+  recorded reason, on the other three.
+- **SDL_GPU and Vulkan each bind one vertex stream and have no compiled-effect instanced draw
+  path**, for stock and compiled effects alike on SDL_GPU. Renderer-wide, not
+  compiled-effect-specific.
+- **`SamplerState.AddressW`** is carried through the neutral contract and consumed by FNA3D, EasyGL
+  and Vulkan.
 - **`MipMapLevelOfDetailBias`** is unrepresentable on the OpenGL ES profiles (no
   `GL_TEXTURE_LOD_BIAS`); FNA3D's own GL driver skips it there too.
 - **SDL_GPU's stock draw families still drop `MaxMipLevel`/`MipMapLevelOfDetailBias`** on the way to

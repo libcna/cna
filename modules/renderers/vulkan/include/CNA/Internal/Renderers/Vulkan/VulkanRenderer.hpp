@@ -10,7 +10,9 @@
 #include <vulkan/vulkan.h>
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <map>
+#include <tuple>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -448,6 +450,18 @@ namespace CNA::Internal::Renderers::Vulkan
 
         void SetCustomEffect(Effect* effect) override { customEffect_ = effect; }
 
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+        /**
+         * @brief Records whether SpriteBatch is in Immediate sort mode.
+         *
+         * plan_fx.md FX-102. Only the compiled-effect route reads it: XNA applies an Effect's
+         * passes when the batch FLUSHES, which in Immediate mode is once per Draw and in every
+         * other mode is once per contiguous same-texture run at End().
+         * @param immediate True for SpriteSortMode.Immediate.
+         */
+        void SetImmediateMode(bool immediate) override { immediateMode_ = immediate; }
+#endif
+
         // REMED-GFX-012 fix: previously unoverridden, so SpriteBatch.Begin(transformMatrix) fell
         // through to IGraphicsRenderer::SetTransformMatrix()'s shared no-op default and the
         // transform was silently discarded on Vulkan specifically (the only affected renderer of
@@ -535,6 +549,29 @@ namespace CNA::Internal::Renderers::Vulkan
         };
 
     private:
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+        /// plan_fx.md FX-102: one sprite held back until the batch flushes, so a whole run of
+        /// same-texture sprites can be replayed once per pass rather than each sprite once per
+        /// pass. Everything a quad needs is captured by value; nothing here outlives the flush.
+        struct PendingCompiledSpriteEXT
+        {
+            const ITextureRenderer* texture = nullptr;
+            Rectangle destination;
+            Rectangle source;
+            Color color;
+            float rotation = 0.0f;
+            Vector2 origin;
+            SpriteEffects effects = SpriteEffects::None;
+        };
+        std::vector<PendingCompiledSpriteEXT> pendingCompiledSprites_;
+        bool immediateMode_ = false;
+        /// Applies the current technique's passes over the whole pending run, pass-major, and
+        /// queues each sprite's quad once per pass. Mirrors FNA's SpriteBatch.FlushBatch.
+        void FlushPendingCompiledSpritesEXT();
+        /// Builds one sprite's six vertices and hands them to the compiled draw route.
+        void QueueCompiledSpriteEXT(const PendingCompiledSpriteEXT& sprite,
+                                    ICompiledEffectRuntime* runtime);
+#endif
         VulkanRenderer*           renderer_             = nullptr;
         bool                             active_              = false;
         Effect*                          customEffect_        = nullptr;
@@ -1065,23 +1102,19 @@ namespace CNA::Internal::Renderers::Vulkan
     public:
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
         /**
-         * @brief Still **false**: the runtime exists, the draw route does not yet.
+         * @brief Whether this renderer runs compiled XNA Effect Framework bytecode.
          *
-         * plan_fx.md FX-065. `VulkanCompiledEffect` is complete and passes every non-drawing
-         * section of the FX-060 shared contract -- format, reflection, the parameter API,
-         * techniques and passes, render state, state policy, samplers, texture binding, clone and
-         * lifecycle. What is missing is the part that turns an applied pass into a Vulkan draw:
-         * a pipeline built from the linked SPIR-V pair, the four descriptor sets MojoShader's
-         * SPIR-V profile expects, and the uniform ring buffers a `Present()`-deferred replay needs.
+         * plan_fx.md FX-065. True: `VulkanCompiledEffect` translates the effect through CNA's own
+         * MojoShader SPIR-V backend -- there is no `mojoshader_vulkan.c` -- and this renderer
+         * builds a pipeline from the linked SPIR-V pair, binds the four descriptor sets the SPIR-V
+         * profile fixes (0 = vertex samplers, 1 = vertex uniforms, 2 = pixel samplers, 3 = pixel
+         * uniforms), and replays the draw from a per-frame uniform ring at `Present()`.
          *
-         * The capability stays false until that exists, and this is not a formality. Reporting true
-         * would let `GraphicsDevice` hand a compiled effect to `DrawPrimitivesEx`, which would
-         * ignore it and render with a stock shader -- precisely the silent fallback `FX-080` was
-         * created to remove from the other three backends. False means construction refuses by
-         * name instead, which is the honest state.
-         * @return false.
+         * The two things it still refuses by name, rather than rendering wrongly, are vertex-stage
+         * sampling (FX-109) and a `Texture3D` bound to a pixel sampler (FX-110).
+         * @return true.
          */
-        [[nodiscard]] bool SupportsCompiledEffects() const override { return false; }
+        [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
 
         /**
          * @brief Creates a compiled-effect runtime for this device.
@@ -1375,11 +1408,6 @@ namespace CNA::Internal::Renderers::Vulkan
         VkSurfaceKHR     surface_        = VK_NULL_HANDLE;
         VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
         VkDevice         device_         = VK_NULL_HANDLE;
-#if defined(CNA_VULKAN_COMPILED_EFFECTS)
-        // plan_fx.md FX-065: one MojoShader effect-backend state per renderer, created lazily on
-        // the first CreateCompiledEffect() call. See VulkanCompiledEffect.hpp.
-        std::unique_ptr<VulkanMojoShaderContextEXT> mojoShaderContext_;
-#endif
 
         uint32_t graphicsQueueFamily_ = 0;
         uint32_t presentQueueFamily_  = 0;
@@ -1511,17 +1539,41 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDeviceMemory  depthMemory_    = VK_NULL_HANDLE;
         VkImageView     depthImageView_ = VK_NULL_HANDLE;
 
-        // --- Sampler cache: one VkSampler per unique (filter,addrU,addrV,aniso) tuple ---
+        // --- Sampler cache: one VkSampler per unique SamplerState ---
+        // plan_fx.md FX-091: every field XNA's SamplerState carries that this renderer can express
+        // is part of the key. Leaving MaxMipLevel, the LOD bias or AddressW out of it -- as this
+        // key did before -- means two genuinely different sampler states collapse onto one
+        // VkSampler, and whichever was created first silently wins.
         struct SamplerStateKey {
-            int filter, addressU, addressV, maxAnisotropy;
+            int filter = 0;
+            int addressU = 0;
+            int addressV = 0;
+            int addressW = 0;
+            int maxAnisotropy = 4;
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
+            [[nodiscard]] auto AsTuple() const noexcept {
+                // The bias is compared by bit pattern rather than by value, so that two distinct
+                // floats can never compare equivalent through a strict-weak ordering on a NaN.
+                return std::tuple(filter, addressU, addressV, addressW, maxAnisotropy, maxMipLevel,
+                                  std::bit_cast<std::uint32_t>(lodBias));
+            }
             bool operator<(const SamplerStateKey& o) const noexcept {
-                if (filter     != o.filter)     return filter     < o.filter;
-                if (addressU   != o.addressU)   return addressU   < o.addressU;
-                if (addressV   != o.addressV)   return addressV   < o.addressV;
-                return maxAnisotropy < o.maxAnisotropy;
+                return AsTuple() < o.AsTuple();
             }
         };
         std::map<SamplerStateKey, VkSampler>                         samplerCache_;
+        /// Returns the cached VkSampler for one XNA sampler state, creating it on first use.
+        /// Shared by the per-slot ApplySampler* setters (which then own a slot) and by the
+        /// compiled-effect route (which owns none -- an Effect's sampler_state block belongs to the
+        /// pass, not to a device slot).
+        [[nodiscard]] VkSampler GetOrCreateSamplerEXT(const SamplerStateKey& key);
+        /// Re-derives slot `slot`'s VkSampler from its whole recorded state.
+        void RebuildSlotSamplerEXT(int slot);
+        /// GraphicsDevice.SamplerStates[slot] as last selected, whole. Each ApplySampler* setter
+        /// updates its own fields here and rebuilds the slot's sampler from all of them, so a
+        /// later setter cannot drop what an earlier one established.
+        SamplerStateKey                                               samplerSlotState_[16] = {};
         VkSampler                                                     slotSamplers_[16] = {};
         std::map<std::pair<VkImageView,VkSampler>, VkDescriptorSet>  texSamplerDescSets_;
         bool anisotropySupported_ = false;
@@ -1629,6 +1681,61 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> fogTex3DUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> fogTex3DUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> fogTex3DUBOPtr_ = {};
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+        // --- Compiled XNA effects (plan_fx.md FX-065) ---
+        //
+        // MojoShader's SPIR-V profile puts its descriptors in four FIXED sets: 0 = vertex-stage
+        // samplers, 1 = the vertex uniform block, 2 = pixel-stage samplers, 3 = the pixel uniform
+        // block. Every pipeline layout here declares all four even when a shader uses none of a
+        // given set, because vkCreatePipelineLayout needs a layout object at each index.
+        //
+        // The two uniform blocks are bound as UNIFORM_BUFFER_DYNAMIC over one ring buffer per
+        // frame, exactly like the fog/skinned bundles above: that keeps a descriptor set's CONTENT
+        // independent of which draw is using it, so a set can be cached by its sampler views alone
+        // while the per-draw uniform bytes travel as a dynamic offset.
+        static constexpr uint32_t kCompiledEffectUBOStride    = 4096;  // 256 float4 registers
+        static constexpr uint32_t kCompiledEffectUBODrawsPerChunk = 256;
+        VkDescriptorSetLayout compiledEffectEmptySetLayout_  = VK_NULL_HANDLE;
+        VkDescriptorSetLayout compiledEffectUniformSetLayoutVS_ = VK_NULL_HANDLE;
+        VkDescriptorSetLayout compiledEffectUniformSetLayoutPS_ = VK_NULL_HANDLE;
+        VkDescriptorPool      compiledEffectDescriptorPool_  = VK_NULL_HANDLE;
+        /// Pixel-sampler set layouts, keyed by the exact set of sampler register indices a shader
+        /// declares -- two effects that sample the same registers share one layout and one pipeline
+        /// layout, and two that do not cannot be handed each other's.
+        std::unordered_map<std::uint64_t, VkDescriptorSetLayout> compiledEffectSamplerSetLayouts_;
+        std::unordered_map<std::uint64_t, VkPipelineLayout>      compiledEffectPipelineLayouts_;
+        std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash> compiledEffectPipelines_;
+        std::array<std::unordered_map<std::uint64_t, VkDescriptorSet>,
+                   MaxFramesInFlight>                  compiledEffectSamplerSets_;
+        /// One slab of `kCompiledEffectUBODrawsPerChunk` uniform slices per stage, with the two
+        /// descriptor sets that name it. Chunks are appended on demand rather than the ring being
+        /// a fixed size: a compiled sprite effect makes one draw per sprite per pass, so a frame
+        /// drawing a few hundred sprites is ordinary rather than exceptional, and wrapping a fixed
+        /// ring would hand two draws the same slice while refusing outright would fail a frame a
+        /// game is entitled to.
+        struct CompiledEffectUniformChunkEXT
+        {
+            VkBuffer        vsBuffer = VK_NULL_HANDLE;
+            VkDeviceMemory  vsMemory = VK_NULL_HANDLE;
+            void*           vsPtr    = nullptr;
+            VkDescriptorSet vsSet    = VK_NULL_HANDLE;
+            VkBuffer        psBuffer = VK_NULL_HANDLE;
+            VkDeviceMemory  psMemory = VK_NULL_HANDLE;
+            void*           psPtr    = nullptr;
+            VkDescriptorSet psSet    = VK_NULL_HANDLE;
+        };
+        std::array<std::vector<CompiledEffectUniformChunkEXT>, MaxFramesInFlight>
+            compiledEffectUBOChunks_;
+        std::array<std::uint32_t, MaxFramesInFlight> compiledEffectUBOCursor_ = {};
+        /// Returns chunk @p chunkIndex of frame @p frameIdx, creating every chunk up to it.
+        CompiledEffectUniformChunkEXT& EnsureCompiledEffectUniformChunkEXT(uint32_t frameIdx,
+                                                                          std::size_t chunkIndex);
+        std::unique_ptr<VulkanMojoShaderContextEXT>   mojoShaderContext_;
+
+        void EnsureCompiledEffectResourcesEXT();
+        [[nodiscard]] VkPipelineLayout GetOrCreateCompiledEffectPipelineLayoutEXT(
+            const std::vector<std::uint32_t>& pixelSamplerBindings);
+#endif
         // SkinnedEffect resources
         VkDescriptorSetLayout descriptorSetLayoutSkinned_  = VK_NULL_HANDLE;
         VkDescriptorPool      descriptorPoolSkinned_       = VK_NULL_HANDLE;
@@ -1777,6 +1884,33 @@ namespace CNA::Internal::Renderers::Vulkan
             // colored3d/textured3d/colored_textured3d bundle. Left false (default) by the legacy
             // no-GpuDrawParams DrawColoredPrimitives()/DrawIndexedColoredPrimitives() path, which
             // still falls through to the original zero-descriptor-set colored3d pipeline.
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+            /// plan_fx.md FX-065: everything a compiled-effect draw needs, captured at queue time.
+            /// The uniform bytes and sampler views in particular CANNOT be read back at record
+            /// time: the constant register files are shared by every effect this renderer owns, and
+            /// a later ApplyPass would have overwritten them.
+            struct CompiledEffectEXT
+            {
+                /// Linked modules, attribute layout and reflected samplers for the applied pass.
+                VulkanCompiledEffect::LinkedPassEXT pass;
+                /// Packed vertex-stage uniform block, empty when the shader declares none.
+                std::vector<std::uint8_t> vertexUniforms;
+                /// Packed pixel-stage uniform block, empty when the shader declares none.
+                std::vector<std::uint8_t> pixelUniforms;
+                /// One image view per reflected pixel sampler, in the same order.
+                std::vector<VkImageView> samplerViews;
+                /// The sampler register index each of those views binds to.
+                std::vector<std::uint32_t> samplerBindings;
+                /// The VkSampler for each of those views, built from the pass's own sampler_state
+                /// block when it assigns one and from the device's slot state when it does not.
+                /// Samplers are cached for the renderer's lifetime, so these stay valid; the views
+                /// belong to the sampled textures and carry the same lifetime assumption every
+                /// other deferred draw family here already makes of its own `descSet`.
+                std::vector<VkSampler> samplers;
+            };
+            bool                    useCompiledEffect = false;
+            CompiledEffectEXT       compiledEffect;
+#endif
             bool                    useFogTex3D       = false;
             float                   fogTex3DUboData[8] = {}; // vec4 fogColorEnabled + vec4 fogVector
             VkDescriptorSet         fogTex3DDescSet   = VK_NULL_HANDLE;
@@ -1890,6 +2024,57 @@ namespace CNA::Internal::Renderers::Vulkan
             uint64_t                order   = 0;
         };
         std::vector<Pending3DDraw>  pending3D_;
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+        [[nodiscard]] VkPipeline GetOrCreateCompiledEffectPipelineEXT(
+            const Pending3DDraw& draw, uint32_t colorAttachmentCount, bool msaa,
+            VkFormat targetDepthFmt);
+        [[nodiscard]] VkDescriptorSet GetOrCreateCompiledEffectSamplerSetEXT(
+            uint32_t frameIdx, VkDescriptorSetLayout layout,
+            const std::vector<std::uint32_t>& bindings,
+            const std::vector<VkImageView>& views,
+            const std::vector<VkSampler>& samplers);
+        void RecordCompiledEffectDrawEXT(VkCommandBuffer cb, const Pending3DDraw& draw,
+                                         uint32_t frameIdx);
+        /// plan_fx.md FX-065: capture everything the deferred replay of a compiled-effect draw
+        /// needs, at the moment the draw is issued. Throws rather than dropping to a stock shader
+        /// if any of it cannot be captured faithfully.
+        void PrepareCompiledEffectDrawEXT(Pending3DDraw& d, const IVertexBufferRenderer& vb,
+                                          const GpuDrawParams& params);
+        /// The same capture, for geometry this renderer generates itself (SpriteBatch quads) and
+        /// so describes with its own fixed declaration rather than a caller-supplied one.
+        void PrepareCompiledEffectDrawEXT(
+            Pending3DDraw& d,
+            const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
+            ICompiledEffectRuntime* runtime);
+        /// Queues one SpriteBatch quad to be drawn with a compiled Effect, as a deferred 3D draw
+        /// rather than through the stock sprite pipeline -- the compiled pass owns the whole
+        /// program, including the projection the stock sprite shader would otherwise apply.
+        CNAEXT void QueueCompiledEffectSpriteEXT(const Sprite2DVertex (&quad)[6],
+                                                 VkImageView spriteView,
+                                                 ICompiledEffectRuntime* runtime);
+        std::map<std::uint64_t, VkShaderModule> compiledEffectShaderModules_;
+
+    public:
+        /**
+         * @brief CNAEXT. Returns a VkShaderModule over exactly these SPIR-V bytes.
+         *
+         * plan_fx.md FX-065. Owned by the renderer and keyed by the SPIR-V's own content, for two
+         * reasons that are both correctness rather than economy. A draw is recorded at `Present()`
+         * long after its pass was applied, so a module owned by the effect -- and destroyed the
+         * next time that shader is re-linked, which `MOJOSHADER_linkSPIRVShaders` forces because it
+         * patches the SPIR-V in place -- would be a dangling handle by then. And the pipeline cache
+         * keys on the module handle, so a handle that can be destroyed and its value reused would
+         * let a later pipeline lookup hit an entry built from different code.
+         *
+         * @param code SPIR-V words.
+         * @param codeBytes Number of bytes at @p code.
+         * @return The module; valid until the device is torn down.
+         */
+        CNAEXT [[nodiscard]] VkShaderModule GetOrCreateCompiledEffectShaderModuleEXT(
+            const void* code, std::size_t codeBytes);
+
+    private:
+#endif
         // Task 447/854: pushes d onto pending3D_ after tagging it with the currently-active
         // OcclusionQuery (if any) -- the single choke point every DrawXPrimitives() call site
         // routes through, so query correlation doesn't need repeating at each of the 6 push
@@ -2398,6 +2583,23 @@ namespace CNA::Internal::Renderers::Vulkan
         void ApplySamplerState(int slot, int filter,
                                int addressU, int addressV,
                                int maxAnisotropy) override;
+
+        /**
+         * @brief Selects the mip clamp and LOD bias of GraphicsDevice.SamplerStates[slot].
+         *
+         * @param slot Sampler slot.
+         * @param maxMipLevel XNA MaxMipLevel: the most detailed level the sampler may select.
+         * @param lodBias XNA MipMapLevelOfDetailBias, added to the computed level of detail.
+         */
+        void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
+
+        /**
+         * @brief Selects the third address mode of GraphicsDevice.SamplerStates[slot].
+         *
+         * @param slot Sampler slot.
+         * @param addressW XNA TextureAddressMode: 0 = Wrap, 1 = Clamp, 2 = Mirror.
+         */
+        void ApplySamplerAddressW(int slot, int addressW) override;
         VkDescriptorSet GetOrCreateTexSamplerDescSet(VkImageView view, VkSampler sampler);
 
         /// REMED-GFX-169: slots 0..6 as one array, for the two PBR descriptor builders whose

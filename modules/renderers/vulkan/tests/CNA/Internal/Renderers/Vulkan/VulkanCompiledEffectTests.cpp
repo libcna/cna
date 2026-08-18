@@ -8,16 +8,17 @@
 // (shader ref-counting, the bound pair, the constant register files, the uniform packing) is code
 // in this repository on this renderer, so it needs its own evidence rather than borrowed trust.
 //
-// These tests go through `VulkanRenderer::CreateCompiledEffect` DIRECTLY rather than the public
-// `Effect` class, because `GraphicsCapability::CompiledEffects` is still false here: the runtime
-// exists, the draw route does not, and reporting the capability true before it does would let a
-// compiled draw fall through to a stock shader. That is the same order SDL_GPU's own tests were
-// written in before FX-071 gave it a draw route, and for the same reason.
+// The runtime-level tests here go through `VulkanRenderer::CreateCompiledEffect` DIRECTLY rather
+// than the public `Effect` class, so they keep testing the backend itself rather than the layer
+// above it. The shared cross-renderer contracts at the bottom of this file go through the public
+// `Effect`/`GraphicsDevice` API instead, which is what makes them the same evidence FNA3D,
+// SDL_GPU and EasyGL produce.
 
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
 
 #include "CNA/Internal/Renderers/Vulkan/VulkanCompiledEffect.hpp"
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
+#include "CNA/TestSupport/CompiledEffectConformance.hpp"
 #include "CNA/TestSupport/CompiledEffectFixtures.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -67,20 +68,17 @@ namespace
     }
 }
 
-TEST(VulkanCompiledEffectTest, TheCapabilityIsStillFalseWhileTheDrawRouteIsMissing)
+TEST(VulkanCompiledEffectTest, TheCapabilityIsTrueAndThePublicBoundaryAcceptsBytecode)
 {
     GraphicsDevice device;
     if (RendererOf(device) == nullptr)
         GTEST_SKIP() << "this build did not select the Vulkan renderer";
-    // plan_fx.md FX-065: deliberate, and the reason is written down where the capability is. The
-    // runtime below is complete; what does not exist yet is the pipeline/descriptor-set/uniform
-    // plumbing that turns an applied pass into a Vulkan draw. Until it does, a true capability
-    // would mean GraphicsDevice hands a compiled effect to a draw route that ignores it.
-    EXPECT_FALSE(device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects));
-    // ...and the public boundary refuses by name rather than accepting bytecode it cannot draw.
-    EXPECT_THROW(Microsoft::Xna::Framework::Graphics::Effect(
-                     device, CNA::TestSupport::BuildSyntheticConformanceEffect({})),
-                 System::NotSupportedException);
+    // plan_fx.md FX-065: true only because the draw route exists. The two report false/true
+    // together on purpose -- a capability that says true while a compiled draw falls through to a
+    // stock shader is exactly the defect FX-080 removed from the other three backends.
+    EXPECT_TRUE(device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects));
+    EXPECT_NO_THROW(Microsoft::Xna::Framework::Graphics::Effect(
+        device, CNA::TestSupport::BuildSyntheticConformanceEffect({})));
 }
 
 TEST(VulkanCompiledEffectTest, ParsesTheCompilerProducedConformanceFixture)
@@ -269,6 +267,205 @@ TEST(VulkanCompiledEffectTest, RepeatedCreateApplyDisposeCyclesStayStable)
         auto clone = runtime->Clone();
         EXPECT_NO_THROW(clone->ApplyPass(0, deviceState, changes));
         if ((cycle & 1) == 0) clone.reset();
+    }
+}
+
+// plan_fx.md FX-060/FX-065: the same cross-renderer contracts FNA3D, SDL_GPU and EasyGL run,
+// through the public Effect/GraphicsDevice API. Each drawing contract renders the compiled
+// effect's own parameters into a render target and reads the pixels back, so a draw that silently
+// used a stock shader -- or bound an attribute, uniform slice or sampler from the wrong place --
+// fails instead of passing quietly.
+
+TEST(VulkanCompiledEffectTest, SharedBackendConformanceContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectContract(device);
+}
+
+TEST(VulkanCompiledEffectDrawTest, SharedDrawMatrixContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectDrawContract(device);
+}
+
+TEST(VulkanCompiledEffectDrawTest, SharedMultiStreamDrawContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectMultiStreamDrawContract(device);
+}
+
+TEST(VulkanCompiledEffectDrawTest, SharedInstancingDrawContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectInstancingDrawContract(device);
+}
+
+TEST(VulkanCompiledEffectDrawTest, SharedSpriteBatchContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchContract(device);
+}
+
+TEST(VulkanCompiledEffectDrawTest, SharedOrientationContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectOrientationContract(device);
+}
+
+TEST(VulkanCompiledEffectDrawTest, SharedEffectSwitchingContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSwitchingContract(device);
+}
+
+TEST(VulkanCompiledEffectDrawTest, SharedSamplerPixelContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::CompiledEffectSamplerContractOptions options;
+    CNA::TestSupport::RunCompiledEffectSamplerPixelContract(device, options);
+}
+
+TEST(VulkanCompiledEffectDrawTest, SharedPassSelectionContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectPassSelectionContract(device);
+}
+
+TEST(VulkanCompiledEffectDrawTest, SharedStockDrawIsolationContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectStockDrawIsolationContract(device);
+}
+
+TEST(VulkanCompiledEffectDrawTest, SharedRenderTargetSourceContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectRenderTargetSourceContract(device);
+}
+
+TEST(VulkanCompiledEffectDrawTest, SharedSpriteBatchMultiPassContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchMultiPassContract(device);
+}
+
+TEST(VulkanCompiledEffectDrawTest, SharedSpriteBatchTextureSlotContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchTextureSlotContract(device);
+}
+
+TEST(VulkanCompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);
+}
+
+// plan_fx.md FX-065. This renderer records a compiled draw at Present(), so each draw's packed
+// uniform block has to survive in a slice of its own until then. The slices come from per-frame
+// chunks of `kCompiledEffectUBODrawsPerChunk` (256) that are APPENDED on demand rather than being
+// one fixed ring: a compiled sprite effect makes a draw per sprite per pass, so a few hundred
+// compiled draws in one frame is ordinary. A fixed ring would either wrap -- handing two draws the
+// same slice, so the second silently renders with the first's constants -- or refuse a frame the
+// game is entitled to. This crosses the boundary twice and reads back three of the draws.
+TEST(VulkanCompiledEffectDrawTest, CompiledDrawsPastOneUniformChunkKeepTheirOwnConstants)
+{
+    using Microsoft::Xna::Framework::Vector4;
+    GraphicsDevice device;
+    if (RendererOf(device) == nullptr)
+        GTEST_SKIP() << "this build did not select the Vulkan renderer";
+
+    Effect effect(device, CNA::TestSupport::BuildSyntheticDrawableEffect());
+    auto& parameters = effect.getParametersProperty();
+    parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+    EffectPass& pass = effect.getTechniquesProperty()[0].getPassesProperty()[1];
+
+    struct ClipVertex { float x, y, z; };
+    const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+    });
+
+    // 600 draws, so the cursor crosses a chunk boundary at 256 and again at 512. Each covers one
+    // cell of a 32x32 target and carries its own Tint, so a shared slice shows up as the wrong
+    // colour in the cell rather than as nothing at all.
+    constexpr int kSize = 32;
+    constexpr int kDraws = 600;
+    RenderTarget2D target(device, kSize, kSize);
+    device.SetRenderTarget(&target);
+    device.Clear(Color(9, 19, 29, 255));
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+
+    // Deliberately NOT periodic modulo the chunk size: with `% 256` the colour of draw i and of
+    // draw i + 256 are equal by construction, so two draws sharing a slice would look correct and
+    // the test would pass against the very bug it exists to catch. Prime moduli make every one of
+    // these 600 draws its own colour.
+    const auto tintFor = [](int i) {
+        return Vector4(static_cast<float>((i * 7) % 251) / 255.0f,
+                       static_cast<float>((i * 13) % 241) / 255.0f,
+                       static_cast<float>((i * 31) % 239) / 255.0f, 1.0f);
+    };
+    for (int i = 0; i < kDraws; ++i)
+    {
+        const int cellX = i % kSize;
+        const int cellY = i / kSize;
+        const float x0 = -1.0f + 2.0f * static_cast<float>(cellX) / kSize;
+        const float x1 = -1.0f + 2.0f * static_cast<float>(cellX + 1) / kSize;
+        const float y0 = -1.0f + 2.0f * static_cast<float>(cellY) / kSize;
+        const float y1 = -1.0f + 2.0f * static_cast<float>(cellY + 1) / kSize;
+        const ClipVertex cell[6] = {
+            {x0, y0, 0.0f}, {x0, y1, 0.0f}, {x1, y1, 0.0f},
+            {x0, y0, 0.0f}, {x1, y1, 0.0f}, {x1, y0, 0.0f},
+        };
+        parameters["Tint"]->SetValue(tintFor(i));
+        pass.Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, cell, 0, 2, declaration);
+    }
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    // One draw inside the first chunk, one just past each boundary.
+    for (const int i : {5, 256, 512})
+    {
+        SCOPED_TRACE("draw " + std::to_string(i));
+        const Vector4 tint = tintFor(i);
+        Color pixel(0, 0, 0, 0);
+        // The target's row 0 is the clip-space y = -1 edge, which this quad's cellY 0 covers.
+        const Rectangle cell(i % kSize, kSize - 1 - (i / kSize), 1, 1);
+        target.GetData(0, &cell, &pixel, 0, 1);
+        const auto channel = [](float value) { return static_cast<int>(value * 255.0f + 0.5f); };
+        EXPECT_NEAR(pixel.getRProperty(), channel(tint.X), 2)
+            << "this draw rendered with another draw's uniform slice";
+        EXPECT_NEAR(pixel.getGProperty(), channel(tint.Y), 2);
+        EXPECT_NEAR(pixel.getBProperty(), channel(tint.Z), 2);
     }
 }
 

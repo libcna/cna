@@ -85,8 +85,6 @@ namespace CNA::Internal::Renderers::Vulkan
             {
                 if (ctx->boundVertex == shader) ctx->boundVertex = nullptr;
                 if (ctx->boundPixel == shader) ctx->boundPixel = nullptr;
-                if (shader->module != VK_NULL_HANDLE && ctx->device != VK_NULL_HANDLE)
-                    vkDestroyShaderModule(ctx->device, shader->module, nullptr);
             }
             if (shader->parseData != nullptr) MOJOSHADER_freeParseData(shader->parseData);
             delete shader;
@@ -434,6 +432,15 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         if (texture != nullptr && !renderer_.OwnsSampleableTextureEXT(texture))
         {
+            // Two genuinely different causes, and a caller can only act on the one it hit.
+            if (dynamic_cast<Microsoft::Xna::Framework::Graphics::Texture3D*>(texture) != nullptr)
+            {
+                throw System::NotSupportedException(
+                    "Vulkan compiled effect: a Texture3D cannot be bound to a compiled effect's "
+                    "sampler. This renderer's Texture3D has no sampleable image view of its own, "
+                    "so the compiled-effect draw route has nothing to bind; the limitation is "
+                    "specific to compiled Effects, not to the renderer (plan_fx.md FX-110).");
+            }
             throw std::invalid_argument(
                 "Vulkan compiled effect: texture was not created by the active Vulkan renderer.");
         }
@@ -667,18 +674,15 @@ namespace CNA::Internal::Renderers::Vulkan
             {
                 throw std::runtime_error("CNA Vulkan: a shader produced no usable SPIR-V.");
             }
-            // Recreated per link: linking PATCHES the SPIR-V in place, so a module made before this
-            // link would carry the previous draw's vertex input types. Cheap, and correct; caching
-            // it would be a correctness bug rather than an optimisation.
-            if (shader.module != VK_NULL_HANDLE)
-                vkDestroyShaderModule(context_->device, shader.module, nullptr);
-            VkShaderModuleCreateInfo info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-            info.codeSize = static_cast<std::size_t>(data->output_len) -
-                            static_cast<std::size_t>(patchTableSize);
-            info.pCode = reinterpret_cast<const std::uint32_t*>(data->output);
-            if (vkCreateShaderModule(context_->device, &info, nullptr, &shader.module) != VK_SUCCESS)
-                throw std::runtime_error("CNA Vulkan: vkCreateShaderModule failed.");
-            return shader.module;
+            // Linking PATCHES the SPIR-V in place, so the bytes only mean this draw's vertex format
+            // right now. vkCreateShaderModule copies them, so a module made here stays correct
+            // forever -- which is why it is asked for by content and owned by the renderer rather
+            // than held on the shader and replaced at the next link. See
+            // VulkanRenderer::GetOrCreateCompiledEffectShaderModuleEXT for why that matters to a
+            // draw recorded at Present().
+            const std::size_t codeBytes = static_cast<std::size_t>(data->output_len) -
+                                          static_cast<std::size_t>(patchTableSize);
+            return renderer_.GetOrCreateCompiledEffectShaderModuleEXT(data->output, codeBytes);
         };
         linked.vertexModule = makeModule(*vertex);
         linked.pixelModule = makeModule(*pixel);
@@ -701,13 +705,25 @@ namespace CNA::Internal::Renderers::Vulkan
         };
         linked.vertexHasUniforms = declaresUniforms(vertexData);
         linked.pixelHasUniforms = declaresUniforms(pixelData);
-        // The pair's identity, for the pipeline cache. Module handles are stable for as long as
-        // this link stands, and a re-link replaces them, which is exactly when a new pipeline is
-        // wanted.
-        linked.pipelineKey = (static_cast<std::uint64_t>(
-                                  reinterpret_cast<std::uintptr_t>(linked.vertexModule)) << 1) ^
-                             static_cast<std::uint64_t>(
-                                 reinterpret_cast<std::uintptr_t>(linked.pixelModule));
+        // The pipeline's identity: the shader pair AND the vertex input layout it is used with.
+        // The modules alone are not enough. They are content-addressed, so two draws whose patched
+        // SPIR-V happens to come out identical share one pair of handles while still binding
+        // different attribute formats and offsets -- and a pipeline built for the first would then
+        // read the second's vertices from the wrong bytes. The renderer's own state key covers the
+        // stride, but not what sits where inside it.
+        std::uint64_t key = 1469598103934665603ull;
+        const auto mix = [&key](std::uint64_t value) {
+            key ^= value + 0x9E3779B97F4A7C15ull + (key << 6) + (key >> 2);
+        };
+        mix(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(linked.vertexModule)));
+        mix(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(linked.pixelModule)));
+        for (const VkVertexInputAttributeDescription& attribute : linked.vertexAttributes)
+        {
+            mix(attribute.location);
+            mix(static_cast<std::uint64_t>(attribute.format));
+            mix(attribute.offset);
+        }
+        linked.pipelineKey = key;
         return linked;
     }
 
