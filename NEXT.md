@@ -66,7 +66,7 @@
 > no tree this campaign builds advertises `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`, so
 > `cna_effect_create_compiled`'s accepting path is never taken here.
 
-## IGL renderer — audited and repaired (2026-08-17), with four items still open
+## IGL renderer — audited, repaired and completed (2026-08-17 / 2026-08-18)
 
 > A full audit of the IGL renderer against `plan_igl.md` found four real defects and fixed them;
 > what remains open is listed below and in `plan_igl.md`'s own task table, which is the detailed
@@ -99,7 +99,10 @@
 > namespace scope with different bodies, so the linker kept one arbitrarily and the first edit to
 > that table changed nothing at all.
 >
-> **Still open for IGL** (details in `plan_igl.md`):
+> **Status: the IGL renderer is complete on both backends.** 70/70 registered tests, and all 27
+> example binaries pass on OpenGL/GLX and on Vulkan alike. What remains open is upstream limits of
+> IGL `v1.1.1`, each established against the pinned source or by attempting it — not unfinished CNA
+> work. Details in `plan_igl.md`:
 >
 > * **IGL-60 and IGL-67 — CLOSED on 2026-08-18.** Both were the same family of bug: Vulkan stored
 >   and read render-target rows three different ways, and each defect hid the other two by
@@ -137,6 +140,9 @@
 >   is itself an abstraction over two APIs.
 > * **IGL-61/62/63** — occlusion queries, sampler LOD bias and cube-target MSAA are not
 >   implementable at IGL `v1.1.1`; re-verified against the pinned headers rather than restated.
+> * **Wayland** — the IGL renderer wires up an X11 native window only, and its constructor throws by
+>   name on Wayland rather than half-working. Left deliberately: it is a platform-layer question
+>   rather than a renderer one, and not worth taking ahead of more important CNA work.
 > * **Non-`Color` surface formats — `Rg32` and `Single` are now public; the rest are not.** The
 >   earlier audit refused to promote anything, for the right reason: it had verified storage, while
 >   promotion promises the whole path. `Igl_PublicSurfaceFormat` supplies the missing two thirds —
