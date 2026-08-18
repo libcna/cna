@@ -55,6 +55,7 @@ orchestration that pulls in extra render targets and GPU memory lives in the gat
 | `CascadedShadowMap` | `CNA/Graphics/CascadedShadowMap.hpp` | The same, split into 2-4 depth ranges so a large scene keeps resolution near the camera. |
 | `CubeShadowMap`, `SpotShadowMap`, `PointLightEXT`, `SpotLightEXT` | `CNA/Graphics/CubeShadowMap.hpp`, `SpotShadowMap.hpp` | Punctual-light shadows: six cube faces for a point light, one perspective map for a spot. |
 | `Skybox` | `CNA/Graphics/Skybox.hpp` | Draws an environment cube map as the sky, in one fullscreen pass. |
+| `ImageBasedLightEXT` | `Microsoft/Xna/Framework/Graphics/ImageBasedLightEXT.hpp` | The three split-sum products as a lit effect consumes them (XNA namespace, always compiled). |
 | `EnvironmentProcessor` | `CNA/Graphics/EnvironmentProcessor.hpp` | Turns an equirectangular panorama into a cube map, and an environment cube into the three IBL products (irradiance, prefiltered specular, BRDF LUT). |
 | `CNAEXT.hpp` | `CNA/Graphics/CNAEXT.hpp` | Master include — pulls in every public type above. |
 
@@ -337,6 +338,44 @@ auto brdfLut     = processor.generateBrdfLut(128, 128);                       //
 - **Cost** (Debug build, single thread, `GenerationCostIsLoadTimeWork`): irradiance 32/32 **3.31 s**,
   prefilter 128/5/64 **2.38 s**, BRDF LUT 128/128 **0.49 s**. An optimised build is several times
   faster. Generate at load, never per frame; halve `sampleCount` where a load screen is unwelcome.
+
+### Image-based lighting: lighting with it
+
+The three products reach a shader through one struct on the effect:
+
+```cpp
+ImageBasedLightEXT environment;
+environment.Irradiance          = irradiance.get();
+environment.PrefilteredSpecular = specular.get();
+environment.BrdfLut             = brdfLut.get();
+environment.PrefilteredMipCount = 5;      // what generatePrefilteredSpecular was asked for
+environment.Intensity           = 1.0f;   // the environment's brightness lives here, not in texels
+
+pbrEffect.setImageBasedLightEXT(environment);   // SkinnedPbrEffect has the same setter
+```
+
+- **`ImageBasedLightEXT` is in the XNA namespace**, beside `PunctualLightEXT` and
+  `ShadowCascadeStateEXT`, and always compiled. An effect's public surface must not change with a
+  build flag, and an always-compiled XNA header cannot include one that exists only under
+  `CNA_CNAEXT`. The engine layer generates the products; the XNA layer consumes them.
+- **All three or none.** A bundle missing any texture is inert and the flat `AmbientLightColor`
+  stays in charge — two thirds of a split sum is a wrong answer, not a partial one.
+- **Flat ambient and IBL are exclusive, never summed.** Both stand for light arriving from the
+  environment, so adding them counts it twice. Binding a valid bundle zeroes the flat term for that
+  draw; detaching it restores exactly what the game set.
+- **Occlusion multiplies the environment term, not the direct light** — and a shadow does the
+  opposite. A shadow map answers the visibility of *one* light; an occlusion map describes how much
+  of the surrounding sky reaches a crevice. Both are asserted in `cnaext_ibl_test`.
+- **Roughness is a mip level**, `roughness * (mipCount - 1)`, the same formula the generator used.
+  On GLSL ES 1.00 profiles (WebGL1, GLES2) a fragment shader has no `textureLod`, so those read the
+  base level and a rough surface reflects a sharp environment. That is a real, visible limitation
+  of those two profiles rather than a silent one.
+- **White furnace** (`cnaext_ibl_test`, environment at half intensity, albedo 1, no lights;
+  128/255 would be exact energy conservation): roughness 0.1 → **159**, 0.4 → **139**, 0.7 → **129**,
+  1.0 → **155**. The split sum with 8-bit products and an 8-sample irradiance sweep gains a little
+  energy at both ends of the roughness range and is nearly exact in the middle.
+- **Cost** (`cnaext_ibl_test --benchmark`, 96×96, Mesa llvmpipe): flat ambient **0.064 ms/frame**,
+  image-based **0.066 ms/frame** — three per-fragment texture reads more, and it shows as about 3 %.
 
 Legend: ✅ implemented and verified · 🟨 partial · ⬜ not implemented · ⛔ deliberately unsupported.
 

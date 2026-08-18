@@ -35,6 +35,8 @@ do not reconstruct the layer's state from the general `NEXT.md`.
 | ✅ | **Phase 8 — directional shadows, complete end to end** (`MOD-800`–`861`, all but `MOD-854`) |
 | ✅ | **Phase 9 — cascaded shadow maps, complete** (`MOD-900`–`917`, 18/18) |
 | ✅ | **Phase 10 — point and spot shadows, complete** (`MOD-1000`–`1012`, 13/13) |
+| ✅ | **Phase 11 — skybox, complete** (`MOD-1100`–`1116`, 17/17) |
+| ✅ | **Phase 12 — image-based lighting, complete** (`MOD-1200`–`1248`; 4 rows ⛔ with reasons, 1 🟨) |
 
 **The HDR spine is complete and verified end to end.** A game can wrap its draw calls in
 `RenderPipeline::begin`/`end`, enable HDR, bloom, a tonemapping operator and FXAA, and get them --
@@ -111,8 +113,31 @@ it was compared against. Only a narrow band of radii made both terms work at onc
 had passed before. `AHigherIntensityDarkensMore` used `EXPECT_LE` and so passed throughout; it is
 strict now.
 
-Next: Phase 11/12 (skybox and IBL), then Phase 13 (materials) and Phase 14 (instancing/LOD helpers,
-independent of all of it).
+**The sky and the environment are in.** `Skybox` draws an environment cube in one fullscreen pass;
+`EnvironmentProcessor` converts an equirectangular panorama to a cube and convolves that cube into
+the three split-sum products; `ImageBasedLightEXT` carries them to `PbrEffect`/`SkinnedPbrEffect`,
+and EasyGL's two PBR programs light with them. Four decisions worth remembering:
+
+- **The precompute is CPU-side.** A render-to-cube version needs float render targets, cube render
+  targets and custom effects present *at once*, which no renderer in the committed scope offers
+  together. On the CPU it works everywhere including Headless, needs no capability gate, and is
+  seamless by construction (the sampler picks the face from the direction). It costs 6.2 s in a
+  Debug build for a full set — load-time work, stated plainly in the docs rather than hidden.
+- **`ImageBasedLightEXT` is in the XNA namespace**, not `CNA::Graphics` — an always-compiled effect
+  surface cannot include a `CNA_CNAEXT`-only header. This overrides §OQ-4's recorded answer; see
+  `MOD-1222` for why the third option beat both listed ones.
+- **Flat ambient and IBL are exclusive.** `FillGpuDrawParams` zeroes `ambientColor` when a valid
+  bundle is bound, so a renderer that ignores the IBL group renders an unlit ambient rather than a
+  double-counted one.
+- **Everything is 8-bit.** `Texture::ValidateFormat` admits `SurfaceFormat::Color` only, so the
+  BRDF table is quantised and an environment brighter than 1.0 carries its brightness in
+  `Intensity` instead of in its texels. `MOD-1208`'s two-format plan had nothing to choose between.
+
+The white furnace (half intensity, albedo 1, exact = 128/255) measures 159/139/129/155 across
+roughness 0.1/0.4/0.7/1.0 — a small energy gain at both ends, near-exact in the middle. Per-frame
+cost is 0.064 ms flat-ambient against 0.066 ms image-based.
+
+Next: Phase 13 (materials) and Phase 14 (instancing/LOD helpers, independent of all of it).
 
 Smaller open rows: `MOD-203` (restore-on-exception around a pass), `MOD-209`/`MOD-210`,
 `MOD-405`/`407`/`409`/`413`/`415`–`417` (bloom quality presets, perf, goldens),
@@ -181,6 +206,8 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-17 | same, with all of Phase 8 (visible shadows, skinned casters, pipeline integration) | same | 7679 ran · 7615 pass · 64 skip · **0 fail** |
 | 2026-08-17 | same, with all of Phase 9 (cascaded shadow maps) | same | 7708 ran · 7644 pass · 64 skip · **0 fail** |
 | 2026-08-17 | same, with all of Phase 10 (point and spot shadows) and the SSAO fix | same | 7730 ran · 7666 pass · 64 skip · **0 fail** |
+| 2026-08-18 | same, with Phase 11 (skybox) and Phase 12.1 (the IBL precompute) | same | 7763 ran · 7699 pass · 64 skip · **0 fail** |
+| 2026-08-18 | same, with all of Phase 12 (IBL consumption, shader and tests) | same | 7769 ran · 7705 pass · 64 skip · **0 fail** |
 
 The `CNA_CNAEXT=OFF` row is the one that answers "can this break what already works". It configures,
 builds and passes with the whole engine layer compiled out. Its lower test count is expected and not

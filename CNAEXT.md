@@ -697,9 +697,9 @@ implementation precedes its per‑renderer follow‑ups.
 | # | Task | Status |
 |---|---|---|
 | N40 | `Skybox` renderer (cube map, fullscreen sky pass), EasyGL | ✅ (one fullscreen draw, no cube mesh: the ray from the inverse rotation-only view-projection *is* the cube lookup. Comes with `EnvironmentProcessor::convertEquirectangular`, since panoramas ship equirectangular and renderers sample cubes — see `plan_modern.md` MOD-1100..1116) |
-| N41 | `EnvironmentProcessor::generateIrradiance` | ⬜ |
-| N42 | `EnvironmentProcessor::generatePrefilteredSpecular` + `generateBrdfLut`; `ImageBasedLightEXT` | ⬜ |
-| N43 | `PbrEffect`/`SkinnedPbrEffect` `setImageBasedLightEXT` hook + split‑sum ambient shader | ⬜ |
+| N41 | `EnvironmentProcessor::generateIrradiance` | ✅ (CPU-side, not render-to-cube: a GPU path needs float render targets, cube render targets and custom effects present at once, which no renderer in the committed scope offers together — see `plan_modern.md` MOD-1200..1212) |
+| N42 | `EnvironmentProcessor::generatePrefilteredSpecular` + `generateBrdfLut`; `ImageBasedLightEXT` | ✅ (`ImageBasedLightEXT` lives in the **XNA** namespace beside `PunctualLightEXT`, not in `CNA::Graphics`: an always-compiled effect surface cannot include a header that exists only under `CNA_CNAEXT`. The BRDF table is 8-bit because `Texture::ValidateFormat` admits `SurfaceFormat::Color` only) |
+| N43 | `PbrEffect`/`SkinnedPbrEffect` `setImageBasedLightEXT` hook + split‑sum ambient shader | ✅ (flat ambient and IBL are exclusive, never summed — `FillGpuDrawParams` zeroes the flat colour so even a renderer ignoring the IBL group cannot double-count. GLSL ES 1.00 profiles have no `textureLod` and read the prefiltered cube's base level, a documented limitation of WEBGL1/OPENGLES2) |
 | N44 | IBL shaders on the other PBR‑capable renderers | ⬜ |
 
 ### Geometry helpers
