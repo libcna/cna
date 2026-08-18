@@ -38,6 +38,7 @@ do not reconstruct the layer's state from the general `NEXT.md`.
 | ✅ | **Phase 11 — skybox, complete** (`MOD-1100`–`1116`, 17/17) |
 | ✅ | **Phase 12 — image-based lighting, complete** (`MOD-1200`–`1248`; 4 rows ⛔ with reasons, 1 🟨) |
 | ✅ | **Phase 13 — material system reconciliation, complete** (`MOD-1300`–`1315`, 16/16) |
+| ✅ | **Phase 14 — instancing, LOD and culling, complete** (`MOD-1400`–`1414`, 15/15) |
 
 **The HDR spine is complete and verified end to end.** A game can wrap its draw calls in
 `RenderPipeline::begin`/`end`, enable HDR, bloom, a tonemapping operator and FXAA, and get them --
@@ -161,7 +162,19 @@ importer's own decoded record. What is worth remembering:
   two draw paths are otherwise identical, asserted at ≤1/255. Making the albedo factor a `Vector4`
   would close it and is an owner decision, because the C mirror is `Color`-shaped too.
 
-Next: Phase 14 (instancing/LOD helpers, independent of all of it).
+**Ten thousand objects now cost one draw call.** `InstancedRendererEXT` owns the per-instance
+transform stream (four `Vector4`s at `TextureCoordinate` 1-4, the layout the renderers already
+bind to the stock shaders), `FrustumCullerEXT` removes what the camera cannot see before any of it
+is uploaded, and `LodGroupEXT` picks a level by distance or by projected pixel size. Measured on
+llvmpipe: 1 000 cubes instanced 0.96 ms against 51.5 ms looped (54x), 10 000 cubes 22.7 ms against
+538 ms (24x) -- and the culled frame is pixel-identical to the unculled one.
+
+Two decisions worth remembering: the per-instance fallback is **opt-in**, because one draw call per
+instance is a different program rather than a slower one; and `LodGroupEXT` orders its levels
+finest first, which is ascending distance in one mode and *descending* pixel size in the other, so
+changing mode re-sorts.
+
+Next: Phase 15 (compute shaders and storage buffers), then 16 (per-renderer rollout) and 17-19.
 
 Smaller open rows: `MOD-203` (restore-on-exception around a pass), `MOD-209`/`MOD-210`,
 `MOD-405`/`407`/`409`/`413`/`415`–`417` (bloom quality presets, perf, goldens),
@@ -233,6 +246,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-18 | same, with Phase 11 (skybox) and Phase 12.1 (the IBL precompute) | same | 7763 ran · 7699 pass · 64 skip · **0 fail** |
 | 2026-08-18 | same, with all of Phase 12 (IBL consumption, shader and tests) | same | 7769 ran · 7705 pass · 64 skip · **0 fail** |
 | 2026-08-18 | same, with all of Phase 13 (the material reconciliation) | same | 7787 ran · 7723 pass · 64 skip · **0 fail** |
+| 2026-08-18 | same, with all of Phase 14 (instancing, LOD and culling) | same | 7806 ran · 7742 pass · 64 skip · **0 fail** |
 
 The `CNA_CNAEXT=OFF` row is the one that answers "can this break what already works". It configures,
 builds and passes with the whole engine layer compiled out. Its lower test count is expected and not

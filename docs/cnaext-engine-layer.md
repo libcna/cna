@@ -56,6 +56,9 @@ orchestration that pulls in extra render targets and GPU memory lives in the gat
 | `ShadowMap`, `DirectionalLightEXT` | `CNA/Graphics/ShadowMap.hpp` | Directional shadow-map generation: fits the light's volume to the scene, opens a pass the app draws its casters into. |
 | `CascadedShadowMap` | `CNA/Graphics/CascadedShadowMap.hpp` | The same, split into 2-4 depth ranges so a large scene keeps resolution near the camera. |
 | `CubeShadowMap`, `SpotShadowMap`, `PointLightEXT`, `SpotLightEXT` | `CNA/Graphics/CubeShadowMap.hpp`, `SpotShadowMap.hpp` | Punctual-light shadows: six cube faces for a point light, one perspective map for a spot. |
+| `InstancedRendererEXT` | `CNA/Graphics/InstancedRendererEXT.hpp` | Draws one mesh part many times in a single call, owning the per-instance transform stream. |
+| `LodGroupEXT` (+ `LodSelectionMode`) | `CNA/Graphics/LodGroupEXT.hpp` | Levels of detail selected by distance or projected screen size, with optional hysteresis. |
+| `FrustumCullerEXT` | `CNA/Graphics/FrustumCullerEXT.hpp` | Filters bounds — or transforms — down to what a camera can see. |
 | `Skybox` | `CNA/Graphics/Skybox.hpp` | Draws an environment cube map as the sky, in one fullscreen pass. |
 | `ImageBasedLightEXT` | `Microsoft/Xna/Framework/Graphics/ImageBasedLightEXT.hpp` | The three split-sum products as a lit effect consumes them (XNA namespace, always compiled). |
 | `EnvironmentProcessor` | `CNA/Graphics/EnvironmentProcessor.hpp` | Turns an equirectangular panorama into a cube map, and an environment cube into the three IBL products (irradiance, prefiltered specular, BRDF LUT). |
@@ -432,6 +435,48 @@ The mapping, field for field (`MOD-1300`):
   `Color`, so importing rounds it to 8 bits per channel. The two paths' draw parameters are
   otherwise identical, and that bound (≤ 1/255 on the base colour, exact everywhere else) is
   asserted rather than assumed.
+
+### Many objects: instancing, LOD and culling
+
+Three small classes that compose into one frame, none of which needs anything the XNA API did not
+already have:
+
+```cpp
+CNA::Graphics::InstancedRendererEXT renderer(device, meshPart);
+CNA::Graphics::FrustumCullerEXT culler;
+CNA::Graphics::LodGroupEXT lod;
+
+culler.setCamera(view, projection);
+culler.cullTransforms(worldMatrices, worldBounds, visible);  // only what can be seen
+renderer.setInstances(visible);                              // one upload, buffer reused
+renderer.draw(effect);                                       // one draw call
+```
+
+- **The instance stream is four `Vector4`s at `TextureCoordinate` usage indices 1–4**, 64 bytes,
+  which is what CNA's renderers already expect and what the stock shaders bind to attribute
+  locations 12–15. So an ordinary `BasicEffect` or `PbrEffect` instances unchanged: the effect's own
+  `World` still applies, with the per-instance transform on top.
+- **The buffer grows and is otherwise reused**, so re-uploading the same count every frame allocates
+  nothing — `getInstanceCapacity()` is the assertable form of that.
+- **The per-instance fallback is opt-in.** Where a renderer cannot instance, `draw` throws unless
+  the caller has enabled the fallback: one draw call per instance is not a slower version of the
+  same program, it is a different one, and a game that would rather know than crawl says nothing
+  and catches the exception. The fallback needs an `IEffectMatrices` effect, and restores its
+  `World` afterwards.
+- **The per-instance tint stream is off by default** and needs a `ShaderEffect` that declares it:
+  the stock shaders already occupy all sixteen attribute locations XNA's profile guarantees, so
+  there is no room for a fifth per-instance element.
+- **`LodGroupEXT` orders its levels finest first** — ascending distance in `Distance` mode,
+  *descending* pixel size in `ScreenSpaceError` mode, because a size threshold shrinks where a
+  distance grows. Optional hysteresis stops an object hovering on a boundary from switching every
+  frame; it holds only across the neighbouring boundary, so a teleport across two levels still
+  changes level immediately.
+- **`FrustumCullerEXT` is a sweep over XNA's own `BoundingFrustum`**, writing indices into a vector
+  the caller reuses. A transform with no matching bound is kept, not dropped: losing geometry
+  because a caller forgot a bound is the more surprising of the two failures.
+- **Cost** (`cnaext_instancing_lod_test --benchmark`, 128×128, Mesa llvmpipe): 1 000 cubes
+  instanced **0.96 ms** against **51.5 ms** looped (**54×**); 10 000 cubes instanced **22.7 ms**
+  against **538 ms** looped (**24×**).
 
 Legend: ✅ implemented and verified · 🟨 partial · ⬜ not implemented · ⛔ deliberately unsupported.
 

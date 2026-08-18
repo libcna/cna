@@ -706,8 +706,8 @@ implementation precedes its per‑renderer follow‑ups.
 
 | # | Task | Status |
 |---|---|---|
-| N50 | `InstancedRendererEXT` (instance‑stream helper over the existing `DrawInstancedPrimitives`) | ⬜ |
-| N51 | `LodGroupEXT` distance selection | ⬜ |
+| N50 | `InstancedRendererEXT` (instance‑stream helper over the existing `DrawInstancedPrimitives`) | ✅ (one draw call for 10 000 cubes, 24-54x faster than the same scene looped; the per-instance fallback is opt-in rather than silent, because one call per instance is a different program, not a slower one — see `plan_modern.md` MOD-1400..1414) |
+| N51 | `LodGroupEXT` distance selection | ✅ (plus optional hysteresis and a screen-space-error mode, and `FrustumCullerEXT` beside it — culling before uploading is what makes the instance stream cheap) |
 | N52 | glTF → `PbrMaterial` bridge (`applyMaterial`) so imported meshes can feed the engine layer | ✅ (`materialFromGltfEXT`, a template over a concept so `graphics-ext` links neither the content module nor `cgltf`; the importer's runtime path is unchanged. glTF's float `baseColorFactor` quantises to the material's 8-bit albedo — the one documented loss, asserted at ≤1/255) |
 
 ### Compute (long term)
