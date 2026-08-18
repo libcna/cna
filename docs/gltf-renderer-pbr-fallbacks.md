@@ -524,6 +524,21 @@ draws it with the opaque-white identity substituted for the authored colour — 
 reported as a successful draw. The project owner rejected the unqualified `GLTF CORE 2.0 CORRECT`
 milestone on 2026-08-18 on exactly that ground, and the partition is the answer to it.
 
+**And "refuses" has a precondition, added the same day after `GLTF-473`:**
+
+> An explicit refusal counts as one **only if it happens before any incompatible vertex-layout
+> interpretation and before any GPU submission.**
+
+Without that clause the second state is not actually safe, because "throws eventually" is not the
+same as "did not read the data". A route that binds a client array, records a command or overwrites a
+matrix and *then* throws has already half-executed the draw: it may have read the record through a
+layout that does not describe it, and it leaves the device in a state the next frame inherits. The
+rule is what makes the refusal a boundary rather than an epilogue, and it is why every guard in this
+document is called at the top of its route rather than beside the code it protects — `GLTF-473`'s own
+first attempt placed two of six calls after a `glMatrixMode`/`glLoadMatrixf` pair and had to be moved.
+Its observable form is recovery: `NoPbrOrSkinnedRecordIsEverReadThroughAnIncompatibleLayout` requires
+the very next valid draw to still render, which a refusal that kept state cannot satisfy.
+
 The refusal is **one shared implementation**, not eight:
 `CNA::Internal::Renderers::RequireVertexColourPbrSupportEXT`
 (`modules/graphics/include/CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp`). It fires

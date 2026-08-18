@@ -2208,6 +2208,24 @@ namespace CNA::Internal::Renderers::OpenGLES1
             return;
         }
 
+        // plan_gltf.md GLTF-473: the ordinary path's own offsets, checked against the same canonical
+        // table. These three are pure predicates and the guard touches nothing, so both sit ABOVE
+        // the first glMatrixMode below rather than beside the pointer setup they describe: a
+        // refusal must leave the context exactly as it found it, or a caller that catches it draws
+        // its next frame through a projection matrix this draw already overwrote.
+        //
+        // The colour and normal arms are already stride-gated above, but the texture arm is not --
+        // it derives its offset as `stride - 8`, which is where UV0 happens to sit in the records
+        // this route was written for and is NOT where it sits in the rigid PBR dual-UV record
+        // (stride 60 keeps UV0 at 40, not 52).
+        const bool wantTexture = params.textureEnabled && params.texture0 != nullptr && stride != kStrideColor;
+        const bool wantNormal = (params.lightingEnabled || wantEnvMap) && stride == kStrideNormalTexture;
+        const bool wantColorArray = params.vertexColorEnabled && (stride == kStrideColor || stride == kStrideColorTexture);
+        RequireClientArraysMatchStrideEXT(stride, wantColorArray,
+                                          wantTexture || wantDualTexture || wantEnvMap, wantNormal,
+                                          wantDualTexture, "ordinary-nonindexed",
+                                          /*unsupportedSemantic*/nullptr);
+
         float projCol[16], viewCol[16], mvCol[16];
         projection.ToColumnMajor(projCol);
         view.ToColumnMajor(viewCol);
@@ -2215,20 +2233,6 @@ namespace CNA::Internal::Renderers::OpenGLES1
 
         glMatrixMode(GL_PROJECTION);
         glLoadMatrixf(projCol);
-
-        const bool wantTexture = params.textureEnabled && params.texture0 != nullptr && stride != kStrideColor;
-        const bool wantNormal = (params.lightingEnabled || wantEnvMap) && stride == kStrideNormalTexture;
-        const bool wantColorArray = params.vertexColorEnabled && (stride == kStrideColor || stride == kStrideColorTexture);
-
-        // plan_gltf.md GLTF-473: the ordinary path's own offsets, checked against the same canonical
-        // table, before any GL state is touched. The colour and normal arms are already
-        // stride-gated above, but the texture arm is not -- it derives its offset as `stride - 8`,
-        // which is where UV0 happens to sit in the records this route was written for and is NOT
-        // where it sits in the rigid PBR dual-UV record (stride 60 keeps UV0 at 40, not 52).
-        RequireClientArraysMatchStrideEXT(stride, wantColorArray,
-                                          wantTexture || wantDualTexture || wantEnvMap, wantNormal,
-                                          wantDualTexture, "ordinary-nonindexed",
-                                          /*unsupportedSemantic*/nullptr);
 
         if (params.lightingEnabled)
         {
@@ -2352,6 +2356,24 @@ namespace CNA::Internal::Renderers::OpenGLES1
             return;
         }
 
+        // plan_gltf.md GLTF-473: the ordinary path's own offsets, checked against the same canonical
+        // table. These three are pure predicates and the guard touches nothing, so both sit ABOVE
+        // the first glMatrixMode below rather than beside the pointer setup they describe: a
+        // refusal must leave the context exactly as it found it, or a caller that catches it draws
+        // its next frame through a projection matrix this draw already overwrote.
+        //
+        // The colour and normal arms are already stride-gated above, but the texture arm is not --
+        // it derives its offset as `stride - 8`, which is where UV0 happens to sit in the records
+        // this route was written for and is NOT where it sits in the rigid PBR dual-UV record
+        // (stride 60 keeps UV0 at 40, not 52).
+        const bool wantTexture = params.textureEnabled && params.texture0 != nullptr && stride != kStrideColor;
+        const bool wantNormal = (params.lightingEnabled || wantEnvMap) && stride == kStrideNormalTexture;
+        const bool wantColorArray = params.vertexColorEnabled && (stride == kStrideColor || stride == kStrideColorTexture);
+        RequireClientArraysMatchStrideEXT(stride, wantColorArray,
+                                          wantTexture || wantDualTexture || wantEnvMap, wantNormal,
+                                          wantDualTexture, "ordinary-indexed",
+                                          /*unsupportedSemantic*/nullptr);
+
         float projCol[16], viewCol[16], mvCol[16];
         projection.ToColumnMajor(projCol);
         view.ToColumnMajor(viewCol);
@@ -2359,20 +2381,6 @@ namespace CNA::Internal::Renderers::OpenGLES1
 
         glMatrixMode(GL_PROJECTION);
         glLoadMatrixf(projCol);
-
-        const bool wantTexture = params.textureEnabled && params.texture0 != nullptr && stride != kStrideColor;
-        const bool wantNormal = (params.lightingEnabled || wantEnvMap) && stride == kStrideNormalTexture;
-        const bool wantColorArray = params.vertexColorEnabled && (stride == kStrideColor || stride == kStrideColorTexture);
-
-        // plan_gltf.md GLTF-473: the ordinary path's own offsets, checked against the same canonical
-        // table, before any GL state is touched. The colour and normal arms are already
-        // stride-gated above, but the texture arm is not -- it derives its offset as `stride - 8`,
-        // which is where UV0 happens to sit in the records this route was written for and is NOT
-        // where it sits in the rigid PBR dual-UV record (stride 60 keeps UV0 at 40, not 52).
-        RequireClientArraysMatchStrideEXT(stride, wantColorArray,
-                                          wantTexture || wantDualTexture || wantEnvMap, wantNormal,
-                                          wantDualTexture, "ordinary-indexed",
-                                          /*unsupportedSemantic*/nullptr);
 
         if (params.lightingEnabled)
         {

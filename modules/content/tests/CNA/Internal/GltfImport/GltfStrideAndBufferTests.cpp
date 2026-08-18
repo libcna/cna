@@ -593,6 +593,18 @@ TEST(RendererStrideConformance, NoPbrOrSkinnedRecordIsEverReadThroughAnIncompati
         EXPECT_NE(std::string::npos, failure.find("Normal0"))
             << "offset 12 is the NORMAL in every record here; a refusal that does not say so is not "
                "actionable: " << failure;
+
+        // And the refusal has to have happened BEFORE the renderer touched anything -- an
+        // "explicit refusal" that already bound state or submitted work is not a refusal, it is a
+        // half-executed draw with an exception on the end. The observable form of that rule is
+        // recovery: the very next valid draw must still render. This is the same property
+        // `DeclarationGuardTest.AValidDrawAfterARefusedOneStillRenders` pins for the declaration
+        // guard, asserted here for the fixed-function layout guard.
+        Model recovery = cm.Load<Model>("mat-unlit");
+        EXPECT_NO_THROW({
+            recovery.Draw(identity, identity, identity);
+            gd.Present();
+        }) << "a valid draw after a refused one failed, so the refusal left renderer state behind";
     }
 }
 
