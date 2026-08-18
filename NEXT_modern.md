@@ -37,6 +37,7 @@ do not reconstruct the layer's state from the general `NEXT.md`.
 | ✅ | **Phase 10 — point and spot shadows, complete** (`MOD-1000`–`1012`, 13/13) |
 | ✅ | **Phase 11 — skybox, complete** (`MOD-1100`–`1116`, 17/17) |
 | ✅ | **Phase 12 — image-based lighting, complete** (`MOD-1200`–`1248`; 4 rows ⛔ with reasons, 1 🟨) |
+| ✅ | **Phase 13 — material system reconciliation, complete** (`MOD-1300`–`1315`, 16/16) |
 
 **The HDR spine is complete and verified end to end.** A game can wrap its draw calls in
 `RenderPipeline::begin`/`end`, enable HDR, bloom, a tonemapping operator and FXAA, and get them --
@@ -137,7 +138,30 @@ The white furnace (half intensity, albedo 1, exact = 128/255) measures 159/139/1
 roughness 0.1/0.4/0.7/1.0 — a small energy gain at both ends, near-exact in the middle. Per-frame
 cost is 0.064 ms flat-ambient against 0.066 ms image-based.
 
-Next: Phase 13 (materials) and Phase 14 (instancing/LOD helpers, independent of all of it).
+**`PbrMaterial` is now a lossless description of `PbrEffect`**, which it was not: it described a
+subset and dropped the rest, so it could not be the serialization form it was meant to be.
+`applyMaterial` / `extractMaterial` round-trip every field exactly (asserted field by field, and
+across all 256 values of the one field that changes representation), `applyMaterialState` applies
+the blending and culling a material implies, and `materialFromGltfEXT` builds one from the glTF
+importer's own decoded record. What is worth remembering:
+
+- **Emissive became a `Vector3` and alpha coverage became `AlphaModeEXT`** — the existing XNA-layer
+  enumeration, not a new `CNA::Graphics::AlphaMode`; a second enum would have met the first in a
+  conversion function nobody could delete.
+- **Defaults moved to glTF's** (metallic 1, roughness 1, from 0 and 0.5) so that applying a default
+  material to a default effect is genuinely a no-op — which is now asserted.
+- **The glTF bridge is a template over a concept**, so `graphics-ext` links neither the content
+  module nor `cgltf`. Both sides test it: a stand-in source here, the importer's real `MaterialOut`
+  there, with a `static_assert` pinning the agreement.
+- **The C ABI was not broken.** `docs/c-api/ABI_VERSIONING.md` forbids changing an existing name's
+  meaning within a major, so `CNA_PbrMaterial` is frozen exactly as published and the current shape
+  arrived as `CNA_PbrMaterialEXT` + `cna_pbr_material_ext_init`. The recorded baseline reports only
+  additions, which the policy permits.
+- **One value quantises**: glTF's float `baseColorFactor` becomes the material's 8-bit albedo. The
+  two draw paths are otherwise identical, asserted at ≤1/255. Making the albedo factor a `Vector4`
+  would close it and is an owner decision, because the C mirror is `Color`-shaped too.
+
+Next: Phase 14 (instancing/LOD helpers, independent of all of it).
 
 Smaller open rows: `MOD-203` (restore-on-exception around a pass), `MOD-209`/`MOD-210`,
 `MOD-405`/`407`/`409`/`413`/`415`–`417` (bloom quality presets, perf, goldens),
@@ -208,6 +232,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-17 | same, with all of Phase 10 (point and spot shadows) and the SSAO fix | same | 7730 ran · 7666 pass · 64 skip · **0 fail** |
 | 2026-08-18 | same, with Phase 11 (skybox) and Phase 12.1 (the IBL precompute) | same | 7763 ran · 7699 pass · 64 skip · **0 fail** |
 | 2026-08-18 | same, with all of Phase 12 (IBL consumption, shader and tests) | same | 7769 ran · 7705 pass · 64 skip · **0 fail** |
+| 2026-08-18 | same, with all of Phase 13 (the material reconciliation) | same | 7787 ran · 7723 pass · 64 skip · **0 fail** |
 
 The `CNA_CNAEXT=OFF` row is the one that answers "can this break what already works". It configures,
 builds and passes with the whole engine layer compiled out. Its lower test count is expected and not
@@ -241,6 +266,16 @@ Two things about how the suite is run matter more than they look:
 - **Run it from the repository root**, not from the build directory. Content/media/audio tests
   resolve fixtures like `tests/assets/xnb/...` relative to the CWD; from `cmake-build-cnaext/` that
   is 116 failures of pure path noise.
+- **The C API is off in `cmake-build-cnaext`, and turning it on has a catch.** Phase 13 verified
+  the C mirror by configuring that tree with `-DCNA_BUILD_C_API=ON`, then turned it back off. The
+  reason: `libcna_c_api_static.a`'s generator reads `CMakeFiles/<target>.dir/link.txt`, which only
+  the Makefile generator writes, so under Ninja that one target fails every build and takes
+  `CApi_InstalledConsumer` with it. Everything else builds and passes. Two other C API gates fail
+  here for environment reasons unrelated to any change: `CApiHeaderCompatibility` (this gcc has no
+  `-std=c23`) and `CApiCoverageMatrix` (regenerating the inventory on this machine reports 388
+  `planned` rows against the checked-in file's 0 — verified on a pristine tree, so the checked-in
+  inventory was generated with a different doxygen).
+
 - **Run it with a display.** Without one, every test whose fixture constructs a `GraphicsDevice`
   fails on "No available video device" (~1000 failures). `Xvfb :99 -screen 0 1280x720x24` plus
   `DISPLAY=:99 SDL_VIDEODRIVER=x11` gives Mesa llvmpipe, which reports **OpenGL ES 3.2** to

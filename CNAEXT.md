@@ -656,7 +656,7 @@ implementation precedes its per‑renderer follow‑ups.
 | N01 | `CNA_CNAEXT` CMake option; builds with and without it | ✅ |
 | N02 | `TonemappingMode` / `RenderQuality` / `ShadowQuality` enums | ✅ (add `Uncharted2`) |
 | N03 | `RenderPipelineSettings` config bag | ✅ (extend fields in N30) |
-| N04 | `PbrMaterial` data bag | ✅ (extend in N42) |
+| N04 | `PbrMaterial` data bag | ✅ (no longer only a bag: it is a lossless value description of `PbrEffect` — `applyMaterial`/`extractMaterial` round-trip exactly, equality/hash/`ToString` included. Emissive is a `Vector3` so HDR emissive survives; alpha coverage reuses the XNA-layer `AlphaModeEXT` rather than declaring a second enum — see `plan_modern.md` MOD-1300..1315) |
 | N05 | `include/CNA/Graphics/CNAEXT.hpp` master include | ⬜ **(mislabeled done; actually missing)** |
 | N06 | `modules/graphics-ext/examples/cnaext_settings_example.cpp` compile test | ✅ |
 
@@ -708,7 +708,7 @@ implementation precedes its per‑renderer follow‑ups.
 |---|---|---|
 | N50 | `InstancedRendererEXT` (instance‑stream helper over the existing `DrawInstancedPrimitives`) | ⬜ |
 | N51 | `LodGroupEXT` distance selection | ⬜ |
-| N52 | glTF → `PbrMaterial` bridge (`applyMaterial`) so imported meshes can feed the engine layer | ⬜ |
+| N52 | glTF → `PbrMaterial` bridge (`applyMaterial`) so imported meshes can feed the engine layer | ✅ (`materialFromGltfEXT`, a template over a concept so `graphics-ext` links neither the content module nor `cgltf`; the importer's runtime path is unchanged. glTF's float `baseColorFactor` quantises to the material's 8-bit albedo — the one documented loss, asserted at ≤1/255) |
 
 ### Compute (long term)
 

@@ -43,7 +43,9 @@ orchestration that pulls in extra render targets and GPU memory lives in the gat
 |---|---|---|
 | `RenderPipelineSettings` | `CNA/Graphics/RenderPipelineSettings.hpp` | Configuration bag (HDR, exposure, gamma, tonemapping, bloom, SSAO, quality, shadows). **No consumer yet** — `plan_modern.md` Phase 7 builds it. |
 | `TonemappingMode`, `RenderQuality`, `ShadowQuality` | same directory | Enumerations used by the settings bag. |
-| `PbrMaterial` | `CNA/Graphics/PbrMaterial.hpp` | Serialization-friendly PBR material description. |
+| `PbrMaterial` (+ `PbrTextureSlot`) | `CNA/Graphics/PbrMaterial.hpp` | A lossless, comparable value description of everything `PbrEffect` renders. |
+| `applyMaterial`, `extractMaterial`, `applyMaterialState` | `CNA/Graphics/MaterialBinding.hpp` | Moves a material onto an effect and back, and applies the device state it implies. |
+| `materialFromGltfEXT` | `CNA/Graphics/GltfMaterialBridge.hpp` | Builds a material from the glTF importer's decoded record. |
 | `DepthEffect` (+ `DepthEffectMode`, `DitherMode`) | `CNA/Graphics/DepthEffect.hpp` | Colour-depth-reduction post-process (RGB565/RGB332, 4/2/1-bit greyscale, palettes, ordered dithering). |
 | `CRTEffect` (+ `CRTMaskType`) | `CNA/Graphics/CRTEffect.hpp` | Scanlines, RGB sub-pixel mask, barrel curvature, vignette. |
 | `AsciiPostProcessEffect` (+ `AsciiQuantizeMode`) | `CNA/Graphics/AsciiPostProcessEffect.hpp` | Renderer-neutral ASCII/glyph-grid post-process (see [`ascii-post-process-effect.md`](ascii-post-process-effect.md)). |
@@ -376,6 +378,60 @@ pbrEffect.setImageBasedLightEXT(environment);   // SkinnedPbrEffect has the same
   energy at both ends of the roughness range and is nearly exact in the middle.
 - **Cost** (`cnaext_ibl_test --benchmark`, 96×96, Mesa llvmpipe): flat ambient **0.064 ms/frame**,
   image-based **0.066 ms/frame** — three per-fragment texture reads more, and it shows as about 3 %.
+
+### Materials: `PbrMaterial` and the effect it describes
+
+`PbrMaterial` is a value: storable, comparable, hashable, and — the point of Phase 13 — a
+**lossless** description of what `PbrEffect` can render.
+
+```cpp
+CNA::Graphics::PbrMaterial material;
+material.setAlbedoTexture(albedo);
+material.setMetallicFactor(0.0f);
+material.setRoughnessFactor(0.35f);
+material.setEmissiveFactor(Vector3(4.0f, 4.0f, 4.0f));   // above 1: HDR emissive
+material.setAlphaMode(AlphaModeEXT::Mask);
+material.setAlphaCutoff(0.4f);
+material.setDoubleSided(true);
+
+applyMaterial(material, effect);            // every field lands on the effect
+applyMaterialState(material, device);       // blending and culling, if the app wants them applied
+assert(extractMaterial(effect) == material);  // exact, and asserted in the tests
+```
+
+The mapping, field for field (`MOD-1300`):
+
+| `PbrMaterial` | `PbrEffect` |
+|---|---|
+| `AlbedoTexture` … `SpecularColorTexture` (7 slots) | `Texture`, `NormalMap`, `MetallicRoughnessMap`, `EmissiveMap`, `OcclusionMap`, `SpecularMapEXT`, `SpecularColorMapEXT` |
+| `AlbedoColor` (`Color`) | `DiffuseColor` (RGB) + `Alpha` |
+| `MetallicFactor`, `RoughnessFactor` | `MetallicFactor`, `RoughnessFactor` |
+| `EmissiveFactor` (`Vector3`) | `EmissiveFactor` |
+| `NormalScale`, `OcclusionStrength` | `NormalScaleEXT`, `OcclusionStrengthEXT` |
+| `Ior`, `SpecularFactor`, `SpecularColorFactor` | `IorEXT`, `SpecularFactorEXT`, `SpecularColorFactorEXT` |
+| `AlphaMode`, `AlphaCutoff`, `DoubleSided` | `AlphaModeEXT`, `AlphaCutoffEXT`, `DoubleSidedEXT` |
+| `TextureCoordinateSet(slot)` ×7 | `TextureCoordinateSetsEXT[0..4]` + the two specular selectors |
+| `TextureTransform(slot)` ×7 | `TextureTransformsEXT[0..4]` + the two specular transforms |
+| `BaseColorTextureSrgb`, `EmissiveTextureSrgb`, `SpecularColorTextureSrgb`, `OutputEncodedToSrgb` | the four `*IsSrgbEXT` / `EncodeOutputToSrgbEXT` properties |
+
+- **Not in the material, deliberately**: matrices, lights, fog, shadows and image-based lighting.
+  Those describe the scene a material stands in; putting them here would make two draws of the same
+  material in two places two materials. `applyMaterial` leaves them untouched.
+- **Ownership** (`MOD-1314`): a material never owns its textures. It is a description, and one that
+  owned GPU resources could not be held by value in a container of materials. Keeping a texture
+  alive is `PbrEffect::SetOwned*`'s job, and it stays on the effect.
+- **Alpha mode and sidedness are device state**, so `applyMaterialState` is a separate call an
+  application makes when it wants them applied: `Blend` → `BlendState::NonPremultiplied` (PBR
+  effects emit straight RGB, and CNA does not sort), `Mask` and `Opaque` → `BlendState::Opaque`
+  (a cutout is a discard in the shader, not blending), `doubleSided` → `RasterizerState::CullNone`.
+- **From glTF**: `materialFromGltfEXT(importedMaterial, textures)` turns the importer's own decoded
+  record into a material. It is a template over a concept rather than a function of
+  `GltfImport::MaterialOut` by name, so the engine layer needs neither the content module nor
+  `cgltf` to build. The importer's runtime path is unchanged; this is a second, optional reading.
+- **One value quantises**: glTF's `baseColorFactor` is four floats and a material's albedo is a
+  `Color`, so importing rounds it to 8 bits per channel. The two paths' draw parameters are
+  otherwise identical, and that bound (≤ 1/255 on the base colour, exact everywhere else) is
+  asserted rather than assumed.
 
 Legend: ✅ implemented and verified · 🟨 partial · ⬜ not implemented · ⛔ deliberately unsupported.
 
