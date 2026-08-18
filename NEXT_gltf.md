@@ -25,6 +25,12 @@ session needs to start work without re-deriving the state.
   "factor-only". It now consumes all twenty, verified on a live IGL OpenGL device in the new
   `cmake-build-igl` tree (40/40 IGL witnesses, 720/720 glTF/PBR tests), which also moved `GLTF-344`
   to 14 of 16.
+- **The last renderer that is theoretically reachable here is `WICKED`, and it is blocked twice** —
+  both blockers measured on 2026-08-18 and written into `GLTF-465`. It has no stride 60, 76 or 80, so
+  it cannot draw dual-UV content at all and `COLOR_0` sits behind that whole family; and configuring
+  it fails before any compile because the **shared** `~/deps/WickedEngine` carries the legacy SDL3
+  bridge and this branch's reverse-patch step cannot undo it. That checkout was left untouched on
+  purpose: repairing it discards another session's state. `METAL` remains uncompilable anywhere here.
   **No renderer in the tree is in the forbidden third state any more** — nothing accepts a valid core glTF primitive and renders it
   with different semantics. `GLTF-465` is half closed: **no PBR renderer draws a `COLOR_0` asset with different
   core semantics any more** (thirteen apply the product, four refuse the draw), and what remains is
