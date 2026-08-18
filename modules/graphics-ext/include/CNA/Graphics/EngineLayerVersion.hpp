@@ -18,8 +18,12 @@
  * **Not an ABI guarantee.** `CNAEXT.md` §9 says the engine layer may change until it stabilizes,
  * and this number does not soften that: it records which revision you have, it does not promise
  * that two revisions are compatible.
+ *
+ * What each revision changed is in `docs/cnaext-engine-changelog.md`. Bump this whenever a
+ * consumer could notice a change — **including an addition**, because a consumer that feature-tests
+ * on the revision needs the number to move when the feature arrives, not only when one breaks.
  */
-#define CNA_CNAEXT_ENGINE_VERSION 1
+#define CNA_CNAEXT_ENGINE_VERSION 2
 
 namespace CNA::Graphics {
 
@@ -30,14 +34,14 @@ namespace CNA::Graphics {
     /**
      * @brief Returns the engine-layer revision the linked library was built with.
      *
-     * @return The revision number; 1 for the first published shape of the layer.
+     * @return The revision number; 1 was the first published shape of the layer.
      */
     [[nodiscard]] int getEngineLayerVersion();
 
     /**
      * @brief Returns the engine-layer revision as text, for logs and about-boxes.
      *
-     * @return The revision in the form `"CNA engine layer 1"`.
+     * @return The revision in the form `"CNA engine layer 2"`.
      */
     [[nodiscard]] std::string getEngineLayerVersionString();
 
