@@ -116,6 +116,25 @@ namespace CNA::Graphics {
         /** @brief Enables or disables FXAA, which runs after tonemapping. */
         void setFXAAEnabled(bool value);
 
+        /**
+         * @brief Returns the minimum local contrast FXAA treats as an edge.
+         *
+         * plan_modern.md `MOD-604`. Lives here rather than only on the pass so a quality preset can
+         * set it: `applyRenderQualityPresetEXT()` writes it, and `FxaaPass` reads it whenever a
+         * settings bag is supplied.
+         *
+         * @return The threshold; the default 0.125 is `RenderQuality::Medium`.
+         */
+        CNAEXT [[nodiscard]] float getFXAAEdgeThresholdEXT() const;
+
+        /**
+         * @brief Sets the minimum local contrast FXAA treats as an edge.
+         *
+         * @param value The threshold. Stored as given; the pass clamps nothing, matching how the
+         *              other out-of-range settings in this bag behave.
+         */
+        CNAEXT void setFXAAEdgeThresholdEXT(float value);
+
         // ── Quality ──────────────────────────────────────────────────────────
 
         /** @brief Returns the overall render quality preset. */
@@ -164,6 +183,7 @@ namespace CNA::Graphics {
         float           ssaoRadius_      = 0.5f;
         float           ssaoIntensity_   = 1.0f;
         int             ssaoSampleCount_ = 16;
+        float           fxaaEdgeThreshold_ = 0.125f;
 
         bool            fxaaEnabled_     = false;
 

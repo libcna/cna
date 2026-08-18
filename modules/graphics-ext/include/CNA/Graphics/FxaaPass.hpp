@@ -5,6 +5,7 @@
 
 #include "CNA/Graphics/FullscreenPass.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
+#include "CNA/Graphics/RenderQuality.hpp"
 
 #include <memory>
 #include <string>
@@ -73,6 +74,34 @@ namespace CNA::Graphics {
          * usual compromise.
          */
         void setEdgeThreshold(float value);
+
+        /**
+         * @brief Returns the edge threshold a quality preset asks for.
+         *
+         * plan_modern.md `MOD-604`. FXAA has no sample count and no resolution to trade, so the dial
+         * it does have is **which edges it bothers with**: the shader takes an early exit where
+         * local contrast is below the threshold.
+         *
+         * | Quality | Threshold | What it filters |
+         * |---|---|---|
+         * | `Low`    | 0.250  | only strong, obvious edges |
+         * | `Medium` | 0.125  | the default; the usual compromise |
+         * | `High`   | 0.0625 | most visible aliasing |
+         * | `Ultra`  | 0.0312 | the FXAA reference's own "quality" value |
+         *
+         * **This preset is not a performance dial**, which is worth saying because every other
+         * preset in this layer is. Measured (`MOD-608`), a flat frame that takes the early exit on
+         * every texel and a one-pixel checkerboard that takes it nowhere cost the same to within
+         * noise, and the four presets do not separate either. The reason is in the shader: five of
+         * its eleven texture samples happen *before* the threshold test, so the exit saves the
+         * later six and nothing else — and on a fill-bound rasteriser that is not enough to
+         * measure. Choose the preset for how much softening you want, and if FXAA needs to be
+         * cheaper, switch it off.
+         *
+         * @param quality The preset to translate.
+         * @return The threshold, always positive.
+         */
+        [[nodiscard]] static float edgeThresholdForQuality(RenderQuality quality);
 
     private:
         std::unique_ptr<FullscreenPass> fullscreen_;

@@ -372,6 +372,40 @@ surface, inverting the most common value in the buffer. And the normal is transf
 3×3 of the world matrix rather than by its inverse transpose, so **non-uniform scale skews it**;
 correcting that needs an inverse per draw that nothing else in this layer pays for.
 
+### FXAA, and when to prefer MSAA instead
+
+`plan_modern.md` `MOD-604`, `MOD-609`.
+
+The two solve the same problem from opposite ends, and the choice is usually made by the renderer
+rather than by taste:
+
+| | MSAA | FXAA |
+|---|---|---|
+| Where it works | Geometry edges | Any edge, including inside a texture or produced by a shader |
+| What it needs | `MultiSampleAntiAliasing`, and a multisampled *render target* if the scene is not drawn to the back buffer | `CustomEffects`, and a renderer that runs the shader source |
+| Cost | Memory and bandwidth, paid on every pixel of the frame whether it has an edge or not | ~3.5 ms at 720p, ~8.2 ms at 1080p on the reference renderer |
+| What it costs you | Nothing in sharpness | Some texture detail: it cannot tell an edge from a fine pattern |
+| HDR | Resolves before tonemapping, so highlights average in scene-referred space | Runs *after* tonemapping, on displayed pixels, which is why `RenderPipeline` orders it last |
+
+**Prefer MSAA where the renderer has it and the scene is geometry-heavy.** It is sharper, and it is
+the only one of the two that antialiases correctly in HDR — averaging four samples of a highlight
+before the tonemapper is not the same as blurring the tonemapped result, and the difference is
+visible on a bright edge.
+
+**Prefer FXAA where MSAA is unavailable or the aliasing is not geometric.** Alpha-tested foliage,
+a shader-produced pattern, a normal map at a grazing angle: MSAA does nothing for any of them,
+because there is no geometric edge to sample.
+
+**Using both is legitimate** and not double work: MSAA removes the geometric aliasing, FXAA catches
+what is left. The pipeline does not stop you, and on the reference renderer the combination costs
+MSAA's memory plus FXAA's 3.5 ms.
+
+Per renderer, the practical position today: EasyGL has both (MSAA up to 4×, and it runs the FXAA
+shader). Vulkan reports `MultiSampleAntiAliasing` but its `ShaderEffect` takes SPIR-V, so FXAA is
+unavailable there and MSAA is the only option. The 2D-only identities have neither and
+`RenderPipeline` passes through. The per-identity matrix below is the authority; this row is the
+guidance that goes with it.
+
 ### SSAO: what it approximates, and where AO is applied
 
 `plan_modern.md` `MOD-520`, `MOD-521`, `MOD-522`, `MOD-523`.

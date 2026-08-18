@@ -151,6 +151,11 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_register_renderer_test(NAME CNAEXT_BloomInTenLines COMMAND cna_test_cnaext_bloom
         TIMEOUT 90 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_modern.md MOD-604/MOD-607/MOD-608: FXAA on and off, and its cost per image content.
+    cna_graphics_ext_test(cna_test_cnaext_fxaa cnaext_fxaa_test.cpp)
+    cna_register_renderer_test(NAME CNAEXT_Fxaa COMMAND cna_test_cnaext_fxaa
+        TIMEOUT 90 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_modern.md MOD-526/MOD-527/MOD-528: SSAO end to end, from the prepass to the frame.
     cna_graphics_ext_test(cna_test_cnaext_ssao cnaext_ssao_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_Ssao COMMAND cna_test_cnaext_ssao

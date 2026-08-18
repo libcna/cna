@@ -66,6 +66,37 @@ Reproduce: `./cmake-build-cnaext/cna_test_cnaext_postprocess_chain --benchmark`.
 | FXAA | 12.99 | ×2.09 |
 | Bloom | 28.61 | ×4.60 |
 
+### FXAA, and why its preset is not a performance dial
+
+`plan_modern.md` `MOD-608`. Reproduce: `./cmake-build-cnaext/cna_test_cnaext_fxaa --benchmark`.
+
+Measured on two deliberately opposite images: a flat field, where the shader's early exit is taken
+on every texel, and a one-pixel checkerboard, where it is taken nowhere.
+
+| Preset | Threshold | Flat, 1280×720 | Checkerboard, 1280×720 |
+|---|---|---|---|
+| `Low` | 0.2500 | 3.61 ms | 3.49 ms |
+| `Medium` | 0.1250 | 3.64 ms | 3.82 ms |
+| `High` | 0.0625 | 3.24 ms | 3.34 ms |
+| `Ultra` | 0.0312 | 4.02 ms | 3.55 ms |
+
+At 1920×1080, `Medium`: 8.20 ms flat, 8.13 ms checkerboard.
+
+**Neither axis separates.** The presets do not, and the two images do not — 3.2 to 4.0 ms is the
+run-to-run noise of a 20-frame sample on this rasteriser, not a trend. That makes FXAA the one
+subsystem here whose quality preset buys **look and nothing else**, and it is worth knowing before
+someone reaches for it to save a frame.
+
+The reason is in the shader rather than in the driver: five of its eleven texture samples happen
+*before* the threshold test, because the test needs the neighbourhood it is testing. The early exit
+saves the later six, and on a fill-bound pass that is not enough to show up. A version that saved
+more would have to test on a cheaper signal than the samples themselves — which is a different
+algorithm, not a tuning of this one.
+
+What FXAA *does* cost is consistent and modest: about 3.5 ms at 720p and 8.2 ms at 1080p, which is
+half of bloom at its default and a fraction of SSAO at any preset. If it needs to be cheaper, the
+answer is `setFXAAEnabled(false)`.
+
 ### SSAO, per quality preset
 
 `plan_modern.md` `MOD-528`. Reproduce: `./cmake-build-cnaext/cna_test_cnaext_ssao --benchmark`.

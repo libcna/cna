@@ -3,6 +3,7 @@
 
 #ifdef CNA_CNAEXT
 #include "CNA/Graphics/BloomPass.hpp"
+#include "CNA/Graphics/FxaaPass.hpp"
 #include "CNA/Graphics/SsaoPass.hpp"
 #endif
 
@@ -53,10 +54,15 @@ namespace CNA::Graphics {
     RenderQuality   RenderPipelineSettings::getRenderQuality()    const { return renderQuality_; }
     void            RenderPipelineSettings::setRenderQuality(RenderQuality q) { renderQuality_ = q; }
 
+    float RenderPipelineSettings::getFXAAEdgeThresholdEXT() const { return fxaaEdgeThreshold_; }
+    void  RenderPipelineSettings::setFXAAEdgeThresholdEXT(float v) { fxaaEdgeThreshold_ = v; }
+
+
     void RenderPipelineSettings::applyRenderQualityPresetEXT()
     {
         bloomIterations_  = BloomPass::iterationsForQuality(renderQuality_);
         ssaoSampleCount_  = SsaoPass::sampleCountForQuality(renderQuality_);
+        fxaaEdgeThreshold_ = FxaaPass::edgeThresholdForQuality(renderQuality_);
     }
 
     ShadowQuality   RenderPipelineSettings::getShadowQuality()    const { return shadowQuality_; }

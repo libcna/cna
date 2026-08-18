@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/FxaaPass.hpp"
+#include "CNA/Graphics/RenderPipelineSettings.hpp"
 #include "CNA/Graphics/ShaderDiagnostics.hpp"
 
 #ifdef CNA_CNAEXT
@@ -103,10 +104,27 @@ void main() {
         effect_->SetUniformVec2("uTexelSize",
                                 context.width > 0 ? 1.0f / static_cast<float>(context.width) : 0.0f,
                                 context.height > 0 ? 1.0f / static_cast<float>(context.height) : 0.0f);
-        effect_->SetUniformFloat("uEdgeThreshold", edgeThreshold_);
+        // The settings bag wins where one is supplied, matching every other pass: a pipeline that
+        // applied a quality preset must not be overruled by a pass-local default nobody set.
+        const float threshold = context.settings != nullptr
+                                    ? context.settings->getFXAAEdgeThresholdEXT()
+                                    : edgeThreshold_;
+        effect_->SetUniformFloat("uEdgeThreshold", threshold);
 
         fullscreen_->draw(context.source, context.destination, effect_.get(),
                           context.width, context.height);
+    }
+
+    float FxaaPass::edgeThresholdForQuality(const RenderQuality quality)
+    {
+        switch (quality)
+        {
+        case RenderQuality::Low:    return 0.250f;
+        case RenderQuality::High:   return 0.0625f;
+        case RenderQuality::Ultra:  return 0.0312f;
+        case RenderQuality::Medium:
+        default:                    return 0.125f;
+        }
     }
 
     const std::string& FxaaPass::getName() const
