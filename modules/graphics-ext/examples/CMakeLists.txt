@@ -138,6 +138,10 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_graphics_ext_test(cna_test_cnaext_ibl cnaext_ibl_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_ImageBasedLighting COMMAND cna_test_cnaext_ibl
         TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_graphics_ext_test(cna_test_cnaext_instancing_lod cnaext_instancing_lod_test.cpp)
+    cna_register_renderer_test(NAME CNAEXT_InstancingAndLod COMMAND cna_test_cnaext_instancing_lod
+        TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

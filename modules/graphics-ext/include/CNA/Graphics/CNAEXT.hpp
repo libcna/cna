@@ -52,6 +52,11 @@
 #include "CNA/Graphics/EnvironmentProcessor.hpp"
 #include "CNA/Graphics/Skybox.hpp"
 
+// ---- Instancing, LOD and culling -------------------------------------------------------------
+#include "CNA/Graphics/FrustumCullerEXT.hpp"
+#include "CNA/Graphics/InstancedRendererEXT.hpp"
+#include "CNA/Graphics/LodGroupEXT.hpp"
+
 // ---- Materials -----------------------------------------------------------------------------
 #include "CNA/Graphics/GltfMaterialBridge.hpp"
 #include "CNA/Graphics/MaterialBinding.hpp"
