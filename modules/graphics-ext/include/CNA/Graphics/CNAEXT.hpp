@@ -44,6 +44,7 @@
 
 // ---- Post-process infrastructure -----------------------------------------------------------
 #include "CNA/Graphics/BlitPass.hpp"
+#include "CNA/Graphics/EffectPass.hpp"
 #include "CNA/Graphics/BloomPass.hpp"
 #include "CNA/Graphics/FullscreenPass.hpp"
 #include "CNA/Graphics/FxaaPass.hpp"
@@ -52,6 +53,7 @@
 #include "CNA/Graphics/PostProcessPass.hpp"
 #include "CNA/Graphics/RenderPipeline.hpp"
 #include "CNA/Graphics/RenderTargetPool.hpp"
+#include "CNA/Graphics/ScopedRenderTarget.hpp"
 #include "CNA/Graphics/SsaoPass.hpp"
 #include "CNA/Graphics/TonemapPass.hpp"
 
@@ -84,6 +86,7 @@
 #include "CNA/Graphics/PbrMaterial.hpp"
 
 // ---- Post-process effects ------------------------------------------------------------------
+#include "CNA/Graphics/AsciiPass.hpp"
 #include "CNA/Graphics/AsciiPostProcessEffect.hpp"
 #include "CNA/Graphics/AsciiQuantizeMode.hpp"
 #include "CNA/Graphics/CRTEffect.hpp"

@@ -309,6 +309,78 @@ Ambient occlusion needs one thing the pipeline cannot do for a game: scene depth
 normals, which means drawing the geometry a second time with a different effect. Supply them with
 `setDepthNormalInputs()`; without them SSAO renders an unoccluded frame rather than failing.
 
+### Writing your own pass
+
+`plan_modern.md` `MOD-233`. There are two routes, and the shorter one is right more often than it
+looks.
+
+**If you have a shader, you do not need a class.** `EffectPass` runs any `Effect` as a fullscreen
+pass, which is all most passes are:
+
+```cpp
+auto tint = std::make_unique<Microsoft::Xna::Framework::Graphics::ShaderEffect>(
+    device, kVertexSource, kFragmentSource);
+pipeline.addOwnedPass(std::make_unique<CNA::Graphics::EffectPass>(device, std::move(tint), "Tint"));
+```
+
+That is also how the three CNAEXT effects that predate this layer — `DepthEffect`, `CRTEffect` and
+any `ShaderEffect` of your own — get into a chain: they are `Effect` subclasses and needed no change
+at all. (`AsciiPostProcessEffect` is the exception, and an instructive one: it is *not* an `Effect` —
+it reads the frame back to the CPU and re-uploads a glyph grid — so it has its own `AsciiPass`.)
+
+**Subclass when the pass needs state, several draws, or its own targets.** A complete pass:
+
+```cpp
+class VignettePass : public CNA::Graphics::PostProcessPass
+{
+public:
+    explicit VignettePass(GraphicsDevice& device)
+        : fullscreen_(std::make_unique<CNA::Graphics::FullscreenPass>(device))
+    {
+        if (isSupported(device))
+            effect_ = std::make_unique<ShaderEffect>(device, kVertex, kFragment);
+    }
+
+    void apply(const CNA::Graphics::PostProcessContext& context) override
+    {
+        if (effect_)
+            effect_->SetUniformFloat("uStrength", strength_);
+        // A null effect draws the source through unchanged, which is the fallback every pass takes.
+        fullscreen_->draw(context.source, context.destination, effect_.get(),
+                          context.width, context.height);
+    }
+
+    [[nodiscard]] const std::string& getName() const override
+    {
+        static const std::string name = "Vignette";
+        return name;
+    }
+
+private:
+    std::unique_ptr<CNA::Graphics::FullscreenPass> fullscreen_;
+    std::unique_ptr<ShaderEffect>                  effect_;
+    float                                          strength_ = 0.5f;
+};
+```
+
+Four rules the layer holds itself to, and a pass that breaks them will misbehave in ways that are
+hard to see:
+
+- **Allocate in the constructor, never in `apply`.** Effects, intermediate targets, buffers. A pass
+  that allocates per frame is a pass that stutters. Where you need a scratch target, take it from the
+  pipeline's `RenderTargetPool` rather than making your own.
+- **Never throw from `apply` because the renderer cannot do something.** Answer `isSupported(device)`
+  false and copy the input through. A game that enables your pass on a 2D-only renderer should get an
+  unaffected frame, not an exception. Refuse only genuinely invalid *arguments*.
+- **Ask the two-part question.** The base class's `isSupported` already does: a renderer that
+  *accepts* an effect is not necessarily one that *runs your source*. If your pass carries GLSL,
+  inherit that default. If it runs a compiled or stock effect, override — that is exactly what
+  `EffectPass` does, and its test says so, so nobody tidies it back.
+- **Do not leave a render target bound.** `FullscreenPass::draw` handles this for you through
+  `ScopedRenderTarget`; if you bind a target yourself, use the same class. A destination left bound
+  after a throw does not look like an error — the frame simply stops updating, because everything
+  drawn afterwards goes into your intermediate.
+
 ### Shadows, and the contract they put on the app
 
 Shadows cost the app something no library can pay on its behalf: **the scene has to be drawable
