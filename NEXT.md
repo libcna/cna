@@ -101,13 +101,29 @@
 >
 > **Still open for IGL** (details in `plan_igl.md`):
 >
-> * **IGL-60** — `Igl_2D` on the Vulkan backend. Narrowed to a readback defect, not a rendering one;
->   no safe fix found.
-> * **IGL-67** — new: uploading pixels into a `RenderTarget2D` and reading them back returns the
->   rows reversed on Vulkan (IGL's Vulkan readback always flips, which cancels only for content
->   this renderer rendered). Correct on OpenGL. Pinned by `Igl_SurfaceFormat_Vulkan`.
+> * **IGL-60 and IGL-67 — CLOSED on 2026-08-18.** Both were the same family of bug: Vulkan stored
+>   and read render-target rows three different ways, and each defect hid the other two by
+>   cancelling against them. `Igl_2D` now passes 5/5 on Vulkan and `Igl_Msaa` 4/4. Two lessons worth
+>   carrying. First, **the obvious fix was measurably wrong** — flipping rows in `UpdatePixels`, the
+>   candidate IGL-67 refused to guess, would have broken the sampler to satisfy the readback,
+>   because uploading into a target and sampling it was already correct. Second, **a test that
+>   renders its own pattern cannot see this class of bug at all**, because a readback flip and a
+>   projection flip cancel exactly; `Igl_ReadbackOrientation` uses no draw call for the part that
+>   matters, which is the only reason it could tell the three apart.
+> * **IGL-43** — a custom `ShaderEffect` cannot take parameters on Vulkan. This is now the *only*
+>   reason any IGL example test fails there (3 of 26 binaries). The effect path itself is verified
+>   on Vulkan by `Igl_CustomEffectBackend`. Closing it means packing parameters into a uniform
+>   buffer whose std140 layout CNA defines and the author's shader declares — a change to the
+>   CNAEXT `ShaderEffect` contract, not a bug fix.
+> * **A custom `ShaderEffect`'s GLSL is not portable between the two IGL backends**, and cannot be:
+>   SPIR-V requires explicit locations on every user in/out and the two backends do not accept the
+>   same `#version`. An application targeting both must supply two sources.
+>   `igl_custom_effect_backend_test.cpp` is the worked example; a violation is now reported with
+>   glslang's own diagnostic instead of "glslang_shader_parse() failed" (IGL-70).
 > * **IGL-53** — no feature-matrix row yet, deliberately, on the same bar LLGL and WebGPU are held
->   to.
+>   to. Closer than it was: the two blockers this row named (IGL-60 and the custom-effect abort) are
+>   both gone, and what remains is one named capability gap rather than a backend that cannot be
+>   described.
 > * **IGL-61/62/63** — occlusion queries, sampler LOD bias and cube-target MSAA are not
 >   implementable at IGL `v1.1.1`; re-verified against the pinned headers rather than restated.
 > * **Non-`Color` surface formats stay out of the public API.** The renderer knows which formats it

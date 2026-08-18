@@ -10,11 +10,12 @@
 > session since. What is *verified* is narrower than what is *implemented*, and `plan_igl.md` §1
 > is the per-phase record of which is which. The short version: the OpenGL/GLX backend is verified
 > across the whole example suite; the Vulkan backend brings up a device, renders 3D, depth and
-> render targets correctly, and has one open readback defect (`plan_igl.md` IGL-60) that keeps
-> `SpriteBatch`'s own pixel test from confirming it. As of the 2026-08-17 audit the registered suite
-> is 61/61 green (34 host-portable unit cases plus 27 example tests), and running all 24 example
-> binaries explicitly on each backend gives 24/24 on OpenGL and 20/24 on Vulkan — the four Vulkan
-> shortfalls are in the gap table below and in `plan_igl.md` §1.
+> render targets, `SpriteBatch` and MSAA correctly, and its one remaining shortfall is that a custom
+> `ShaderEffect` cannot take parameters there (`plan_igl.md` IGL-43). As of the 2026-08-18 row-order
+> repair the registered suite is 65/65 green (34 host-portable unit cases plus 31 example tests), and
+> running all 26 example binaries explicitly on each backend gives 26/26 on OpenGL and 23/26 on
+> Vulkan — the three Vulkan shortfalls are all that one gap, and are in the gap table below and in
+> `plan_igl.md` §1.
 
 ## What this renderer is
 
@@ -132,7 +133,8 @@ row pitch is shorter than one packed row is refused rather than read past.
 | Cube render-target MSAA | `igl::FramebufferDesc` cannot express a multisampled cube attachment with a per-face resolve | applied count reported as 1 |
 | `ShaderEffect` parameters on Vulkan | Loose (non-block) uniforms do not exist in Vulkan GLSL, and IGL's Vulkan encoder leaves `bindUniform` unimplemented | the draw throws by name; use a std140 block, or `CNA_IGL_BACKEND=opengl` |
 | Non-`Color` surface formats in the public API | Promoting them needs per-format verification of upload, sampling and readback, which has not been done | the renderer refuses what IGL cannot store and defers the rest to the framework's `Color`-only rule (see *Surface formats* above) |
-| Uploading pixels into a render target on Vulkan | IGL's Vulkan `copyBytesColorAttachment` always reads back vertically flipped, which cancels out for content this renderer *rendered* but not for content it *uploaded* | `RenderTarget2D.SetData` followed by `GetData` returns the rows reversed on `CNA_IGL_BACKEND=vulkan`; rendering into a target and reading it back is correct on both backends (`plan_igl.md` IGL-67) |
+| A custom `ShaderEffect`'s parameters on Vulkan | Loose non-block uniforms do not exist in Vulkan GLSL, and IGL's Vulkan encoder leaves `bindUniform` unimplemented | Refused by name at draw time rather than drawn with stale values. The effect itself compiles, binds and draws on Vulkan (`plan_igl.md` IGL-42/IGL-43) |
+| A custom `ShaderEffect`'s GLSL is not portable between the two backends | SPIR-V requires an explicit `layout(location = N)` on every user input and output — the varyings between stages included — and `layout(set = N, binding = N)` on samplers; desktop GLSL 4.10 requires neither, and the two backends do not accept the same `#version` | Supply two sources and pick by backend. A shader that violates this is refused with glslang's own line-and-reason text plus the requirement in words (`plan_igl.md` IGL-70); `igl_custom_effect_backend_test.cpp` is the worked example of both variants |
 
 ## IGL's debug trap is turned off deliberately
 
@@ -168,10 +170,18 @@ viewport specifically so its coordinate system matches OpenGL's. Two consequence
    `Viewport` rectangle and the letterbox/overscan rectangle into a clip-space scale/offset matrix.
    Clipping is done by the scissor rectangle, whose Y origin *is* converted per backend (OpenGL
    measures it from the bottom, Vulkan from the top).
-2. **Off-screen targets render Y-flipped.** That stores their rows top-first, so
-   `RenderTarget2D.GetData()` and sampling a target both agree with an uploaded `Texture2D`. The
-   pipeline's front-face winding is reversed to match, so `CullClockwiseFace` culls the same
-   triangles whether you are drawing to the back buffer or to a target.
+2. **Off-screen targets render Y-flipped — on the OpenGL backend only.** That stores their rows
+   top-first, so `RenderTarget2D.GetData()` and sampling a target both agree with an uploaded
+   `Texture2D`, and the pipeline's front-face winding is reversed to match so `CullClockwiseFace`
+   culls the same triangles either way. The Vulkan backend needs neither, because "up the screen"
+   is a different direction through image memory in each: a GL texture's row 0 sits at `t=0`, the
+   bottom, while a Vulkan image's row 0 is the top. Applying it on both stored rendered content
+   upside down relative to uploaded content (`plan_igl.md` IGL-67).
+3. **Vulkan readbacks undo one row flip.** `igl::vulkan::Framebuffer::copyBytesColorAttachment`
+   reverses the rows of every rectangle it copies and its OpenGL counterpart reverses none, so
+   exactly one has to be undone for both backends to owe a caller the same bytes. The back buffer's
+   readback additionally converts the requested rectangle's Y origin, for the same reason the
+   scissor rectangle already did (`plan_igl.md` IGL-60).
 
 Clip depth is corrected with `z' = 2z − w` only when `IDevice::getNormalizedZRange()` reports
 `NegOneToOne` (the OpenGL backend); XNA's projections target Direct3D's `[0, w]`.

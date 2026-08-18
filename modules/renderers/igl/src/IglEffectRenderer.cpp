@@ -5,14 +5,95 @@
 #include "CNA/LogCategory.hpp"
 
 #include <igl/Device.h>
+#include <igl/Log.h>
 #include <igl/Shader.h>
 #include <igl/ShaderCreator.h>
 
+#include <cstdarg>
+#include <cstdio>
 #include <cstring>
 #include <string>
 
 namespace CNA::Internal::Renderers::Igl
 {
+    namespace
+    {
+        /// Error text IGL logged while @ref ScopedIglErrorCapture was in scope.
+        std::string& CapturedIglErrors()
+        {
+            static std::string captured;
+            return captured;
+        }
+
+        IGLLogHandlerFunc& PreviousIglLogHandler()
+        {
+            static IGLLogHandlerFunc previous = nullptr;
+            return previous;
+        }
+
+        int CaptureIglLog(const IGLLogLevel level, const char* const format, va_list ap)
+        {
+            va_list copy;
+            va_copy(copy, ap);
+            char buffer[2048];
+            const int written = std::vsnprintf(buffer, sizeof(buffer), format, copy);
+            va_end(copy);
+
+            if (level == IGLLogError && written > 0)
+                CapturedIglErrors().append(buffer, static_cast<std::size_t>(written) <
+                                                           sizeof(buffer)
+                                                       ? static_cast<std::size_t>(written)
+                                                       : sizeof(buffer) - 1);
+
+            const IGLLogHandlerFunc previous = PreviousIglLogHandler();
+            return previous != nullptr ? previous(level, format, ap)
+                                       : IGLLogDefaultHandler(level, format, ap);
+        }
+
+        /// Collects what IGL itself says about a failing shader, for the duration of one compile.
+        ///
+        /// `igl::Result::message` carries only "glslang_shader_parse() failed" -- the line number,
+        /// the offending declaration and the reason all go to IGL's log instead, which is where a
+        /// caller cannot reach them. That leaves a ShaderEffect author with a failure and no way to
+        /// tell a missing `layout(location = ...)` apart from a typo, so the log is captured here
+        /// and folded into the error CNA reports.
+        ///
+        /// The handler is global in IGL and this installs and restores it around a single call.
+        /// That is sound because this renderer compiles shaders on the thread that owns the device,
+        /// as it does every other IGL call; it is not a general-purpose capture. Everything is
+        /// still forwarded to whatever handler was installed before, so IGL's own logging is
+        /// unchanged.
+        class ScopedIglErrorCapture
+        {
+        public:
+            ScopedIglErrorCapture()
+            {
+                CapturedIglErrors().clear();
+                PreviousIglLogHandler() = IGLLogGetHandler();
+                IGLLogSetHandler(&CaptureIglLog);
+            }
+
+            ~ScopedIglErrorCapture()
+            {
+                IGLLogSetHandler(PreviousIglLogHandler());
+                PreviousIglLogHandler() = nullptr;
+            }
+
+            ScopedIglErrorCapture(const ScopedIglErrorCapture&)            = delete;
+            ScopedIglErrorCapture& operator=(const ScopedIglErrorCapture&) = delete;
+
+            /// Returns what IGL logged at error level, trimmed of trailing whitespace.
+            [[nodiscard]] static std::string Text()
+            {
+                std::string text = CapturedIglErrors();
+                while (!text.empty() && (text.back() == '\n' || text.back() == '\r' ||
+                                         text.back() == ' ' || text.back() == '\t'))
+                    text.pop_back();
+                return text;
+            }
+        };
+    }
+
     IglEffectRenderer::IglEffectRenderer(IglRenderer& owner)
         : owner_(owner), programId_(owner.NextProgramIdEXT())
     {
@@ -33,9 +114,14 @@ namespace CNA::Internal::Renderers::Igl
             AdaptCustomShaderSources(vertSrc, fragSrc, owner_.IsVulkanBackend());
 
         igl::Result result;
-        stages_ = igl::ShaderStagesCreator::fromModuleStringInput(
-            owner_.GetDevice(), sources.vertex.c_str(), "main", "CNA ShaderEffect VS",
-            sources.fragment.c_str(), "main", "CNA ShaderEffect FS", &result);
+        std::string reported;
+        {
+            const ScopedIglErrorCapture capture;
+            stages_ = igl::ShaderStagesCreator::fromModuleStringInput(
+                owner_.GetDevice(), sources.vertex.c_str(), "main", "CNA ShaderEffect VS",
+                sources.fragment.c_str(), "main", "CNA ShaderEffect FS", &result);
+            reported = ScopedIglErrorCapture::Text();
+        }
 
         if (!stages_ || !result.isOk())
         {
@@ -43,6 +129,19 @@ namespace CNA::Internal::Renderers::Igl
             compileError_ = result.message.empty()
                                 ? std::string("IGL renderer: ShaderEffect compilation failed")
                                 : result.message;
+            if (!reported.empty())
+                compileError_ += "\n" + reported;
+            if (owner_.IsVulkanBackend())
+            {
+                // The overwhelmingly common reason a shader that compiles on the OpenGL backend is
+                // rejected here, and one the raw glslang text states without saying what to do
+                // about it.
+                compileError_ +=
+                    "\nIGL renderer: the Vulkan backend compiles GLSL to SPIR-V, which requires an "
+                    "explicit layout(location = N) on every user input and output -- the varyings "
+                    "between stages included -- and layout(set = N, binding = N) on every sampler. "
+                    "A shader written for the OpenGL backend usually needs its own Vulkan variant.";
+            }
             return false;
         }
 

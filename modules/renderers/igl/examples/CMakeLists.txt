@@ -216,4 +216,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
         COMMAND cna_test_igl_readback_orientation
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
+
+    # IGL-42/IGL-43: the custom ShaderEffect path on BOTH backends. The three existing custom-effect
+    # tests all set effect parameters, which design decision 8 refuses on Vulkan, so none of them
+    # could report anything about the path itself there. This one is deliberately uniform-free.
+    cna_igl_test(cna_test_igl_custom_effect_backend igl_custom_effect_backend_test.cpp)
+    cna_register_renderer_test(NAME Igl_CustomEffectBackend
+        COMMAND cna_test_igl_custom_effect_backend
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_renderer_test(NAME Igl_CustomEffectBackend_Vulkan
+        COMMAND cna_test_igl_custom_effect_backend
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
 endif()
