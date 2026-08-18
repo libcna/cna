@@ -160,9 +160,47 @@ struct ResolvedSpriteCommand final {
         case CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING:
             *outCapability = CNA::GraphicsCapability::AdditiveBlending;
             return true;
+        case CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS:
+            *outCapability = CNA::GraphicsCapability::CompiledEffects;
+            return true;
         default:
             return false;
     }
+}
+
+// The reverse direction exists for its exhaustiveness rather than for a caller: it has no
+// `default`, so a capability appended to CNA::GraphicsCapability stops this translation unit
+// compiling instead of silently never reaching the C identity space.
+[[nodiscard]] CNA_GraphicsCapability MapGraphicsCapabilityToC(
+    const CNA::GraphicsCapability capability) noexcept
+{
+    switch (capability) {
+        case CNA::GraphicsCapability::ThreeD: return CNA_GRAPHICS_CAPABILITY_THREE_D;
+        case CNA::GraphicsCapability::DepthStencilBuffer:
+            return CNA_GRAPHICS_CAPABILITY_DEPTH_STENCIL_BUFFER;
+        case CNA::GraphicsCapability::MultiSampleAntiAliasing:
+            return CNA_GRAPHICS_CAPABILITY_MULTI_SAMPLE_ANTI_ALIASING;
+        case CNA::GraphicsCapability::MultipleRenderTargets:
+            return CNA_GRAPHICS_CAPABILITY_MULTIPLE_RENDER_TARGETS;
+        case CNA::GraphicsCapability::AnisotropicFiltering:
+            return CNA_GRAPHICS_CAPABILITY_ANISOTROPIC_FILTERING;
+        case CNA::GraphicsCapability::WireFrame: return CNA_GRAPHICS_CAPABILITY_WIRE_FRAME;
+        case CNA::GraphicsCapability::OcclusionQuery:
+            return CNA_GRAPHICS_CAPABILITY_OCCLUSION_QUERY;
+        case CNA::GraphicsCapability::CustomEffects:
+            return CNA_GRAPHICS_CAPABILITY_CUSTOM_EFFECTS;
+        case CNA::GraphicsCapability::Texture3D: return CNA_GRAPHICS_CAPABILITY_TEXTURE_3D;
+        case CNA::GraphicsCapability::MultiStreamVertexInput:
+            return CNA_GRAPHICS_CAPABILITY_MULTI_STREAM_VERTEX_INPUT;
+        case CNA::GraphicsCapability::Instancing: return CNA_GRAPHICS_CAPABILITY_INSTANCING;
+        case CNA::GraphicsCapability::StencilBuffer:
+            return CNA_GRAPHICS_CAPABILITY_STENCIL_BUFFER;
+        case CNA::GraphicsCapability::AdditiveBlending:
+            return CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING;
+        case CNA::GraphicsCapability::CompiledEffects:
+            return CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS;
+    }
+    return CNA_GRAPHICS_CAPABILITY_MAXIMUM + UINT32_C(1);
 }
 
 [[nodiscard]] CNA_GraphicsRendererType MapGraphicsRendererType(
@@ -215,6 +253,9 @@ struct ResolvedSpriteCommand final {
         case CNA::GraphicsRendererType::SvgDom: return CNA_GRAPHICS_RENDERER_SVG_DOM;
         case CNA::GraphicsRendererType::OpenVg: return CNA_GRAPHICS_RENDERER_OPENVG;
         case CNA::GraphicsRendererType::PortableGL: return CNA_GRAPHICS_RENDERER_PORTABLEGL;
+        case CNA::GraphicsRendererType::TinyGL: return CNA_GRAPHICS_RENDERER_TINYGL;
+        case CNA::GraphicsRendererType::Igl: return CNA_GRAPHICS_RENDERER_IGL;
+        case CNA::GraphicsRendererType::PixiJs: return CNA_GRAPHICS_RENDERER_PIXIJS;
     }
     return CNA_GRAPHICS_RENDERER_UNKNOWN;
 }
@@ -258,12 +299,14 @@ struct ResolvedSpriteCommand final {
 {
     CNA_GraphicsCapabilityFlags flags = UINT64_C(0);
     for (CNA_GraphicsCapability capability = CNA_GRAPHICS_CAPABILITY_THREE_D;
-         capability <= CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING;
+         capability <= CNA_GRAPHICS_CAPABILITY_MAXIMUM;
          ++capability) {
         CNA::GraphicsCapability nativeCapability{};
-        if (TryMapGraphicsCapability(capability, &nativeCapability) &&
-            graphicsDevice.SupportsCapability(nativeCapability)) {
-            flags |= UINT64_C(1) << capability;
+        if (!TryMapGraphicsCapability(capability, &nativeCapability)) {
+            continue;
+        }
+        if (graphicsDevice.SupportsCapability(nativeCapability)) {
+            flags |= UINT64_C(1) << MapGraphicsCapabilityToC(nativeCapability);
         }
     }
     return flags;

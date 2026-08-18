@@ -185,7 +185,8 @@ static int validate_backend_classification(void)
     }
     if (cna_graphics_backend_get_category(CNA_GRAPHICS_RENDERER_UNKNOWN, &category) !=
             CNA_RESULT_INVALID_ARGUMENT ||
-        cna_graphics_backend_get_maturity(UINT32_C(47), &maturity) !=
+        cna_graphics_backend_get_maturity(
+            CNA_GRAPHICS_RENDERER_MAXIMUM + UINT32_C(1), &maturity) !=
             CNA_RESULT_INVALID_ARGUMENT ||
         cna_graphics_backend_get_category(CNA_GRAPHICS_RENDERER_HEADLESS, 0) !=
             CNA_RESULT_INVALID_ARGUMENT ||
@@ -207,10 +208,30 @@ static int validate_backend_classification(void)
         return 0;
     }
 
+    /* CBIND-052A: every published identity classifies, walked as a range. A backend that reached
+       CNA::GraphicsRendererType without a C identity is refused by both routes, which is what
+       TINYGL, IGL and PIXIJS were until this slice -- and the bound this loop and the refusal
+       above are written against is now the published maximum rather than a literal that has to
+       be remembered. */
+    {
+        CNA_GraphicsRendererType identity = CNA_GRAPHICS_RENDERER_UNKNOWN;
+        for (identity = CNA_GRAPHICS_RENDERER_SDL_RENDERER;
+             identity <= CNA_GRAPHICS_RENDERER_MAXIMUM; ++identity) {
+            category = UINT32_C(999);
+            maturity = UINT32_C(999);
+            if (cna_graphics_backend_get_category(identity, &category) != CNA_RESULT_SUCCESS ||
+                category == UINT32_C(999) ||
+                cna_graphics_backend_get_maturity(identity, &maturity) != CNA_RESULT_SUCCESS ||
+                maturity == UINT32_C(999)) {
+                return 0;
+            }
+        }
+    }
+
     /* The compiled-in answers agree with classifying the compiled-in identity. */
     if (cna_graphics_renderer_get_current_type(0) != CNA_RESULT_INVALID_ARGUMENT ||
         cna_graphics_renderer_get_current_type(&type) != CNA_RESULT_SUCCESS ||
-        type == CNA_GRAPHICS_RENDERER_UNKNOWN || type > UINT32_C(46)) {
+        type == CNA_GRAPHICS_RENDERER_UNKNOWN || type > CNA_GRAPHICS_RENDERER_MAXIMUM) {
         return 0;
     }
     if (cna_graphics_backend_get_current_category(0) != CNA_RESULT_INVALID_ARGUMENT ||
@@ -407,6 +428,34 @@ static int validate_renderer_selection(void)
         if (cna_graphics_renderer_get_fallback_at_ext(UINT64_C(0), &record) !=
             CNA_RESULT_INVALID_ARGUMENT) {
             return (fprintf(stderr, "SEL ARM %d\n", 12), 0);
+        }
+    }
+
+    /* CBIND-052A: every published identity is one the selection surface actually knows, walked as
+       a range rather than named one backend at a time. That is what this arm is for: TINYGL, IGL
+       and PIXIJS existed in CNA::GraphicsRendererType while the C identity table had never heard
+       of them, so each was refused here as "not a public CNA renderer identity" -- and because no
+       test enumerated the range, nothing said so. A backend added to CNA without a C identity
+       fails this arm now. */
+    {
+        CNA_GraphicsRendererType identity = CNA_GRAPHICS_RENDERER_UNKNOWN;
+        for (identity = CNA_GRAPHICS_RENDERER_SDL_RENDERER;
+             identity <= CNA_GRAPHICS_RENDERER_MAXIMUM; ++identity) {
+            flag = UINT8_C(9);
+            if (cna_graphics_renderer_get_is_available_ext(identity, &flag) !=
+                    CNA_RESULT_SUCCESS ||
+                (flag != CNA_FALSE && flag != CNA_TRUE)) {
+                return (fprintf(stderr, "SEL ARM %d (identity %u)\n", 15, (unsigned)identity), 0);
+            }
+        }
+        /* The range is closed at both ends: nothing below the first identity and nothing above
+           the last one is an identity, so UNKNOWN stays a report and never an argument. */
+        if (cna_graphics_renderer_get_is_available_ext(CNA_GRAPHICS_RENDERER_UNKNOWN, &flag) !=
+                CNA_RESULT_INVALID_ARGUMENT ||
+            cna_graphics_renderer_get_is_available_ext(
+                CNA_GRAPHICS_RENDERER_MAXIMUM + UINT32_C(1), &flag) !=
+                CNA_RESULT_INVALID_ARGUMENT) {
+            return (fprintf(stderr, "SEL ARM %d\n", 16), 0);
         }
     }
 

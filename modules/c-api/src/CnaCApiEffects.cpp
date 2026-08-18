@@ -140,15 +140,11 @@ public:
     {
     }
 
-    [[nodiscard]] Effect* Clone() override
-    {
-        return new CApiEffect(getGraphicsDeviceInternal());
-    }
-
-protected:
-    void OnApply() override
-    {
-    }
+    // CBIND-052B: this class overrode Clone() and OnApply() because both were pure virtual and
+    // there was nothing to inherit. Both are ordinary virtuals now, and the inherited Clone() is
+    // the one that matters: it clones a compiled effect's runtime and copies its parameter values,
+    // where the override returned a fresh empty effect and silently dropped both. OnApply()'s base
+    // is the same no-op the override was, so what is left here is the two constructors.
 };
 
 struct AnnotationResource final {
@@ -2731,6 +2727,49 @@ CNA_Result cna_effect_pass_create(
     });
 }
 
+CNA_Result cna_effect_pass_create_indexed_ext(
+    const CNA_StringView name,
+    const uint64_t techniqueIdentity,
+    const uint32_t passIndex,
+    CNA_EffectPassHandle* const outPass)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPass == nullptr) {
+            return InvalidArgument("The EffectPass output handle is null.");
+        }
+        *outPass = CNA_INVALID_HANDLE;
+        std::string copiedName;
+        if (const CNA_Result result = CopyEffectName(
+                name, &copiedName, "The EffectPass name is not valid UTF-8 text.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreatePassHandle(
+            std::make_shared<EffectPass>(
+                nullptr, std::move(copiedName), techniqueIdentity, passIndex),
+            nullptr,
+            outPass);
+    });
+}
+
+CNA_Result cna_effect_pass_get_index_ext(
+    const CNA_EffectPassHandle passHandle,
+    uint32_t* const outIndex)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outIndex == nullptr) {
+            return InvalidArgument("The EffectPass index output is null.");
+        }
+        std::shared_ptr<PassResource> pass;
+        if (const CNA_Result result = GetPass(passHandle, &pass);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outIndex = pass->value->getIndexInternal();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_effect_pass_destroy(const CNA_EffectPassHandle passHandle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -2996,6 +3035,52 @@ CNA_Result cna_effect_technique_create_named(
             std::make_shared<EffectTechnique>(nullptr, std::move(copiedName)),
             std::make_shared<TechniqueState>(),
             outTechnique);
+    });
+}
+
+CNA_Result cna_effect_technique_create_reflected_ext(
+    const CNA_StringView name,
+    const uint32_t techniqueIndex,
+    const CNA_Bool addDefaultPass,
+    CNA_EffectTechniqueHandle* const outTechnique)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTechnique == nullptr) {
+            return InvalidArgument("The EffectTechnique output handle is null.");
+        }
+        *outTechnique = CNA_INVALID_HANDLE;
+        if (addDefaultPass != CNA_FALSE && addDefaultPass != CNA_TRUE) {
+            return InvalidArgument("The default-pass flag is not a CNA_Bool value.");
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyEffectName(
+                name, &copiedName, "The EffectTechnique name is not valid UTF-8 text.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateTechniqueHandle(
+            std::make_shared<EffectTechnique>(
+                nullptr, std::move(copiedName), techniqueIndex, addDefaultPass == CNA_TRUE),
+            std::make_shared<TechniqueState>(),
+            outTechnique);
+    });
+}
+
+CNA_Result cna_effect_technique_get_index_ext(
+    const CNA_EffectTechniqueHandle techniqueHandle,
+    uint32_t* const outIndex)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outIndex == nullptr) {
+            return InvalidArgument("The EffectTechnique index output is null.");
+        }
+        std::shared_ptr<TechniqueResource> technique;
+        if (const CNA_Result result = GetTechnique(techniqueHandle, &technique);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outIndex = technique->value->getIndexInternal();
+        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -3679,6 +3764,25 @@ CNA_Result cna_effect_copy_type_name(
         return CopyEffectString(
             effectHandle, destination, capacity, outByteCount,
             [](Effect& effect) -> const std::string& { return effect.GetTypeName(); });
+    });
+}
+
+CNA_Result cna_effect_get_is_compiled_ext(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outIsCompiled)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outIsCompiled == nullptr) {
+            return InvalidArgument("The Effect compiled-runtime output is null.");
+        }
+        std::shared_ptr<EffectResource> effect;
+        if (const CNA_Result result = GetEffect(effectHandle, &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // The runtime itself is renderer-owned implementation, so its presence is what crosses.
+        *outIsCompiled = effect->value->GetCompiledRuntimePtr() != nullptr ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
     });
 }
 

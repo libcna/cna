@@ -8,7 +8,7 @@
 static const char ContainerName[] = "ReaderRoot";
 static const char AssetFile[] = "graph.bin";
 static const char EffectReaderName[] = "Microsoft.Xna.Framework.Content.EffectReader";
-static const char EffectTargetName[] = "Microsoft.Xna.Framework.Graphics.Effect";
+static const char PlaceholderName[] = "cna.Placeholder";
 
 typedef struct ReaderFixture {
     CNA_StorageDeviceHandle device;
@@ -332,7 +332,8 @@ static int validate_type_readers(const ReaderFixture* const fixture)
     uint64_t bytes = 0U;
     int32_t version = -1;
 
-    if (cna_content_register_known_unsupported_xnb_readers() != CNA_RESULT_SUCCESS) {
+    if (cna_content_register_known_unsupported_xnb_readers() != CNA_RESULT_SUCCESS ||
+        cna_content_register_known_unsupported_xnb_readers() != CNA_RESULT_SUCCESS) {
         return 0;
     }
     if (cna_content_type_reader_manager_get_is_registered(view("cna.NoSuchReader"), &flag) !=
@@ -343,11 +344,30 @@ static int validate_type_readers(const ReaderFixture* const fixture)
         rejected != CNA_INVALID_HANDLE) {
         return 0;
     }
+    /* CBIND-052A: the known-unsupported hook registers nothing today, and asserting that is the
+       point. Its one entry was the general EffectReader, and the compiled Effect Framework work
+       replaced that placeholder with a reader that really decodes -- registered by an internal
+       entry point with no C form. So the hook stays the published extension point, idempotent
+       and empty, and this negative is what would catch an entry silently reappearing in it. */
     if (cna_content_type_reader_manager_get_is_registered(view(EffectReaderName), &flag) !=
             CNA_RESULT_SUCCESS ||
-        flag != CNA_TRUE ||
-        cna_content_type_reader_manager_create_reader(view(EffectReaderName), &type_reader) !=
-            CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_content_type_reader_manager_create_reader(view(EffectReaderName), &rejected) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        rejected != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    /* Every reader-contract route below is therefore driven through a placeholder the caller
+       builds itself, which is the one recognized-but-unsupported reader C can still produce. An
+       undefined reason is refused before anything is constructed. */
+    if (cna_known_unsupported_content_type_reader_create(
+            view(PlaceholderName), UINT32_C(9), &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
+        rejected != CNA_INVALID_HANDLE ||
+        cna_known_unsupported_content_type_reader_create(
+            view(PlaceholderName),
+            CNA_UNSUPPORTED_CONTENT_READER_REASON_COMPILED_PLATFORM_SHADER_BYTECODE,
+            &type_reader) != CNA_RESULT_SUCCESS ||
         type_reader == CNA_INVALID_HANDLE) {
         return 0;
     }
@@ -355,10 +375,10 @@ static int validate_type_readers(const ReaderFixture* const fixture)
     memset(buffer, 0, sizeof(buffer));
     if (cna_content_type_reader_get_target_type_name_size(type_reader, &bytes) !=
             CNA_RESULT_SUCCESS ||
-        bytes != (uint64_t)strlen(EffectTargetName) ||
+        bytes != (uint64_t)strlen(PlaceholderName) ||
         cna_content_type_reader_copy_target_type_name(
             type_reader, buffer, (uint64_t)sizeof(buffer), &bytes) != CNA_RESULT_SUCCESS ||
-        strcmp(buffer, EffectTargetName) != 0 ||
+        strcmp(buffer, PlaceholderName) != 0 ||
         cna_content_type_reader_copy_target_type_name(type_reader, buffer, UINT64_C(2), &bytes) !=
             CNA_RESULT_BUFFER_TOO_SMALL) {
         return 0;
@@ -395,15 +415,10 @@ static int validate_type_readers(const ReaderFixture* const fixture)
         return 0;
     }
 
+    /* A second placeholder of its own is released twice to prove the handle contract, separately
+       from the one carrying the reader-contract routes above. */
     if (cna_known_unsupported_content_type_reader_create(
-            view("cna.Placeholder"),
-            UINT32_C(9),
-            &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
-        rejected != CNA_INVALID_HANDLE) {
-        return 0;
-    }
-    if (cna_known_unsupported_content_type_reader_create(
-            view("cna.Placeholder"),
+            view("cna.SecondPlaceholder"),
             CNA_UNSUPPORTED_CONTENT_READER_REASON_COMPILED_PLATFORM_SHADER_BYTECODE,
             &placeholder) != CNA_RESULT_SUCCESS) {
         return 0;
@@ -411,7 +426,7 @@ static int validate_type_readers(const ReaderFixture* const fixture)
     memset(buffer, 0, sizeof(buffer));
     if (cna_content_type_reader_copy_target_type_name(
             placeholder, buffer, (uint64_t)sizeof(buffer), &bytes) != CNA_RESULT_SUCCESS ||
-        strcmp(buffer, "cna.Placeholder") != 0 ||
+        strcmp(buffer, "cna.SecondPlaceholder") != 0 ||
         cna_content_type_reader_destroy(placeholder) != CNA_RESULT_SUCCESS ||
         cna_content_type_reader_destroy(placeholder) != CNA_RESULT_INVALID_HANDLE) {
         return 0;
@@ -420,7 +435,8 @@ static int validate_type_readers(const ReaderFixture* const fixture)
     if (cna_content_type_reader_destroy(type_reader) != CNA_RESULT_SUCCESS) {
         return 0;
     }
-    /* Clearing the process-wide registry is observable, and re-registration restores it. */
+    /* Clearing the process-wide registry succeeds and leaves nothing resolvable, and the
+       known-unsupported hook still succeeds afterwards without putting anything back. */
     if (cna_content_type_reader_manager_clear_type_creators() != CNA_RESULT_SUCCESS ||
         cna_content_type_reader_manager_get_is_registered(view(EffectReaderName), &flag) !=
             CNA_RESULT_SUCCESS ||
@@ -430,7 +446,7 @@ static int validate_type_readers(const ReaderFixture* const fixture)
     return cna_content_register_known_unsupported_xnb_readers() == CNA_RESULT_SUCCESS &&
         cna_content_type_reader_manager_get_is_registered(view(EffectReaderName), &flag) ==
             CNA_RESULT_SUCCESS &&
-        flag == CNA_TRUE;
+        flag == CNA_FALSE;
 }
 
 static int validate_identities(void)

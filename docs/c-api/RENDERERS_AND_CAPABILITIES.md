@@ -27,6 +27,21 @@ A recognized capability that is unavailable is a successful query returning `CNA
 unset bit. An operation that requires it returns `CNA_RESULT_NOT_SUPPORTED` and leaves documented
 outputs unchanged. An unknown capability identifier returns `CNA_RESULT_INVALID_ARGUMENT`.
 
+## The two identity ranges are closed and enumerable
+
+`CNA_GRAPHICS_RENDERER_UNKNOWN` through `CNA_GRAPHICS_RENDERER_MAXIMUM`, and
+`CNA_GRAPHICS_CAPABILITY_THREE_D` through `CNA_GRAPHICS_CAPABILITY_MAXIMUM`, are contiguous with no
+gaps, so a consumer can walk either space without naming each member and without a table of its own
+that would drift. Anything above either maximum is refused by every route that accepts that
+identity; `CNA_GRAPHICS_RENDERER_UNKNOWN` is a value routes *report*, never one they accept.
+
+Both ranges are held against CNA's own enumerations at compile time, because they had already
+fallen behind: `TINYGL`, `IGL` and `PIXIJS` existed as CNA renderers with no C identity at all, so
+each was refused as "not a public CNA renderer identity" while the coverage matrix recorded it as
+mapped. The C identity table is now pinned to the count of renderers CNA declares, and the
+capability translation is exhaustive over CNA's enumeration, so a renderer or capability added to
+CNA without a C identity fails the build rather than reaching a consumer as `UNKNOWN`.
+
 Platform-device availability uses the same successful-snapshot rule. `cna_touch_get_capabilities`
 reports connection and maximum touches, while `cna_audio_get_capabilities` probes CNA's real native
 audio mixer and reports whether playback can currently be opened. Applications therefore need not
