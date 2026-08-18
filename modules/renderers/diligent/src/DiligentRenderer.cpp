@@ -2,6 +2,8 @@
 #include "CNA/Internal/Renderers/Diligent/DiligentRenderer.hpp"
 #include "CNA/Internal/Renderers/Diligent/DiligentShaderSources.hpp"
 
+#include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
+
 #include "CNA/Logger.hpp"
 
 #include <algorithm>
@@ -3732,6 +3734,15 @@ namespace CNA::Internal::Renderers::Diligent
         const auto* vertexBuffer = dynamic_cast<const DiligentVertexBufferRenderer*>(&vb);
         if (vertexBuffer == nullptr || vertexBuffer->GetBuffer() == nullptr)
             throw std::runtime_error("CNA Diligent: draw with a foreign or empty vertex buffer");
+
+        // plan_gltf.md GLTF-465: this renderer's PBR pixel shader does not multiply COLOR_0 into
+        // base colour, and its stride-60 input layout would otherwise accept the draw and render the
+        // surface with the opaque-white identity -- a wrong picture reported as a success. Refuse it
+        // instead, with the reason and the application's own opt-out named.
+        if (params != nullptr)
+        {
+            RequireVertexColourPbrSupportEXT(*params, vertexBuffer->GetStride(), "DILIGENT");
+        }
 
         if (params != nullptr)
             RejectUnsupportedStreamCombination(*params, kRendererName);

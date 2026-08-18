@@ -2,6 +2,7 @@
 // plan_wicked.md: CNA's WICKED graphics renderer on Wicked Engine's wi::graphics::GraphicsDevice.
 
 #include "CNA/Internal/Renderers/Wicked/WickedRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
 #include "WickedShaderSources.hpp"
 
 #include "wiGraphicsDevice_Vulkan.h"
@@ -3494,6 +3495,11 @@ namespace CNA::Internal::Renderers::Wicked
                                                   PrimitiveType primitive, int primitiveCount,
                                                   const GpuDrawParams& params)
     {
+        // plan_gltf.md GLTF-465: this renderer has no stride-60/80 layout and no COLOR_0 term in its
+        // PBR path, so such a draw is refused by name rather than reaching a shader that would drop
+        // the authored colour.
+        RequireVertexColourPbrSupportEXT(
+            params, static_cast<const WickedVertexBufferRenderer&>(vb).GetStrideEXT(), "WICKED");
         SubmitDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, &params);
     }
 
@@ -3505,6 +3511,8 @@ namespace CNA::Internal::Renderers::Wicked
                                                          int primitiveCount,
                                                          const GpuDrawParams& params)
     {
+        RequireVertexColourPbrSupportEXT(
+            params, static_cast<const WickedVertexBufferRenderer&>(vb).GetStrideEXT(), "WICKED");
         SubmitDraw(vb, &ib, world, view, projection, primitive, primitiveCount, &params);
     }
 

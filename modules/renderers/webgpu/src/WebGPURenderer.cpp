@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
+#include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
 #include "CNA/Internal/Renderers/WebGPU/WebGPUMetalSurface.hpp"
 
 #if defined(_WIN32)
@@ -7317,6 +7318,11 @@ struct VSOut {
     {
         RequireSupportedFillModeEXT(primitive, "ordinary-nonindexed");
         RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
+        // plan_gltf.md GLTF-465: WebGPU has no stride-60/80 pipeline, so such a draw currently falls
+        // through this dispatch to DrawColoredPrimitives, which throws about a stride-16 buffer --
+        // a refusal, but one that names the wrong thing. Refuse it here with the real reason.
+        RequireVertexColourPbrSupportEXT(
+            params, static_cast<const WebGPUVertexBufferRenderer&>(vb).Stride(), "WEBGPU");
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
         // PBR owns its glTF MASK coverage; standalone AlphaTestEffect wins only for non-PBR
         // draws. Dual-texture then wins over env-map/skinned/
@@ -7412,6 +7418,11 @@ struct VSOut {
     {
         RequireSupportedFillModeEXT(primitive, "ordinary-indexed");
         RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
+        // plan_gltf.md GLTF-465: WebGPU has no stride-60/80 pipeline, so such a draw currently falls
+        // through this dispatch to DrawColoredPrimitives, which throws about a stride-16 buffer --
+        // a refusal, but one that names the wrong thing. Refuse it here with the real reason.
+        RequireVertexColourPbrSupportEXT(
+            params, static_cast<const WebGPUVertexBufferRenderer&>(vb).Stride(), "WEBGPU");
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
         const bool needsAlphaTest = !params.pbr &&
                                     (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
 #include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 
 #include "CNA/Logger.hpp"
@@ -4892,6 +4893,12 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
+        // plan_gltf.md GLTF-465: strides 60 and 80 already fail the expected-stride check below, but
+        // they fail it as a layout mismatch, which says nothing about the core semantic that is
+        // missing. Name it first so this renderer's refusal is the shared one, with the
+        // application's own opt-out spelled out.
+        RequireVertexColourPbrSupportEXT(params, stride, "SDL_GPU");
+
         const bool skinned = params.skinned;
         const std::size_t expectedStride = skinned ? 68u : 48u;
         if (stride != expectedStride)

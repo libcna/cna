@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Metal/MetalRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
 #include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalPipelineKey.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalCommandFailure.hpp"
@@ -3907,6 +3908,10 @@ void MetalRenderer::DrawPrimitivesEx(const IVertexBufferRenderer& v,const Matrix
     ValidateMetalDrawParams(gp,*vb);
     RequireFaithfulDeclarationEXT(vb->declaration(),static_cast<int>(vb->stride()),
                                   "ordinary-nonindexed");
+    // plan_gltf.md GLTF-465: Metal has no stride-60/80 pipeline, so such a draw already fails in
+    // pipeline selection -- but as "unsupported vertex stride", which does not say that the missing
+    // piece is glTF's COLOR_0 base-colour product. Refuse it here with that reason instead.
+    RequireVertexColourPbrSupportEXT(gp,vb->stride(),"METAL");
     drawMetal3D(*impl_,*vb,nullptr,w,vi,p,pt,pc,&gp);
 }
 
@@ -3922,6 +3927,10 @@ void MetalRenderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer& v,
     ValidateMetalDrawParams(gp,*vb);
     RequireFaithfulDeclarationEXT(vb->declaration(),static_cast<int>(vb->stride()),
                                   "ordinary-indexed");
+    // plan_gltf.md GLTF-465: Metal has no stride-60/80 pipeline, so such a draw already fails in
+    // pipeline selection -- but as "unsupported vertex stride", which does not say that the missing
+    // piece is glTF's COLOR_0 base-colour product. Refuse it here with that reason instead.
+    RequireVertexColourPbrSupportEXT(gp,vb->stride(),"METAL");
     drawMetal3D(*impl_,*vb,ib,w,vi,p,pt,pc,&gp);
 }
 void MetalRenderer::SetStringMarkerEXT(const char* m)

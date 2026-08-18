@@ -22,6 +22,7 @@
 // constant at the same index).
 
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
+#include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Textures.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9RenderTargets.hpp"
@@ -161,6 +162,12 @@ namespace CNA::Internal::Renderers::DirectX9
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
         using namespace Shaders;
+
+        // plan_gltf.md GLTF-465: stride 60/80 already fail the two stride checks below, but they fail
+        // them as "no matching CNA vertex layout", which says nothing about the semantic that is
+        // actually missing. Name it first, with the application's own opt-out, so the refusal is the
+        // shared one every other renderer in this state gives.
+        RequireVertexColourPbrSupportEXT(params, stride, "DIRECTX9");
 
         const bool skinned = params.skinned;
         if (skinned && stride != 68)

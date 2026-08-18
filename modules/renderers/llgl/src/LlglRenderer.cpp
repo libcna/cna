@@ -2,6 +2,7 @@
 #include "CNA/Internal/Renderers/Llgl/LlglRenderer.hpp"
 
 #include "CNA/Internal/Renderers/Common/NotYetImplemented.hpp"
+#include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
@@ -3520,6 +3521,14 @@ namespace CNA::Internal::Renderers::Llgl
     {
         if (primitiveCount <= 0)
             return;
+
+        // plan_gltf.md GLTF-465: this renderer's PBR fragment shader reads no colour attribute, and
+        // its stride-60 vertex-format row would otherwise accept the draw and render it with the
+        // opaque-white identity substituted for the authored COLOR_0. Refused by name instead.
+        if (params != nullptr)
+        {
+            RequireVertexColourPbrSupportEXT(*params, vertexBuffer.GetStride(), "LLGL");
+        }
 
         // Real XNA MRT is meaningfully useful/testable only through a custom ShaderEffect with
         // multiple layout(location=N) out fragment outputs drawn via SpriteBatch -- see

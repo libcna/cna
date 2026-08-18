@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -3952,6 +3953,11 @@ namespace CNA::Internal::Renderers::Bgfx
                                                const GpuDrawParams& params)
     {
         auto& vb = static_cast<const BgfxVertexBufferRenderer&>(vb_in);
+
+        // plan_gltf.md GLTF-465: this renderer's PBR fragment shader is precompiled bgfx bytecode
+        // that reads no colour attribute, and its stride-60 layout would otherwise accept the draw and
+        // render the surface with the opaque-white identity in place of the authored COLOR_0.
+        RequireVertexColourPbrSupportEXT(params, vb.stride, "BGFX");
         if (!bgfx::isValid(vb.handle)) return;
 
         ApplyViewportOverride();
@@ -4414,6 +4420,11 @@ namespace CNA::Internal::Renderers::Bgfx
         // per-branch comments -- with an index buffer bound instead of a plain vertex draw.
         auto& vb = static_cast<const BgfxVertexBufferRenderer&>(vb_in);
         auto& ib = static_cast<const BgfxIndexBufferRenderer&>(ib_in);
+
+        // plan_gltf.md GLTF-465: this renderer's PBR fragment shader is precompiled bgfx bytecode
+        // that reads no colour attribute, and its stride-60 layout would otherwise accept the draw and
+        // render the surface with the opaque-white identity in place of the authored COLOR_0.
+        RequireVertexColourPbrSupportEXT(params, vb.stride, "BGFX");
         if (!bgfx::isValid(vb.handle) || !bgfx::isValid(ib.handle)) return;
 
         ApplyViewportOverride();
