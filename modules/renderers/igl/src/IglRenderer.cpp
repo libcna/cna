@@ -743,7 +743,12 @@ namespace CNA::Internal::Renderers::Igl
 
         igl::TextureDesc desc = igl::TextureDesc::newCube(
             ToIglSurfaceFormat(surfaceFormat), static_cast<std::uint32_t>(size),
-            static_cast<std::uint32_t>(size), igl::TextureDesc::TextureUsageBits::Sampled,
+            static_cast<std::uint32_t>(size), igl::TextureDesc::TextureUsageBits::Sampled |
+                // IGL-17: also an attachment, so GetData can build a throwaway framebuffer over
+                // this image and read a face back. Costs nothing on either backend for a texture
+                // that is otherwise sampled, and is what turns "this renderer cannot fetch cube
+                // pixels back" into a capability it actually has.
+                igl::TextureDesc::TextureUsageBits::Attachment,
             "CNA TextureCube");
         desc.numMipLevels = static_cast<std::uint32_t>(mipLevels);
 

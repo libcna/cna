@@ -27,6 +27,10 @@
 #include <vector>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/RendererTestGate.hpp"
+
+// Lets CNA_RENDERER_IS name identities bare, matching the compile-time guards it replaced.
+using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -42,6 +46,29 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::Texture3D;
 using Microsoft::Xna::Framework::Graphics::TextureCollection;
+
+namespace
+{
+/// Whether this renderer can fetch a volume texture's voxels back to the CPU.
+///
+/// Storage and readback were the same question for every renderer until IGL, exactly as they were
+/// for cube faces (see TextureCubeTests.cpp's own split). IGL owns real volume pixels --
+/// `IglTexture3DRenderer::SetData` uploads into an `igl::TextureType::ThreeD` resource and
+/// `Igl_ShaderEffectTexture3D` proves they sample correctly through a real custom shader -- but IGL
+/// v1.1.1 cannot attach a 3D texture to a framebuffer, which is the only readback it has.
+/// `opengl::TextureBufferBase::attach` falls through to `glFramebufferTexture2D` for a volume
+/// (because `getNumLayers()` counts ARRAY layers, of which a volume has one) and the driver answers
+/// `GL_INVALID_OPERATION ... invalid textarget GL_TEXTURE_3D`; the Vulkan copy is 2D-only in the
+/// same way. So `GetData` refuses rather than fabricating voxels, and the shared layer turns that
+/// into a NotSupportedException.
+///
+/// Verified by attempting it, not assumed -- see plan_igl.md IGL-17. Without this arm an IGL build
+/// asserts a readback the renderer honestly cannot perform, in four tests at once.
+[[nodiscard]] bool VolumeReadbackSupported()
+{
+    return !CNA_RENDERER_IS(Igl);
+}
+}
 
 // -----------------------------------------------------------------------
 // Constructor / properties
@@ -181,6 +208,13 @@ TEST_F(Texture3DTest, SetDataExactElementCountStoresTheWholeVolume)
     EXPECT_NO_THROW(tex.SetData(second.data(), 0, 8));
 
     std::vector<Color> got(8, Color(0xCD, 0xCD, 0xCD, 0xCD));
+    // A renderer that owns volume pixels but cannot fetch them back must say so rather than
+    // fabricate them; the upload above is still exercised on every renderer.
+    if (!VolumeReadbackSupported())
+    {
+        EXPECT_THROW((void)tex.GetData(got.data(), 8), System::NotSupportedException);
+        return;
+    }
     ASSERT_NO_THROW(tex.GetData(got.data(), 8));
     for (const Color& c : got)
         EXPECT_EQ(c.getPackedValueProperty(), second[0].getPackedValueProperty());
@@ -200,6 +234,13 @@ TEST_F(Texture3DTest, SetDataNonZeroStartIndexUploadsOnlyItsOwnWindow)
     EXPECT_NO_THROW(tex.SetData(src.data(), 4, 8));
 
     std::vector<Color> got(8, Color(0xCD, 0xCD, 0xCD, 0xCD));
+    // A renderer that owns volume pixels but cannot fetch them back must say so rather than
+    // fabricate them; the upload above is still exercised on every renderer.
+    if (!VolumeReadbackSupported())
+    {
+        EXPECT_THROW((void)tex.GetData(got.data(), 8), System::NotSupportedException);
+        return;
+    }
     ASSERT_NO_THROW(tex.GetData(got.data(), 8));
     for (int i = 0; i < 8; ++i)
     {
@@ -289,6 +330,13 @@ TEST_F(Texture3DTest, SetDataBoxWithinBoundsStoresOnlyThatSlice)
     EXPECT_NO_THROW(tex.SetData(0, 0, 0, 2, 2, 0, 1, buf.data(), 0, 4));
 
     std::vector<Color> got(8, Color(0xCD, 0xCD, 0xCD, 0xCD));
+    // A renderer that owns volume pixels but cannot fetch them back must say so rather than
+    // fabricate them; the upload above is still exercised on every renderer.
+    if (!VolumeReadbackSupported())
+    {
+        EXPECT_THROW((void)tex.GetData(got.data(), 8), System::NotSupportedException);
+        return;
+    }
     ASSERT_NO_THROW(tex.GetData(got.data(), 8));
     for (std::size_t i = 0; i < 4; ++i)
         EXPECT_EQ(got[i].getPackedValueProperty(), buf[0].getPackedValueProperty()) << "slice 0, i=" << i;
@@ -382,6 +430,13 @@ TEST_F(Texture3DTest, GetDataBoxWithinBoundsReturnsUploadedSlice)
     // no volume resource at all. So real content is the only acceptable outcome here.
     const Color sentinel(0xCD, 0xCD, 0xCD, 0xCD);
     std::vector<Color> buf(4, sentinel);
+    // A renderer that owns volume pixels but cannot fetch them back must say so rather than
+    // fabricate them; the upload above is still exercised on every renderer.
+    if (!VolumeReadbackSupported())
+    {
+        EXPECT_THROW((void)tex.GetData(0, 0, 0, 2, 2, 0, 1, buf.data(), 0, 4), System::NotSupportedException);
+        return;
+    }
     ASSERT_NO_THROW(tex.GetData(0, 0, 0, 2, 2, 0, 1, buf.data(), 0, 4));
     for (int i = 0; i < 4; ++i)
         EXPECT_EQ(buf[i].getPackedValueProperty(), uploaded[i].getPackedValueProperty()) << i;

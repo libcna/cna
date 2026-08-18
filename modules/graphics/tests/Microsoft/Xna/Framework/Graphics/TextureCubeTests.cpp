@@ -122,21 +122,19 @@ namespace
                             OpenVg, PortableGL, TinyGL, PixiJs);
 }
 
-/// Level-0 readback and storage were the same set until IGL: a renderer either owned cube pixels or
-/// it did not.
+/// Level-0 readback and storage are the same set again.
 ///
-/// plan_igl.md IGL-17 falsifies that premise, which is why this is no longer an alias. IGL owns cube
-/// pixels -- `IglTextureCubeRenderer::SetData` uploads into a real `igl::TextureType::Cube`
-/// resource, and `Igl_EnvironmentMapEffect` proves the faces sample correctly -- but IGL exposes
-/// readback through `IFramebuffer`, not `ITexture`, and a plain `TextureCube` owns no framebuffer
-/// (`RenderTargetCube` does, and overrides `GetData`). Its `GetData` therefore answers false rather
-/// than fabricating pixels, which the shared layer turns into a NotSupportedException.
-///
-/// Without this arm an IGL build asserted a readback the renderer honestly documents it does not
-/// have, in eight tests at once.
+/// This briefly was not an alias: IGL exposes readback through `IFramebuffer` rather than
+/// `ITexture`, and a plain `TextureCube` owns no framebuffer, so its `GetData` refused (plan_igl.md
+/// IGL-17). That turned out to be a limit of the renderer rather than of IGL -- a framebuffer is a
+/// cheap descriptor over an existing image, and `IglTextureCubeRenderer::GetData` now builds a
+/// throwaway one to read the requested face, the same move its own render-target readback already
+/// made for an MSAA resolve. Kept as its own named predicate rather than folded back into
+/// `CubeStorageSupported`, because the two really are different questions and the next renderer to
+/// own cube pixels without being able to fetch them back should say so here.
 [[nodiscard]] inline bool CubeLevel0ReadbackSupported()
 {
-    return !CNA_RENDERER_IS(Igl) && CubeStorageSupported();
+    return CubeStorageSupported();
 }
 
 /// Readback ABOVE level 0 is a separate question. OpenGL ES 1.1 reads a cube face back by attaching

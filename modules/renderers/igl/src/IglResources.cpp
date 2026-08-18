@@ -219,14 +219,51 @@ namespace CNA::Internal::Renderers::Igl
         return texture_->upload(range, data, 0).isOk();
     }
 
-    bool IglTextureCubeRenderer::GetData(int /*face*/, int /*level*/, int /*x*/, int /*y*/,
-                                         int /*w*/, int /*h*/, void* /*data*/,
-                                         int /*dataLength*/) const
+    bool IglTextureCubeRenderer::GetData(const int face, const int level, const int x, const int y,
+                                         const int w, const int h, void* const data,
+                                         const int dataLength) const
     {
-        // IGL exposes readback through IFramebuffer, not ITexture, and a plain TextureCube owns no
-        // framebuffer. RenderTargetCube does, and overrides this. Refusing is the honest answer for
-        // a resource whose bytes this renderer genuinely cannot fetch back.
-        return false;
+        // IGL exposes readback through IFramebuffer rather than ITexture, and a plain TextureCube
+        // owns no framebuffer -- which is why this used to refuse. It does not have to: a
+        // framebuffer is a cheap descriptor over an existing image, and IglRenderTargetRenderer
+        // already builds a throwaway one over another texture for its MSAA-resolve readback. The
+        // same move works here, so the bytes really are reachable and the refusal was a limit of
+        // this renderer rather than of IGL.
+        //
+        // Any defined level, not just 0: the range's own mipLevel reaches the attachment on both
+        // backends -- OpenGL's toReadAttachmentParams copies it into AttachmentParams::mipLevel for
+        // glFramebufferTexture2D, and Vulkan passes it to getImageData2D as the copy's level -- so
+        // the face AND the mip are both selected by the range this builds.
+        if (!texture_ || data == nullptr || owner_ == nullptr)
+            return false;
+        if (face < 0 || face > 5 || level < 0 || level >= mipLevels_)
+            return false;
+        if (w <= 0 || h <= 0 || dataLength < FormatRegionByteCount(surfaceFormat_, w, h))
+            return false;
+
+        owner_->FlushPendingFrameEXT();
+
+        igl::FramebufferDesc desc;
+        desc.colorAttachments[0].texture = texture_;
+        desc.debugName = "CNA TextureCube readback";
+
+        igl::Result result;
+        const std::shared_ptr<igl::IFramebuffer> framebuffer =
+            owner_->GetDevice().createFramebuffer(desc, &result);
+        if (!framebuffer || !result.isOk())
+            return false;
+
+        // newCubeFace, not new2D: a plain new2D range silently defaults to face 0 regardless of
+        // which face was asked for, exactly as IglRenderTargetCubeRenderer::GetData already notes.
+        const igl::TextureRangeDesc range = igl::TextureRangeDesc::newCubeFace(
+            static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y),
+            static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h),
+            static_cast<std::uint32_t>(face), static_cast<std::uint32_t>(level));
+        framebuffer->copyBytesColorAttachment(owner_->GetCommandQueue(), 0, data, range, 0);
+        // The same unconditional Vulkan row flip every other readback here undoes (IGL-67).
+        if (owner_->IsVulkanBackend())
+            FlipRowsInPlace(surfaceFormat_, w, h, data);
+        return true;
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -270,8 +307,25 @@ namespace CNA::Internal::Renderers::Igl
                                        int /*h*/, int /*depth*/, void* /*data*/,
                                        int /*dataLength*/) const
     {
-        // As for TextureCube above: IGL has no volume-texture readback path, so this refuses rather
-        // than fabricating voxels.
+        // Refused, and unlike the TextureCube case above this one really is an upstream limit --
+        // established by trying it, not by assuming it (plan_igl.md IGL-17).
+        //
+        // The cube path works because a framebuffer is a cheap descriptor over an existing image,
+        // so GetData can build a throwaway one and read the face back. That does not carry over to
+        // a volume: IGL v1.1.1 cannot attach a 3D texture to a framebuffer at all.
+        // `opengl::TextureBufferBase::attach` branches on multisample, stereo and array-layer and
+        // otherwise calls `glFramebufferTexture2D`, and a 3D texture takes that last branch because
+        // `getNumLayers()` counts ARRAY layers, of which a volume has one. The driver answers
+        // exactly what the API says it should: `GL_INVALID_OPERATION in
+        // glFramebufferTexture2D(invalid textarget GL_TEXTURE_3D)`. There is no
+        // `glFramebufferTexture3D`/`glFramebufferTextureLayer` path to reach, and the Vulkan side
+        // is no better -- its copy is `ivkGetBufferImageCopy2D` with `extent.depth` fixed at 1 and
+        // `getVkLayer()` feeding a volume's slice index into `baseArrayLayer`, which is invalid for
+        // a 3D image.
+        //
+        // So this is not a slice loop waiting to be written; there is nothing underneath it to
+        // call. Answering false keeps the "never invent content" contract -- the shared layer
+        // raises NotSupportedException rather than handing back fabricated voxels.
         return false;
     }
 

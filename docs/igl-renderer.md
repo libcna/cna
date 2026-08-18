@@ -75,7 +75,7 @@ own display connection and leaves the drawable unset, which cannot present to a 
 | `MultiStreamVertexInput` | Yes — `igl::VertexAttribute::bufferIndex` expresses it natively |
 | `Instancing` | Yes — `VertexSampleFunction::Instance` |
 | `CustomEffects` | Yes on OpenGL; parameters are refused on Vulkan (see below) |
-| `Texture3D` | Yes (real volume storage) |
+| `Texture3D` | Yes (real volume storage, sampling verified); voxels cannot be read back — see the gap table |
 | `AnisotropicFiltering` | Yes |
 | `MultiSampleAntiAliasing` | Yes on render targets; on the back buffer only via the OpenGL visual |
 | `WireFrame` | OpenGL only — Vulkan needs `fillModeNonSolid`, which IGL does not request |
@@ -130,8 +130,8 @@ row pitch is shorter than one packed row is refused rather than read past.
 | Back-buffer MSAA on Vulkan | IGL's swap-chain images are single-sample and this renderer adds no resolve pass of its own | `GetMultiSampleCount()` returns 0 — the count that is genuinely in effect |
 | Swap interval on Vulkan | Present mode is fixed when the swap chain is created | `SetSwapInterval` returns false |
 | Sampler LOD bias | `igl::SamplerStateDesc` has no such field | recorded for diagnostics, not applied |
+| `Texture3D.GetData` (volume readback) | IGL `v1.1.1` cannot attach a 3D texture to a framebuffer, which is its only readback route. `opengl::TextureBufferBase::attach` falls through to `glFramebufferTexture2D` for a volume — `getNumLayers()` counts array layers, of which a volume has one — and the driver answers `GL_INVALID_OPERATION … invalid textarget GL_TEXTURE_3D`; the Vulkan copy is 2D-only in the same way | `GetData` returns false and the shared layer raises `NotSupportedException` rather than fabricating voxels. Upload and sampling are unaffected (`plan_igl.md` IGL-17) |
 | Cube render-target MSAA | `igl::FramebufferDesc` cannot express a multisampled cube attachment with a per-face resolve | applied count reported as 1 |
-| `ShaderEffect` parameters on Vulkan | Loose (non-block) uniforms do not exist in Vulkan GLSL, and IGL's Vulkan encoder leaves `bindUniform` unimplemented | the draw throws by name; use a std140 block, or `CNA_IGL_BACKEND=opengl` |
 | Non-`Color` surface formats in the public API | Promoting them needs per-format verification of upload, sampling and readback, which has not been done | the renderer refuses what IGL cannot store and defers the rest to the framework's `Color`-only rule (see *Surface formats* above) |
 | A custom `ShaderEffect`'s parameters on Vulkan | Loose non-block uniforms do not exist in Vulkan GLSL, and IGL's Vulkan encoder leaves `bindUniform` unimplemented | Refused by name at draw time rather than drawn with stale values. The effect itself compiles, binds and draws on Vulkan (`plan_igl.md` IGL-42/IGL-43) |
 | A custom `ShaderEffect`'s GLSL is not portable between the two backends | SPIR-V requires an explicit `layout(location = N)` on every user input and output — the varyings between stages included — and `layout(set = N, binding = N)` on samplers; desktop GLSL 4.10 requires neither, and the two backends do not accept the same `#version` | Supply two sources and pick by backend. A shader that violates this is refused with glslang's own line-and-reason text plus the requirement in words (`plan_igl.md` IGL-70); `igl_custom_effect_backend_test.cpp` is the worked example of both variants |

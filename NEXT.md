@@ -110,6 +110,15 @@
 >   renders its own pattern cannot see this class of bug at all**, because a readback flip and a
 >   projection flip cancel exactly; `Igl_ReadbackOrientation` uses no draw call for the part that
 >   matters, which is the only reason it could tell the three apart.
+> * **IGL-17 — cube readback landed, volume readback proved impossible.** A plain `TextureCube` now
+>   reads back at every declared mip level: the old refusal ("IGL exposes readback through
+>   `IFramebuffer`, not `ITexture`") was true and not a reason, since a framebuffer is a cheap
+>   descriptor over an existing image and the render-target path was already building throwaway ones.
+>   All 49 `TextureCubeTest` cases pass. Volume readback is a genuine upstream limit, established by
+>   attempting it: IGL cannot attach a 3D texture to a framebuffer on either backend, and the driver
+>   says so (`GL_INVALID_OPERATION … invalid textarget GL_TEXTURE_3D`). The three suites that
+>   asserted it now assert the refusal instead — the per-renderer table the previous audit said did
+>   not exist.
 > * **IGL-43** — a custom `ShaderEffect` cannot take parameters on Vulkan. This is now the *only*
 >   reason any IGL example test fails there (3 of 26 binaries). The effect path itself is verified
 >   on Vulkan by `Igl_CustomEffectBackend`. Closing it means packing parameters into a uniform
