@@ -189,6 +189,33 @@ protected:
                 renderedMatchesUploaded = false;
         ExpectTrue("a target rendered INTO reads back the same way as one uploaded INTO",
                    renderedMatchesUploaded);
+
+        // The question the two readback answers alone cannot settle: a readback flip and a storage
+        // flip are indistinguishable from a readback. Sampling reads the image with neither, so
+        // drawing the RENDERED target to the screen says which orientation the sampler sees -- and
+        // therefore which of the two storage conventions is the canonical one.
+        device.Clear(Color(static_cast<bytecs>(0), static_cast<bytecs>(0),
+                           static_cast<bytecs>(0), static_cast<bytecs>(255)));
+        spriteBatch.Begin();
+        spriteBatch.Draw(rendered, Vector2(0.0f, 0.0f), Color::White);
+        spriteBatch.End();
+
+        std::vector<Color> sampledRendered(static_cast<std::size_t>(kSize) * kSize, Unwritten());
+        device.GetBackBufferData(sampledRendered.data(), 0,
+                                 static_cast<int>(sampledRendered.size()));
+        std::printf("sampled rendered target : ");
+        for (int row = 0; row < kSize; ++row)
+            std::printf("%3d ",
+                        sampledRendered[static_cast<std::size_t>(row) * kSize].getRProperty());
+        std::printf("\n");
+
+        bool renderedSamplesUpright = true;
+        for (int row = 0; row < kSize; ++row)
+            if (sampledRendered[static_cast<std::size_t>(row) * kSize].getRProperty() !=
+                RowColor(row).getRProperty())
+                renderedSamplesUpright = false;
+        ExpectTrue("drawing a target that was RENDERED into is upright, like an uploaded one",
+                   renderedSamplesUpright);
     }
 
 public:

@@ -4,8 +4,11 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 
+#include <cstdint>
+#include <cstring>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace CNA::Internal::Renderers::Igl
 {
@@ -231,5 +234,35 @@ namespace CNA::Internal::Renderers::Igl
         if (sliceBytes <= 0 || depth <= 0)
             return 0;
         return sliceBytes * depth;
+    }
+
+    void FlipRowsInPlace(const int surfaceFormat, const int width, const int height,
+                         void* const data) noexcept
+    {
+        if (data == nullptr || width <= 0 || height <= 1)
+            return;
+
+        const int rowBytes = FormatRowByteCount(surfaceFormat, width);
+        if (rowBytes <= 0)
+            return;
+
+        // A compressed format's "row" is a row of 4x4 blocks, so reversing rows would also have to
+        // reverse each block's own four texel rows. No block-compressed format is supported on this
+        // renderer (IglSurfaceFormats' own table refuses every one of them), so rather than write
+        // arithmetic nothing can reach, refuse to touch the data at all.
+        if (IsBlockCompressedFormat(surfaceFormat))
+            return;
+
+        auto* const bytes = static_cast<std::uint8_t*>(data);
+        std::vector<std::uint8_t> scratch(static_cast<std::size_t>(rowBytes));
+        for (int row = 0; row < height / 2; ++row)
+        {
+            std::uint8_t* const top = bytes + static_cast<std::size_t>(row) * rowBytes;
+            std::uint8_t* const bottom =
+                bytes + static_cast<std::size_t>(height - 1 - row) * rowBytes;
+            std::memcpy(scratch.data(), top, static_cast<std::size_t>(rowBytes));
+            std::memcpy(top, bottom, static_cast<std::size_t>(rowBytes));
+            std::memcpy(bottom, scratch.data(), static_cast<std::size_t>(rowBytes));
+        }
     }
 }

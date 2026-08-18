@@ -102,6 +102,23 @@ namespace CNA::Internal::Renderers::Igl
     [[nodiscard]] int FormatRowByteCount(int surfaceFormat, int width) noexcept;
 
     /**
+     * @brief Reverses the row order of a tightly packed region in place.
+     *
+     * IGL's Vulkan `copyBytesColorAttachment` passes `flipImageVertical = true` to
+     * `VulkanStagingDevice::getImageData2D` unconditionally, reversing the rows of whatever
+     * rectangle it copied; its OpenGL counterpart is a plain `glReadPixels` and reverses nothing.
+     * A caller that wants one convention from both backends has to undo exactly one of them, and
+     * this is that undo. A single-row region is unaffected either way, which is precisely why the
+     * discrepancy stayed invisible to every per-pixel test.
+     *
+     * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.
+     * @param width         Region width in texels.
+     * @param height        Region height in texels.
+     * @param data          Start of the region; @p height rows of `FormatRowByteCount` bytes.
+     */
+    void FlipRowsInPlace(int surfaceFormat, int width, int height, void* data) noexcept;
+
+    /**
      * @brief Bytes a @p width x @p height region occupies in @p surfaceFormat.
      *
      * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.

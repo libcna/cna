@@ -130,11 +130,26 @@ namespace CNA::Internal::Renderers::Igl
 
         Matrix combined = world * view * projection;
 
-        if (!isBackBuffer)
+        if (!isBackBuffer && !IsVulkanBackend())
         {
             // An off-screen target is rendered with a flipped Y so its rows are stored top-first,
             // which is what makes it read back and sample in the same orientation as an uploaded
             // texture. The pipeline's front-face winding is reversed to match (see AcquirePipeline).
+            //
+            // OpenGL only, because the correction the two backends need is not the same one. IGL's
+            // Vulkan encoder already flips the viewport height so that clip +Y runs up the screen
+            // on both backends -- but "up the screen" is a DIFFERENT direction through image memory
+            // in each: a GL texture's row 0 sits at t=0, the bottom, while a Vulkan image's row 0
+            // is the top. So on OpenGL this flip is what puts a target's rows in the same order
+            // SetData uploads them, and on Vulkan it is what took them OUT of that order.
+            //
+            // Applying it on both stored rendered content upside down relative to uploaded content,
+            // which is a contradiction the renderer cannot satisfy: the sampler, the readback and
+            // SetRenderTarget-then-draw all read one image. It stayed invisible because it cancelled
+            // against two other Vulkan-only defects -- IGL's unconditional readback row flip
+            // (IglRenderTargetRenderer::GetData) and ReadBackbuffer's inverted row origin -- so a
+            // rendered target read back correctly and a 1x1 pixel check of a sampled one passed,
+            // each for the wrong reason. Measured directly by Igl_ReadbackOrientation.
             Matrix flip = Matrix::getIdentityProperty();
             flip.M22 = -1.0f;
             combined = combined * flip;

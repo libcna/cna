@@ -539,6 +539,18 @@ namespace CNA::Internal::Renderers::Igl
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
+        /**
+         * @brief Reverses the row order IGL's Vulkan readback imposed, so both backends agree.
+         *
+         * A no-op on OpenGL and for a single-row region. See the definition for why exactly one of
+         * the two backends' conventions has to be undone.
+         *
+         * @param w    Region width in texels.
+         * @param h    Region height in texels.
+         * @param data Start of the region just filled by `copyBytesColorAttachment`.
+         */
+        CNAEXT void UndoVulkanReadbackRowFlip(int w, int h, void* data) const noexcept;
+
         /** @brief No-op: this renderer binds targets through `SetRenderTargets`, not per-resource. */
         void BindAsRenderTarget() override {}
 

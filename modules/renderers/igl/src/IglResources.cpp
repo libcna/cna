@@ -536,11 +536,30 @@ namespace CNA::Internal::Renderers::Igl
 
             resolvedFramebuffer->copyBytesColorAttachment(owner_->GetCommandQueue(), 0, data, range,
                                                           0);
+            UndoVulkanReadbackRowFlip(w, h, data);
             return true;
         }
 
         framebuffer_->copyBytesColorAttachment(owner_->GetCommandQueue(), 0, data, range, 0);
+        UndoVulkanReadbackRowFlip(w, h, data);
         return true;
+    }
+
+    void IglRenderTargetRenderer::UndoVulkanReadbackRowFlip(const int w, const int h,
+                                                            void* const data) const noexcept
+    {
+        // igl::vulkan::Framebuffer::copyBytesColorAttachment passes flipImageVertical = true to
+        // VulkanStagingDevice::getImageData2D UNCONDITIONALLY, so the rectangle it hands back has
+        // its rows reversed; its OpenGL counterpart is a plain glReadPixels and reverses nothing.
+        // A target's rows are stored top-first on both backends (IglRenderer::SubmitDraw keeps
+        // rendered content in the same order SetData uploads it), so exactly one of the two has to
+        // be undone, and this is it.
+        //
+        // A single-row read is unaffected by either convention, which is why this discrepancy was
+        // invisible to every per-pixel test the renderer had and only surfaced through a
+        // full-surface GetData of an UPLOADED target (Igl_ReadbackOrientation).
+        if (owner_ != nullptr && owner_->IsVulkanBackend())
+            FlipRowsInPlace(surfaceFormat_, w, h, data);
     }
 
     int IglRenderTargetRenderer::GetAppliedDepthStencilFormatEXT(
@@ -654,6 +673,10 @@ namespace CNA::Internal::Renderers::Igl
             static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h),
             static_cast<std::uint32_t>(face));
         framebuffer->copyBytesColorAttachment(owner_->GetCommandQueue(), 0, data, range, 0);
+        // Same unconditional Vulkan row flip as RenderTarget2D's own readback undoes; a cube face
+        // is read through the identical IGL entry point.
+        if (owner_->IsVulkanBackend())
+            FlipRowsInPlace(surfaceFormat_, w, h, data);
         return true;
     }
 

@@ -187,7 +187,13 @@ namespace CNA::Internal::Renderers::Igl
         // off-screen target additionally renders with a flipped Y projection -- see
         // IglRenderer::SubmitDraw -- which reverses the winding once more, and the pipeline follows
         // that so CullClockwiseFace keeps culling the same triangles either way.
-        desc.frontFaceWinding = boundTarget_ != nullptr && boundTarget_ != backBufferTarget_.get()
+        //
+        // The extra off-screen flip is OpenGL-only (see IglRenderer::SubmitDraw for why the two
+        // backends need different corrections), so the winding that follows it must be too --
+        // reversing it on Vulkan, where no flip is applied, would cull the wrong triangles.
+        desc.frontFaceWinding = boundTarget_ != nullptr &&
+                                        boundTarget_ != backBufferTarget_.get() &&
+                                        !IsVulkanBackend()
                                     ? igl::WindingMode::Clockwise
                                     : igl::WindingMode::CounterClockwise;
 

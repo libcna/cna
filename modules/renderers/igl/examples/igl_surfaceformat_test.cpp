@@ -11,8 +11,8 @@
 // Check A -- a `RenderTarget2D` of each supported byte class (1, 2, 4, 8 and 16 bytes per texel)
 //   survives an upload/readback round trip with its bytes intact. This is the discriminating
 //   check: with the old `width * 4` row pitch a 16-byte texel's rows were sliced to a quarter of
-//   their length and a 1-byte texel's upload read four times its own buffer. The expected row
-//   ORDER differs per backend -- see the IGL-67 note inside CheckRoundTrip.
+//   their length and a 1-byte texel's upload read four times its own buffer. The row ORDER is now
+//   the same on both backends (IGL-67) -- see the note inside CheckRoundTrip.
 // Check B -- `CreateTexture` sizes a non-`Color` `ImageData` from that image's own format, and
 //   refuses an image whose pixel vector is too short for it rather than reading past its end.
 // Check C -- a format IGL cannot represent (`Rgba64`, whose 8-byte R16G16B16A16 texel has no IGL
@@ -31,7 +31,6 @@
 
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
-#include "CNA/Internal/Renderers/Igl/IglRendererSelection.hpp"
 #include "CNA/Internal/Renderers/Igl/IglSurfaceFormats.hpp"
 
 #include "common/PixelTestGame.hpp"
@@ -83,30 +82,7 @@ namespace
         return bytes;
     }
 
-    /// Reverses the row order of a tightly packed image.
-    [[nodiscard]] std::vector<std::uint8_t> FlipRows(const std::vector<std::uint8_t>& image,
-                                                     const int surfaceFormat, const int width,
-                                                     const int height)
-    {
-        const std::size_t rowBytes =
-            static_cast<std::size_t>(FormatRowByteCount(surfaceFormat, width));
-        std::vector<std::uint8_t> flipped(image.size());
-        for (int y = 0; y < height; ++y)
-        {
-            const std::uint8_t* source = image.data() + static_cast<std::size_t>(y) * rowBytes;
-            std::uint8_t* destination =
-                flipped.data() + static_cast<std::size_t>(height - 1 - y) * rowBytes;
-            std::memcpy(destination, source, rowBytes);
-        }
-        return flipped;
-    }
 
-    /// True when this process resolved IGL's Vulkan backend.
-    [[nodiscard]] bool IsVulkanBackend()
-    {
-        namespace Detail = CNA::Internal::Renderers::Igl::Detail;
-        return Detail::ResolveRendererBackendForWindow() == Detail::RendererBackend::Vulkan;
-    }
 }
 
 class IglSurfaceFormatTest : public CNA::Examples::PixelTestGame
@@ -149,15 +125,13 @@ class IglSurfaceFormatTest : public CNA::Examples::PixelTestGame
         if (!ExpectTrue((name + ": GetData read the whole region back").c_str(), readBack))
             return;
 
-        // plan_igl.md IGL-67: igl::vulkan::Framebuffer::copyBytesColorAttachment always reads back
-        // vertically flipped. For content this renderer RENDERED that cancels against design
-        // decision 6's own projection flip (which is why Igl_RenderTarget_Vulkan reads correctly);
-        // for content a caller UPLOADED there is no second flip, so the rows come back reversed on
-        // Vulkan and identically on OpenGL. Pinned here as the documented behaviour rather than
-        // waved through, so the byte-exact row-pitch coverage below still runs on both backends --
-        // fixing IGL-67 must flip this expectation back.
-        const std::vector<std::uint8_t> expected =
-            IsVulkanBackend() ? FlipRows(uploaded, ordinal, kTargetWidth, kTargetHeight) : uploaded;
+        // plan_igl.md IGL-67, now closed: this expectation used to be flipped on Vulkan, because
+        // igl::vulkan::Framebuffer::copyBytesColorAttachment reverses the rows of every rectangle
+        // it copies while its OpenGL counterpart reverses none. The renderer now undoes exactly
+        // that one flip (IglRenderTargetRenderer::UndoVulkanReadbackRowFlip), so both backends owe
+        // the caller the rows it uploaded, in the order it uploaded them -- which is what XNA says
+        // and what the sampler was already doing.
+        const std::vector<std::uint8_t>& expected = uploaded;
 
         std::size_t firstMismatch = expected.size();
         for (std::size_t i = 0; i < expected.size(); ++i)

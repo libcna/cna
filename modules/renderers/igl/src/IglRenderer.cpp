@@ -1130,11 +1130,23 @@ namespace CNA::Internal::Renderers::Igl
         const int physicalX = presentX_ + static_cast<int>(std::lround(x * scaleX));
         const int physicalWidth = std::max(1, static_cast<int>(std::lround(w * scaleX)));
         const int physicalHeight = std::max(1, static_cast<int>(std::lround(h * scaleY)));
-        // The colour attachment stores its rows bottom-first on both backends, so the requested
-        // top-relative rectangle is converted before the copy and the result is flipped afterwards.
+        // IGL hands back a rectangle stored bottom-first on both backends, so the loop below flips
+        // it once. What the two backends do NOT agree on is where the requested rectangle's own y
+        // is measured from: glReadPixels counts from the bottom of the attachment, and
+        // vkCmdCopyImageToBuffer counts from the top of the image. IGL passes the value straight
+        // through without reconciling them, exactly as it does for the scissor rectangle (see
+        // ApplyScissor, which already converts for the same reason).
+        //
+        // The two conventions coincide only when the rectangle IS the whole attachment, where y is
+        // 0 from either edge -- which is why a full-surface read was correct while every 1x1 pixel
+        // check of the same frame read its mirror row and found the clear colour. That is the whole
+        // of IGL-60's Bug C: a readback defect, not the SpriteBatch rendering defect it looked like.
         const int surfaceHeight = std::max(1, backBuffer.GetTargetHeight());
         const int physicalTop = presentY_ + static_cast<int>(std::lround(y * scaleY));
-        const int physicalY = std::max(0, surfaceHeight - physicalTop - physicalHeight);
+        const int physicalY =
+            IsVulkanBackend()
+                ? std::max(0, physicalTop)
+                : std::max(0, surfaceHeight - physicalTop - physicalHeight);
 
         std::vector<std::uint8_t> block(static_cast<std::size_t>(physicalWidth) *
                                         static_cast<std::size_t>(physicalHeight) * 4);
