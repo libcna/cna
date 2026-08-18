@@ -250,7 +250,10 @@ TEST(SsaoPassTest, AHigherIntensityDarkensMore)
 
     const std::size_t beside =
         static_cast<std::size_t>(kSize / 2) * kSize + kSize / 2 + 1;
-    EXPECT_LE(ReadTarget(strong)[beside].getRProperty(), ReadTarget(weak)[beside].getRProperty());
+    // Strictly less, not "no brighter". The weaker form passes when the pass produces no
+    // occlusion at all, which is precisely the state it should be catching: every intensity then
+    // yields the same untouched frame, and the only test that notices is the one beside this.
+    EXPECT_LT(ReadTarget(strong)[beside].getRProperty(), ReadTarget(weak)[beside].getRProperty());
 }
 
 TEST(SsaoPassTest, WithoutDepthAndNormalsTheFrameIsPassedThroughUnchanged)
@@ -317,6 +320,7 @@ TEST(SsaoPassTest, SettingsRoundTripAndSampleCountsAreClampedOnUse)
     context.settings      = &settings;
     EXPECT_NO_THROW(pass.apply(context));
 }
+
 
 } // namespace
 

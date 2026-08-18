@@ -60,6 +60,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #include <stdexcept>
 #include "System/InvalidOperationException.hpp"
 #include <algorithm>
+#include <cstdio>
 #include <iomanip>
 #include <memory>
 #include <sstream>
@@ -1717,33 +1718,42 @@ if (!ProfileIsEs2ApiGeneration())
         if (loc >= 0) program_.set_uniform_matrix4(loc, matrix);
     }
 
+    int EasyGLEffectRenderer::ArrayUniformLocation(const char* name)
+    {
+        // GLSL names an array uniform by its first element, and whether a driver also accepts the
+        // bare array name is a driver decision rather than a specified one. Looking for both is
+        // the difference between an SSAO kernel that occludes and one that silently stays at the
+        // origin -- there is no error either way, only a black-and-white image where an ambient
+        // occlusion pass should be.
+        const int direct = program_.uniform_location(name);
+        if (direct >= 0)
+            return direct;
+        return program_.uniform_location((std::string(name) + "[0]").c_str());
+    }
+
     void EasyGLEffectRenderer::SetUniformFloatArray(const char* name, const float* values, int count)
     {
-        const int loc = program_.uniform_location(name);
+        const int loc = ArrayUniformLocation(name);
         if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count)), 1);
     }
 
     void EasyGLEffectRenderer::SetUniformVec2Array(const char* name, const float* values, int count)
     {
-        const int loc = program_.uniform_location(name);
+        const int loc = ArrayUniformLocation(name);
         if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count) * 2), 2);
     }
 
     void EasyGLEffectRenderer::SetUniformVec3Array(const char* name, const float* values, int count)
     {
-        const int loc = program_.uniform_location(name);
+        const int loc = ArrayUniformLocation(name);
+        std::fprintf(stderr, "[PROBE] vec3array %s loc=%d count=%d first=%f\n", name, loc, count, count>0?values[0]:0.0f);
         if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count) * 3), 3);
     }
 
     void EasyGLEffectRenderer::SetUniformMat4Array(const char* name, const float* matrices,
                                                   int count)
     {
-        // GLSL names the first element of an array uniform, so a palette declared `uBones[72]` is
-        // located as "uBones[0]". Both spellings are tried because a caller naturally writes the
-        // array's own name and some drivers accept it.
-        int loc = program_.uniform_location(name);
-        if (loc < 0)
-            loc = program_.uniform_location((std::string(name) + "[0]").c_str());
+        const int loc = ArrayUniformLocation(name);
         if (loc >= 0 && count > 0)
             ::metagl::glUniformMatrix4fv(::metagl::UniformLocation{loc}, count, 0, matrices);
     }

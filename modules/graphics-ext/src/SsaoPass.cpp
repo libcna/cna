@@ -61,6 +61,7 @@ uniform vec3  uKernel[64];
 uniform vec2  uNoiseScale;
 uniform float uRadius;
 uniform float uBias;
+uniform float uDepthRange;
 uniform int   uSampleCount;
 
 void main() {
@@ -72,12 +73,23 @@ void main() {
         return;
     }
 
-    vec3 normal = normalize(texture(uNormalSampler, TexCoord).xyz * 2.0 - 1.0);
+    // Every normalize() here is guarded. normalize(vec3(0)) is NaN, every comparison against NaN
+    // is false, and the occlusion test below is a comparison -- so one degenerate vector does not
+    // produce a wrong pixel, it silently produces an entirely unoccluded frame with no error
+    // anywhere to point at. A mid-grey noise texel is enough to do it: (0.5, 0.5) decodes to (0, 0).
+    vec3 rawNormal = texture(uNormalSampler, TexCoord).xyz * 2.0 - 1.0;
+    vec3 normal = length(rawNormal) > 1e-4 ? normalize(rawNormal) : vec3(0.0, 0.0, 1.0);
 
     // A per-pixel rotation from a tiled 4x4 noise texture. Without it every pixel samples the same
     // pattern and the result bands visibly; with it the error becomes noise the blur can remove.
-    vec3 randomVector = normalize(vec3(texture(uNoiseSampler, TexCoord * uNoiseScale).xy * 2.0 - 1.0, 0.0));
-    vec3 tangent   = normalize(randomVector - normal * dot(randomVector, normal));
+    vec3 rawRandom = vec3(texture(uNoiseSampler, TexCoord * uNoiseScale).xy * 2.0 - 1.0, 0.0);
+    vec3 randomVector = length(rawRandom) > 1e-4 ? normalize(rawRandom) : vec3(1.0, 0.0, 0.0);
+
+    vec3 rawTangent = randomVector - normal * dot(randomVector, normal);
+    // The rotation vector can land parallel to the normal, leaving nothing to build a tangent from.
+    vec3 tangent = length(rawTangent) > 1e-4
+                     ? normalize(rawTangent)
+                     : normalize(cross(normal, vec3(0.0, 1.0, 0.0)) + vec3(1e-3, 0.0, 0.0));
     vec3 bitangent = cross(normal, tangent);
     mat3 tbn = mat3(tangent, bitangent, normal);
 
@@ -88,18 +100,27 @@ void main() {
 
         vec3 samplePosition = tbn * uKernel[i];
         vec2 sampleUv = TexCoord + samplePosition.xy * uRadius;
-        float sampleDepth = texture(texture1, sampleUv).r;
+        float sampleDepth = textureLod(texture1, sampleUv, 0.0).r;
         if (sampleDepth <= 0.0) continue;
 
-        float expectedDepth = centerDepth - samplePosition.z * uRadius;
-        if (sampleDepth < expectedDepth - uBias) {
-            float rangeCheck = smoothstep(0.0, 1.0, uRadius / max(abs(centerDepth - sampleDepth), 1e-5));
+        // An occluder is simply something nearer to the camera than this pixel. The obvious
+        // extra term -- offsetting the comparison by the sample's own depth component times the
+        // radius -- belongs to a view-space formulation, and this pass has no view space: its
+        // radius is a screen-space offset in UV and its depths are a normalized texture. Mixing
+        // the two makes the comparison depend on a quantity in the wrong units, and the symptom
+        // is not a wrong-looking image but an entirely unoccluded one at most radii, because the
+        // offset swamps the depth difference it is being compared against.
+        if (sampleDepth < centerDepth - uBias) {
+            // Distant geometry seen past a silhouette must not darken this pixel; uDepthRange is
+            // how far away an occluder may be and still count, in the depth texture's own units.
+            float rangeCheck =
+                smoothstep(0.0, 1.0, uDepthRange / max(abs(centerDepth - sampleDepth), 1e-5));
             occlusion += rangeCheck;
         }
     }
 
     float visibility = 1.0 - occlusion / float(count);
-    FragColor = vec4(vec4(visibility, visibility, visibility, 1.0));
+    FragColor = vec4(visibility, visibility, visibility, 1.0);
 }
 )";
 
@@ -236,6 +257,10 @@ void main() {
             static_cast<float>(context.height) / static_cast<float>(kNoiseExtent));
         occlusionEffect_->SetUniformFloat("uRadius", radius);
         occlusionEffect_->SetUniformFloat("uBias", 0.005f);
+        // The depth-side companion to the screen-space radius: how far, in the depth texture's own
+        // 0..1 units, an occluder may be and still count. Tied to the radius so one setting still
+        // controls "how big is the ambient neighbourhood", but never used as a UV offset.
+        occlusionEffect_->SetUniformFloat("uDepthRange", std::max(radius * 0.25f, 0.01f));
         occlusionEffect_->SetUniformInt("uSampleCount", samples);
 
         fullscreen_->draw(context.sourceDepth, occlusion, occlusionEffect_.get(),

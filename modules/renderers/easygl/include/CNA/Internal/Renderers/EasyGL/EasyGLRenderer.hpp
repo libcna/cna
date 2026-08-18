@@ -457,6 +457,9 @@ namespace CNA::Internal::Renderers::EasyGL
         void SetUniformFloatArray(const char* name, const float* values, int count) override;
         void SetUniformVec2Array(const char* name, const float* values, int count) override;
         void SetUniformVec3Array(const char* name, const float* values, int count) override;
+        /// Resolves an array uniform by its bare name or by GLSL's `name[0]` spelling, because
+        /// which of the two a driver accepts is not specified.
+        int ArrayUniformLocation(const char* name);
         void SetUniformMat4Array(const char* name, const float* matrices, int count) override;
         void BindTexture(int unit, ITextureRenderer* texture) override;
         void BindTextureCube(int unit, ITextureCubeRenderer* texture) override;
