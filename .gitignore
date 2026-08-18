@@ -91,3 +91,8 @@ Testing/
 # plan_modern.md MOD-7: generated Doxygen output for the CNA::Graphics engine layer
 # (`doxygen docs/Doxyfile.cnaext`, or the CNAEXT_DoxygenGroup ctest). Regenerated, never source.
 build/doxygen-cnaext/
+
+# plan_modern.md MOD-134: scratch configure trees and logs from
+# scripts/check_renderer_configure_sweep.sh. Each tree is deleted as soon as its identity is
+# checked; the logs are kept only until the next run.
+build/renderer-sweep/

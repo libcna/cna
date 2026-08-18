@@ -27,6 +27,31 @@ ten times another here is doing roughly ten times the work — and they are not 
 any GPU will do. Where a number is dominated by fill rate (shadow maps, the sky) hardware changes it
 completely; where it is dominated by call count (instancing) the ratio survives.
 
+## HDR render targets
+
+`plan_modern.md` `MOD-138`. What the HDR pipeline's *first* decision costs, before any pass runs:
+a scene target in a float format rather than 8-bit `Color`.
+
+Reproduce: `./cmake-build-cnaext/cna_test_cnaext_hdr_target --benchmark`.
+
+| Target format | Bytes/texel | 1280×720 memory | Fill, ms/frame | vs `Color` |
+|---|---|---|---|---|
+| `Color` (RGBA8) | 4 | 3.52 MiB | 6.73 | — |
+| `HdrBlendable` / `HalfVector4` (RGBA16F) | 8 | 7.03 MiB | 7.27 | +8% |
+| `Vector4` (RGBA32F) | 16 | 14.06 MiB | 7.50 | +11% |
+
+The fill is a full-target textured quad, not a clear, **and the measurement had to be forced to
+happen.** With a clear alone, all three formats timed identically — llvmpipe queues the tile work and
+nothing had ever touched the memory, so the number measured the API rather than the memory traffic.
+Reading back a single texel after each fill makes the driver do the work inside the timed region.
+All three rows pay that same one-texel readback, so the comparison stays fair.
+
+**What to take from this.** Doubling bytes per texel does not double the cost: at 1280×720 the step
+from 8-bit to RGBA16F is 8%, and to RGBA32F 11%, on a rasteriser where fill is expensive. Memory is
+the honest reason to prefer `HdrBlendable` over `Vector4` for a scene target — half the bytes, and a
+post-process chain holds several targets at once — not frame time. That is the justification behind
+`RenderQuality` choosing `HdrBlendable`, and it is a measurement rather than an assumption.
+
 ## Shadows
 
 | What | Measurement | Source |

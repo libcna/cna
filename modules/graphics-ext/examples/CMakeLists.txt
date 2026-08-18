@@ -150,6 +150,11 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_graphics_ext_test(cna_test_cnaext_bloom cnaext_bloom_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_BloomInTenLines COMMAND cna_test_cnaext_bloom
         TIMEOUT 90 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_modern.md MOD-132/MOD-138: what a float render target buys, on screen, and what it costs.
+    cna_graphics_ext_test(cna_test_cnaext_hdr_target cnaext_hdr_target_test.cpp)
+    cna_register_renderer_test(NAME CNAEXT_HdrRenderTarget COMMAND cna_test_cnaext_hdr_target
+        TIMEOUT 90 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # ---- plan_modern.md MOD-1740: the guard script, as a test ---------------------------------------

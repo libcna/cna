@@ -1025,7 +1025,12 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "TINYGL")
     message(STATUS "CNA: Using TINYGL (C-Chads/tinygl, CPU fixed-function OpenGL 1.x) graphics renderer")
     set(RENDERER_DIR "modules/renderers/tinygl")
     set(RENDERER_TARGET "cna_renderer_tinygl")
-    add_compile_definitions(CNA_RENDERER_TINYGL)
+    # plan_modern.md MOD-134: this arm used to call add_compile_definitions() directly and never
+    # append to _cna_identity_defines, which is the list the caller turns into this identity's entry
+    # in CNA_RENDERER_TARGET_DEFINES. An empty entry makes that list empty rather than one element
+    # long, and modules/renderers/CMakeLists.txt then failed with "list GET given empty list" --
+    # TINYGL did not configure at all. Every other one of the 45 dispatch arms already did this.
+    list(APPEND _cna_identity_defines CNA_RENDERER_TINYGL)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_TINYGL")
     include(cmake/ThirdPartyTinyGL.cmake)
     cna_configure_tinygl()
