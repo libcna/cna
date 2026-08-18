@@ -936,6 +936,25 @@ namespace CNA::Internal::Renderers
         float cascadeBlendBand = 0.0f;
         /// Tints each cascade a different colour. A debugging aid, off by default.
         bool  cascadeDebugTint = false;
+        /// plan_modern.md MOD-1005: one punctual light and its shadow. 0 means none -- and every
+        /// draw that has never heard of punctual lights leaves it there, which is what keeps this
+        /// free. 1 is a point light (shadowed by `punctualShadowCube`), 2 a spot light (shadowed
+        /// by `punctualShadowMap` through `punctualViewProjColMajor`). Both maps store *distance
+        /// from the light over its range*, not projected depth; see CNA::Graphics::CubeShadowMap.
+        int   punctualKind = 0;
+        float punctualPosition[3]  = {0, 0, 0};
+        float punctualDirection[3] = {0, -1, 0};
+        float punctualDiffuse[3]   = {1, 1, 1};
+        float punctualRange        = 20.0f;
+        /// Cosine of the inner and outer cone half-angles, precomputed: the shader needs the
+        /// cosines and computing them per fragment would be six transcendental calls per pixel.
+        float punctualCosInner     = 1.0f;
+        float punctualCosOuter     = 1.0f;
+        float punctualShadowBias   = 0.004f;
+        const ITextureCubeRenderer* punctualShadowCube = nullptr;
+        const ITextureRenderer*     punctualShadowMap  = nullptr;
+        float punctualViewProjColMajor[16] = {
+            1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
         /// BasicEffect: DirectionalLight0/1/2's SpecularColor, zeroed when that light is disabled
         /// (mirrors the light*Diffuse zeroing — FNA's DirectionalLight.Enabled setter zeroes both).
         float light0Specular[3] = {0,0,0};

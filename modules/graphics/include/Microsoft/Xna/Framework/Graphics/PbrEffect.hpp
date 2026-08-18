@@ -496,6 +496,10 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void setShadowCascadesEXT(const ShadowCascadeStateEXT& state) override;
         /** @brief Returns the cascade set in use; `Count == 0` means a single map. */
         CNAEXT [[nodiscard]] const ShadowCascadeStateEXT& getShadowCascadesEXT() const override;
+        /** @brief Supplies one punctual light and its shadow. @param light The light. */
+        CNAEXT void setPunctualLightEXT(const PunctualLightEXT& light) override;
+        /** @brief Returns the punctual light in use; `Kind == None` means there is none. */
+        CNAEXT [[nodiscard]] const PunctualLightEXT& getPunctualLightEXT() const override;
 
     private:
 
@@ -506,6 +510,7 @@ namespace Microsoft::Xna::Framework::Graphics
         float shadowDepthBiasEXT_ = 0.0015f;
         int   shadowFilterRadiusEXT_ = 1;   // 3x3, the default ShadowQuality::Medium asks for
         ShadowCascadeStateEXT shadowCascadesEXT_{};
+        PunctualLightEXT punctualLightEXT_{};
         explicit PbrEffect(const PbrEffect& cloneSource);
 
         void CacheEffectParameters();

@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: MS-PL
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include <cmath>
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
@@ -324,6 +326,38 @@ namespace Microsoft::Xna::Framework::Graphics
         p.shadowsEnabled  = shadowsEnabledEXT_ && shadowMapEXT_ != nullptr;
         p.shadowDepthBias = shadowDepthBiasEXT_;
         p.shadowPcfRadius = shadowFilterRadiusEXT_;
+        if (punctualLightEXT_.Kind != PunctualLightKindEXT::None)
+        {
+            // MOD-1005. The cosines are precomputed here rather than in the shader: a cone test
+            // needs cos(angle), and six transcendental calls per fragment to recover what the CPU
+            // already knows is a poor trade.
+            p.punctualKind = punctualLightEXT_.Kind == PunctualLightKindEXT::Point ? 1 : 2;
+            p.punctualPosition[0] = punctualLightEXT_.Position.X;
+            p.punctualPosition[1] = punctualLightEXT_.Position.Y;
+            p.punctualPosition[2] = punctualLightEXT_.Position.Z;
+            p.punctualDirection[0] = punctualLightEXT_.Direction.X;
+            p.punctualDirection[1] = punctualLightEXT_.Direction.Y;
+            p.punctualDirection[2] = punctualLightEXT_.Direction.Z;
+            p.punctualDiffuse[0] = punctualLightEXT_.DiffuseColor.X;
+            p.punctualDiffuse[1] = punctualLightEXT_.DiffuseColor.Y;
+            p.punctualDiffuse[2] = punctualLightEXT_.DiffuseColor.Z;
+            p.punctualRange      = punctualLightEXT_.Range;
+            p.punctualCosInner   = std::cos(punctualLightEXT_.InnerAngle);
+            p.punctualCosOuter   = std::cos(punctualLightEXT_.OuterAngle);
+            p.punctualShadowBias = punctualLightEXT_.ShadowDepthBias;
+            if (punctualLightEXT_.Kind == PunctualLightKindEXT::Point &&
+                punctualLightEXT_.ShadowCube != nullptr)
+            {
+                p.punctualShadowCube = &punctualLightEXT_.ShadowCube->GetRenderer();
+            }
+            else if (punctualLightEXT_.Kind == PunctualLightKindEXT::Spot &&
+                     punctualLightEXT_.ShadowMap != nullptr)
+            {
+                p.punctualShadowMap = &punctualLightEXT_.ShadowMap->GetRenderer();
+                const float* m = &punctualLightEXT_.ShadowViewProjection.M11;
+                for (int i = 0; i < 16; ++i) p.punctualViewProjColMajor[i] = m[i];
+            }
+        }
         if (p.shadowsEnabled && shadowCascadesEXT_.Count > 0)
         {
             // MOD-908: the cascade matrices replace the single light matrix rather than joining
@@ -606,5 +640,15 @@ namespace Microsoft::Xna::Framework::Graphics
     const ShadowCascadeStateEXT& SkinnedEffect::getShadowCascadesEXT() const
     {
         return shadowCascadesEXT_;
+    }
+
+    void SkinnedEffect::setPunctualLightEXT(const PunctualLightEXT& light)
+    {
+        punctualLightEXT_ = light;
+    }
+
+    const PunctualLightEXT& SkinnedEffect::getPunctualLightEXT() const
+    {
+        return punctualLightEXT_;
     }
 }

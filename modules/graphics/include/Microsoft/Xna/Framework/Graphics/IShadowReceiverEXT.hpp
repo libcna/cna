@@ -3,6 +3,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PunctualLightEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShadowCascadeStateEXT.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics {
@@ -110,6 +111,25 @@ namespace Microsoft::Xna::Framework::Graphics {
 
         /** @brief Returns the cascade set currently in use; `Count == 0` means a single map. */
         CNAEXT [[nodiscard]] virtual const ShadowCascadeStateEXT& getShadowCascadesEXT() const = 0;
+
+        /**
+         * @brief Supplies one punctual light -- point or spot -- and its shadow.
+         *
+         * Separate from the directional shadow above rather than folded into it, because the two
+         * shadow *different lights*: the directional map answers "is the sun blocked here", this
+         * one answers "is that lamp blocked here", and multiplying one light's contribution by the
+         * other's visibility is the kind of mistake that produces a plausible image and no clue.
+         *
+         * `Kind == None` is the default and leaves the draw exactly as it was, so an effect that
+         * never hears about punctual lights behaves as it did before they existed. One light per
+         * draw; see `PunctualLightEXT` for why that ceiling is deliberate.
+         *
+         * @param light The light and its shadow, as one value.
+         */
+        CNAEXT virtual void setPunctualLightEXT(const PunctualLightEXT& light) = 0;
+
+        /** @brief Returns the punctual light in use; `Kind == None` means there is none. */
+        CNAEXT [[nodiscard]] virtual const PunctualLightEXT& getPunctualLightEXT() const = 0;
     };
 
 } // namespace Microsoft::Xna::Framework::Graphics

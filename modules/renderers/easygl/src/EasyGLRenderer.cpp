@@ -285,6 +285,77 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 "    return vec3(1.0,1.0,0.6);\n" \
 "}\n"
 
+// plan_modern.md MOD-1005/MOD-1006: one punctual light -- point or spot -- with its own shadow.
+// Kept beside the directional lookup rather than folded into it because the two shadow different
+// lights: one answers "is the sun blocked here", the other "is that lamp blocked here", and
+// multiplying one light's contribution by the other's visibility produces a plausible image and no
+// clue that anything is wrong.
+//
+// Both maps store *distance from the light over its range*, so the comparison is the same
+// arithmetic for a cube face and a spot map, and the cube is sampled by direction -- which is the
+// whole reason distance is stored instead of projected depth.
+//
+// Three choices inside it are worth stating. A cube face is chosen by the sampled direction alone,
+// so a point light needs no per-face bookkeeping in the lookup -- the six faces are one texture
+// here. The cube path takes a single tap while the spot path filters 3x3: filtering across a cube
+// face's edge needs seamless sampling, which is not available on every profile these shaders
+// compile in, and a tap that silently wrapped to the wrong face would draw a stripe of shadow
+// along every cube seam. And the inverse-square falloff is windowed to zero at the range, so the
+// light ends exactly where its shadow map ends -- an unwindowed one never reaches zero and leaves
+// a visible step at the boundary, which is precisely where the shadow stops being available.
+#define CNA_GL_PUNCTUAL_DECL \
+"uniform float uPunctualKind;\n" \
+"uniform vec3 uPunctualPosition;\n" \
+"uniform vec3 uPunctualDirection;\n" \
+"uniform vec3 uPunctualDiffuse;\n" \
+"uniform float uPunctualRange;\n" \
+"uniform float uPunctualCosInner;\n" \
+"uniform float uPunctualCosOuter;\n" \
+"uniform float uPunctualBias;\n" \
+"uniform float uPunctualHasShadow;\n" \
+"uniform vec2 uPunctualTexel;\n" \
+"uniform samplerCube uPunctualCube;\n" \
+"uniform sampler2D uPunctualMap;\n" \
+"uniform mat4 uPunctualViewProj;\n" \
+"float cnaPunctualShadow(vec3 worldPos,vec3 toLight,float distanceToLight){\n" \
+"    if(uPunctualHasShadow<0.5) return 1.0;\n" \
+"    float here=clamp(distanceToLight/uPunctualRange,0.0,1.0);\n" \
+"    if(uPunctualKind<1.5){\n" \
+"        float occluder=texture(uPunctualCube,-toLight).r;\n" \
+"        return (here-uPunctualBias<=occluder)?1.0:0.0;\n" \
+"    }\n" \
+"    vec4 clip=uPunctualViewProj*vec4(worldPos,1.0);\n" \
+"    if(clip.w<=0.0) return 1.0;\n" \
+"    vec3 uv=clip.xyz/clip.w*0.5+0.5;\n" \
+"    if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0) return 1.0;\n" \
+"    float lit=0.0;\n" \
+"    for(int y=-1;y<=1;++y){\n" \
+"        for(int x=-1;x<=1;++x){\n" \
+"            vec2 at=clamp(uv.xy+vec2(float(x),float(y))*uPunctualTexel,vec2(0.0),vec2(1.0));\n" \
+"            float occluder=texture(uPunctualMap,at).r;\n" \
+"            lit+=(here-uPunctualBias<=occluder)?1.0:0.0;\n" \
+"        }\n" \
+"    }\n" \
+"    return lit/9.0;\n" \
+"}\n" \
+"vec3 cnaPunctualLight(vec3 worldPos,vec3 normal){\n" \
+"    if(uPunctualKind<0.5) return vec3(0.0);\n" \
+"    vec3 offset=uPunctualPosition-worldPos;\n" \
+"    float distanceToLight=length(offset);\n" \
+"    if(distanceToLight>uPunctualRange||distanceToLight<1e-5) return vec3(0.0);\n" \
+"    vec3 toLight=offset/distanceToLight;\n" \
+"    float t=distanceToLight/uPunctualRange;\n" \
+"    float window=clamp(1.0-t*t*t*t,0.0,1.0);\n" \
+"    float attenuation=window*window/(1.0+distanceToLight*distanceToLight);\n" \
+"    if(uPunctualKind>1.5){\n" \
+"        float cosAngle=dot(normalize(uPunctualDirection),-toLight);\n" \
+"        float cone=clamp((cosAngle-uPunctualCosOuter)/max(uPunctualCosInner-uPunctualCosOuter,1e-4),0.0,1.0);\n" \
+"        attenuation*=cone*cone;\n" \
+"    }\n" \
+"    float ndotl=max(dot(normal,toLight),0.0);\n" \
+"    return uPunctualDiffuse*ndotl*attenuation*cnaPunctualShadow(worldPos,toLight,distanceToLight);\n" \
+"}\n"
+
 namespace CNA::Internal::Renderers::EasyGL
 {
     using namespace Microsoft::Xna::Framework;
@@ -5852,6 +5923,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out vec4 FragColor;\n"
 CNA_GL_RT_SAMPLE_UV_DECL
 CNA_GL_SHADOW_DECL
+CNA_GL_PUNCTUAL_DECL
 "void main(){\n"
 // XNA uses a separate unlit shader variant. Do not merely zero the light colours and continue
 // through the lit math here: an unlit vertex at the default eye position makes normalize(0)
@@ -5867,7 +5939,7 @@ CNA_GL_SHADOW_DECL
 // MOD-838: the shadow attenuates direct light only. Ambient is light arriving from every
 // direction, and darkening it here would make a shadowed surface black rather than shaded.
 "        float shadow=cnaShadowFactor(vWorldPos);\n"
-"        vec3 lightSum=uAmbientColor+(uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2)*shadow;\n"
+"        vec3 lightSum=uAmbientColor+(uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2)*shadow+cnaPunctualLight(vWorldPos,N);\n"
 "        litRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
 "        vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
 "        vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
@@ -6393,6 +6465,7 @@ CNA_GL_SKIN_NORMAL_DECL
 "out vec4 FragColor;\n"
 CNA_GL_RT_SAMPLE_UV_DECL
 CNA_GL_SHADOW_DECL
+CNA_GL_PUNCTUAL_DECL
 "void main(){\n"
 "    vec3 N=normalize(vNormal);\n"
 "    vec3 E=normalize(uEyePosition-vWorldPos);\n"
@@ -6403,7 +6476,7 @@ CNA_GL_SHADOW_DECL
 // folds ambient into uEmissiveColor, which is added below and therefore already outside the
 // attenuated term.
 "    float cnaShadow=cnaShadowFactor(vWorldPos);\n"
-"    vec3 lightSum=(uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2)*cnaShadow;\n"
+"    vec3 lightSum=(uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2)*cnaShadow+cnaPunctualLight(vWorldPos,N);\n"
 // audit_net.md remediation (2026-07-18, fourth round): EmissiveColor is ADDED after the
 // diffuse multiply, never multiplied by it - matches FNA's own Lighting.fxh ComputeLights()
 // verbatim (`mul(diffuse, lightDiffuse) * DiffuseColor.rgb + EmissiveColor`), and matches what
@@ -6776,6 +6849,7 @@ CNA_GL_SRGB_TRANSFER_DECL
 CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
 CNA_GL_SHADOW_DECL
+CNA_GL_PUNCTUAL_DECL
 + (dualUv ? "vec2 cnaPbrUV(float setIndex){return setIndex<0.5?vUV:vUV1;}\n" : "") +
 "vec2 cnaPbrTransformUV(vec2 uv,int slot){\n"
 "    vec3 value=vec3(uv,1.0);\n"
@@ -6820,6 +6894,7 @@ CNA_GL_SHADOW_DECL
 // touch. The ambient/occlusion term below stands for light arriving from the rest of the
 // environment, which an occluder between the surface and this one light does not block.
 "    Lo*=cnaShadowFactor(vWorldPos);\n"
+"    Lo+=cnaPunctualLight(vWorldPos,finalNormal)*albedo;\n"
 "    float occlusion=texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(" + occlusionUv + ",4),uRtFlipVHi.x)).r;\n"
 // §3.9.3's own formula: 1 + strength * (sampled - 1). At strength 0 this is 1 whatever the map
 // holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
@@ -7042,6 +7117,7 @@ CNA_GL_SRGB_TRANSFER_DECL
 CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
 CNA_GL_SHADOW_DECL
+CNA_GL_PUNCTUAL_DECL
 + (dualUv ? "vec2 cnaPbrUV(float setIndex){return setIndex<0.5?vUV:vUV1;}\n" : "") +
 "vec2 cnaPbrTransformUV(vec2 uv,int slot){\n"
 "    vec3 value=vec3(uv,1.0);\n"
@@ -7086,6 +7162,7 @@ CNA_GL_SHADOW_DECL
 // touch. The ambient/occlusion term below stands for light arriving from the rest of the
 // environment, which an occluder between the surface and this one light does not block.
 "    Lo*=cnaShadowFactor(vWorldPos);\n"
+"    Lo+=cnaPunctualLight(vWorldPos,finalNormal)*albedo;\n"
 "    float occlusion=texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(" + occlusionUv + ",4),uRtFlipVHi.x)).r;\n"
 // §3.9.3's own formula: 1 + strength * (sampled - 1). At strength 0 this is 1 whatever the map
 // holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
@@ -7400,6 +7477,19 @@ CNA_GL_SHADOW_DECL
         p.loc_cascade_viewz  = p.prog.uniform_location("uCascadeViewZ");
         p.loc_cascade_blend  = p.prog.uniform_location("uCascadeBlend");
         p.loc_cascade_debug  = p.prog.uniform_location("uCascadeDebug");
+        p.loc_punctual_kind   = p.prog.uniform_location("uPunctualKind");
+        p.loc_punctual_pos    = p.prog.uniform_location("uPunctualPosition");
+        p.loc_punctual_dir    = p.prog.uniform_location("uPunctualDirection");
+        p.loc_punctual_diff   = p.prog.uniform_location("uPunctualDiffuse");
+        p.loc_punctual_range  = p.prog.uniform_location("uPunctualRange");
+        p.loc_punctual_cosin  = p.prog.uniform_location("uPunctualCosInner");
+        p.loc_punctual_cosout = p.prog.uniform_location("uPunctualCosOuter");
+        p.loc_punctual_bias   = p.prog.uniform_location("uPunctualBias");
+        p.loc_punctual_hasmap = p.prog.uniform_location("uPunctualHasShadow");
+        p.loc_punctual_cube   = p.prog.uniform_location("uPunctualCube");
+        p.loc_punctual_map    = p.prog.uniform_location("uPunctualMap");
+        p.loc_punctual_vp     = p.prog.uniform_location("uPunctualViewProj");
+        p.loc_punctual_texel  = p.prog.uniform_location("uPunctualTexel");
     }
 
     void EasyGLRenderer::BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
@@ -7841,6 +7931,71 @@ if (ProfileIsEs2ApiGeneration())
                     p.prog.set_uniform(p.loc_cascade_blend, params.cascadeBlendBand);
                 if (p.loc_cascade_debug >= 0)
                     p.prog.set_uniform(p.loc_cascade_debug, params.cascadeDebugTint ? 1.0f : 0.0f);
+            }
+
+            // Punctual light (MOD-1005). Units 8 and 9, past the shadow map's unit 7, so a lamp
+            // and the sun can be shadowed in the same draw without displacing each other.
+            if (p.loc_punctual_kind >= 0)
+            {
+                const int kind = params.punctualKind < 0 ? 0
+                               : (params.punctualKind > 2 ? 0 : params.punctualKind);
+                const bool haveCube = kind == 1 && params.punctualShadowCube != nullptr;
+                const bool haveMap  = kind == 2 && params.punctualShadowMap != nullptr;
+                p.prog.set_uniform(p.loc_punctual_kind, static_cast<float>(kind));
+                if (p.loc_punctual_pos >= 0)
+                    p.prog.set_uniform(p.loc_punctual_pos, params.punctualPosition[0],
+                                       params.punctualPosition[1], params.punctualPosition[2]);
+                if (p.loc_punctual_dir >= 0)
+                    p.prog.set_uniform(p.loc_punctual_dir, params.punctualDirection[0],
+                                       params.punctualDirection[1], params.punctualDirection[2]);
+                if (p.loc_punctual_diff >= 0)
+                    p.prog.set_uniform(p.loc_punctual_diff, params.punctualDiffuse[0],
+                                       params.punctualDiffuse[1], params.punctualDiffuse[2]);
+                if (p.loc_punctual_range >= 0)
+                    p.prog.set_uniform(p.loc_punctual_range,
+                                       params.punctualRange > 0.0f ? params.punctualRange : 1.0f);
+                if (p.loc_punctual_cosin >= 0)
+                    p.prog.set_uniform(p.loc_punctual_cosin, params.punctualCosInner);
+                if (p.loc_punctual_cosout >= 0)
+                    p.prog.set_uniform(p.loc_punctual_cosout, params.punctualCosOuter);
+                if (p.loc_punctual_bias >= 0)
+                    p.prog.set_uniform(p.loc_punctual_bias, params.punctualShadowBias);
+                if (p.loc_punctual_hasmap >= 0)
+                    p.prog.set_uniform(p.loc_punctual_hasmap,
+                                       (haveCube || haveMap) ? 1.0f : 0.0f);
+                if (p.loc_punctual_vp >= 0)
+                    p.prog.set_uniform_matrix4(p.loc_punctual_vp, params.punctualViewProjColMajor);
+                if (p.loc_punctual_texel >= 0)
+                {
+                    // Its own texel size, not the directional map's. Borrowing that one means a
+                    // draw with no sun attached filters the spot map with a texel of 1.0 -- every
+                    // tap clamped to a corner of the map, every corner white, and a spot shadow
+                    // that silently never appears.
+                    const int width  = haveMap ? params.punctualShadowMap->GetWidth() : 1;
+                    const int height = haveMap ? params.punctualShadowMap->GetHeight() : 1;
+                    p.prog.set_uniform(p.loc_punctual_texel,
+                                       width > 0 ? 1.0f / static_cast<float>(width) : 0.0f,
+                                       height > 0 ? 1.0f / static_cast<float>(height) : 0.0f);
+                }
+                if (p.loc_punctual_cube >= 0)
+                {
+                    p.prog.set_uniform(p.loc_punctual_cube, 8);
+                    if (haveCube)
+                        params.punctualShadowCube->BindGL(8);
+                }
+                if (p.loc_punctual_map >= 0)
+                {
+                    p.prog.set_uniform(p.loc_punctual_map, 9);
+                    if (haveMap)
+                        params.punctualShadowMap->BindGL(9);
+                    else
+                    {
+                        EnsureDefaultWhiteTexture();
+                        default_white_texture_.active_bind(::easygl::TextureUnit::Texture9,
+                                                           ::easygl::TextureTarget::Texture2D);
+                    }
+                }
+                ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
             }
             if (p.loc_shadowmap >= 0)
             {

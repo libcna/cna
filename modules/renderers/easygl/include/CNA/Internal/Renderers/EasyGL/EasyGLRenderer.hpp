@@ -739,6 +739,21 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_cascade_viewz  = -1;  ///< vec4, the view matrix's third column
             int loc_cascade_blend  = -1;  ///< float cross-fade width in view-depth units
             int loc_cascade_debug  = -1;  ///< float 0/1
+            /// plan_modern.md MOD-1005: one punctual light. uPunctualKind 0 means none and the
+            /// rest are left alone, which is why an existing draw is unchanged.
+            int loc_punctual_kind   = -1;  ///< float 0 none, 1 point, 2 spot
+            int loc_punctual_pos    = -1;
+            int loc_punctual_dir    = -1;
+            int loc_punctual_diff   = -1;
+            int loc_punctual_range  = -1;
+            int loc_punctual_cosin  = -1;
+            int loc_punctual_cosout = -1;
+            int loc_punctual_bias   = -1;
+            int loc_punctual_hasmap = -1;
+            int loc_punctual_cube   = -1;  ///< samplerCube, unit 8
+            int loc_punctual_map    = -1;  ///< sampler2D, unit 9
+            int loc_punctual_vp     = -1;
+            int loc_punctual_texel  = -1;  ///< vec2 1/size of the spot map
             int loc_envmap        = -1;  ///< samplerCube (EnvironmentMapEffect only)
             int loc_envmap_amount = -1;  ///< float blend [0,1]
             int loc_envmap_spec   = -1;  ///< vec3 specular tint
