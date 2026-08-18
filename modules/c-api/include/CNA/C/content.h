@@ -171,6 +171,75 @@ CNA_C_API CNA_Result cna_content_manager_load_texture_cube(
     CNA_Handle* out_texture);
 
 /**
+ * @brief Loads a SpriteFont asset, reporting both the font and its glyph atlas.
+ *
+ * @param content_manager Owned content-manager handle.
+ * @param asset_name UTF-8 logical asset name, with or without its extension.
+ * @param out_sprite_font Receives an **owned** SpriteFont handle on success, destroyed with
+ *        `cna_sprite_font_destroy`.
+ * @param out_texture Receives an **owned** Texture2D handle for the glyph atlas, destroyed with
+ *        `cna_texture2d_destroy`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` for a missing or undecodable asset, or a
+ *         documented argument/handle/thread failure. On any failure both outputs are left
+ *         `CNA_INVALID_HANDLE` and nothing is created.
+ *
+ * This maps the canonical `Load<SpriteFont>` specialization, which reads both the `.xnb` font
+ * container and CNA's own `.cnj` font descriptor. It removes the need for a consumer to parse
+ * either format itself in order to obtain a font this ABI will accept.
+ *
+ * **Two owned handles, one asset**, which is why this loader has a fourth parameter the other
+ * three do not. A SpriteFont is a font *and* the texture it draws from, and both have to be
+ * reachable: the font for measuring, layout and `cna_sprite_batch_draw_string`, the atlas for a
+ * consumer that places glyphs itself from `cna_sprite_font_copy_glyphs`. Handing back only the
+ * font would leave the atlas alive but unnameable.
+ *
+ * **Destroy the font first.** The atlas is retained for as long as a SpriteFont uses it, exactly
+ * as it is for a caller-built font, so `cna_texture2d_destroy` refuses with
+ * `CNA_RESULT_INVALID_STATE` while the font exists. That ordering rule is the same one
+ * `cna_sprite_font_create` already imposes, so a consumer needs no special case for a loaded font.
+ */
+CNA_C_API CNA_Result cna_content_manager_load_sprite_font(
+    CNA_Handle content_manager,
+    CNA_StringView asset_name,
+    CNA_Handle* out_sprite_font,
+    CNA_Handle* out_texture);
+
+/**
+ * @brief Loads a compiled asset whose root reader was registered by the caller.
+ *
+ * @param content_manager Owned content-manager handle.
+ * @param asset_name UTF-8 logical asset name, with or without its extension.
+ * @param out_object Receives the opaque object the caller's reader produced. This ABI does not
+ *        own it: it is neither dereferenced nor freed here, and its lifetime is whatever the
+ *        reader that made it says it is.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_IO` for a missing or malformed asset, for a file
+ *         naming a reader nothing is registered under, and for a reader that refused -- the
+ *         message carries the `CNA_Result` the callback returned; or a documented
+ *         argument/handle/thread failure.
+ *
+ * The counterpart of `cna_content_type_reader_manager_register`, and the only route that reaches
+ * a caller-supplied reader from outside: the typed loaders next to this one each name a C++ type
+ * this ABI knows, and a custom content type is by definition not one of them. The asset's own
+ * type-reader table decides which reader runs, so this route needs no type argument -- it needs
+ * only that the reader the file names has been registered.
+ *
+ * **Only compiled `.xnb` assets reach a registered reader.** A loose file or a `.cnj` descriptor
+ * is dispatched by the requested C++ type instead of by a reader name, and there is no C++ type
+ * here to dispatch on. Such an asset fails with `CNA_RESULT_IO` rather than being read by the
+ * wrong reader.
+ *
+ * The result is cached by asset name exactly as every other load is, so a second call for the
+ * same name returns the same pointer without re-reading the file -- which is the caching XNA
+ * guarantees for a reference type, and means the caller must not free the object while the
+ * content manager that produced it can still hand it out. `cna_content_manager_unload` drops the
+ * cache.
+ */
+CNA_C_API CNA_Result cna_content_manager_load_foreign_ext(
+    CNA_Handle content_manager,
+    CNA_StringView asset_name,
+    void** out_object);
+
+/**
  * @brief Gets the UTF-8 byte count of the resolved filesystem path for an asset name.
  *
  * @param content_manager Owned content-manager handle.
