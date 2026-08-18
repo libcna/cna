@@ -34,8 +34,10 @@ Oracle repository: `openeggbert/cna-gltf-viewer` (`develop`), writable and exerc
 > a row closes, so the correction is mechanical: extract every `| GLTF-nnn | … | <state> |` cell and
 > tally it. Anyone editing a state must re-tally.
 >
-> Of 475 rows: **471 are closed (`✔` 275, `✅` 196)** and **4 remain open** — 2 `✅/⬜`
-> (`GLTF-344`, `GLTF-465`) and 1 `⬜` (`GLTF-459`).
+> Of 477 rows: **474 are closed (`✔` 275, `✅` 199)** and **3 remain open** — 2 `✅/⬜`
+> (`GLTF-344`, `GLTF-465`) and 1 `⬜` (`GLTF-459`). Re-tallied mechanically on 2026-08-18 after
+> `GLTF-475`–`GLTF-477` closed; see **"Current state" below**, the consolidated
+> status section that precedes §1 and is the one to read before the table.
 > `GLTF-460` closed on 2026-08-18 (`docs/gltf-campaign-retrospective.md`); `GLTF-459` was re-assessed
 > the same day and stays open on §27.2's rows 3, 6 and 12 — row 6, real point/spot lighting, is the
 > only one that is a whole feature rather than coverage.
@@ -56,7 +58,9 @@ Oracle repository: `openeggbert/cna-gltf-viewer` (`develop`), writable and exerc
 > **The milestone in force is `GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT` (§27.1.3, restated
 > 2026-08-18 after `GLTF-472`'s adversarial audit), with PBR renderer coverage stated beside it:
 > 15 of 17 renderers apply `COLOR_0`, and the other 2 refuse such a draw by name rather than drawing
-> it wrongly.** The unqualified `GLTF CORE 2.0 CORRECT` was claimed for part of 2026-08-18 on the
+> it wrongly.** The seventeen are sixteen full PBR renderers plus `SOFTWARE`, whose reduced CPU path
+> has no BRDF at all — see §27.1.3, which now states that where the count is made rather than only in
+> `docs/software-renderer.md`. The unqualified `GLTF CORE 2.0 CORRECT` was claimed for part of 2026-08-18 on the
 > ground that no renderer was left in the forbidden third state. **`GLTF-472` falsified that:** two
 > of the thirteen renderers counted as applying the product could not in fact draw such a primitive
 > at all — `SDL_GPU`'s draw-entry dispatch still selected its PBR queue for `stride == 48`/`68` only,
@@ -90,6 +94,88 @@ Oracle repository: `openeggbert/cna-gltf-viewer` (`develop`), writable and exerc
 > It realises `FUTURE.md` **Phase 5 — glTF correctness campaign**, and supersedes the analysis-only
 > `gltfissues.md` (2026-07-28) as the campaign's working document. `gltfissues.md` remains valid
 > historical evidence and is **not** rewritten.
+
+---
+
+## Current state (2026-08-18) — read this before §1
+
+The Executive Summary in §1 is the 2026-08-11 planning-session analysis, preserved as written;
+almost everything it describes as broken has since been fixed. This section is what is true now.
+
+### What is done
+
+Core glTF 2.0 import and the runtime model are correct and declared so, under the qualified name
+`GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT` (§27.1.3). That covers the node-transform pipeline, the
+data model, the vertex ABI, both PBR effects, the `.cnj` offline path, and the §3.7.2 rules an
+adversarial re-audit found violated in 2026-08-17 (flat normals per face, per-morph-target flat
+normals, ignoring provided tangents without `NORMAL`, and `COLOR_0` keeping its material).
+
+The evidence is a seven-rung ladder (L0–L7) plus, since `GLTF-472`, a **live draw tier** that no
+static audit can substitute for. **Fourteen renderers** now draw every canonical glTF stride through
+a real device. The conformance corpus is 148 assets / 744 files, byte-identical to its own generator,
+with four independent L7 golden policies.
+
+### The rule everything is measured against
+
+A renderer has exactly two acceptable behaviours for a core glTF feature it meets:
+
+1. render it correctly, or
+2. refuse the draw explicitly and safely — *before* any incompatible vertex-layout interpretation or
+   GPU submission,
+
+and never the third: accept the asset and render it with different semantics. That third state is a
+defect, not a limitation, however well documented.
+
+### What remains open, and why
+
+Three rows. **None is a documentation gap and none is finishable by measurement**; each names its own
+blocker.
+
+| Row | What is left | Why it is blocked here |
+|---|---|---|
+| `GLTF-465` | `COLOR_0` applied (rather than refused) in the last **2 of 17** PBR renderers: `METAL`, `WICKED`. | `METAL` cannot be compiled in any environment this repository runs in — Apple toolchain only. `WICKED` is blocked twice: it has **no stride 60, 76 or 80 at all**, so it cannot draw dual-UV content and `COLOR_0` sits behind that whole family rather than beside it; and the shared `~/deps/WickedEngine` carries the **legacy SDL3 bridge**, so `cmake/ThirdPartyWicked.cmake` cannot reverse-patch it and the configure fails before compiling anything. Repairing that checkout discards a state another session put there, so it needs an owner's decision. |
+| `GLTF-344` | `KHR_materials_specular`'s two **texture** inputs in the last **2 of 16**: `METAL`, `WICKED`. | Same two blockers. The factor-only half is complete on every PBR renderer as of `GLTF-476` — it was **not** before, and the claim that it was is one of the things that audit falsified. |
+| `GLTF-459` | Declare `GLTF ROBUST`. §27.2 is **9 of 12** green; rows 3, 6 and 12 are open. | Row 3 is `GLTF-344` above. **Row 6 is the only whole feature left in the campaign**: real point and spot lights with falloff and cone angles, through a light ABI shared by every renderer, which XNA's own `IEffectLights` cannot express — it is deliberately scoped, not residue. Row 12 needs a fourth renderer on Gate C's real-world matrix, which needs a built Khronos `glTF-Sample-Renderer` and a `glTF-Sample-Assets` checkout; neither is on this host, and `BGFX` is unusable for it for a separate stated reason (not byte-deterministic across a full-corpus sequence). |
+
+### Environment blockers are unreliable — check before believing
+
+Five recorded blockers were re-checked during the 2026-08-18 audit and **four were false**:
+
+- the DXVK Wine prefix, the side-by-side ES 1.1 Mesa and the pinned `d3dcompiler_47.dll` were all
+  already present, which unblocked `DIRECTX9` and `OPENGLES1`;
+- `BGFX`'s "whose draw it cannot run" was one missing **development symlink** — `libwayland-egl.so.1`
+  is installed but `libwayland-dev` is not, so `-lwayland-egl` failed at link and nothing about bgfx
+  was involved. Installing `libwayland-dev` would make that permanent rather than per-session.
+
+Only wgpu-native was genuinely absent, and downloading it closed `WEBGPU`. A blocker recorded in a
+row is a hypothesis about a machine at a moment; re-run it before planning around it.
+
+### What the last audit round changed, and the lesson worth carrying
+
+`GLTF-472`–`GLTF-477` were an adversarial audit that started from "assume the previous agents were
+wrong". It found **seven defects that every static inventory in the repository reported as correct**:
+
+- two renderers whose `COLOR_0` shader existed but could not be reached (`GLTF-472`);
+- `OPENGLES1` reading a PBR record through the `VertexPositionColor` layout (`GLTF-473`);
+- `OPENGL4` painting the `NORMAL` as the surface colour and `DILIGENT` drawing the same input black
+  (`GLTF-475`);
+- `IGL` transporting **6 of the 20** PBR draw parameters — four of the fourteen it dropped were
+  *core* glTF material inputs — while an inventory labelled it "factor-only" (`GLTF-476`);
+- `FNA3D` shading glTF materials with FNA's own `BasicEffect`, and `OPENGL1` drawing every record
+  wider than 32 bytes as **flat white** geometry, both reporting success (`GLTF-477`).
+
+Two rules came out of it, and they generalise past glTF:
+
+> **A source audit sees only what a component *declares*.** If a subsystem has a dispatch step
+> between "the feature exists" and "the feature runs", the audit must include one test that executes
+> the dispatch. Adding a row to an inventory is not that test.
+
+> **A partition's discriminator must measure the property it claims to.** "Mentions the normal map"
+> is not "implements the material model". The cheap version — does each component name each input at
+> all? — is one test, and it would have caught `GLTF-476` on the day `IGL` landed.
+
+`docs/gltf-campaign-retrospective.md` carries both in full, with each lesson tied to a defect that
+actually happened.
 
 ---
 
