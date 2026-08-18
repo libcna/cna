@@ -225,25 +225,50 @@ TEST(VulkanCompiledEffectTest, MalformedBytecodeIsRejectedWithoutCrashing)
     const std::vector<std::uint8_t> garbage(64, 0xABu);
     EXPECT_ANY_THROW(renderer->CreateCompiledEffect(garbage.data(), garbage.size()));
 
-    // A structurally credible header truncated mid-table is NOT asserted here, and the reason is
-    // worth writing down because it looks like a gap and is not one. This backend rejects such an
-    // input correctly -- measured: with the SDL assertion hint set to always-ignore the case passes in 70 ms. What
-    // it also does is trip an assertion inside pinned MojoShader's own effect parser
-    // (`mojoshader_effects.c` `readvalue`: `type >= MOJOSHADER_SYMTYPE_BOOL && type <=
-    // MOJOSHADER_SYMTYPE_FLOAT`), and MojoShader's `assert` resolves to SDL's own assertion macro, whose DEFAULT
-    // handler blocks waiting for an interactive answer. A test that trips it therefore hangs a
-    // whole suite run rather than failing.
-    //
-    // That is a test-harness problem (CNA's suite should install a non-interactive SDL assertion
-    // handler) and a MojoShader robustness problem (FX-056's fuzz campaign owns it), not evidence
-    // about this renderer -- so this case is left to those rather than made to look like a Vulkan
-    // finding. Recorded in plan_fx.md FX-065.
     const std::vector<std::uint8_t> shortHeader{
         0x01, 0x09, 0xFF, 0xFE, 0, 0, 0, 0,
         0, 0, 0, 0, 1, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0
     };
     EXPECT_ANY_THROW(renderer->CreateCompiledEffect(shortHeader.data(), shortHeader.size()));
+
+    // A REAL effect truncated mid-table: structurally credible for as far as the parser gets, so
+    // it reaches deeper than the hand-built header above. It trips an assertion inside pinned
+    // MojoShader's own effect parser (`mojoshader_effects.c` `readvalue`), and MojoShader's
+    // `assert` resolves to SDL's, whose default handler BLOCKS for an interactive answer. This
+    // case therefore used to hang a whole suite run rather than fail, which is why it was left out
+    // of this test until `tests/HarnessAssertionPolicy.cpp` (plan_fx.md FX-111) made the suite's
+    // assertion policy non-interactive. It is here now because it is the one case that proves that
+    // policy is in effect -- if it regresses, this hangs.
+    const std::vector<std::uint8_t> whole = LoadEffect("CnaConformanceEffect.fxb");
+    if (!whole.empty())
+    {
+        for (std::size_t bytes = 4; bytes < whole.size(); bytes += 4)
+        {
+            const std::vector<std::uint8_t> truncated(
+                whole.begin(), whole.begin() + static_cast<std::ptrdiff_t>(bytes));
+            // Two outcomes are acceptable and a third is not. Refusing is the usual one. Parsing
+            // successfully is also legitimate -- the last few lengths of this fixture drop only
+            // trailing bytes MojoShader does not need -- but then the runtime has to be WHOLE, not
+            // a half-built object that crashes at the next call. What is not acceptable is wedging
+            // or killing the process, which is the whole point of sweeping every length rather
+            // than one: on this fixture 1544 bytes reaches an assertion inside MojoShader's own
+            // parser, and before FX-111 that alone hung the suite. The length is a property of the
+            // fixture rather than of the contract, so it is not pinned here.
+            std::unique_ptr<ICompiledEffectRuntime> parsed;
+            try
+            {
+                parsed = renderer->CreateCompiledEffect(truncated.data(), truncated.size());
+            }
+            catch (const std::exception&)
+            {
+                continue;
+            }
+            ASSERT_NE(parsed, nullptr) << "truncated to " << bytes << " bytes";
+            EXPECT_FALSE(parsed->GetDescription().techniques.empty())
+                << "truncated to " << bytes << " bytes: accepted, but reflects nothing";
+        }
+    }
 }
 
 TEST(VulkanCompiledEffectTest, RepeatedCreateApplyDisposeCyclesStayStable)
