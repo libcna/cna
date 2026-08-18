@@ -53,6 +53,7 @@ orchestration that pulls in extra render targets and GPU memory lives in the gat
 | `FullscreenPass`, `RenderTargetPool` | same directory | The screen-covering draw and the intermediate-target cache every pass shares. |
 | `ShadowMap`, `DirectionalLightEXT` | `CNA/Graphics/ShadowMap.hpp` | Directional shadow-map generation: fits the light's volume to the scene, opens a pass the app draws its casters into. |
 | `CascadedShadowMap` | `CNA/Graphics/CascadedShadowMap.hpp` | The same, split into 2-4 depth ranges so a large scene keeps resolution near the camera. |
+| `CubeShadowMap`, `SpotShadowMap`, `PointLightEXT`, `SpotLightEXT` | `CNA/Graphics/CubeShadowMap.hpp`, `SpotShadowMap.hpp` | Punctual-light shadows: six cube faces for a point light, one perspective map for a spot. |
 | `CNAEXT.hpp` | `CNA/Graphics/CNAEXT.hpp` | Master include — pulls in every public type above. |
 
 ## Conventions for this layer
@@ -91,6 +92,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | `RenderPipeline` + post-process passes | ✅ | ⬜ | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
 | Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ⬜ | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
 | Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ⬜ | ⬜ | ⬜ — same accepted-and-ignored convention |
+| Point / spot lights + shadows | ✅ punctual lighting and its cube/spot lookup on all four lit programs | ⬜ | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Skybox + IBL | ⬜ | ⬜ | ⬜ | ⬜ |
 | Compute / storage buffers | ⬜ | ⬜ | ⬜ | ⬜ |
 
@@ -221,6 +223,52 @@ Worth knowing:
   0.12 ms, two cascades 0.20 ms, three 0.49 ms, four 0.43 ms per frame. Software-rasterizer
   figures, so a recording rather than a budget — the shape, roughly linear in cascade count with
   the per-pass overhead dominating at this triangle count, is what transfers.
+
+### Point and spot lights
+
+XNA's lit effects carry three *directional* lights and nothing else, so a point light's shadow
+would have had nothing to attenuate. `PunctualLightEXT` therefore carries a light **and** its
+shadow, and the four lit effects gained a punctual lighting term for it to modulate — point or
+spot, with an inverse-square falloff windowed to zero at the light's range, so the light ends
+exactly where its shadow map ends.
+
+```cpp
+CNA::Graphics::CubeShadowMap cube(device, ShadowQuality::Medium);
+CNA::Graphics::PointLightEXT lamp;
+lamp.Position = /* ... */;  lamp.Range = 40.0f;
+
+cube.update(lamp);
+for (int face = 0; face < CNA::Graphics::CubeShadowMap::kFaceCount; ++face)
+{
+    cube.begin(face);
+    drawCasters();                       // the scene, six more times
+    cube.end();
+}
+
+PunctualLightEXT punctual;
+punctual.Kind       = PunctualLightKindEXT::Point;
+punctual.Position   = lamp.Position;
+punctual.Range      = lamp.Range;
+punctual.ShadowCube = cube.getShadowTexture();
+effect.setPunctualLightEXT(punctual);
+```
+
+- **One punctual light per draw**, alongside the three directional slots. A deliberate ceiling, not
+  an accident: each shadowed light is another generation pass, and six of them for a point light.
+- **Both maps store distance from the light over its range**, not projected depth. A cube face's
+  projected depth is defined by that face's own projection, so comparing against it means
+  recovering which face a direction came from; distance over range is the same number whichever
+  face it landed on. The range you light with must be the range the map was generated with.
+- **The cube face size is capped at 1024** whatever the quality asks. Six faces at 4096 is a
+  hundred million texels for one light.
+- **The cube lookup takes a single tap** while the spot map gets 3×3 PCF. Filtering across a cube
+  face's edge needs seamless sampling, which is not available on every profile these shaders
+  compile in, and a tap that wrapped to the wrong face would draw a stripe along every seam.
+- **Cost** (`cnaext_pointshadow_test --benchmark`, 2 casting triangles, Mesa llvmpipe): one
+  directional map 0.05 ms, a spot map 0.04 ms, **a point light's six faces 5.42 ms**. That is not
+  six times a single map, it is a hundred times: each face rebinds a different cube attachment and
+  clears it, so per-pass overhead dominates completely at low triangle counts. It is also the
+  whole reason point shadows are something a game opts into per light.
 
 Legend: ✅ implemented and verified · 🟨 partial · ⬜ not implemented · ⛔ deliberately unsupported.
 
