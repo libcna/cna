@@ -179,11 +179,12 @@ identity and draw the surface anyway: they **refuse the draw** through the share
 Accepting a valid asset and rendering it with different core semantics would be a wrong picture
 reported as success; refusing it is limited backend coverage, which is what it actually is.
 
-Two qualifications belong next to that count, both measured by drawing rather than by reading shader
-source (`GLTF-472`). **`LLGL` applies the product only where a base-colour texture is bound**: it
-treats `PbrEffect`'s base-colour map as mandatory and refuses the draw without one, so it cannot draw
-a material that carries only a `baseColorFactor` — glTF's own default material, §3.9.2 — on any
-stride (`GLTF-474`). **`OPENGLES1` is outside the seventeen and refuses**: it has no PBR path at all,
+One qualification belongs next to that count, measured by drawing rather than by reading shader
+source (`GLTF-472`). `LLGL` applied the product only where a base-colour texture was bound: it
+treated `PbrEffect`'s base-colour map as mandatory and refused the draw without one, so it could not
+draw a material carrying only a `baseColorFactor` — glTF's own default material, §3.9.2. `GLTF-474`
+removed that rule, along with `SDL_GPU`'s and `DILIGENT`'s own unreachable strides, so all three now
+draw every canonical glTF stride. **`OPENGLES1` is outside the seventeen and refuses**: it has no PBR path at all,
 and used to route a PBR draw to its fixed-function colour path, which reads a four-byte colour at
 offset 12 — the `NORMAL` floats on a stride-60 record. `GLTF-473` replaced that with an explicit
 refusal naming the semantic, the offset, what the record actually keeps there and the effect

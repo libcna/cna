@@ -3600,7 +3600,10 @@ namespace CNA::Internal::Renderers::Llgl
             }
         }
 
-        const bool textured = (params != nullptr && params->textureEnabled && params->texture0 != nullptr);
+        // plan_gltf.md GLTF-474: not const any more -- an untextured PBR or skinned draw adopts
+        // the neutral-white default below rather than being refused, which is what makes it a
+        // textured draw from the pipeline's point of view.
+        bool textured = (params != nullptr && params->textureEnabled && params->texture0 != nullptr);
         const bool lit = (params != nullptr && params->lightingEnabled);
         // LLGL-31: lighting without a texture is real now, provided the vertex layout carries
         // colours -- AcquirePrimitiveVertexShader() throws its own clear error otherwise, the same
@@ -3661,24 +3664,22 @@ namespace CNA::Internal::Renderers::Llgl
 
         const bool skinned = (params != nullptr && params->skinned);
         const bool pbr = (params != nullptr && params->pbr);
-        if (skinned && !pbr && params->texture0 == nullptr)
+        // plan_gltf.md GLTF-474. Both of these used to throw "needs Texture bound", on the reading
+        // that a base-colour map is mandatory for SkinnedEffect and PbrEffect the way it is for
+        // DualTextureEffect and EnvironmentMapEffect. That reading does not survive contact with
+        // what PbrEffect actually models: glTF 3.9.2 makes `baseColorTexture` OPTIONAL, and glTF's
+        // own default material -- a bare `baseColorFactor` -- has none. This renderer could
+        // therefore not draw the default material on any stride, which is not a limitation of LLGL
+        // but of this rule; every other renderer in the tree binds a 1x1 white texture, and
+        // `tex * colour` then collapses to the colour exactly as an untextured draw should.
+        //
+        // The same 1x1 white the optional PBR maps already resolve to is used here, so this adds no
+        // new resource and no new lifetime.
+        if ((pbr || skinned) && params->texture0 == nullptr)
         {
-            // No fabricated-white-texture fallback here either, matching the DualTextureEffect/
-            // EnvironmentMapEffect precedent above -- SkinnedEffect is always textured in real
-            // XNA, unlike BasicEffect.
-            throw std::runtime_error(
-                std::string(kRendererName) + " renderer: SkinnedEffect needs Texture bound");
-        }
-        if (pbr && params->texture0 == nullptr)
-        {
-            // Texture (base colour) is the one PbrEffect/SkinnedPbrEffect map that is not optional
-            // -- matches SkinnedEffect's own precedent above. NormalMap/MetallicRoughnessMap/
-            // EmissiveMap/OcclusionMap genuinely CAN be left null in real XNA usage (see
-            // PbrEffect::FillGpuDrawParams()), so unlike this, they resolve to a 1x1 default
-            // texture below instead of throwing.
-            throw std::runtime_error(
-                std::string(kRendererName) + " renderer: " +
-                (skinned ? "SkinnedPbrEffect" : "PbrEffect") + " needs Texture bound");
+            EnsureDefaultPbrTexturesEXT();
+            resolvedTexture.texture = defaultWhitePbrTexture_;
+            textured = true;
         }
         LLGL::Texture* resolvedPbrNormalMap = nullptr;
         LLGL::Texture* resolvedPbrMetallicRoughnessMap = nullptr;

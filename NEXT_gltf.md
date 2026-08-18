@@ -8,8 +8,8 @@ session needs to start work without re-deriving the state.
 
 - **Branch:** `feature/gltf`, with local commits. The owner explicitly requested a push when the
   current autonomous run reaches its weekly-limit cutoff; no pull request has been requested.
-- **Working document:** `plan_gltf.md`, **475** numbered rows. **Seven remain open: `GLTF-344` and
-  `GLTF-465` (both `✅/⬜`), and `GLTF-459`, `GLTF-460`, `GLTF-464`, `GLTF-474`, `GLTF-475` (`⬜`).**
+- **Working document:** `plan_gltf.md`, **475** numbered rows. **Six remain open: `GLTF-344` and
+  `GLTF-465` (both `✅/⬜`), and `GLTF-459`, `GLTF-460`, `GLTF-464`, `GLTF-475` (`⬜`).**
   `GLTF-463` closed on 2026-08-17; `GLTF-472` (the adversarial audit) closed on 2026-08-18 and opened
   three rows; `GLTF-473` closed the same day and opened `GLTF-475`. **No renderer in the tree is in
   the forbidden third state any more** — nothing accepts a valid core glTF primitive and renders it
@@ -27,8 +27,8 @@ session needs to start work without re-deriving the state.
   primitive at all: `SDL_GPU`'s dispatch still selected its PBR queue for `stride == 48`/`68` only, and
   `DILIGENT` picked its stride-80 shader variant and then refused stride 80 nine lines later. Both are
   fixed. The name stays qualified because renderer coverage is not uniform — four PBR renderers refuse
-  the feature (`GLTF-465`), and `LLGL`, `SDL_GPU` and `DILIGENT` each cannot draw content the tables
-  did not say was unreachable (`GLTF-474`). `OPENGLES1` (outside the seventeen) used to accept a PBR
+  the feature (`GLTF-465`). `LLGL`, `SDL_GPU` and `DILIGENT` each could not draw content the tables did
+  not say was unreachable; `GLTF-474` closed that, and all three now draw every canonical stride. `OPENGLES1` (outside the seventeen) used to accept a PBR
   draw and read a stride-60 record's `NORMAL` as its vertex colour; `GLTF-473` closed that against a
   real ES 1.1 driver, so **the forbidden third state is now empty** and the qualifier survives for a
   different reason — coverage, not wrong output.

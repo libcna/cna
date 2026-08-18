@@ -2895,6 +2895,7 @@ namespace CNA::Internal::Renderers::Diligent
         bool usesPbr = false;
         bool usesDualPbrUv = false;
         bool usesVertexColour = false;
+        bool usesSkinnedVertexColour = false;
 
         switch (key.variant)
         {
@@ -2980,6 +2981,41 @@ namespace CNA::Internal::Renderers::Diligent
                 };
                 usesTexture = true;
                 usesBones = true;
+                break;
+            // plan_gltf.md GLTF-474: stride 56 is the stride-52 skinned record with a packed,
+            // normalized COLOR_0 appended at 52 -- what a skinned vertex-coloured
+            // KHR_materials_unlit primitive imports to. The five leading elements are byte-for-byte
+            // the stride-52 ones, so the only new thing is ATTRIB5; the explicit stride is stated on
+            // every element because Diligent's automatic stride is the end of the last attribute.
+            case ShaderVariant::SkinnedColored3D:
+                vertexSource = kSkinnedVertexHlsl;
+                pixelSource = kLitPixelHlsl;
+                layout = {
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False, 0,  56}, // Position
+                    Dg::LayoutElement{1, 0, 3, Dg::VT_FLOAT32, Dg::False, 12, 56}, // Normal
+                    Dg::LayoutElement{2, 0, 2, Dg::VT_FLOAT32, Dg::False, 24, 56}, // UV
+                    Dg::LayoutElement{3, 0, 4, Dg::VT_FLOAT32, Dg::False, 32, 56}, // BlendWeights
+                    Dg::LayoutElement{4, 0, 4, Dg::VT_UINT8,   Dg::False, 48, 56}, // BlendIndices
+                    Dg::LayoutElement{5, 0, 4, Dg::VT_UINT8,   Dg::True,  52, 56}, // COLOR_0
+                };
+                usesTexture = true;
+                usesBones = true;
+                usesSkinnedVertexColour = true;
+                break;
+            case ShaderVariant::SkinnedColoredVertexLit3D:
+                vertexSource = kSkinnedVertexLitVertexHlsl;
+                pixelSource = kLitVertexLitPixelHlsl;
+                layout = {
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False, 0,  56},
+                    Dg::LayoutElement{1, 0, 3, Dg::VT_FLOAT32, Dg::False, 12, 56},
+                    Dg::LayoutElement{2, 0, 2, Dg::VT_FLOAT32, Dg::False, 24, 56},
+                    Dg::LayoutElement{3, 0, 4, Dg::VT_FLOAT32, Dg::False, 32, 56},
+                    Dg::LayoutElement{4, 0, 4, Dg::VT_UINT8,   Dg::False, 48, 56},
+                    Dg::LayoutElement{5, 0, 4, Dg::VT_UINT8,   Dg::True,  52, 56},
+                };
+                usesTexture = true;
+                usesBones = true;
+                usesSkinnedVertexColour = true;
                 break;
             case ShaderVariant::EnvironmentMap3D:
                 vertexSource = kLitVertexHlsl;
@@ -3149,6 +3185,37 @@ namespace CNA::Internal::Renderers::Diligent
             kVertexLightingHlsl + (usesBones ? kBonesHlsl : "") + vertexSource;
         std::string pixelHlsl = std::string(kConstantsHlsl) +
             kPixelHelpersHlsl + pixelSource;
+        // plan_gltf.md GLTF-474: the skinned stock stages carry the same kind of template marker the
+        // PBR ones do, and for the same reason -- Diligent's HLSL-to-GLSL converter analyses tokens
+        // inside inactive #if branches, so each variant must receive a program containing exactly the
+        // attributes its native input layout supplies. Expanded for EVERY variant, not only the
+        // colour-carrying ones, because the markers live in stages the uncoloured variants share and
+        // an unexpanded marker left behind is a comment that silently means nothing.
+        {
+            const auto Replace = [](std::string& source, const char* marker, const char* text) {
+                const std::size_t markerLength = std::strlen(marker);
+                const std::size_t textLength = std::strlen(text);
+                for (std::size_t at = source.find(marker); at != std::string::npos;
+                     at = source.find(marker, at + textLength))
+                    source.replace(at, markerLength, text);
+            };
+            // g_Flags.y is the effect's own VertexColorEnabled, exactly as it is on the PBR path, so
+            // an application can opt back into the opaque-white identity on coloured geometry.
+            const char* attribute = usesSkinnedVertexColour ? "float4 Color : ATTRIB5;" : "";
+            const char* interpolant = usesSkinnedVertexColour ? "float4 Color : COLOR0;" : "";
+            const char* assignment = usesSkinnedVertexColour ? "psIn.Color = vsIn.Color;" : "";
+            const char* product = usesSkinnedVertexColour
+                ? "if (g_Flags.y > 0.5) baseColor *= psIn.Color;" : "";
+            for (std::string* source : {&vertexHlsl, &pixelHlsl})
+            {
+                Replace(*source, "/* CNA_SKINNED_COLOR_ATTRIBUTE */", attribute);
+                Replace(*source, "/* CNA_SKINNED_COLOR_INTERPOLANT */", interpolant);
+                Replace(*source, "/* CNA_SKINNED_COLOR_ASSIGNMENT */", assignment);
+                Replace(*source, "/* CNA_SKINNED_COLOR_PRODUCT */", product);
+                if (source->find("/* CNA_SKINNED_COLOR") != std::string::npos)
+                    throw std::runtime_error("CNA Diligent: unexpanded skinned-colour shader marker");
+            }
+        }
         if (usesPbr)
         {
             // Diligent's HLSL-to-GLSL converter analyses tokens inside inactive #if branches.
@@ -3831,6 +3898,12 @@ namespace CNA::Internal::Renderers::Diligent
                     ? ShaderVariant::SkinnedVertexLit3D
                     : ShaderVariant::Skinned3D;
                 break;
+            // plan_gltf.md GLTF-474: the same selection, on the record that also carries a colour.
+            case 56:
+                variant = (params != nullptr && params->lightingEnabled && !params->preferPerPixelLighting)
+                    ? ShaderVariant::SkinnedColoredVertexLit3D
+                    : ShaderVariant::SkinnedColored3D;
+                break;
             case 48: variant = ShaderVariant::Pbr3D; break;
             case 60: variant = ShaderVariant::PbrDualUv3D; break;
             case 68: variant = ShaderVariant::SkinnedPbr3D; break;
@@ -3844,9 +3917,14 @@ namespace CNA::Internal::Renderers::Diligent
         if (dualTexture && stride != 20 && stride != 24)
             throw std::runtime_error(
                 "CNA Diligent: DualTextureEffect needs a textured vertex layout (stride 20 or 24)");
-        if (params != nullptr && params->skinned && !params->pbr && stride != 52)
+        // plan_gltf.md GLTF-474: stride 56 is stride 52 with a packed COLOR_0 appended, and the
+        // switch above already selects a SkinnedColored variant for it. This is the third time in
+        // this renderer that a layout existed and a stride list one branch later refused it
+        // (GLTF-472 was the stride-80 PBR twin), which is why the route-acceptance predicates are
+        // now pinned by EveryStrideGatedPbrRouteAdmitsBothColourCarryingStrides.
+        if (params != nullptr && params->skinned && !params->pbr && stride != 52 && stride != 56)
             throw std::runtime_error(
-                "CNA Diligent: SkinnedEffect needs a skinned vertex layout (stride 52)");
+                "CNA Diligent: SkinnedEffect needs a skinned vertex layout (stride 52 or 56)");
         if (params != nullptr && params->envMapping && stride != 32)
             throw std::runtime_error(
                 "CNA Diligent: EnvironmentMapEffect needs a position/normal/UV vertex layout "
@@ -3933,8 +4011,15 @@ namespace CNA::Internal::Renderers::Diligent
             constants.flags[1] = 1.0f;
         }
         UploadConstants(constants);
+        // plan_gltf.md GLTF-474: the stride-56 twins belong in this list too. This renderer
+        // enumerates its skinned variants in several places, and a new one that is added to the
+        // layout switch but not to THIS list gets a pipeline that declares a bone buffer nobody
+        // maps -- which Diligent catches as "dynamic allocation ... is out-of-date" rather than
+        // drawing wrongly, but only in a debug build.
         if ((variant == ShaderVariant::Skinned3D ||
              variant == ShaderVariant::SkinnedVertexLit3D ||
+             variant == ShaderVariant::SkinnedColored3D ||
+             variant == ShaderVariant::SkinnedColoredVertexLit3D ||
              variant == ShaderVariant::SkinnedPbr3D ||
              variant == ShaderVariant::SkinnedPbrDualUv3D ||
              variant == ShaderVariant::SkinnedPbrColor3D) &&

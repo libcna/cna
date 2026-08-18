@@ -3897,6 +3897,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                                    PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
+        // plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
+        // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
+        // replay keeps every allocation on the queueing side, where a failure still has a
+        // caller to report to.
+        EnsureDefaultPbrTextures();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
 
@@ -3947,6 +3952,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                       const Matrix& world, const Matrix& view, const Matrix& projection,
                                                       PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
+        // plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
+        // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
+        // replay keeps every allocation on the queueing side, where a failure still has a
+        // caller to report to.
+        EnsureDefaultPbrTextures();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         if (sdlGpuVb.Stride() != 32)
             throw std::invalid_argument("CNA SDL_GPU: lit_textured3d requires a stride-32 "
@@ -4696,6 +4706,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                     const Matrix& world, const Matrix& view, const Matrix& projection,
                                                     PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
+        // plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
+        // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
+        // replay keeps every allocation on the queueing side, where a failure still has a
+        // caller to report to.
+        EnsureDefaultPbrTextures();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
 
@@ -4888,6 +4903,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                  const Matrix& world, const Matrix& view, const Matrix& projection,
                                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
+        // plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
+        // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
+        // replay keeps every allocation on the queueing side, where a failure still has a
+        // caller to report to.
+        EnsureDefaultPbrTextures();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
         if (stride != 52 && stride != 56)
@@ -5354,7 +5374,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        samplerBinding.texture = command.texture.texture;
+        // plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
+        // BasicEffect/SkinnedEffect/AlphaTestEffect run untextured, and glTF's own default
+        // material has no baseColorTexture at all. Binding neutral white makes `tex * colour`
+        // collapse to the colour, which is what EasyGL and Vulkan already do; without it this
+        // renderer had to refuse the draw upstream instead.
+        samplerBinding.texture = command.texture ? command.texture.texture
+                                                 : defaultWhiteTexture_->Texture();
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
                                                    "AlphaTest3D");
@@ -5527,7 +5553,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_BindGPUVertexStorageBuffers(pass, 0, &command.uploadedBoneBuffer, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        samplerBinding.texture = command.texture.texture;
+        // plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
+        // BasicEffect/SkinnedEffect/AlphaTestEffect run untextured, and glTF's own default
+        // material has no baseColorTexture at all. Binding neutral white makes `tex * colour`
+        // collapse to the colour, which is what EasyGL and Vulkan already do; without it this
+        // renderer had to refuse the draw upstream instead.
+        samplerBinding.texture = command.texture ? command.texture.texture
+                                                 : defaultWhiteTexture_->Texture();
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
                                                    "Skinned3D");
@@ -5834,7 +5866,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        samplerBinding.texture = command.texture.texture;
+        // plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
+        // BasicEffect/SkinnedEffect/AlphaTestEffect run untextured, and glTF's own default
+        // material has no baseColorTexture at all. Binding neutral white makes `tex * colour`
+        // collapse to the colour, which is what EasyGL and Vulkan already do; without it this
+        // renderer had to refuse the draw upstream instead.
+        samplerBinding.texture = command.texture ? command.texture.texture
+                                                 : defaultWhiteTexture_->Texture();
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
                                                    "Textured3D");
@@ -5877,7 +5915,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        samplerBinding.texture = command.texture.texture;
+        // plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
+        // BasicEffect/SkinnedEffect/AlphaTestEffect run untextured, and glTF's own default
+        // material has no baseColorTexture at all. Binding neutral white makes `tex * colour`
+        // collapse to the colour, which is what EasyGL and Vulkan already do; without it this
+        // renderer had to refuse the draw upstream instead.
+        samplerBinding.texture = command.texture ? command.texture.texture
+                                                 : defaultWhiteTexture_->Texture();
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
                                                    "LitTextured3D");
@@ -6184,7 +6228,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
         const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
         const bool needsSkinned = !needsAlphaTest && !needsDualTexture && !needsEnvMap && !needsPbr && params.skinned;
-        if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
+        // plan_gltf.md GLTF-474: no `params.texture0 != nullptr` here any more. A stock effect's
+        // base-colour map is optional in XNA and absent in glTF's own default material, and the
+        // replay binds neutral white for it -- so requiring one here did not make the draw safe, it
+        // made the draw fall past every branch into the stride-16 colour path and be refused there.
+        if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32))
         {
             QueueAlphaTestDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
@@ -6211,7 +6259,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             QueuePbrDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (needsSkinned && (stride == 52 || stride == 56) && params.texture0 != nullptr)
+        if (needsSkinned && (stride == 52 || stride == 56))
         {
             QueueSkinnedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
@@ -6221,12 +6269,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             QueueColoredDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, &params);
             return;
         }
-        if ((stride == 20 || stride == 24) && params.texture0 != nullptr)
+        if (stride == 20 || stride == 24)
         {
             QueueTexturedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (stride == 32 && params.texture0 != nullptr)
+        if (stride == 32)
         {
             QueueLitTexturedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
@@ -6257,7 +6305,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
         const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
         const bool needsSkinned = !needsAlphaTest && !needsDualTexture && !needsEnvMap && !needsPbr && params.skinned;
-        if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
+        // plan_gltf.md GLTF-474: no `params.texture0 != nullptr` here any more. A stock effect's
+        // base-colour map is optional in XNA and absent in glTF's own default material, and the
+        // replay binds neutral white for it -- so requiring one here did not make the draw safe, it
+        // made the draw fall past every branch into the stride-16 colour path and be refused there.
+        if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32))
         {
             QueueAlphaTestDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
@@ -6284,7 +6336,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             QueuePbrDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (needsSkinned && (stride == 52 || stride == 56) && params.texture0 != nullptr)
+        if (needsSkinned && (stride == 52 || stride == 56))
         {
             QueueSkinnedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
@@ -6294,12 +6346,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount, &params);
             return;
         }
-        if ((stride == 20 || stride == 24) && params.texture0 != nullptr)
+        if (stride == 20 || stride == 24)
         {
             QueueTexturedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (stride == 32 && params.texture0 != nullptr)
+        if (stride == 32)
         {
             QueueLitTexturedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;

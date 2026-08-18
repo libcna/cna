@@ -464,22 +464,17 @@ TEST(RendererStrideConformance, AColourCarryingPbrPrimitiveEitherDrawsOrRefusesB
         if (failure.empty()) { continue; }
         if (failure.find("COLOR_0") != std::string::npos) { continue; }
 
-        // One renderer refuses this draw for a different reason, and its diagnostic is accurate
-        // about it, so it is named here in full rather than allowed by a looser rule. LLGL treats
-        // PbrEffect's base colour map as mandatory; glTF's own default material has none
-        // (`baseColorFactor` alone is a complete metallic-roughness material, §3.9.2), which is
-        // what both fixtures below author, so LLGL cannot draw them at all. That is limited
-        // coverage with an honest message, not the silent degradation this test forbids -- but it
-        // is also the reason LLGL's "applies COLOR_0" row carries a precondition in
-        // `docs/gltf-renderer-pbr-fallbacks.md`. Pinned verbatim so it cannot quietly widen.
-        //
-        // `GLTF-473` joins them for the same reason: a fixed-function renderer that has no PBR path
-        // at all refuses this draw by naming the exact layout incompatibility -- which semantic, at
+        // One other refusal is allowed, and only one. A fixed-function renderer with no PBR path at
+        // all refuses this draw by naming the exact layout incompatibility -- which semantic, at
         // which offset, where the record really keeps it, and which effect sent the draw there. That
         // is a more specific answer than "COLOR_0 is unsupported", not a vaguer one.
-        constexpr std::array<const char*, 3> namedPreconditions{{
-            "LLGL renderer: PbrEffect needs Texture bound",
-            "LLGL renderer: SkinnedPbrEffect needs Texture bound",
+        //
+        // LLGL's two "needs Texture bound" messages used to be pinned here as well: it treated
+        // PbrEffect's base-colour map as mandatory, so it could not draw a `baseColorFactor`-only
+        // material -- glTF's own default (§3.9.2), and what both fixtures here author. `GLTF-474`
+        // removed that rule rather than the exception, so the exception is gone too. A pinned
+        // allowance that can no longer fire is a place for a regression to hide.
+        constexpr std::array<const char*, 1> namedPreconditions{{
             "GLTF-473",
         }};
         const bool named = std::any_of(

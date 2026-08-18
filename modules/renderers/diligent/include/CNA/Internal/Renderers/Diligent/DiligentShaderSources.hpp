@@ -308,6 +308,7 @@ struct PSInput
     float3 WorldPos : WORLD_POS;
     float3 Normal   : NORMAL;
     float  FogKeep  : FOG_KEEP;
+    /* CNA_SKINNED_COLOR_INTERPOLANT */
 };
 
 struct PSOutput
@@ -318,6 +319,7 @@ struct PSOutput
 void main(in PSInput psIn, out PSOutput psOut)
 {
     float4 baseColor = g_DiffuseColor;
+    /* CNA_SKINNED_COLOR_PRODUCT */
     if (g_Flags.x > 0.5)
         baseColor *= g_Texture.Sample(g_Texture_sampler, psIn.UV);
 
@@ -474,6 +476,7 @@ struct PSInput
     float3 LitDiffuse  : LIT_DIFFUSE;
     float3 LitSpecular : LIT_SPECULAR;
     float  FogKeep     : FOG_KEEP;
+    /* CNA_SKINNED_COLOR_INTERPOLANT */
 };
 
 struct PSOutput
@@ -484,6 +487,7 @@ struct PSOutput
 void main(in PSInput psIn, out PSOutput psOut)
 {
     float4 baseColor = g_DiffuseColor;
+    /* CNA_SKINNED_COLOR_PRODUCT */
     if (g_Flags.x > 0.5)
         baseColor *= g_Texture.Sample(g_Texture_sampler, psIn.UV);
 
@@ -510,6 +514,7 @@ struct VSInput
     float2 UV           : ATTRIB2;
     float4 BlendWeights : ATTRIB3;
     uint4  BlendIndices : ATTRIB4;
+    /* CNA_SKINNED_COLOR_ATTRIBUTE */
 };
 
 struct PSInput
@@ -519,6 +524,7 @@ struct PSInput
     float3 LitDiffuse  : LIT_DIFFUSE;
     float3 LitSpecular : LIT_SPECULAR;
     float  FogKeep     : FOG_KEEP;
+    /* CNA_SKINNED_COLOR_INTERPOLANT */
 };
 
 void main(in VSInput vsIn, out PSInput psIn)
@@ -534,6 +540,7 @@ void main(in VSInput vsIn, out PSInput psIn)
     ComputeVertexLighting(worldPos, normal, psIn.LitDiffuse, psIn.LitSpecular);
     psIn.UV      = vsIn.UV;
     psIn.FogKeep = ComputeFogKeep(skinnedPos.xyz);
+    /* CNA_SKINNED_COLOR_ASSIGNMENT */
 }
 )";
 
@@ -967,6 +974,7 @@ struct VSInput
     float2 UV           : ATTRIB2;
     float4 BlendWeights : ATTRIB3;
     uint4  BlendIndices : ATTRIB4;
+    /* CNA_SKINNED_COLOR_ATTRIBUTE */
 };
 
 struct PSInput
@@ -976,6 +984,7 @@ struct PSInput
     float3 WorldPos : WORLD_POS;
     float3 Normal   : NORMAL;
     float  FogKeep  : FOG_KEEP;
+    /* CNA_SKINNED_COLOR_INTERPOLANT */
 };
 
 void main(in VSInput vsIn, out PSInput psIn)
@@ -990,6 +999,7 @@ void main(in VSInput vsIn, out PSInput psIn)
     psIn.Normal   = normalize(mul(skinnedNormal, InverseTranspose3x3(float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz))));
     psIn.UV       = vsIn.UV;
     psIn.FogKeep  = ComputeFogKeep(skinnedPos.xyz);
+    /* CNA_SKINNED_COLOR_ASSIGNMENT */
 }
 )";
 
