@@ -52,6 +52,43 @@ the honest reason to prefer `HdrBlendable` over `Vector4` for a scene target —
 post-process chain holds several targets at once — not frame time. That is the justification behind
 `RenderQuality` choosing `HdrBlendable`, and it is a measurement rather than an assumption.
 
+## The whole frame
+
+`plan_modern.md` `MOD-742`. Every other table here times one pass in isolation. This is what a game
+actually pays: a frame drawn the way a game draws it — a `SpriteBatch` sprite and a `BasicEffect`
+triangle — with and without the pipeline around it. Both sides pay the same back-buffer read (which
+is what forces the frame to happen inside the timed region), so the *difference* is the pipeline.
+
+At 96×96, `cnaext_render_pipeline_test --benchmark`:
+
+| Frame | ms | Over direct |
+|---|---|---|
+| Direct rendering, no pipeline | 0.76 | — |
+| Pipeline present, nothing enabled | 0.84 | +0.07 |
+| HDR + bloom + tonemap + FXAA, `Low` | 3.25 | +2.48 |
+| HDR + bloom + tonemap + FXAA, `Medium` | 3.76 | +3.00 |
+| HDR + bloom + tonemap + FXAA, `High` | 4.80 | +4.04 |
+| HDR + bloom + tonemap + FXAA, `Ultra` | 4.78 | +4.02 |
+
+Two things worth taking from it.
+
+**An inert pipeline costs about 9%** at this size — 0.07 ms — and that is the *whole* overhead of
+having the object in the frame, since with nothing enabled it allocates no scene target and runs no
+passes. At a real resolution the fixed part does not grow, so the fraction falls.
+
+**The stack costs three to four times the scene**, which sounds alarming and is an artefact of the
+scene: this one is a sprite and a triangle at 96×96, so the passes — which are fullscreen and do not
+care how little geometry there was — dominate completely. A frame with real geometry pays the same
+few milliseconds of post-processing against a much larger base. That is the shape to plan for: the
+engine layer's cost is close to constant per pixel and independent of scene complexity, which is the
+opposite of how the scene itself behaves.
+
+`High` and `Ultra` are within noise of each other, for the reason `MOD-416` measured: the extra
+bloom levels are a quarter of the one before and cost almost nothing.
+
+SSAO is not in this table. It needs a depth/normal prepass this scene does not have, and it is
+measured on its own above — where it costs more than everything here put together.
+
 ## Post-process passes
 
 `plan_modern.md` `MOD-230`. What each pass costs over a full frame, and — more usefully — what each

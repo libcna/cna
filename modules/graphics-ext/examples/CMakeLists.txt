@@ -151,6 +151,11 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_register_renderer_test(NAME CNAEXT_BloomInTenLines COMMAND cna_test_cnaext_bloom
         TIMEOUT 90 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_modern.md MOD-738..MOD-742: the layer's showcase -- 2D and 3D through the full stack.
+    cna_graphics_ext_test(cna_test_cnaext_render_pipeline cnaext_render_pipeline_test.cpp)
+    cna_register_renderer_test(NAME CNAEXT_RenderPipeline COMMAND cna_test_cnaext_render_pipeline
+        TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_modern.md MOD-604/MOD-607/MOD-608: FXAA on and off, and its cost per image content.
     cna_graphics_ext_test(cna_test_cnaext_fxaa cnaext_fxaa_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_Fxaa COMMAND cna_test_cnaext_fxaa

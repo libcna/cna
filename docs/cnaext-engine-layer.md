@@ -309,6 +309,21 @@ Ambient occlusion needs one thing the pipeline cannot do for a game: scene depth
 normals, which means drawing the geometry a second time with a different effect. Supply them with
 `setDepthNormalInputs()`; without them SSAO renders an unoccluded frame rather than failing.
 
+### Threading: owner-thread only
+
+`plan_modern.md` `MOD-744`. Construct a `RenderPipeline`, configure it, call `begin`/`end` and
+destroy it **on the thread that owns the `GraphicsDevice`**, and nowhere else. The same applies to
+every other type in this layer.
+
+This is not caution, it is the only thing that would be true: the engine layer is a thin arrangement
+of `GraphicsDevice`, `SpriteBatch` and `Effect` calls, and none of those is thread-safe. Adding a
+lock here would make the *layer's* own state safe while every call it makes underneath stayed
+unsafe — which is worse than no lock, because it reads as a guarantee.
+
+One place where this could surprise: `RenderPipeline` subscribes to `GraphicsDevice::DeviceReset`
+(`MOD-715`), so its handler runs on whichever thread raised that event. For every renderer today
+that is the owner thread, and a renderer that changed it would need to say so.
+
 ### The depth/normal prepass, and what a game has to do
 
 `plan_modern.md` `MOD-500`–`MOD-507`, `MOD-529`. Screen-space effects need to know the *shape* of
