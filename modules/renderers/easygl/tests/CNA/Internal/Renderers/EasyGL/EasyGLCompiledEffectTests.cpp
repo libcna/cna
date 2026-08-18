@@ -548,4 +548,12 @@ TEST(EasyGLCompiledEffectDrawTest, CompiledDrawObjectsSurviveAContextRecreation)
     }
 }
 
+TEST(EasyGLCompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);
+}
+
 #endif  // CNA_EASYGL_COMPILED_EFFECTS

@@ -835,4 +835,12 @@ TEST(SdlGpuCompiledEffectDrawTest, SharedSpriteBatchTextureSlotContract)
     CNA::TestSupport::RunCompiledEffectSpriteBatchTextureSlotContract(device);
 }
 
+TEST(SdlGpuCompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);
+}
+
 #endif  // CNA_SDL_GPU_COMPILED_EFFECTS

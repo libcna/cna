@@ -47,11 +47,34 @@ namespace CNA::Internal::Renderers::SdlGpu
             };
             if (auto* texture2D = dynamic_cast<Texture2D*>(texture))
                 return sampleable(texture2D->GetRenderer());
-            if (auto* texture3D = dynamic_cast<Texture3D*>(texture))
-                return dynamic_cast<const SdlGpuTextureRenderer*>(&texture3D->GetRenderer());
-            if (auto* textureCube = dynamic_cast<TextureCube*>(texture))
-                return dynamic_cast<const SdlGpuTextureRenderer*>(&textureCube->GetRenderer());
             return nullptr;
+        }
+
+        /// plan_fx.md FX-110: whether this renderer owns @p texture at all, whatever its dimension.
+        ///
+        /// `ITextureRenderer`, `ITexture3DRenderer` and `ITextureCubeRenderer` are three unrelated
+        /// interfaces rather than a hierarchy, so a cube or volume texture cannot be answered by
+        /// AsSdlGpuTexture's single pointer -- and a cross-cast between them returns null even for
+        /// a texture this renderer created. Assigning one to a compiled Effect's texture parameter
+        /// is legitimate regardless; whether a DRAW can bind it is decided at draw time against the
+        /// shader's own declared sampler dimension, which is a different question.
+        bool OwnsSampleableTexture(Texture* texture)
+        {
+            if (texture == nullptr) return false;
+            using namespace Microsoft::Xna::Framework::Graphics;
+            if (auto* textureCube = dynamic_cast<TextureCube*>(texture))
+            {
+                return dynamic_cast<const SdlGpuTextureCubeRenderer*>(
+                           &textureCube->GetRenderer()) != nullptr ||
+                       dynamic_cast<const SdlGpuRenderTargetCubeRenderer*>(
+                           &textureCube->GetRenderer()) != nullptr;
+            }
+            if (auto* texture3D = dynamic_cast<Texture3D*>(texture))
+            {
+                return dynamic_cast<const SdlGpuTexture3DRenderer*>(
+                           &texture3D->GetRenderer()) != nullptr;
+            }
+            return AsSdlGpuTexture(texture) != nullptr;
         }
 
         /// Wires MojoShader's own SDL_GPU adapter as the backend the effect parser compiles with.
@@ -214,7 +237,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             throw std::invalid_argument("SDL_GPU compiled effect: parameter is not a texture.");
         }
-        if (texture != nullptr && AsSdlGpuTexture(texture) == nullptr)
+        if (texture != nullptr && !OwnsSampleableTexture(texture))
         {
             throw std::invalid_argument(
                 "SDL_GPU compiled effect: texture was not created by the active SDL_GPU renderer.");

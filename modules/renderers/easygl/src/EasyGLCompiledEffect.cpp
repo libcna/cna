@@ -55,10 +55,78 @@ namespace CNA::Internal::Renderers::EasyGL
                     return plain;
                 return dynamic_cast<const EasyGLRenderTargetRenderer*>(&renderer);
             }
-            // plan_fx.md FX-062, matching FX-071's own scope: 3D/cube sampler binding for a
-            // compiled effect is refused explicitly at draw time rather than silently mishandled,
-            // so this resolver only needs to recognize a 2D texture's own renderer identity here.
             return nullptr;
+        }
+
+        /**
+         * @brief One compiled sampler's texture, resolved to whichever EasyGL kind backs it.
+         *
+         * plan_fx.md FX-110. `ITextureRenderer`, `ITexture3DRenderer` and `ITextureCubeRenderer`
+         * are three unrelated interfaces rather than a hierarchy, so a compiled sampler's texture
+         * cannot be carried as one pointer. Exactly one member is non-null when `Resolved()`.
+         */
+        struct ResolvedSamplerTextureEXT
+        {
+            const ITextureRenderer* texture2D = nullptr;
+            const EasyGLTexture3DRenderer* volume = nullptr;
+            const EasyGLTextureCubeRenderer* cube = nullptr;
+
+            [[nodiscard]] bool Resolved() const
+            {
+                return texture2D != nullptr || volume != nullptr || cube != nullptr;
+            }
+
+            /// The shader-side sampler dimension this texture can legally serve.
+            [[nodiscard]] MOJOSHADER_samplerType Kind() const
+            {
+                if (cube != nullptr) return MOJOSHADER_SAMPLER_CUBE;
+                if (volume != nullptr) return MOJOSHADER_SAMPLER_VOLUME;
+                return MOJOSHADER_SAMPLER_2D;
+            }
+
+            /// Binds to @p unit through whichever renderer owns it; each binds its own GL target.
+            void BindGL(int unit) const
+            {
+                if (cube != nullptr) cube->BindGL(unit);
+                else if (volume != nullptr) volume->BindGL(unit);
+                else if (texture2D != nullptr) texture2D->BindGL(unit);
+            }
+        };
+
+        /// plan_fx.md FX-110: resolves a public texture of ANY dimension to its EasyGL renderer.
+        /// This renderer samples `Texture3D` and `TextureCube` in its ordinary draw families, and
+        /// a compiled Effect can bind either to a sampler just as a game's own shader can, so the
+        /// compiled route resolves all three kinds rather than refusing two of them by name.
+        ResolvedSamplerTextureEXT ResolveSamplerTexture(Texture* texture)
+        {
+            ResolvedSamplerTextureEXT resolved;
+            if (texture == nullptr) return resolved;
+            using namespace Microsoft::Xna::Framework::Graphics;
+            if (auto* textureCube = dynamic_cast<TextureCube*>(texture))
+            {
+                resolved.cube = dynamic_cast<const EasyGLTextureCubeRenderer*>(
+                    &textureCube->GetRenderer());
+                return resolved;
+            }
+            if (auto* texture3D = dynamic_cast<Texture3D*>(texture))
+            {
+                resolved.volume = dynamic_cast<const EasyGLTexture3DRenderer*>(
+                    &texture3D->GetRenderer());
+                return resolved;
+            }
+            resolved.texture2D = AsEasyGLTexture(texture);
+            return resolved;
+        }
+
+        /// The public XNA name of a reflected sampler's dimension, for a refusal's text.
+        [[nodiscard]] const char* SamplerKindName(MOJOSHADER_samplerType type)
+        {
+            switch (type)
+            {
+                case MOJOSHADER_SAMPLER_CUBE:   return "samplerCUBE (TextureCube)";
+                case MOJOSHADER_SAMPLER_VOLUME: return "sampler3D (Texture3D)";
+                default:                        return "sampler2D (Texture2D)";
+            }
         }
 
         /// Wires MojoShader's own OpenGL adapter as the backend the effect parser compiles with.
@@ -346,7 +414,7 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             throw std::invalid_argument("EasyGL compiled effect: parameter is not a texture.");
         }
-        if (texture != nullptr && AsEasyGLTexture(texture) == nullptr)
+        if (texture != nullptr && !ResolveSamplerTexture(texture).Resolved())
         {
             throw std::invalid_argument(
                 "EasyGL compiled effect: texture was not created by the active EasyGL renderer, "
@@ -657,51 +725,45 @@ namespace CNA::Internal::Renderers::EasyGL
             bool samplerAssigned = false;
             effect->GetBoundSamplerEXT(static_cast<std::uint32_t>(sampler.index), /*vertexStage=*/false,
                                        texture, samplerState, samplerAssigned);
-            const ITextureRenderer* nativeTexture = AsEasyGLTexture(texture);
+            ResolvedSamplerTextureEXT nativeTexture = ResolveSamplerTexture(texture);
             // plan_fx.md FX-080: SpriteBatch overwrites slot 0 with the drawn texture after the
             // effect's pass applies, exactly as FNA's SpriteBatch.DrawPrimitives does with
             // GraphicsDevice.Textures[0] -- unconditionally, whatever the effect bound there.
             if (sampler.index == 0 && spriteBatchSlotZeroTexture != nullptr)
-                nativeTexture = spriteBatchSlotZeroTexture;
-            if (nativeTexture == nullptr)
             {
-                // plan_fx.md FX-109: the two reasons are different limitations and are named
-                // separately. "Nothing bound" is a porting mistake in the effect or the game;
-                // "bound, but a volume or cube texture" is this route's own documented boundary --
-                // the renderer samples both elsewhere, only its compiled-effect binding does not.
-                const std::string slotName = std::to_string(sampler.index) + " ('" +
-                    (sampler.name != nullptr ? sampler.name : "<unnamed>") + "')";
-                using namespace Microsoft::Xna::Framework::Graphics;
-                if (dynamic_cast<Texture3D*>(texture) != nullptr)
-                {
-                    throw System::NotSupportedException(
-                        "CNA EasyGL: this compiled effect binds a Texture3D to pixel sampler slot " +
-                        slotName + ". This renderer samples Texture3D elsewhere, but its "
-                        "compiled-effect draw route resolves 2D textures only; the limitation is "
-                        "specific to compiled Effects, not to the renderer.");
-                }
-                if (dynamic_cast<TextureCube*>(texture) != nullptr)
-                {
-                    throw System::NotSupportedException(
-                        "CNA EasyGL: this compiled effect binds a TextureCube to pixel sampler "
-                        "slot " + slotName + ". This renderer samples TextureCube elsewhere, but "
-                        "its compiled-effect draw route resolves 2D textures only; the limitation "
-                        "is specific to compiled Effects, not to the renderer.");
-                }
+                nativeTexture = ResolvedSamplerTextureEXT{};
+                nativeTexture.texture2D = spriteBatchSlotZeroTexture;
+            }
+            const std::string slotName = std::to_string(sampler.index) + " ('" +
+                (sampler.name != nullptr ? sampler.name : "<unnamed>") + "')";
+            if (!nativeTexture.Resolved())
+            {
                 throw System::NotSupportedException(
                     "CNA EasyGL: this compiled effect's pixel shader samples slot " + slotName +
                     ", but no texture is bound there. Assign the effect's texture parameter, or "
                     "select one on GraphicsDevice.Textures, before drawing.");
+            }
+            // plan_fx.md FX-110: the shader's declared sampler dimension and the bound texture's
+            // kind have to agree. GL binds a texture per TARGET, so a cube texture bound where the
+            // shader declared sampler2D leaves that sampler reading an incomplete 2D target --
+            // black, silently -- rather than erroring. Named instead.
+            if (sampler.type != nativeTexture.Kind())
+            {
+                throw System::NotSupportedException(
+                    "CNA EasyGL: this compiled effect's pixel shader declares " +
+                    std::string(SamplerKindName(sampler.type)) + " at slot " + slotName +
+                    ", but the texture bound there is a " +
+                    SamplerKindName(nativeTexture.Kind()) + ". The dimensions must match.");
             }
             // plan_fx.md FX-099: a render target's colour texture stores its rows the other way up
             // from an uploaded texture, and MojoShader's generated GLSL carries none of this
             // renderer's own sampling-time correction. Bind a corrected copy instead, and only for
             // the sources that need one -- SampledRowOrderIsBottomUp is the same single source of
             // truth every stock sampling path asks.
-            if (SampledRowOrderIsBottomUp(nativeTexture))
+            if (SampledRowOrderIsBottomUp(nativeTexture.texture2D))
             {
                 const auto* renderTarget =
-                    dynamic_cast<const EasyGLRenderTargetRenderer*>(nativeTexture);
+                    dynamic_cast<const EasyGLRenderTargetRenderer*>(nativeTexture.texture2D);
                 if (renderTarget == nullptr)
                 {
                     throw System::NotSupportedException(
@@ -719,7 +781,7 @@ namespace CNA::Internal::Renderers::EasyGL
             }
             else
             {
-                nativeTexture->BindGL(sampler.index);
+                nativeTexture.BindGL(static_cast<int>(sampler.index));
             }
             // plan_fx.md FX-083: the pass's own sampler_state block reaches the GPU here. Before
             // this, only the texture object's creation-time GL filter/wrap applied and an

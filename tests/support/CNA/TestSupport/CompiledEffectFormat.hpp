@@ -39,10 +39,30 @@ namespace CNA::TestSupport::EffectFormat
         TypeString = 4,
         TypeTexture = 5,
         TypeTexture2D = 7,
+        TypeTexture3D = 8,
+        TypeTextureCube = 9,
         TypeSampler = 10,
         TypeSampler2D = 12,
+        TypeSampler3D = 13,
+        TypeSamplerCube = 14,
         TypePixelShader = 15,
         TypeVertexShader = 16,
+    };
+
+    /**
+     * @brief `D3DSAMPLER_TEXTURE_TYPE`, the sampler dimension a `dcl` names in a pixel shader.
+     *
+     * plan_fx.md FX-110. Lives in bits 27..30 of a `dcl` instruction's usage token, and is what
+     * makes MojoShader report `MOJOSHADER_SAMPLER_2D`, `_CUBE` or `_VOLUME` for a reflected
+     * sampler -- the fact a renderer has to check the bound texture's kind against.
+     */
+    enum SamplerTextureType : std::uint32_t
+    {
+        SamplerTypeUnknown = 0,
+        SamplerType1D = 1,
+        SamplerType2D = 2,
+        SamplerTypeCube = 3,
+        SamplerTypeVolume = 4,
     };
 
     /** @brief `D3DRENDERSTATETYPE` tokens a compiled pass can assign. */

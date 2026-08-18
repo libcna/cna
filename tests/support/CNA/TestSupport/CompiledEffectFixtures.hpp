@@ -154,6 +154,23 @@ namespace CNA::TestSupport
         return offset;
     }
 
+    /**
+     * @brief The dimension of the sampler a fixture declares. CNAEXT.
+     *
+     * plan_fx.md FX-110. XNA's `Texture2D`, `Texture3D` and `TextureCube` all reach a compiled
+     * Effect through the same texture parameter, and MojoShader reflects the shader's own
+     * expectation as `MOJOSHADER_SAMPLER_2D` / `_VOLUME` / `_CUBE`. A backend has to match the two.
+     */
+    enum class SyntheticSamplerKind
+    {
+        /** @brief `sampler2D`, a two-component coordinate. */
+        Sampler2D,
+        /** @brief `samplerCUBE`, a three-component direction. */
+        SamplerCube,
+        /** @brief `sampler3D`, a three-component volume coordinate. */
+        Sampler3D,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -196,6 +213,13 @@ namespace CNA::TestSupport
         /// value, so the XNA `SetValue(string)`/`GetValueString()` pair can be exercised on a
         /// parameter that really is one instead of only through its rejection path.
         bool includeStringParameter = false;
+        /// plan_fx.md FX-110: which sampler dimension the fixture declares. A compiled Effect can
+        /// bind a cube or volume texture to a sampler just as easily as a 2D one, and a renderer
+        /// that resolves only 2D has to say so rather than bind the wrong kind -- so the suite
+        /// needs a fixture of each shape. Affects the texture and sampler parameters' reflected
+        /// object types, the pixel shader's `dcl_<kind>` token and its constant-table entry, and
+        /// the width of the texture coordinate the vertex shader forwards.
+        SyntheticSamplerKind samplerKind = SyntheticSamplerKind::Sampler2D;
         /// plan_fx.md FX-093: the drawable pixel shader SAMPLES the effect's own sampler instead
         /// of writing `Tint` flat -- `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint` -- and the vertex
         /// shader forwards TEXCOORD0 to it. Without this every drawable fixture had no sampler at
@@ -232,11 +256,13 @@ namespace CNA::TestSupport
      * real program even though the shader body itself is trivial. `mov oC0, c0` keeps the
      * generated shader valid on every profile a backend may select at runtime.
      */
-    inline std::vector<std::uint8_t> BuildSyntheticPixelShader(std::uint32_t samplerRegister,
-                                                       bool breakSymbolBinding = false,
-                                                       bool includeSampler = true,
-                                                       bool samplesTexture = false,
-                                                       bool swizzleTint = false)
+    inline std::vector<std::uint8_t> BuildSyntheticPixelShader(
+        std::uint32_t samplerRegister,
+        bool breakSymbolBinding = false,
+        bool includeSampler = true,
+        bool samplesTexture = false,
+        bool swizzleTint = false,
+        SyntheticSamplerKind samplerKind = SyntheticSamplerKind::Sampler2D)
     {
         constexpr std::uint32_t versionToken = 0xFFFF0200u;
         const int constantCount = includeSampler ? 2 : 1;
@@ -272,7 +298,11 @@ namespace CNA::TestSupport
 
         const auto samplerType = static_cast<std::uint32_t>(ctab.size());
         AppendUInt16(ctab, EffectFormat::ClassObject);
-        AppendUInt16(ctab, EffectFormat::TypeSampler2D);
+        AppendUInt16(ctab, samplerKind == SyntheticSamplerKind::SamplerCube
+                               ? EffectFormat::TypeSamplerCube
+                               : samplerKind == SyntheticSamplerKind::Sampler3D
+                                     ? EffectFormat::TypeSampler3D
+                                     : EffectFormat::TypeSampler2D);
         AppendUInt16(ctab, 1);
         AppendUInt16(ctab, 1);
         AppendUInt16(ctab, 1);
@@ -339,14 +369,25 @@ namespace CNA::TestSupport
 
         if (samplesTexture)
         {
-            // dcl t0.xy -- the interpolated texture coordinate the vertex shader forwards.
+            // plan_fx.md FX-110: a cube or volume sampler reads three components, a 2D one reads
+            // two, and the declaration has to say which -- both in the coordinate register's write
+            // mask and in the sampler's own texture-type field.
+            const bool threeComponent = samplerKind != SyntheticSamplerKind::Sampler2D;
+            const std::uint32_t coordinateMask = threeComponent ? 0x7u : 0x3u;
+            const std::uint32_t samplerTextureType =
+                samplerKind == SyntheticSamplerKind::SamplerCube
+                    ? EffectFormat::SamplerTypeCube
+                    : samplerKind == SyntheticSamplerKind::Sampler3D
+                          ? EffectFormat::SamplerTypeVolume
+                          : EffectFormat::SamplerType2D;
+            // dcl t0.xy(z) -- the interpolated texture coordinate the vertex shader forwards.
             AppendUInt32(shader, 0x0000001Fu | (2u << 24));
             AppendUInt32(shader, 0x80000000u);
-            AppendUInt32(shader, destination(regTexture, 0, 0x3u));
-            // dcl_2d s<samplerRegister> -- the texture type lives in bits 27..30 of the usage
-            // token; 2 is D3DSTT_2D.
+            AppendUInt32(shader, destination(regTexture, 0, coordinateMask));
+            // dcl_<2d|cube|volume> s<samplerRegister> -- the texture type lives in bits 27..30 of
+            // the usage token (D3DSAMPLER_TEXTURE_TYPE).
             AppendUInt32(shader, 0x0000001Fu | (2u << 24));
-            AppendUInt32(shader, 0x80000000u | (2u << 27));
+            AppendUInt32(shader, 0x80000000u | (samplerTextureType << 27));
             AppendUInt32(shader, destination(regSampler, samplerRegister, 0xFu));
             // texld r0, t0, s<samplerRegister>
             AppendUInt32(shader, 0x00000042u | (3u << 24));
@@ -389,7 +430,8 @@ namespace CNA::TestSupport
      * @return The complete vertex-shader token buffer.
      */
     inline std::vector<std::uint8_t> BuildSyntheticVertexShader(bool readsSecondStream,
-                                                                bool forwardsTexCoord = false)
+                                                                bool forwardsTexCoord = false,
+                                                                bool forwardsThreeComponents = false)
     {
         constexpr std::uint32_t versionToken = 0xFFFE0200u;
         const std::uint32_t constantCount = readsSecondStream ? 2u : 1u;
@@ -515,9 +557,12 @@ namespace CNA::TestSupport
         AppendUInt32(shader, source(regConst, 0));
         if (forwardsTexCoord)
         {
-            // mov oT0.xy, v1 -- the interpolated coordinate the sampling pixel shader reads.
+            // mov oT0.xy(z), v1 -- the interpolated coordinate the sampling pixel shader reads.
+            // plan_fx.md FX-110: a cube or volume sampler needs three components, so the mask
+            // follows the sampler the pixel shader declares rather than being fixed at .xy.
             AppendUInt32(shader, 0x00000001u | (2u << 24));
-            AppendUInt32(shader, destination(regTexCoordOut, 0, 0x3u));
+            AppendUInt32(shader, destination(regTexCoordOut, 0,
+                                             forwardsThreeComponents ? 0x7u : 0x3u));
             AppendUInt32(shader, source(regInput, 1));
         }
         AppendUInt32(shader, 0x0000FFFFu);
@@ -597,12 +642,26 @@ namespace CNA::TestSupport
             AppendScalarType(bytes, EffectFormat::TypeInt, qualityName, empty);
         const std::uint32_t passTagType =
             AppendScalarType(bytes, EffectFormat::TypeInt, passTagName, empty);
+        // plan_fx.md FX-110: the reflected object types follow the sampler dimension the shader
+        // declares, so a cube fixture reports TextureCube/SamplerCube through the public API too.
+        const std::uint32_t reflectedTextureType =
+            options.samplerKind == SyntheticSamplerKind::SamplerCube
+                ? EffectFormat::TypeTextureCube
+                : options.samplerKind == SyntheticSamplerKind::Sampler3D
+                      ? EffectFormat::TypeTexture3D
+                      : EffectFormat::TypeTexture2D;
+        const std::uint32_t reflectedSamplerType =
+            options.samplerKind == SyntheticSamplerKind::SamplerCube
+                ? EffectFormat::TypeSamplerCube
+                : options.samplerKind == SyntheticSamplerKind::Sampler3D
+                      ? EffectFormat::TypeSampler3D
+                      : EffectFormat::TypeSampler2D;
         const std::uint32_t textureType =
-            AppendObjectType(bytes, EffectFormat::TypeTexture2D, textureName, empty);
+            AppendObjectType(bytes, reflectedTextureType, textureName, empty);
         const std::uint32_t samplerType =
-            AppendObjectType(bytes, EffectFormat::TypeSampler2D, samplerName, empty);
+            AppendObjectType(bytes, reflectedSamplerType, samplerName, empty);
         const std::uint32_t stateTextureType =
-            AppendObjectType(bytes, EffectFormat::TypeTexture2D, empty, empty);
+            AppendObjectType(bytes, reflectedTextureType, empty, empty);
         const std::uint32_t pixelShaderType =
             AppendObjectType(bytes, EffectFormat::TypePixelShader, empty, empty);
         const std::uint32_t vertexShaderType =
@@ -876,7 +935,7 @@ namespace CNA::TestSupport
 
         const std::vector<std::uint8_t> shader = BuildSyntheticPixelShader(
             options.samplerRegister, options.breakShaderSymbolBinding, options.includeSampler,
-            options.pixelShaderSamplesTexture);
+            options.pixelShaderSamplesTexture, /*swizzleTint=*/false, options.samplerKind);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -884,7 +943,8 @@ namespace CNA::TestSupport
         if (includeVertexShader)
         {
             const std::vector<std::uint8_t> vertexShader = BuildSyntheticVertexShader(
-                options.vertexShaderReadsSecondStream, options.pixelShaderSamplesTexture);
+                options.vertexShaderReadsSecondStream, options.pixelShaderSamplesTexture,
+                options.samplerKind != SyntheticSamplerKind::Sampler2D);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());
@@ -946,6 +1006,7 @@ namespace CNA::TestSupport
      *
      * @param samplerStates The `sampler_state` assignments the pass declares, in order.
      * @param samplerRegister The sampler register the shader declares.
+     * @param samplerKind Which sampler dimension the shader declares (plan_fx.md FX-110).
      * @return The complete effect bytecode.
      */
     /**
@@ -966,7 +1027,8 @@ namespace CNA::TestSupport
 
     inline std::vector<std::uint8_t> BuildSyntheticSamplingEffect(
         const std::vector<SyntheticSamplerState>& samplerStates,
-        std::uint32_t samplerRegister = 0)
+        std::uint32_t samplerRegister = 0,
+        SyntheticSamplerKind samplerKind = SyntheticSamplerKind::Sampler2D)
     {
         SyntheticEffectOptions options;
         options.includeDrawableProgram = true;
@@ -974,6 +1036,7 @@ namespace CNA::TestSupport
         options.pixelShaderSamplesTexture = true;
         options.samplerStates = samplerStates;
         options.samplerRegister = samplerRegister;
+        options.samplerKind = samplerKind;
         return BuildSyntheticEffect(options);
     }
 

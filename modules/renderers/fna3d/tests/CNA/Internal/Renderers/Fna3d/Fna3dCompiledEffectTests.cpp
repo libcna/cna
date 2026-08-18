@@ -1687,3 +1687,11 @@ TEST(Fna3dCompiledEffectDrawTest, SharedSpriteBatchTextureSlotContract)
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectSpriteBatchTextureSlotContract(device);
 }
+
+TEST(Fna3dCompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);
+}

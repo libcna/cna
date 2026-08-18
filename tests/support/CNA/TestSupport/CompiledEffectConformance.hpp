@@ -35,7 +35,10 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -110,7 +113,10 @@ namespace CNA::TestSupport
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
     using Microsoft::Xna::Framework::Graphics::RasterizerState;
     using Microsoft::Xna::Framework::Graphics::SamplerState;
+    using Microsoft::Xna::Framework::Graphics::CubeMapFace;
     using Microsoft::Xna::Framework::Graphics::Texture2D;
+    using Microsoft::Xna::Framework::Graphics::Texture3D;
+    using Microsoft::Xna::Framework::Graphics::TextureCube;
     using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
     using Microsoft::Xna::Framework::Graphics::TextureFilter;
 
@@ -1697,6 +1703,46 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief The three-component sibling of @ref SamplingQuadVertex. CNAEXT.
+     *
+     * plan_fx.md FX-110. A cube sampler takes a direction and a volume sampler a 3D coordinate, so
+     * the fixture's vertex shader forwards `oT0.xyz` and the stream has to carry three components.
+     */
+    struct SamplingQuadVertexXYZ
+    {
+        float x, y, z;
+        float u, v, w;
+    };
+
+    /** @brief The declaration `SamplingQuadVertexXYZ` is streamed with. */
+    [[nodiscard]] inline VertexDeclaration SamplingQuadDeclarationXYZ()
+    {
+        return VertexDeclaration(static_cast<int>(sizeof(SamplingQuadVertexXYZ)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+    }
+
+    /**
+     * @brief Fills a six-vertex full-target quad whose every corner carries @p u / @p v / @p w.
+     *
+     * @param quad Destination, six vertices.
+     * @param u Texture coordinate U written to every corner.
+     * @param v Texture coordinate V written to every corner.
+     * @param w Texture coordinate W written to every corner.
+     */
+    inline void FillSamplingQuadXYZ(SamplingQuadVertexXYZ (&quad)[6], float u, float v, float w)
+    {
+        const float corners[6][2] = {
+            {-1.0f, 1.0f}, {-1.0f, -1.0f}, {1.0f, -1.0f},
+            {-1.0f, 1.0f}, {1.0f, -1.0f}, {1.0f, 1.0f},
+        };
+        for (int i = 0; i < 6; ++i)
+            quad[i] = SamplingQuadVertexXYZ{corners[i][0], corners[i][1], 0.0f, u, v, w};
+    }
+
+    /**
      * @brief What a backend can represent of XNA's sampler state, for the GPU-visible contract.
      *
      * plan_fx.md FX-093. Some sampler properties have no expression on some backends -- OpenGL ES
@@ -2339,6 +2385,191 @@ namespace CNA::TestSupport
                     "MaxMipLevel");
         expectColor(drawCompiled(), green,
                     "and the compiled effect must still get its own clamp on the next draw");
+    }
+
+    /**
+     * @brief Contract: a compiled Effect can sample a cube and a volume texture, or refuse by name.
+     *
+     * plan_fx.md FX-110. XNA's `TextureCube` and `Texture3D` reach a compiled Effect through the
+     * same texture parameter a `Texture2D` does, and MojoShader reflects the shader's own
+     * expectation as `MOJOSHADER_SAMPLER_CUBE` or `_VOLUME`. Two things must hold, and neither was
+     * observable before this section existed: a backend that resolves those kinds must sample the
+     * RIGHT one, and a backend that does not must say so by name instead of binding a texture of
+     * the wrong dimension -- which on a GL-shaped API leaves the sampler reading an incomplete
+     * target and returning black rather than erroring.
+     *
+     * A backend that refuses skips rather than fails: refusing a kind it cannot bind is a valid,
+     * documented state (`plan_fx.md` section 10.5 classifies it), and the refusal's own text is
+     * what this section then asserts on.
+     *
+     * @param device Device whose renderer claims CompiledEffects.
+     */
+    inline void RunCompiledEffectCubeAndVolumeSamplerContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        constexpr int kSize = 8;
+        const Color background(9, 19, 29, 255);
+        const VertexDeclaration declaration = SamplingQuadDeclarationXYZ();
+
+        const std::vector<SyntheticSamplerState> pointClamp = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+            {Fx::SampAddressW, Fx::AddressClamp},
+        };
+
+        // Draws a full-target quad whose every vertex carries the same three-component coordinate,
+        // so the sampled texel is a property of the sampler and the coordinate alone.
+        const auto sample = [&](SyntheticSamplerKind kind, float u, float v, float w,
+                                const std::function<void(Effect&)>& bind,
+                                std::string& refusal) -> Color {
+            // A backend may refuse at either end: when the effect is CREATED (its shader
+            // translation cannot express that sampler dimension) or when a draw BINDS the texture.
+            // Both are valid documented states and both are caught here, so a refusal is reported
+            // by its message rather than by an escaping exception.
+            std::unique_ptr<Effect> effect;
+            SamplingQuadVertexXYZ quad[6];
+            FillSamplingQuadXYZ(quad, u, v, w);
+            RenderTarget2D target(device, kSize, kSize);
+            try
+            {
+                effect = std::make_unique<Effect>(
+                    device, BuildSyntheticSamplingEffect(pointClamp, 0, kind));
+                auto& parameters = effect->getParametersProperty();
+                parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+                parameters["Tint"]->SetValue(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+                bind(*effect);
+            }
+            catch (const std::exception& error)
+            {
+                refusal = error.what();
+                return background;
+            }
+
+            device.SetRenderTarget(&target);
+            device.Clear(background);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            try
+            {
+                effect->getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+                device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                          static_cast<const void*>(quad), 0, 2, declaration);
+            }
+            catch (const std::exception& error)
+            {
+                refusal = error.what();
+                device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+                return background;
+            }
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color pixel(0, 0, 0, 0);
+            const Rectangle centre(kSize / 2, kSize / 2, 1, 1);
+            target.GetData(0, &centre, &pixel, 0, 1);
+            return pixel;
+        };
+        const auto expectColor = [](const Color& actual, const Color& expected, const char* label) {
+            SCOPED_TRACE(label);
+            EXPECT_NEAR(actual.getRProperty(), expected.getRProperty(), 3);
+            EXPECT_NEAR(actual.getGProperty(), expected.getGProperty(), 3);
+            EXPECT_NEAR(actual.getBProperty(), expected.getBProperty(), 3);
+        };
+
+        // --- A cube texture, one solid colour per face ------------------------------------------
+        {
+            const Color faceColors[6] = {
+                Color(255, 0, 0, 255),   // +X
+                Color(0, 255, 0, 255),   // -X
+                Color(0, 0, 255, 255),   // +Y
+                Color(255, 255, 0, 255), // -Y
+                Color(255, 0, 255, 255), // +Z
+                Color(0, 255, 255, 255), // -Z
+            };
+            TextureCube cube(device, 2, /*mipMap=*/false, SurfaceFormat::Color);
+            for (int face = 0; face < 6; ++face)
+            {
+                const Color texels[4] = {faceColors[face], faceColors[face],
+                                         faceColors[face], faceColors[face]};
+                cube.SetData(static_cast<CubeMapFace>(face), texels, 4);
+            }
+            const auto bindCube = [&](Effect& e) {
+                e.getParametersProperty()["FxTexture"]->SetValue(&cube);
+            };
+
+            std::string refusal;
+            const Color positiveX = sample(SyntheticSamplerKind::SamplerCube,
+                                           1.0f, 0.0f, 0.0f, bindCube, refusal);
+            if (!refusal.empty())
+            {
+                EXPECT_FALSE(refusal.empty())
+                    << "a refusal must say what it could not do, so a port can act on it";
+                GTEST_SKIP() << "this renderer refuses a cube sampler: " << refusal;
+            }
+            expectColor(positiveX, faceColors[0], "a +X direction samples the +X face");
+
+            std::string ignored;
+            expectColor(sample(SyntheticSamplerKind::SamplerCube, -1.0f, 0.0f, 0.0f, bindCube,
+                               ignored),
+                        faceColors[1], "a -X direction samples the -X face");
+            expectColor(sample(SyntheticSamplerKind::SamplerCube, 0.0f, 1.0f, 0.0f, bindCube,
+                               ignored),
+                        faceColors[2], "a +Y direction samples the +Y face");
+            expectColor(sample(SyntheticSamplerKind::SamplerCube, 0.0f, 0.0f, -1.0f, bindCube,
+                               ignored),
+                        faceColors[5], "a -Z direction samples the -Z face");
+        }
+
+        // --- A volume texture, one solid colour per depth slice ---------------------------------
+        {
+            const Color sliceColors[2] = {Color(255, 0, 0, 255), Color(0, 0, 255, 255)};
+            Texture3D volume(device, 2, 2, 2, /*mipMap=*/false, SurfaceFormat::Color);
+            const Color texels[8] = {
+                sliceColors[0], sliceColors[0], sliceColors[0], sliceColors[0],
+                sliceColors[1], sliceColors[1], sliceColors[1], sliceColors[1],
+            };
+            volume.SetData(texels, 8);
+            const auto bindVolume = [&](Effect& e) {
+                e.getParametersProperty()["FxTexture"]->SetValue(&volume);
+            };
+
+            std::string refusal;
+            const Color nearSlice = sample(SyntheticSamplerKind::Sampler3D,
+                                           0.5f, 0.5f, 0.25f, bindVolume, refusal);
+            if (!refusal.empty())
+            {
+                EXPECT_FALSE(refusal.empty())
+                    << "a refusal must say what it could not do, so a port can act on it";
+                GTEST_SKIP() << "this renderer refuses a volume sampler: " << refusal;
+            }
+            expectColor(nearSlice, sliceColors[0], "w = 0.25 samples the first depth slice");
+
+            std::string ignored;
+            expectColor(sample(SyntheticSamplerKind::Sampler3D, 0.5f, 0.5f, 0.75f, bindVolume,
+                               ignored),
+                        sliceColors[1], "w = 0.75 samples the second depth slice");
+        }
+
+        // --- The dimensions must agree ----------------------------------------------------------
+        //
+        // A cube texture bound where the shader declared sampler2D is not a smaller mistake than
+        // an unbound slot: on a GL-shaped API each target is bound separately, so the 2D sampler
+        // reads an incomplete target and returns black with no error at all.
+        {
+            Texture2D flat(device, 1, 1);
+            const Color white[1] = {Color::White};
+            flat.SetData(white, 1);
+            std::string refusal;
+            (void) sample(SyntheticSamplerKind::SamplerCube, 1.0f, 0.0f, 0.0f,
+                          [&](Effect& e) {
+                              e.getParametersProperty()["FxTexture"]->SetValue(&flat);
+                          },
+                          refusal);
+            EXPECT_FALSE(refusal.empty())
+                << "a Texture2D bound to a samplerCUBE must be refused, not sampled as black";
+        }
     }
 
     /**

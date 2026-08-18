@@ -16,6 +16,7 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
+#include "System/InvalidCastException.hpp"
 
 #include <SDL3/SDL_stdinc.h>
 
@@ -223,6 +224,33 @@ namespace CNA::Internal::Renderers::Fna3d
         if (texture != nullptr && GetSampledTexture(texture) == nullptr)
             throw std::invalid_argument(
                 "FNA3D compiled effect: texture was not created by the active FNA3D renderer.");
+        // plan_fx.md FX-110: the assigned texture's dimension must match the one the effect
+        // declared. FNA3D binds a texture to a slot by its own target, so a Texture2D assigned to a
+        // samplerCUBE leaves the cube target unbound and the shader samples black -- silently, and
+        // indistinguishably from a genuinely black texture. Refused at assignment, which is where
+        // XNA refuses it too (EffectParameter.SetValue's own InvalidCastException).
+        if (texture != nullptr)
+        {
+            using namespace Microsoft::Xna::Framework::Graphics;
+            const bool isCube = dynamic_cast<TextureCube*>(texture) != nullptr;
+            const bool isVolume = !isCube && dynamic_cast<Texture3D*>(texture) != nullptr;
+            const auto declared = static_cast<MOJOSHADER_symbolType>(parameterType);
+            const bool declaredCube = declared == MOJOSHADER_SYMTYPE_TEXTURECUBE;
+            const bool declaredVolume = declared == MOJOSHADER_SYMTYPE_TEXTURE3D;
+            // A parameter declared as the dimensionless `texture` accepts any kind, exactly as
+            // Direct3D 9's own `texture` type does; only an explicit dimension is checked.
+            const bool declaredAny = declared == MOJOSHADER_SYMTYPE_TEXTURE;
+            if (!declaredAny && (isCube != declaredCube || isVolume != declaredVolume))
+            {
+                const auto* declaredName = declaredCube ? "TextureCube"
+                                         : declaredVolume ? "Texture3D" : "Texture2D";
+                const auto* assignedName = isCube ? "TextureCube"
+                                         : isVolume ? "Texture3D" : "Texture2D";
+                throw System::InvalidCastException(
+                    std::string("FNA3D compiled effect: parameter declares ") + declaredName +
+                    " but a " + assignedName + " was assigned; the dimensions must match.");
+            }
+        }
         textures_[runtimeIndex] = texture;
     }
 

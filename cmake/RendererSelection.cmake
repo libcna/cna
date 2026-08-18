@@ -736,6 +736,20 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "VULKAN")
     list(APPEND _cna_identity_defines CNA_RENDERER_VULKAN)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_VULKAN")
     find_package(Vulkan REQUIRED)
+    # plan_fx.md FX-065: compiled XNA Effect bytecode through MojoShader's portable SPIR-V profile.
+    # Off by default and shaped exactly like the CNA_EASYGL_COMPILED_EFFECTS and
+    # CNA_SDL_GPU_COMPILED_EFFECTS options above, for the same reason: MojoShader is a fetched
+    # dependency this renderer does not otherwise need. Unlike those two there is no
+    # MojoShader-provided adapter to link against (there is no `mojoshader_vulkan.c`) -- the
+    # nine-function effect backend is CNA's own, written directly against MOJOSHADER_parse with
+    # the SPIR-V profile, which FX-064's existence gate proved against a real device.
+    option(CNA_VULKAN_COMPILED_EFFECTS
+           "Build Vulkan support for compiled XNA Effect bytecode (plan_fx.md FX-065)" OFF)
+    if(CNA_VULKAN_COMPILED_EFFECTS)
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+        add_compile_definitions(CNA_VULKAN_COMPILED_EFFECTS)
+    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU")
     message(STATUS "CNA: Using WEBGPU graphics renderer")
     set(RENDERER_DIR "modules/renderers/webgpu")

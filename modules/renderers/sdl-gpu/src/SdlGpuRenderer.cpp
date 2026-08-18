@@ -15,6 +15,7 @@
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffect.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #endif
 
@@ -5163,26 +5164,59 @@ namespace CNA::Internal::Renderers::SdlGpu
                     std::string("CNA SDL_GPU: this compiled effect's pixel shader samples '") +
                     name + "', but no texture is bound to it.");
             }
-            auto* texture2D = dynamic_cast<Microsoft::Xna::Framework::Graphics::Texture2D*>(boundTexture);
-            if (texture2D == nullptr)
+            // plan_fx.md FX-110: the shader's declared sampler dimension decides which resolver
+            // the bound texture has to go through, and the two must agree. SDL_GPU binds a texture
+            // by handle rather than by target, so a cube bound where the shader declared sampler2D
+            // is a validation error at best and a wrongly-sampled image at worst -- named here
+            // instead of either.
+            using Microsoft::Xna::Framework::Graphics::Texture2D;
+            using Microsoft::Xna::Framework::Graphics::Texture3D;
+            using Microsoft::Xna::Framework::Graphics::TextureCube;
+            auto* texture2D = dynamic_cast<Texture2D*>(boundTexture);
+            auto* textureCube = dynamic_cast<TextureCube*>(boundTexture);
+            auto* texture3D = dynamic_cast<Texture3D*>(boundTexture);
+            const MOJOSHADER_samplerType boundKind =
+                textureCube != nullptr ? MOJOSHADER_SAMPLER_CUBE
+                : texture3D != nullptr ? MOJOSHADER_SAMPLER_VOLUME
+                                       : MOJOSHADER_SAMPLER_2D;
+            const auto kindName = [](MOJOSHADER_samplerType type) {
+                switch (type)
+                {
+                    case MOJOSHADER_SAMPLER_CUBE:   return "samplerCUBE (TextureCube)";
+                    case MOJOSHADER_SAMPLER_VOLUME: return "sampler3D (Texture3D)";
+                    default:                        return "sampler2D (Texture2D)";
+                }
+            };
+            if (reflectedSampler->type != boundKind)
             {
-                // plan_fx.md FX-109: named by shape, and classified. This renderer samples both
-                // Texture3D and TextureCube in its ordinary draw families; only the compiled-effect
-                // binding path resolves 2D alone, so this is a compiled-Effect-specific limitation
-                // rather than a renderer-wide one.
-                const bool isCube =
-                    dynamic_cast<Microsoft::Xna::Framework::Graphics::TextureCube*>(boundTexture)
-                        != nullptr;
                 throw System::NotSupportedException(
-                    std::string("CNA SDL_GPU: this compiled effect binds a ") +
-                    (isCube ? "TextureCube" : "Texture3D") + " to pixel sampler slot " +
-                    std::to_string(slot) + ". This renderer samples that kind elsewhere, but its "
-                    "compiled-effect draw route resolves 2D textures only; the limitation is "
-                    "specific to compiled Effects, not to the renderer.");
+                    std::string("CNA SDL_GPU: this compiled effect's pixel shader declares ") +
+                    kindName(reflectedSampler->type) + " at slot " + std::to_string(slot) +
+                    ", but the texture bound there is a " + kindName(boundKind) +
+                    ". The dimensions must match.");
+            }
+            if (texture3D != nullptr)
+            {
+                // Still refused, and now for a reason that is written down rather than assumed:
+                // SdlGpuTexture3DRenderer keeps its native handle as a bare pointer instead of the
+                // lifetime-tracked SdlGpuSampledTextureEXT every other sampled kind resolves to,
+                // and a compiled draw is replayed at Present() long after a short-lived public
+                // Texture3D may be gone. Adopting it means giving that class the same shared
+                // state the others have, which is a texture-lifetime task rather than an FX one.
+                throw System::NotSupportedException(
+                    "CNA SDL_GPU: this compiled effect binds a Texture3D to pixel sampler slot " +
+                    std::to_string(slot) + ". This renderer samples Texture3D elsewhere, but its "
+                    "compiled-effect draw route cannot yet keep a volume texture alive across the "
+                    "deferred replay; the limitation is specific to compiled Effects, not to the "
+                    "renderer (plan_fx.md FX-110).");
             }
 
-            samplerBinding.texture = ResolveSampledTextureEXT(&texture2D->GetRenderer(),
-                                                              "CompiledEffect.Sampler");
+            samplerBinding.texture =
+                textureCube != nullptr
+                    ? ResolveSampledCubeEXT(&textureCube->GetRenderer(),
+                                            "CompiledEffect.CubeSampler")
+                    : ResolveSampledTextureEXT(&texture2D->GetRenderer(),
+                                               "CompiledEffect.Sampler");
             if (samplerAssigned)
             {
                 // plan_fx.md FX-083: the pass's own sampler_state block, LOD clamp and bias
