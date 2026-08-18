@@ -297,6 +297,8 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-18 | `cmake-build-cnaext` (EasyGL) re-verified after the Phase 16.6 probes and the shader-execution sweep | Xvfb :99 | 7829 ran · 7765 pass · 64 skip · **0 fail** |
 | 2026-08-18 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`** re-verified after the same | Xvfb :99 | 7556 ran · 7494 pass · 62 skip · **0 fail** |
 | 2026-08-18 | `cmake-build-cnaext`, after closing Phases 0–3 (the rows those phases had left open) | Xvfb :99 | 7879 ran · 7815 pass · 64 skip · **0 fail** |
+| 2026-08-18 | `cmake-build-cnaext`, after the ASan pass and the device-lifecycle tests (`MOD-743`, `MOD-1708`, `MOD-1714`, `MOD-1715`) | Xvfb :99 | 7940 ran · 7876 pass · 64 skip · **0 fail** |
+| 2026-08-18 | **`cmake-build-cnaext-release`** — the same tree at `-DCMAKE_BUILD_TYPE=Release` (`MOD-1716`) | Xvfb :99 | 7940 ran · 7876 pass · 64 skip · **0 fail** |
 
 The `CNA_CNAEXT=OFF` row is the one that answers "can this break what already works". It configures,
 builds and passes with the whole engine layer compiled out. Its lower test count is expected and not
@@ -392,6 +394,25 @@ Three things are worth knowing before repeating it:
 Xvfb also dies periodically in this container. A wrapper that checks `xdpyinfo` and restarts it
 before running is worth having; without one, a test run fails with "x11 not available" and looks
 like a regression.
+
+### Release vs Debug, and the 32-bit half of `MOD-1716`
+
+`cmake-build-cnaext-release/` is the third persistent build directory for this work
+(`-DCMAKE_BUILD_TYPE=Release -DCNA_CNAEXT=ON -DCNA_GRAPHICS_RENDERER=OPENGLES3`). Both
+configurations run the same 7940 tests with the same 7876 passes and the *same 64 skips* -- the two
+skip lists were diffed name by name and differ only in per-test milliseconds. That equality is the
+point of the row: an optimised build of a layer full of floating-point shader maths and
+tolerance-based image assertions is exactly where a `-ffast-math`-shaped difference or an
+uninitialised read would show up as a different verdict, and none does. Release is about 22% faster
+end to end (230 s vs 294 s), which is unremarkable for a suite dominated by llvmpipe rasterisation
+rather than by CNA's own code.
+
+The **32-bit** half of `MOD-1716` is not verifiable in this container and is not claimed. There is
+no i386 multilib (`g++ -m32` cannot find `Scrt1.o`, and `/usr/lib/i386-linux-gnu` does not exist),
+so a 32-bit build would fail at the C runtime long before reaching a 32-bit SDL3, GL or FFmpeg --
+none of which are present either. Installing a full 32-bit sysroot to satisfy one plan row is not
+proportionate; the row stays 🟨 with the blocker named rather than being marked done on a
+64-bit-only measurement.
 
 ### Closing Phases 0–3: what the leftover rows were actually hiding
 
