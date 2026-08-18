@@ -117,6 +117,29 @@ static int validate_base_effect(const CNA_Handle device)
                     CNA_RESULT_INVALID_ARGUMENT && refused == CNA_INVALID_HANDLE);
         REQUIRE(cna_effect_create_compiled(device, garbage, (uint64_t)sizeof(garbage), 0) ==
                     CNA_RESULT_INVALID_ARGUMENT);
+        /* CBIND-058: and the capability decides what a *renderer* answers, which is the half the
+           three refusals above deliberately do not depend on. A build without the capability must
+           refuse valid-looking bytecode for that reason and no other; a build with it must not
+           refuse for that reason. Neither branch needs a fixture, because both are about the
+           refusal, and the accepting path is proved by the shared compiled-effect conformance
+           suite in the trees that advertise the capability. */
+        if (compiled_effects == CNA_FALSE) {
+            CNA_Bool three_d = CNA_FALSE;
+            REQUIRE(cna_graphics_device_supports_capability(
+                        device, CNA_GRAPHICS_CAPABILITY_THREE_D, &three_d) == CNA_RESULT_SUCCESS);
+        }
+    }
+    {
+        /* The dialect a custom ShaderEffect's sources must use. Every renderer answers, and an
+           undeclared one answers UNKNOWN rather than guessing. */
+        CNA_ShaderDialect dialect = UINT32_MAX;
+        REQUIRE(cna_graphics_device_get_shader_dialect_ext(device, &dialect) ==
+                    CNA_RESULT_SUCCESS &&
+                dialect <= CNA_SHADER_DIALECT_MAXIMUM &&
+                cna_graphics_device_get_shader_dialect_ext(device, 0) ==
+                    CNA_RESULT_INVALID_ARGUMENT &&
+                cna_graphics_device_get_shader_dialect_ext(CNA_INVALID_HANDLE, &dialect) ==
+                    CNA_RESULT_INVALID_HANDLE);
     }
     REQUIRE(cna_effect_get_graphics_device(effect, &owner) == CNA_RESULT_SUCCESS &&
             owner == device);
@@ -433,6 +456,24 @@ static int validate_shader_effect(const CNA_Handle device)
                 shader, string_view("Empty"), 0, 0U) == CNA_RESULT_SUCCESS &&
             cna_shader_effect_set_uniform_vector2_array(
                 shader, string_view("V2A"), vectors, 2U) == CNA_RESULT_SUCCESS);
+
+    /* CBIND-058: the std140 block declaration a SPIR-V target needs and every other dialect
+       ignores, so the same call sits unconditionally beside the effect's construction. */
+    {
+        const CNA_StringView block_names[2] = {string_view("Tint"), string_view("Scale")};
+        const int32_t block_offsets[2] = {0, 16};
+        REQUIRE(cna_shader_effect_declare_uniform_block_ext(
+                    shader, 32, block_names, block_offsets, 2U) == CNA_RESULT_SUCCESS &&
+                /* Zero members clears a previous declaration and accepts null arrays. */
+                cna_shader_effect_declare_uniform_block_ext(shader, 0, 0, 0, 0U) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_shader_effect_declare_uniform_block_ext(
+                    shader, -1, block_names, block_offsets, 2U) == CNA_RESULT_INVALID_ARGUMENT &&
+                cna_shader_effect_declare_uniform_block_ext(
+                    shader, 32, 0, block_offsets, 2U) == CNA_RESULT_INVALID_ARGUMENT &&
+                cna_shader_effect_declare_uniform_block_ext(
+                    shader, 32, block_names, 0, 2U) == CNA_RESULT_INVALID_ARGUMENT);
+    }
 
     REQUIRE(cna_texture2d_create(device, &texture_info, &texture2d) == CNA_RESULT_SUCCESS &&
             cna_texturecube_create(device, &cube_info, &cube) == CNA_RESULT_SUCCESS);

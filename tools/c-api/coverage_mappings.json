@@ -1372,8 +1372,8 @@
         "field",
         "alias"
       ],
-      "mapping": "owned game-child `CNA_EffectHandle` values for the abstract Effect contract through a minimal concrete adapter plus native EffectMaterial, ShaderEffect and SpriteEffect instances; compiled bytecode judged as an argument before a renderer is consulted -- empty and structurally invalid bytes are refused as arguments, the MGFX container as an unsupported format, and acceptance of valid bytecode is the renderer's answer through `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`; `cna_effect_get_is_compiled_ext` maps `GetCompiledRuntimePtr` as the one fact a C caller can act on, because the runtime object itself is renderer-owned implementation C can neither construct nor call into, and `cna_effect_clone` carries that state to the clone because `Clone()` is an ordinary virtual now and clones the runtime and parameter values itself; clone/dispose/apply, borrowed device, current technique, stable parameter/technique views, exact type/source strings, renderer and stock-sprite identity queries, all ShaderEffect uniform/texture/matrix routes, and transitive child-view/device/texture lifetime retention. Renderer-specific pointers and GpuDrawParams remain behind the adapter and are consumed through Effect Apply and CNA draw operations",
-      "tests": "base/material/shader/sprite construction and same-type clones, the three renderer-independent compiled-bytecode refusals, the compiled-runtime presence answer and its preservation across a clone asserted as a relationship rather than a constant, dispose/apply, current-technique/pass validation, exact type/source strings, device ownership, all shader uniform and matrix operations, renderer-state consistency, Texture2D/cube dispatch and retention, Texture3D backend refusal, transitive pass lifetime after parent-handle destruction, and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
+      "mapping": "owned game-child `CNA_EffectHandle` values for the abstract Effect contract through a minimal concrete adapter plus native EffectMaterial, ShaderEffect and SpriteEffect instances; compiled bytecode judged as an argument before a renderer is consulted -- empty and structurally invalid bytes are refused as arguments, the MGFX container as an unsupported format, and acceptance of valid bytecode is the renderer's answer through `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`; `cna_effect_get_is_compiled_ext` maps `GetCompiledRuntimePtr` as the one fact a C caller can act on, because the runtime object itself is renderer-owned implementation C can neither construct nor call into, and `cna_effect_clone` carries that state to the clone because `Clone()` is an ordinary virtual now and clones the runtime and parameter values itself; clone/dispose/apply, borrowed device, current technique, stable parameter/technique views, exact type/source strings, renderer and stock-sprite identity queries, all ShaderEffect uniform/texture/matrix routes, and transitive child-view/device/texture lifetime retention. Renderer-specific pointers and GpuDrawParams remain behind the adapter and are consumed through Effect Apply and CNA draw operations. `DeclareUniformBlockEXT` becomes `cna_shader_effect_declare_uniform_block_ext`, taking `CNA_StringView` members like every other named string in this ABI and copying them into NUL-terminated storage for a canonical signature that wants `const char* const*` -- a view carries a length, not a terminator, and may point into the middle of a larger buffer",
+      "tests": "base/material/shader/sprite construction and same-type clones, the three renderer-independent compiled-bytecode refusals, the compiled-runtime presence answer and its preservation across a clone asserted as a relationship rather than a constant, dispose/apply, current-technique/pass validation, exact type/source strings, device ownership, all shader uniform and matrix operations, renderer-state consistency, Texture2D/cube dispatch and retention, Texture3D backend refusal, transitive pass lifetime after parent-handle destruction, and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan, and a two-member std140 block declaration with its clear-by-zero-count form and the refusals for a negative block size and for either array being null with a non-zero count",
       "status": "implemented",
       "task": "CBIND-035D5",
       "approved_symbols": [
@@ -1408,6 +1408,7 @@
         "CPP-6C88F3038C1E",
         "CPP-6ECCB4ADF8C5",
         "CPP-7A1C5D5A71C3",
+        "CPP-7DD635339D18",
         "CPP-7E3150BBBEB7",
         "CPP-83D9A84CABE4",
         "CPP-84A11EC71B8A",
@@ -3188,20 +3189,24 @@
       "id": "sprite-font-surface",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/SpriteFont\\.hpp$",
-      "mapping": "owned SpriteFont handle, copied `CNA_SpriteFontGlyph` table, versioned info, character copy, mutable properties and UTF-8 measurement operations",
-      "tests": "ABI layouts and `GraphicsSurfaceSmoke.c` construction, characters, both measurement semantics, fallback, texture retention, UTF-8, threading and lifetime cases",
+      "mapping": "owned SpriteFont handle, versioned info, character copy, mutable properties and UTF-8 measurement operations, plus `cna_sprite_font_copy_glyphs`, which returns the bounds, cropping and kerning tables as the same `CNA_SpriteFontGlyph` array `cna_sprite_font_create` accepts -- four parallel C++ vectors become one C array because C has no place to put four. The atlas is the Texture2D handle the caller supplied, or the second output of `cna_content_manager_load_sprite_font` for a loaded font",
+      "tests": "ABI layouts and `GraphicsSurfaceSmoke.c` construction, characters, glyph-table round trip field by field including the two-call size contract and the character-order guarantee, both measurement semantics, fallback, texture retention, UTF-8, threading and lifetime cases; `ContentSmoke.c` for a font the content manager loaded",
       "status": "implemented",
       "task": "CBIND-034",
       "approved_symbols": [
         "CPP-220B55042378",
         "CPP-389B9801BA04",
+        "CPP-52D616085059",
         "CPP-730C4428EB63",
         "CPP-8F66B189D54E",
         "CPP-8F6E0EDDF29D",
         "CPP-A5FFCC151335",
         "CPP-A84FB2CC0861",
+        "CPP-CCB6841A6BA9",
         "CPP-D38F786A0B42",
         "CPP-E1A50355EC5F",
+        "CPP-E807BE35B013",
+        "CPP-EF2130D78371",
         "CPP-F17A79F6FCE3",
         "CPP-FC2903C772E9"
       ]
@@ -6364,18 +6369,19 @@
     },
     {
       "id": "content-type-reader-manager-factory",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentTypeReaderManager::(?:ReaderFactory|AddTypeCreator)$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentTypeReaderManager::(?:ReaderFactory|AddTypeCreator|RemoveTypeCreatorEXT)$",
       "kinds": [
         "alias",
         "method"
       ],
-      "mapping": "No C mapping: registering a factory requires a callback that constructs a C++ reader object, which C cannot produce. The C API exposes the built-in registrations through `cna_content_register_known_unsupported_xnb_readers` and `cna_content_manager_register_builtin_loaders` instead of an untyped factory hook",
-      "tests": "Doxygen declaration inventory; the registrations these back are observed through `cna_content_type_reader_manager_get_is_registered` in `ContentReaderSmoke.c`",
-      "status": "not-applicable",
-      "task": "CBIND-036B2",
+      "mapping": "`cna_content_type_reader_manager_register` and `_unregister`. A C caller cannot write a C++ reader class, so what it registers is a versioned callback table -- a per-file instance factory, a read callback returning `CNA_Result`, and an optional per-instance destructor -- which the adapter wraps in a canonical reader. `RemoveTypeCreatorEXT` exists for the registration handle's release, because a registration with an owner cannot be withdrawn by clearing the whole registry. **Documented deviation:** registration refuses a name that is already taken instead of silently ignoring the repeat, so a caller cannot hold a live handle whose factory is never called",
+      "tests": "`ContentReaderSmoke.c` registration refusals, duplicate-name refusal, one fresh instance per creation, the reader answering its own declared target type, version and in-place capability, a read driven through a borrowed `CNA_ContentReaderHandle` that refuses to be destroyed from inside the callback, a refusing read failing the operation, per-instance destruction, and unregistration freeing the name for a second registration; `ContentSmoke.c` a real `.xnb` whose root reader is the registered one, loaded through `cna_content_manager_load_foreign_ext`; `ContentTypeReaderManagerTests.cpp` for the canonical single-key removal",
+      "status": "implemented",
+      "task": "CBIND-056",
       "approved_symbols": [
         "CPP-09DB27A7EE81",
-        "CPP-279E8490E90F"
+        "CPP-279E8490E90F",
+        "CPP-30D157629310"
       ]
     },
     {
@@ -14167,6 +14173,50 @@
       "approved_symbols": [
         "CPP-534556328EF8",
         "CPP-8C5D891CEF8E"
+      ]
+    },
+    {
+      "id": "content-foreign-content-object",
+      "qualified_name_regex": "^CNA::Content::ForeignContentObjectEXT(?:::value)?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "the `void*` a caller-registered content type reader returns, delivered by `cna_content_manager_load_foreign_ext`. The carrier exists because `ContentManager::Load<T>` needs a C++ `T` and a custom content type has none; C never sees the struct, only the pointer inside it, which this ABI neither dereferences nor frees",
+      "tests": "`ContentSmoke.c` loads a real `.xnb` through a caller-registered reader, asserts the exact pointer the reader produced comes back, that a second load answers it from the cache without re-reading, that a typed loader asked for the same asset is refused rather than handed it, and that a withdrawn registration makes the next load fail",
+      "status": "implemented",
+      "task": "CBIND-056",
+      "approved_symbols": [
+        "CPP-226B6B2C37AD",
+        "CPP-75B664627903"
+      ]
+    },
+    {
+      "id": "preparing-device-settings-mutable",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::PreparingDeviceSettingsEventArgs::getGraphicsDeviceInformationEXT$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_graphics_device_manager_subscribe_preparing_device_settings_ext`, whose handler receives a mutable `CNA_GraphicsDeviceInformation` and whose writes are what the device is then created from. This accessor is what makes that possible at all: the handler collection delivers a `const` argument, and the settings are held by pointer, so a mutable reference comes back with no cast. A handler that corrupts the structure is ignored rather than half-applied",
+      "tests": "`GraphicsDeviceManagerSmoke.c` subscribes both the observing and the mutating handler to the same event, asserts they run equally often, that a written back-buffer width is what the next preparation observes, and that a deliberately corrupted structure changes nothing",
+      "status": "implemented",
+      "task": "CBIND-057",
+      "approved_symbols": [
+        "CPP-981740C1013F"
+      ]
+    },
+    {
+      "id": "graphics-device-shader-dialect",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::GetShaderDialectEXT$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_graphics_device_get_shader_dialect_ext`, answering one `CNA_SHADER_DIALECT_*` identity. The canonical return is a renderer-internal enumeration, so the C identities are their own closed range with a published `CNA_SHADER_DIALECT_MAXIMUM` and an exhaustive no-`default` switch, which is what makes a dialect appended to the canonical enumeration a compile error here rather than a silent `UNKNOWN`",
+      "tests": "`EffectSmoke.c` asserts the active renderer answers inside the closed identity range, that a null output is refused, and that an invalid device handle is refused",
+      "status": "implemented",
+      "task": "CBIND-058",
+      "approved_symbols": [
+        "CPP-39044E370C4E"
       ]
     }
   ]

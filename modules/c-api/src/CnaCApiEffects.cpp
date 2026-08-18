@@ -4041,6 +4041,73 @@ CNA_Result cna_shader_effect_set_uniform_int32(
     });
 }
 
+CNA_Result cna_shader_effect_declare_uniform_block_ext(
+    const CNA_EffectHandle effectHandle,
+    const int32_t blockSizeBytes,
+    const CNA_StringView* const names,
+    const int32_t* const offsets,
+    const uint64_t count)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (blockSizeBytes < 0) {
+            return InvalidArgument("The uniform block size must not be negative.");
+        }
+        std::size_t nameBytes = 0U;
+        if (const CNA_Result result = CheckedElementByteCount(
+                names, count, sizeof(CNA_StringView), &nameBytes);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The uniform block member-name array is invalid.");
+        }
+        std::size_t offsetBytes = 0U;
+        if (const CNA_Result result = CheckedElementByteCount(
+                offsets, count, sizeof(int32_t), &offsetBytes);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The uniform block member-offset array is invalid.");
+        }
+        int nativeCount = 0;
+        if (const CNA_Result result = RequestedCountToInt(count, &nativeCount);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // The canonical signature takes `const char* const*`, so the views must become owned
+        // NUL-terminated strings first -- a CNA_StringView carries a length, not a terminator, and
+        // may point into the middle of a larger buffer.
+        std::vector<std::string> copiedNames;
+        std::vector<const char*> namePointers;
+        std::vector<int> nativeOffsets;
+        copiedNames.reserve(static_cast<std::size_t>(nativeCount));
+        namePointers.reserve(static_cast<std::size_t>(nativeCount));
+        nativeOffsets.reserve(static_cast<std::size_t>(nativeCount));
+        for (int index = 0; index < nativeCount; ++index) {
+            std::string copied;
+            if (const CNA_Result result = CopyUniformName(names[index], &copied);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            copiedNames.push_back(std::move(copied));
+            nativeOffsets.push_back(static_cast<int>(offsets[index]));
+        }
+        for (const std::string& name : copiedNames) {
+            namePointers.push_back(name.c_str());
+        }
+        shader->DeclareUniformBlockEXT(
+            static_cast<int>(blockSizeBytes),
+            nativeCount == 0 ? nullptr : namePointers.data(),
+            nativeCount == 0 ? nullptr : nativeOffsets.data(),
+            nativeCount);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_shader_effect_set_uniform_float_array(
     const CNA_EffectHandle effectHandle,
     const CNA_StringView name,

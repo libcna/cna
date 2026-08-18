@@ -15,9 +15,9 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 6,296 | A C route exists and is tested. |
+| Fully mapped | 6,308 | A C route exists and is tested. |
 | **Partially mapped** | 12 | A route exists but covers a stated subset. Read the next section before relying on one. |
-| **No C form** | 386 | Nothing callable was omitted; see the reasons below. |
+| **No C form** | 384 | Nothing callable was omitted; see the reasons below. |
 
 ## Partially mapped: a route exists, and it does less than the C++ does
 
@@ -72,7 +72,7 @@ An iterator has no fixed size, no stable representation and no C spelling. Every
 
 A protected member is mappable only when this ABI supplies a derived class that would override it. Where it does -- a game component's hooks -- the member is mapped; where the derived class is the caller's C++ code, there is nothing for C to override.
 
-### Templates over an arbitrary C++ type — 26 symbols
+### Templates over an arbitrary C++ type — 24 symbols
 
 C cannot name a C++ type, so a generic operation cannot be called from C at all. Where the canonical template has a small closed set of useful instantiations, the ABI names them one by one instead; the generic form itself stays unmapped.
 

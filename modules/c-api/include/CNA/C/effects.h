@@ -1180,12 +1180,56 @@ CNA_C_API CNA_Result cna_effect_create_empty(
     CNA_EffectHandle* out_effect);
 
 /**
- * @brief Attempts to create an Effect from compiled XNA `.fx` bytecode.
+ * @brief Creates an Effect from compiled XNA/FNA Effect Framework bytecode.
+ *
  * @param graphics_device Borrowed graphics-device handle from an active game callback.
- * @param effect_code Bytecode bytes copied during the call.
- * @param effect_code_count Number of bytes at @p effect_code.
- * @param out_effect Receives the owned effect handle on success.
- * @return `CNA_RESULT_NOT_SUPPORTED` while native CNA bytecode loading is unavailable.
+ * @param effect_code Bytecode bytes copied during the call; the caller keeps its buffer.
+ * @param effect_code_count Number of bytes at @p effect_code; must be positive.
+ * @param out_effect Receives the owned effect handle on success, destroyed with
+ *        `cna_effect_destroy`. Every failure leaves it `CNA_INVALID_HANDLE`.
+ * @return `CNA_RESULT_SUCCESS`, or one of the failures below.
+ *
+ * ### What this accepts
+ *
+ * The Direct3D 9 Effect Framework binary an XNA or FNA game ships as content -- a `.fxb`,
+ * including the extra wrapper the XNA 4 effect compiler prepends -- and the identical `Effect`
+ * payload carried inside an XNB asset. The reflected object graph is then reachable through
+ * `cna_effect_get_parameters`, `cna_effect_get_techniques` and their collections, and a pass
+ * applies and draws like any other effect.
+ *
+ * Three things are deliberately **not** accepted, each refused by name rather than guessed at:
+ * MonoGame's `MGFX`/`.mgfxo` container, which is a different format; HLSL `.fx` **source**, since
+ * this runtime embeds no HLSL compiler and the XNA/FNA toolchain must compile it first; and
+ * GLSL/SPIR-V/Metal source pairs, which are `cna_shader_effect_create`'s subject, a separate API
+ * behind a separate capability.
+ *
+ * ### Which builds accept it
+ *
+ * Support is a renderer property, not a property of this ABI, and
+ * `cna_graphics_device_supports_capability` with `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`
+ * answers it for the running build. It is true for the `FNA3D` renderer always, and for the
+ * `SDL_GPU`, `VULKAN` and EasyGL-family (`OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`,
+ * `WEBGL2`) renderers when their build option is on -- the effect runtime is a fetched dependency
+ * those families do not otherwise need, so the capability never claims more than the binary
+ * actually contains. Every other renderer identity reports false and refuses the bytecode rather
+ * than quietly drawing with a stock shader, because a silent fallback makes a porting bug look
+ * like an art bug. `docs/fx-compiled-effects.md` is the full matrix, including which limitations
+ * are renderer-wide and which are specific to compiled effects.
+ *
+ * ### Failures
+ *
+ * - `CNA_RESULT_INVALID_ARGUMENT` -- a null output, an empty buffer, a buffer whose pointer and
+ *   count disagree, or bytes without a structurally valid Effect Framework header. An argument is
+ *   judged before any renderer is consulted, so these hold in every build.
+ * - `CNA_RESULT_NOT_SUPPORTED` -- a recognized container this constructor does not accept (the
+ *   `MGFX` case above), or a renderer whose `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS` is false.
+ *   The message names which of the two it was.
+ * - `CNA_RESULT_INVALID_STATE`, `CNA_RESULT_OVERFLOW`, `CNA_RESULT_OUT_OF_MEMORY` -- a
+ *   structurally valid binary whose reflected graph is inconsistent, exceeds a documented bound
+ *   (the payload is capped at 64 MiB), or cannot be allocated.
+ *
+ * Treat a binary from outside the application as untrusted input: it is bounded and
+ * arithmetic-checked and has been fuzzed hard, which is a measured bound rather than a proof.
  */
 CNA_C_API CNA_Result cna_effect_create_compiled(
     CNA_Handle graphics_device,
@@ -1399,6 +1443,32 @@ CNA_C_API CNA_Result cna_shader_effect_set_uniform_int32(
     CNA_EffectHandle effect,
     CNA_StringView name,
     int32_t value);
+
+/**
+ * @brief Declares the std140 uniform block this effect's parameters live in.
+ *
+ * @param effect Owned ShaderEffect handle.
+ * @param block_size_bytes Size of the whole block in bytes, std140-padded; must not be negative.
+ * @param names Array of @p count UTF-8 member names, copied by the call. May be null only when
+ *        @p count is zero.
+ * @param offsets Array of @p count byte offsets from the start of the block, one per name. May be
+ *        null only when @p count is zero.
+ * @param count Number of members; zero clears any previous declaration.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a malformed array pair, a name
+ *         that is not valid UTF-8, or a count above the canonical range, or a documented
+ *         handle/thread failure.
+ *
+ * Required on a renderer whose shading dialect has no loose (non-block) uniforms -- every SPIR-V
+ * target -- and harmlessly ignored everywhere else, so the same call can sit unconditionally
+ * beside the effect's construction. Ask `cna_graphics_device_get_shader_dialect_ext` which dialect
+ * the active renderer wants.
+ */
+CNA_C_API CNA_Result cna_shader_effect_declare_uniform_block_ext(
+    CNA_EffectHandle effect,
+    int32_t block_size_bytes,
+    const CNA_StringView* names,
+    const int32_t* offsets,
+    uint64_t count);
 
 /** @brief Sets a named array of scalar float shader uniforms. */
 CNA_C_API CNA_Result cna_shader_effect_set_uniform_float_array(

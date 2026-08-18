@@ -2,7 +2,10 @@
 
 ## ABI identity
 
-The initial ABI is `0.1.0`. Its packed representation is a `uint32_t`:
+The ABI is `0.2.0`; `0.1.0` was the initial one. The minor moved when the routes recorded in
+`plan_binding.md` CBIND-054 through CBIND-058 were added -- every one of them additive, so a
+consumer built against `0.1.0` still links and behaves identically. Its packed representation is
+a `uint32_t`:
 
 ```text
 bits 31..16  major
