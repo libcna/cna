@@ -15,7 +15,7 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 6,286 | A C route exists and is tested. |
+| Fully mapped | 6,296 | A C route exists and is tested. |
 | **Partially mapped** | 12 | A route exists but covers a stated subset. Read the next section before relying on one. |
 | **No C form** | 386 | Nothing callable was omitted; see the reasons below. |
 
@@ -120,11 +120,12 @@ promise rather than of any declaration.
 | Subject | What it means | Status |
 |---|---|---|
 | **FFmpeg stays a system dependency** | The package installs the SDL3, SDL3_image and SDL3_mixer libraries this project builds, beside `libcna_c_api.so`, whose RPATH is `$ORIGIN` -- so an installed CNA links and runs with no environment variable. FFmpeg is different: libavcodec, libavformat, libavutil and libswresample come from the distribution. Copying a distribution's binaries into this package would take on their redistribution terms, freeze their soname against future security updates and drag in the transitive libraries they were linked against, so they remain a system dependency a deployment installs the ordinary way. | by design (CONSUMING.md) |
-| **The static archive keeps 83 C++ statics visible** | A static CNA exists and exports exactly the same 2,720 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly. | by design (CONSUMING.md) |
+| **The static archive keeps 83 C++ statics visible** | A static CNA exists and exports exactly the same 2,838 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly. | by design (CONSUMING.md) |
 | **One active CNA runtime per process** | A second `cna_game_create` while a game is alive returns `CNA_RESULT_INVALID_STATE`. This makes the interaction with CNA's process-level graphics and input state explicit; simultaneous runtimes are an ABI-semantic change requiring a reviewed design. | by design (HANDLES.md) |
 | **Handles are thread-affine and never leave their process** | A handle used from a thread other than its creator's answers `CNA_RESULT_THREAD`. Handles are not pointers, not serializable and not stable across processes. | by design (HANDLES.md) |
 | **The ABI is 0.x and experimental** | An incompatible change requires only a minor-version increment, release notes and a regenerated baseline. The additive-only guarantee begins at 1.0, which is a separate, later decision. | by design (ABI_VERSIONING.md) |
-| **Four of the 46 renderers are built and run here** | The other 42 share the same C surface and the same capability queries. What a given backend supports is answered by `cna_graphics_device_supports_capability`, never by its renderer identity. | by design (RENDERERS_AND_CAPABILITIES.md) |
+| **Four of the 49 renderers are built and run here** | The other 45 share the same C surface and the same capability queries. What a given backend supports is answered by `cna_graphics_device_supports_capability`, never by its renderer identity. | by design (RENDERERS_AND_CAPABILITIES.md) |
+| **No verification tree can create a compiled Effect Framework effect** | `cna_effect_create_compiled`'s three refusals are renderer-independent and are tested, but none of the four trees this campaign builds -- HEADLESS, SDL_RENDERER and SOFTWARE twice -- advertises `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`, so the accepting path is never taken. That leaves `cna_effect_get_is_compiled_ext` proved only on its `CNA_FALSE` branch, and clone-preserves-compiled-state asserted as a relationship between source and clone rather than on a genuinely compiled effect. A tree on a renderer that implements compiled effects would close both. | not tested here (EFFECTS.md) |
 
 ## Not covered by any test here
 
@@ -133,7 +134,7 @@ Taken from `tools/c-api/compatibility_matrix.json`, so the two cannot disagree:
 - **Running a Windows binary.** The cross-compiler proves the headers parse for a Windows target; nothing here links or executes one, so no Windows behaviour is claimed.
 - **macOS, iOS, Android and the web targets.** No toolchain for any of them is present, so no cell exists for them at all rather than an untested claim.
 - **C89.** The headers use `//` comments and mixed declarations, so C99 is the floor by design rather than by accident.
-- **Renderers other than the four configured.** CNA has 46 renderer identities; four are built and run here. The other 42 share the same C surface, and the capability queries are what a caller uses to find out what any of them supports.
+- **Renderers other than the four configured.** CNA has 49 renderer identities; four are built and run here. The other 45 share the same C surface, and the capability queries are what a caller uses to find out what any of them supports.
 
 Regenerate with:
 

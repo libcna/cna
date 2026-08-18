@@ -671,6 +671,58 @@ TEST(Fna3dCompiledEffectTest, CrashCorpusIsRejectedWithoutCrashing)
     EXPECT_GT(replayed, 0) << "the crash corpus directory contains no .fxb inputs";
 }
 
+// plan_fx.md FX-084/FX-086: the shared draw matrix. Each of these renders the compiled effect's
+// own Tint parameter into a render target and reads it back, so a draw that silently used a stock
+// shader -- or bound an attribute from the wrong stream -- fails instead of passing quietly.
+
+TEST(Fna3dCompiledEffectDrawTest, SharedDrawMatrixContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectDrawContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedMultiStreamDrawContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectMultiStreamDrawContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedInstancingDrawContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectInstancingDrawContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedSpriteBatchContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedOrientationContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectOrientationContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedEffectSwitchingContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSwitchingContract(device);
+}
+
 TEST(Fna3dCompiledEffectTest, SharedBackendConformanceContract)
 {
     GraphicsDevice device;
@@ -1585,4 +1637,77 @@ TEST(Fna3dCompiledEffectTest, SpriteBatchExecutesCompiledEffectAndOverridesTextu
     EXPECT_NEAR(pixel.getRProperty(), 20, 2);
     EXPECT_NEAR(pixel.getGProperty(), 210, 2);
     EXPECT_NEAR(pixel.getBProperty(), 60, 2);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedSamplerPixelContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::CompiledEffectSamplerContractOptions options;
+    CNA::TestSupport::RunCompiledEffectSamplerPixelContract(device, options);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedPassSelectionContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectPassSelectionContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedStockDrawIsolationContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectStockDrawIsolationContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedRenderTargetSourceContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectRenderTargetSourceContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedSpriteBatchMultiPassContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchMultiPassContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedSpriteBatchTextureSlotContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchTextureSlotContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedManyDrawsContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectManyDrawsContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedTruncationContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectTruncationContract(device);
 }

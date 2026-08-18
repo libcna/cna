@@ -66,6 +66,11 @@ namespace Microsoft::Xna::Framework::Graphics
 namespace CNA::Internal::Renderers
 {
     class IGraphicsRenderer;
+
+    // Mirrors the definition in CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp. Declared here
+    // rather than including that header, which this one deliberately does not pull into every
+    // consumer of the public GraphicsDevice API; the underlying type is fixed so the two agree.
+    enum class ShaderDialectEXT : int;
     struct GpuDrawParams;
 }
 
@@ -991,6 +996,19 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT [[nodiscard]] CNA::Internal::Renderers::IGraphicsRenderer& GetRenderer() const;
 
         /**
+         * @brief The shading dialect a custom `ShaderEffect`'s sources must be written in. CNAEXT.
+         *
+         * A `ShaderEffect` is renderer-specific source text, and until now an application had no
+         * supported way to ask which dialect to supply -- it had to infer one from the build's
+         * renderer identity, which is wrong in a multi-renderer build and meaningless for a
+         * renderer that chooses its native API per process (IGL, LLGL, Diligent).
+         *
+         * @return The active renderer's dialect, or `ShaderDialectEXT::Unknown` where the renderer
+         *         has not declared one -- which means "do not guess", not "no shaders".
+         */
+        CNAEXT [[nodiscard]] CNA::Internal::Renderers::ShaderDialectEXT GetShaderDialectEXT() const;
+
+        /**
          * @brief Returns which graphics renderer THIS DEVICE is using.
          *
          * plan_runtimerenderer.md RTR-P7-3. This used to be `constexpr`, returning
@@ -1124,6 +1142,12 @@ namespace Microsoft::Xna::Framework::Graphics
         /// down and rebuilt for a fallback candidate needing a different window kind, so the device
         /// still has to know which windows it is allowed to replace.
         bool ownsWindow_ = false;
+        /// Whether this device currently holds ONE reference on the platform's video subsystem.
+        ///
+        /// The count it stands for is 0 or 1 and nothing else: every acquisition and release goes
+        /// through setVideoSubsystemAcquired(), which is what makes that a structural property
+        /// rather than a rule the call sites have to remember. See that method's own comment for
+        /// why a plain bool beside two independent AcquireSubsystem() calls could not be right.
         bool videoSubsystemAcquired_;
         // Declared before renderer_: reverse destruction keeps presentation alive through the
         // raster renderer's final destructor calls.
@@ -1275,6 +1299,19 @@ namespace Microsoft::Xna::Framework::Graphics
 
         void createOrAttachWindow();
         void createRenderer();
+
+        /**
+         * @brief Brings this device's platform video-subsystem reference to @p acquired.
+         *
+         * The single owner of that reference. Idempotent in both directions, so this device holds
+         * either zero or one reference no matter how many times, or from how many places, the
+         * question is asked -- which is the whole point: `AcquireSubsystem()` is reference
+         * counted, so a second acquisition that is never matched by a second release leaves the
+         * video subsystem up for the rest of the process.
+         *
+         * @param acquired True to hold a reference, false to give it up.
+         */
+        void setVideoSubsystemAcquired(bool acquired);
 
         /**
          * @brief Resolves which renderer this device uses, honouring any configured fallback chain.

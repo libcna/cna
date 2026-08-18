@@ -88,7 +88,9 @@ Before the smaller caveats below — these two are the ones most likely to block
   Direct3D 9 Effect Framework bytecode (`.fxb` or an XNB Effect payload), not HLSL `.fx` source and
   not MonoGame MGFX. Public parameters, techniques/passes, cloning, pass state, general 3D draws,
   and `SpriteBatch` use the native FNA3D/MojoShader runtime. Other renderers currently report
-  `CompiledEffects == false`, so use FNA3D or keep a renderer-specific CNAEXT `ShaderEffect` path.
+  `CompiledEffects == false`, so use FNA3D, SDL_GPU or the EasyGL/OpenGL family (the latter two
+  need `CNA_SDL_GPU_COMPILED_EFFECTS`/`CNA_EASYGL_COMPILED_EFFECTS` at configure time), or keep a
+  renderer-specific CNAEXT `ShaderEffect` path.
 
 ## What has caveats — read this before porting anything using these
 

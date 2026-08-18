@@ -28,6 +28,73 @@ namespace CNA::Internal::Renderers::SdlGpu
 #endif
 
     /**
+     * @brief The complete identity of one native `SDL_GPUSampler`, as a comparable value. CNAEXT.
+     *
+     * plan_fx.md FX-091. This replaces a hand-packed `std::uint64_t` whose 32-bit LOD-bias field
+     * was shifted to bit 40 and therefore lost its top eight bits -- the float's sign and seven of
+     * its eight exponent bits -- so `0.0`, `+/-0.5`, `+/-2.0` and `+/-8.0` all produced the same
+     * key and were served the same native sampler. Every field a sampler is built from is a named
+     * member here, compared for equality directly: a field that is added to the descriptor and not
+     * to this struct is a compile-time-visible omission rather than a silent aliasing bug.
+     *
+     * `mipLodBias` is compared by its exact bit pattern, not by `==`: two biases that differ only
+     * in sign of zero must not share a sampler, and a NaN bias must still find its own entry
+     * rather than never matching itself.
+     */
+    struct SamplerCacheKeyEXT
+    {
+        /** @brief Raw XNA `TextureFilter` ordinal (0..8). */
+        std::int32_t textureFilter = 0;
+        /** @brief Raw `TextureAddressMode` ordinal for U. */
+        std::int32_t addressU = 0;
+        /** @brief Raw `TextureAddressMode` ordinal for V. */
+        std::int32_t addressV = 0;
+        /** @brief Raw `TextureAddressMode` ordinal for W. */
+        std::int32_t addressW = 0;
+        /** @brief `SamplerState.MaxAnisotropy` after the 1..16 clamp the descriptor also applies. */
+        std::int32_t maxAnisotropy = 1;
+        /** @brief `SamplerState.MaxMipLevel`, unclamped, exactly as the caller asked for it. */
+        std::int32_t maxMipLevel = 0;
+        /** @brief `SamplerState.MipMapLevelOfDetailBias`, kept as its IEEE-754 bit pattern. */
+        std::uint32_t mipLodBiasBits = 0;
+
+        /**
+         * @brief Builds a key from one complete sampler request.
+         *
+         * @param filter Raw `TextureFilter` ordinal.
+         * @param u Raw `TextureAddressMode` ordinal for U.
+         * @param v Raw `TextureAddressMode` ordinal for V.
+         * @param w Raw `TextureAddressMode` ordinal for W.
+         * @param anisotropy `MaxAnisotropy`, already clamped by the caller.
+         * @param mipLevel `MaxMipLevel`.
+         * @param lodBias `MipMapLevelOfDetailBias`.
+         * @return The key describing that request.
+         */
+        [[nodiscard]] static SamplerCacheKeyEXT Make(int filter, int u, int v, int w,
+                                                     int anisotropy, int mipLevel, float lodBias);
+
+        /**
+         * @brief Value equality across every member.
+         *
+         * @param other The key to compare against.
+         * @return True when the two describe the same native sampler.
+         */
+        [[nodiscard]] bool operator==(const SamplerCacheKeyEXT& other) const = default;
+    };
+
+    /** @brief Hash for SamplerCacheKeyEXT, mixing every member so no field is ignored. CNAEXT. */
+    struct SamplerCacheKeyHashEXT
+    {
+        /**
+         * @brief Hashes a sampler key.
+         *
+         * @param key The key to hash.
+         * @return Its hash value.
+         */
+        [[nodiscard]] std::size_t operator()(const SamplerCacheKeyEXT& key) const noexcept;
+    };
+
+    /**
      * @brief Scoped, renderer-instance-local failure points used by the SDL_GPU lifetime
      * regression. CNAEXT.
      *
@@ -855,6 +922,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         void SetCustomEffect(Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override { textureFilter_ = textureFilter; }
         void SetSamplerAddressMode(int addressU, int addressV) override { addressU_ = addressU; addressV_ = addressV; }
+        /**
+         * @brief Records whether this batch is in `SpriteSortMode::Immediate`.
+         *
+         * plan_fx.md FX-102: the two modes need different compiled-Effect pass granularity, and
+         * XNA's own `SpriteBatch` is where the difference comes from. See @ref End.
+         *
+         * @param immediate True when `SpriteSortMode::Immediate` is active for this batch.
+         */
+        void SetImmediateMode(bool immediate) override { immediateMode_ = immediate; }
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,
                   const Rectangle& destinationRectangle,
@@ -881,6 +957,39 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// not read again at Present() time, so later SetUniform* calls on the same live effect
         /// object never retroactively change an already-queued sprite's rendered result.
         Effect* customEffect_ = nullptr;
+        bool immediateMode_ = false;
+
+        /**
+         * @brief One deferred sprite, held until the batch flushes. CNAEXT.
+         *
+         * plan_fx.md FX-102. Only a compiled Effect in a non-Immediate batch needs this: XNA runs
+         * the whole batch once per pass, so the sprites cannot be queued as they arrive.
+         */
+        struct PendingSpriteEXT
+        {
+            /** @brief The public texture renderer the sprite draws, and the run it belongs to. */
+            const ITextureRenderer* texture = nullptr;
+            /** @brief The texture resolved to its bindable native form, resolved at Draw() time. */
+            SdlGpuSampledTextureEXT nativeTexture;
+            /** @brief Destination rectangle in the batch's coordinate space. */
+            Rectangle destination{};
+            /** @brief Source rectangle in texels. */
+            Rectangle source{};
+            /** @brief Per-sprite tint. */
+            Color color = Color::White;
+            /** @brief Rotation in radians. */
+            float rotation = 0.0f;
+            /** @brief Rotation origin. */
+            Vector2 origin = Vector2::Zero;
+            /** @brief Flip flags. */
+            SpriteEffects effects = SpriteEffects::None;
+            /** @brief Layer depth. */
+            float layerDepth = 0.0f;
+        };
+        std::vector<PendingSpriteEXT> pendingSprites_;
+
+        /// Replays @ref pendingSprites_ the way XNA's SpriteBatch does -- see End().
+        void FlushPendingCompiledSpritesEXT();
     };
 
     /**
@@ -1127,6 +1236,16 @@ namespace CNA::Internal::Renderers::SdlGpu
             int addressU = 0;
             int addressV = 0;
             int maxAnisotropy = 4;
+            /// plan_fx.md FX-083: XNA's SamplerState.MaxMipLevel and MipMapLevelOfDetailBias,
+            /// recorded by ApplySamplerMipState. Consumed by the compiled-effect draw route, which
+            /// is where an Effect's own `sampler_state` block lands.
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
+            /// plan_fx.md FX-091: XNA's SamplerState.AddressW, recorded by ApplySamplerAddressW.
+            /// This renderer samples 2D textures only, so W never reaches the hardware -- it is
+            /// recorded and carried into the sampler key anyway, so the day a volume texture is
+            /// sampled here it cannot be handed a sampler built for a different W mode.
+            int addressW = 1;
         };
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
@@ -1138,6 +1257,15 @@ namespace CNA::Internal::Renderers::SdlGpu
             int addressU = 0;
             int addressV = 0;
             int maxAnisotropy = 4;
+            /// plan_fx.md FX-083: the effect's own MaxMipLevel/MipMapLevelOfDetailBias, which
+            /// SDL_GPU expresses exactly (min_lod and mip_lod_bias). Before this they were
+            /// published on GraphicsDevice.SamplerStates and then dropped on the way to the GPU.
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
+            /// plan_fx.md FX-091: the effect's own AddressW. Carried into the sampler cache key so
+            /// two passes differing only in W cannot share one native sampler, even though this
+            /// renderer's 2D-only compiled sampling never observes the axis itself.
+            int addressW = 1;
         };
 
         /**
@@ -1608,11 +1736,18 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         /**
          * @brief True: this renderer executes compiled XNA Effect Framework bytecode
-         * (plan_fx.md FX-071). Ordinary 3D draws and SpriteBatch both have a working compiled-
-         * effect route, verified by a real (not simulated) golden-pixel test and the FX-060 shared
-         * conformance suite. Still refused explicitly rather than silently mishandled: a compiled
-         * effect's vertex shader sampling a texture, a 3D/cube (not 2D) sampler binding, and more
-         * than one vertex stream.
+         * (plan_fx.md FX-071, FX-080/FX-083).
+         *
+         * Ordinary and indexed 3D draws and SpriteBatch all have a working compiled-effect route,
+         * verified by a real (not simulated) golden-pixel test and by the FX-060 shared
+         * conformance suite's own read-back pixel checks. The pass's declared `sampler_state`
+         * block reaches the GPU, LOD clamp and bias included.
+         *
+         * Still refused explicitly rather than silently mishandled: a compiled effect's vertex
+         * shader sampling a texture, and a 3D/cube (not 2D) sampler binding. Multi-stream and
+         * instanced draws are refused one level up -- this renderer reports neither
+         * `MultiStreamVertexInput` nor implements `DrawInstancedPrimitivesEx`, so `GraphicsDevice`
+         * rejects them before submission, for compiled and stock effects alike.
          * @return true.
          */
         [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
@@ -1773,6 +1908,34 @@ namespace CNA::Internal::Renderers::SdlGpu
          * enables it), and it participates in the sampler cache key.
          */
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
+        /**
+         * @brief Records XNA's `SamplerState.MaxMipLevel`/`MipMapLevelOfDetailBias` for a slot.
+         *
+         * plan_fx.md FX-083. SDL_GPU expresses both exactly -- `min_lod` and `mip_lod_bias` on
+         * `SDL_GPUSamplerCreateInfo`, the same mapping FNA3D's own SDL_GPU driver makes -- and
+         * both now participate in the sampler cache key so two slots asking for different LOD
+         * clamps do not share one sampler object. The compiled-effect draw route consumes them.
+         * The stock 3D draw families still capture only filter/addressing/anisotropy into their
+         * own command structs; that pre-existing gap is recorded in docs/sampler-state-support.md.
+         *
+         * @param slot Sampler slot.
+         * @param maxMipLevel Most detailed mip level the sampler may use.
+         * @param lodBias Level-of-detail bias.
+         */
+        void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
+        /**
+         * @brief Records XNA's `SamplerState.AddressW` for a slot.
+         *
+         * plan_fx.md FX-091. This renderer's compiled-effect route resolves 2D textures only, so
+         * the third addressing axis is never observable in a sampled result today -- but it IS part
+         * of a sampler's identity, and recording it keeps the cache key complete. Overriding the
+         * hook also means the device's own W selection is what an unassigned slot reports, instead
+         * of a silently invented default.
+         *
+         * @param slot Sampler slot.
+         * @param addressW Raw `TextureAddressMode` ordinal for W.
+         */
+        void ApplySamplerAddressW(int slot, int addressW) override;
 
         std::unique_ptr<IVertexBufferRenderer> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int index_capacity) override;
@@ -1981,11 +2144,21 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @param maxAnisotropy Public `SamplerState.MaxAnisotropy`, clamped to 1..16; applied only
          *        for `TextureFilter::Anisotropic`, but always part of the cache key.
          * @param family Public draw family, for `CNA_SDLGPU_SAMPLER_TRACE` only.
+         * @param maxMipLevel Public `SamplerState.MaxMipLevel`; becomes `min_lod` (plan_fx.md
+         *        FX-083), the same mapping FNA3D's own SDL_GPU driver makes.
+         * @param lodBias Public `SamplerState.MipMapLevelOfDetailBias`; becomes `mip_lod_bias`.
+         * @param addressW Raw `TextureAddressMode` ordinal for W. SDL_GPU's compiled-effect route
+         *        samples 2D textures only, so this axis never reaches the hardware today -- it is
+         *        part of the key regardless, so adopting it later cannot be served a sampler built
+         *        for a different W mode.
          * @return The cached or newly created native sampler; never null.
          */
         [[nodiscard]] SDL_GPUSampler* GetOrCreateSampler(int textureFilter, int addressU,
                                                          int addressV, int maxAnisotropy,
-                                                         const char* family);
+                                                         const char* family,
+                                                         int maxMipLevel = 0,
+                                                         float lodBias = 0.0f,
+                                                         int addressW = 1);
         // Uploads all queued sprite vertex data (copy pass) -- must run BEFORE
         // BeginGPURenderPass; SDL_gpu forbids a copy pass nested inside a render pass.
         void UploadSpriteVertexData(SDL_GPUCommandBuffer* cmd);
@@ -2410,9 +2583,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         // format vs. render-target R8G8B8A8_UNORM), unlike Phases 1-7 where sprites only ever
         // targeted the swapchain.
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> spritePipelines_;
-        /// REMED-GFX-170: keyed on the complete sampler description (filter | addressU | addressV |
-        /// maxAnisotropy), so two states that differ in ANY component get their own native sampler.
-        std::unordered_map<std::uint32_t, SDL_GPUSampler*> samplerCache_;
+        /// REMED-GFX-170 / plan_fx.md FX-091: keyed on the complete sampler description as a
+        /// struct with member-wise equality, so two states that differ in ANY component get their
+        /// own native sampler and no field can be silently truncated out of the key.
+        std::unordered_map<SamplerCacheKeyEXT, SDL_GPUSampler*, SamplerCacheKeyHashEXT> samplerCache_;
         SDL_GPUBuffer* spriteVertexBuffer_ = nullptr;
         Uint32 spriteVertexCapacityBytes_ = 0;
         std::vector<SpriteCommand> spriteCommands_;

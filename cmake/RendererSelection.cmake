@@ -373,31 +373,11 @@ endif()
 # CNA_GRAPHICS_RENDERERS is the opt-in second mode -- a list of identities to compile in, from which
 # one is chosen at runtime (CNA::GraphicsRendererSelection). When it is not set it is simply the
 # single default, so every code path below runs identically for existing builds.
-set(CNA_GRAPHICS_RENDERERS "" CACHE STRING
-    "Semicolon-separated list of graphics renderers to compile in (opt-in multi-renderer mode). \
-Empty means single-renderer mode using CNA_GRAPHICS_RENDERER.")
-
-if(CNA_GRAPHICS_RENDERERS STREQUAL "")
-    set(_cna_renderer_identities "${CNA_GRAPHICS_RENDERER}")
-else()
-    set(_cna_renderer_identities ${CNA_GRAPHICS_RENDERERS})
-    # CNA_GRAPHICS_RENDERER names the default within the list, so it must be a member of it.
-    if(NOT CNA_GRAPHICS_RENDERER IN_LIST _cna_renderer_identities)
-        list(GET _cna_renderer_identities 0 CNA_GRAPHICS_RENDERER)
-        message(STATUS
-            "CNA: CNA_GRAPHICS_RENDERER was not a member of CNA_GRAPHICS_RENDERERS; "
-            "defaulting to the list's first entry (${CNA_GRAPHICS_RENDERER}).")
-    endif()
-    # The default must be attempted first, so the generated registry lists it first.
-    list(REMOVE_ITEM _cna_renderer_identities "${CNA_GRAPHICS_RENDERER}")
-    list(INSERT _cna_renderer_identities 0 "${CNA_GRAPHICS_RENDERER}")
-endif()
-
-list(REMOVE_DUPLICATES _cna_renderer_identities)
-set(_cna_default_renderer_identity "${CNA_GRAPHICS_RENDERER}")
-# Visible to modules/renderers/CMakeLists.txt, which has to re-establish the per-family identity
-# before entering each family's own subdirectory.
-set(CNA_RENDERER_IDENTITIES "${_cna_renderer_identities}")
+#
+# Resolved by its own file, which `cmake -P` can run standalone, so the membership contract has a
+# real test rather than only a comment (cmake/Tests/RendererDefaultCase.cmake). Included, not
+# called as a function, because it publishes CNA_RENDERER_IDENTITIES into this scope.
+include(cmake/RendererDefaultSelection.cmake)
 
 # Design decision 11: reject an unbuildable combination here, with a reason, rather than letting it
 # surface as a duplicate-symbol link error.
@@ -406,7 +386,10 @@ cna_validate_renderer_combination(${_cna_renderer_identities})
 
 list(LENGTH _cna_renderer_identities _cna_renderer_identity_count)
 if(_cna_renderer_identity_count GREATER 1)
-    message(STATUS "CNA: multi-renderer build -- ${_cna_renderer_identities} (default: ${CNA_GRAPHICS_RENDERER})")
+    # The set and its default were already announced by RendererDefaultSelection.cmake; this line
+    # states only what is different about this mode.
+    message(STATUS "CNA: multi-renderer build -- the renderer is chosen at runtime "
+                   "(CNA::GraphicsRendererSelection)")
     # Consumed by GraphicsRendererType.hpp and the identity-reporting accessors (phase P7).
     add_compile_definitions(CNA_MULTI_RENDERER)
 endif()
@@ -414,6 +397,17 @@ endif()
 # The per-identity configuration below is a MACRO, not a function, on purpose: macros do not create
 # a scope, so every set()/add_compile_definitions()/add_subdirectory() inside behaves exactly as it
 # did when this was straight-line code. For a single-identity list the execution is identical.
+#
+# plan_runtimerenderer.md RTR-P6-4: an identity's own CNA_RENDERER_<X> macro is announced by
+# appending it to _cna_identity_defines -- NEVER by calling add_compile_definitions() here. The
+# loop below applies the list to that family's own target and, for the DEFAULT identity only, to
+# the whole project. add_compile_definitions() is directory-scoped and this file is included from
+# the top-level CMakeLists.txt, so calling it from an arm defines that identity's macro
+# project-wide for every identity in the list, not just the default -- which breaks the invariant
+# every compile-time renderer question in the tree rests on ("the CNA_RENDERER_<X> that is defined
+# names the DEFAULT"), including getCurrentGraphicsRendererType()'s #elif chain, which would then
+# answer with whichever identity happens to sit earliest in it. TINYGL and PIXIJS were both added
+# that way and are fixed; scripts/check_runtime_renderer_discipline.py now fails on a new one.
 macro(cna_configure_renderer_identity)
     set(_cna_identity_defines)
 # PLAT-140: a terminal consumes finished CPU frames through IPlatformSurfacePresenter; it has no
@@ -736,6 +730,20 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "VULKAN")
     list(APPEND _cna_identity_defines CNA_RENDERER_VULKAN)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_VULKAN")
     find_package(Vulkan REQUIRED)
+    # plan_fx.md FX-065: compiled XNA Effect bytecode through MojoShader's portable SPIR-V profile.
+    # Off by default and shaped exactly like the CNA_EASYGL_COMPILED_EFFECTS and
+    # CNA_SDL_GPU_COMPILED_EFFECTS options above, for the same reason: MojoShader is a fetched
+    # dependency this renderer does not otherwise need. Unlike those two there is no
+    # MojoShader-provided adapter to link against (there is no `mojoshader_vulkan.c`) -- the
+    # nine-function effect backend is CNA's own, written directly against MOJOSHADER_parse with
+    # the SPIR-V profile, which FX-064's existence gate proved against a real device.
+    option(CNA_VULKAN_COMPILED_EFFECTS
+           "Build Vulkan support for compiled XNA Effect bytecode (plan_fx.md FX-065)" OFF)
+    if(CNA_VULKAN_COMPILED_EFFECTS)
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+        add_compile_definitions(CNA_VULKAN_COMPILED_EFFECTS)
+    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU")
     message(STATUS "CNA: Using WEBGPU graphics renderer")
     set(RENDERER_DIR "modules/renderers/webgpu")
@@ -1025,7 +1033,7 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "TINYGL")
     message(STATUS "CNA: Using TINYGL (C-Chads/tinygl, CPU fixed-function OpenGL 1.x) graphics renderer")
     set(RENDERER_DIR "modules/renderers/tinygl")
     set(RENDERER_TARGET "cna_renderer_tinygl")
-    add_compile_definitions(CNA_RENDERER_TINYGL)
+    list(APPEND _cna_identity_defines CNA_RENDERER_TINYGL)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_TINYGL")
     include(cmake/ThirdPartyTinyGL.cmake)
     cna_configure_tinygl()
@@ -1033,7 +1041,7 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "PIXIJS")
     message(STATUS "CNA: Using PIXIJS (pixijs.com WebGL scene graph) graphics renderer")
     set(RENDERER_DIR "modules/renderers/pixijs")
     set(RENDERER_TARGET "cna_renderer_pixijs")
-    add_compile_definitions(CNA_RENDERER_PIXIJS)
+    list(APPEND _cna_identity_defines CNA_RENDERER_PIXIJS)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_PIXIJS")
     # plan_pixijs.md Design decision 4: vendor a pinned PixiJS UMD build and prepend it into the
     # generated glue code via --pre-js, so the global PIXI.* namespace exists before any of this

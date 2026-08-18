@@ -1095,6 +1095,13 @@ namespace Microsoft::Xna::Framework::Graphics
                     compiledRuntime_->SetParameterTexture(
                         parameter.GetRuntimeIndexInternal(), parameter.GetTextureInternal());
                     break;
+                case EffectParameterType::String:
+                    // A string object is pure CPU reflection data: no shader stage reads one, and
+                    // the value storage behind it is the effect's object-table index, not text.
+                    // Uploading it would overwrite that index with the string's own bytes. CNA
+                    // owns the current value per Effect instance (EffectParameter::SetValue), so
+                    // nothing has to reach the renderer runtime here.
+                    break;
                 default:
                     compiledRuntime_->SetParameterValue(
                         parameter.GetRuntimeIndexInternal(), parameter.GetRawValueInternal(),

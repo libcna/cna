@@ -158,4 +158,51 @@ namespace CNA::Internal::Renderers::Igl::Detail
     {
         return backend == RendererBackend::Vulkan;
     }
+
+    RendererWindowKind GetRendererBackendWindowKind(const RendererBackend backend)
+    {
+        if (RendererBackendNeedsOpenGLWindow(backend))
+            return RendererWindowKind::OpenGL;
+        if (RendererBackendNeedsVulkanWindow(backend))
+            return RendererWindowKind::Vulkan;
+
+        // Unreachable for the two backends that exist, and deliberately not `Plain`: a backend
+        // this function does not know cannot be given a window silently, so it gets one no
+        // renderer can adopt and the device fails by name instead of drawing into the wrong API.
+        return RendererWindowKind::None;
+    }
+
+    RendererGlFramebufferRequest GetRendererBackendGlFramebufferRequest(
+        const RendererBackend backend)
+    {
+        if (!RendererBackendNeedsOpenGLWindow(backend))
+            return RendererGlFramebufferRequest{};
+
+        RendererGlFramebufferRequest request;
+        // The depth/stencil pair this renderer's own back-buffer format assumes
+        // (igl::TextureFormat::S8_UInt_Z24_UNorm, see IglPlatformSurface::CreateDevice).
+        request.depthBits = 24;
+        request.stencilBits = 8;
+        request.doubleBuffered = true;
+        // Back-buffer MSAA on this backend is the platform GL visual's own multisample buffer --
+        // there is no resolve pass here that could add it later, so the visual has to carry it.
+        request.wantsMultiSample = true;
+        return request;
+    }
+
+    RendererBackend ResolveRendererBackendForWindow() noexcept
+    {
+        try
+        {
+            return ResolveRendererBackend();
+        }
+        catch (...)
+        {
+            // CNA_IGL_BACKEND names something this build cannot honour. The descriptor this
+            // answer feeds cannot report an error, so report the build's own first preference and
+            // let ResolveRendererBackend() raise the real message when the renderer is created.
+            const std::vector<RendererBackend> preference = GetDefaultRendererPreference();
+            return preference.empty() ? RendererBackend::OpenGL : preference.front();
+        }
+    }
 }

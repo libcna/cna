@@ -6,6 +6,8 @@
 #include "CNA/LogCategory.hpp"
 #include "shaders/spirv_shaders.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -13,6 +15,8 @@
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffect.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #endif
 
 #include <SDL3/SDL.h>
@@ -31,6 +35,51 @@
 
 namespace CNA::Internal::Renderers::SdlGpu
 {
+    // plan_fx.md FX-091: the sampler cache's key. REMED-GFX-170 established that the key must be
+    // the COMPLETE sampler description; FX-083 then added the LOD clamp and bias to it by hand-
+    // packing them into a uint64, which silently discarded the top eight bits of the 32-bit bias
+    // -- a float's sign and most of its exponent -- and so aliased whole families of distinct
+    // biases onto one cached sampler. A struct with defaulted member-wise equality cannot lose a
+    // field that way, and a new field is a compile-time addition here rather than a bit-layout
+    // puzzle.
+    SamplerCacheKeyEXT SamplerCacheKeyEXT::Make(int filter, int u, int v, int w,
+                                                int anisotropy, int mipLevel, float lodBias)
+    {
+        SamplerCacheKeyEXT key;
+        key.textureFilter = filter;
+        key.addressU = u;
+        key.addressV = v;
+        key.addressW = w;
+        key.maxAnisotropy = anisotropy;
+        key.maxMipLevel = mipLevel;
+        static_assert(sizeof(key.mipLodBiasBits) == sizeof(lodBias));
+        std::memcpy(&key.mipLodBiasBits, &lodBias, sizeof(key.mipLodBiasBits));
+        return key;
+    }
+
+    std::size_t SamplerCacheKeyHashEXT::operator()(const SamplerCacheKeyEXT& key) const noexcept
+    {
+        // FNV-1a over the six integer fields and the bias bit pattern. Every member participates;
+        // an equal-hash collision only costs a bucket walk, whereas a member left out of the key
+        // itself would hand back the wrong sampler, which is what FX-091 fixes.
+        std::size_t hash = 1469598103934665603ull;
+        const auto mix = [&hash](std::uint32_t value) {
+            for (int byte = 0; byte < 4; ++byte)
+            {
+                hash ^= static_cast<std::size_t>((value >> (byte * 8)) & 0xFFu);
+                hash *= 1099511628211ull;
+            }
+        };
+        mix(static_cast<std::uint32_t>(key.textureFilter));
+        mix(static_cast<std::uint32_t>(key.addressU));
+        mix(static_cast<std::uint32_t>(key.addressV));
+        mix(static_cast<std::uint32_t>(key.addressW));
+        mix(static_cast<std::uint32_t>(key.maxAnisotropy));
+        mix(static_cast<std::uint32_t>(key.maxMipLevel));
+        mix(key.mipLodBiasBits);
+        return hash;
+    }
+
     namespace
     {
         enum class ConstructionShader : std::size_t
@@ -224,20 +273,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUCopyPass* pass_ = nullptr;
         };
 
-        // REMED-GFX-170: the cache key is the COMPLETE sampler description, exactly like
-        // WebGPURenderer::GetOrCreateSlotSampler's own. It used to be `filterIndex*9+u*3+v`
-        // with `filterIndex = filter == 0 ? 0 : 1`, an 18-entry array that collapsed all eight
-        // non-Linear ordinals onto ONE entry -- so even a corrected descriptor would have been
-        // handed the first non-Linear sampler ever built for that address-mode pair.
-        [[nodiscard]] std::uint32_t SamplerCacheKey(int filter, int addressU, int addressV,
-                                                    int maxAnisotropy)
-        {
-            return (static_cast<std::uint32_t>(filter) & 0xFFu)
-                 | ((static_cast<std::uint32_t>(addressU) & 0xFFu) << 8)
-                 | ((static_cast<std::uint32_t>(addressV) & 0xFFu) << 16)
-                 | ((static_cast<std::uint32_t>(maxAnisotropy) & 0xFFu) << 24);
-        }
-
         [[nodiscard]] SDL_GPUSamplerAddressMode ToAddressMode(int mode)
         {
             switch (mode)
@@ -282,6 +317,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             createInfo.address_mode_v = ToAddressMode(addressV);
             createInfo.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
             createInfo.max_lod = 32.0f;
+            createInfo.min_lod = 0.0f;
+            createInfo.mip_lod_bias = 0.0f;
             // Only TextureFilter::Anisotropic names anisotropic filtering; every other ordinal
             // must leave it off, or a Point ordinal would silently become a filtered fetch. The
             // Vulkan driver under SDL_GPU rejects a maxAnisotropy above its own device limit, so
@@ -2673,6 +2710,21 @@ namespace CNA::Internal::Renderers::SdlGpu
         samplerSlots_[slot].maxAnisotropy = maxAnisotropy;
     }
 
+    void SdlGpuRenderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
+    {
+        if (slot < 0 || slot >= static_cast<int>(samplerSlots_.size()))
+            return;
+        samplerSlots_[slot].maxMipLevel = maxMipLevel;
+        samplerSlots_[slot].lodBias = lodBias;
+    }
+
+    void SdlGpuRenderer::ApplySamplerAddressW(int slot, int addressW)
+    {
+        if (slot < 0 || slot >= static_cast<int>(samplerSlots_.size()))
+            return;
+        samplerSlots_[slot].addressW = addressW;
+    }
+
     void SdlGpuRenderer::ApplyScissorForRef(SDL_GPURenderPass* pass, const QueuedDrawRef& ref,
                                                    int targetWidth, int targetHeight) const
     {
@@ -3023,15 +3075,25 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     SDL_GPUSampler* SdlGpuRenderer::GetOrCreateSampler(int textureFilter, int addressU,
                                                               int addressV, int maxAnisotropy,
-                                                              const char* family)
+                                                              const char* family,
+                                                              int maxMipLevel, float lodBias,
+                                                              int addressW)
     {
         const int clampedAniso = std::clamp(maxAnisotropy, 1, 16);
-        const std::uint32_t key = SamplerCacheKey(textureFilter, addressU, addressV, clampedAniso);
+        // plan_fx.md FX-083: XNA's MaxMipLevel is the most detailed level the sampler may use,
+        // i.e. a lower bound on the computed level of detail -- SDL_GPU's min_lod. That is the
+        // same translation FNA3D's own SDL_GPU driver makes.
+        const float minLod = static_cast<float>(std::max(maxMipLevel, 0));
+        const SamplerCacheKeyEXT key = SamplerCacheKeyEXT::Make(
+            textureFilter, addressU, addressV, addressW, clampedAniso, maxMipLevel, lodBias);
         const auto it = samplerCache_.find(key);
         const bool hit = it != samplerCache_.end();
 
         SDL_GPUSamplerCreateInfo createInfo{};
         FillSdlGpuSamplerCreateInfo(createInfo, textureFilter, addressU, addressV, clampedAniso);
+        createInfo.min_lod = minLod;
+        createInfo.max_lod = std::max(createInfo.max_lod, minLod);
+        createInfo.mip_lod_bias = lodBias;
 
         SDL_GPUSampler* sampler = nullptr;
         if (hit)
@@ -3054,7 +3116,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             std::fprintf(stderr,
                          "[cna-sdlgpu-sampler] family=%s filter=%d(%s) mag=%s min=%s mip=%s "
-                         "aniso=%s/%.1f addrU=%s addrV=%s key=0x%08x sampler=%p %s\n",
+                         "aniso=%s/%.1f addrU=%s addrV=%s addrW=%d minLod=%.1f bias=%.9g "
+                         "keyhash=0x%016llx sampler=%p %s\n",
                          family, textureFilter, TextureFilterName(textureFilter),
                          SdlFilterName(createInfo.mag_filter),
                          SdlFilterName(createInfo.min_filter),
@@ -3063,7 +3126,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                          static_cast<double>(createInfo.max_anisotropy),
                          SdlAddressModeName(createInfo.address_mode_u),
                          SdlAddressModeName(createInfo.address_mode_v),
-                         static_cast<unsigned>(key), static_cast<void*>(sampler),
+                         key.addressW,
+                         static_cast<double>(createInfo.min_lod),
+                         static_cast<double>(createInfo.mip_lod_bias),
+                         static_cast<unsigned long long>(SamplerCacheKeyHashEXT{}(key)),
+                         static_cast<void*>(sampler),
                          hit ? "HIT" : "CREATE");
         }
         return sampler;
@@ -5166,7 +5233,9 @@ namespace CNA::Internal::Renderers::SdlGpu
 
             Texture* boundTexture = nullptr;
             Microsoft::Xna::Framework::Graphics::SamplerState samplerState;
-            effect.GetBoundSamplerEXT(slot, /*vertexStage=*/false, boundTexture, samplerState);
+            bool samplerAssigned = false;
+            effect.GetBoundSamplerEXT(slot, /*vertexStage=*/false, boundTexture, samplerState,
+                                      &samplerAssigned);
             if (boundTexture == nullptr)
             {
                 const char* name = reflectedSampler->name != nullptr ? reflectedSampler->name
@@ -5175,21 +5244,85 @@ namespace CNA::Internal::Renderers::SdlGpu
                     std::string("CNA SDL_GPU: this compiled effect's pixel shader samples '") +
                     name + "', but no texture is bound to it.");
             }
-            auto* texture2D = dynamic_cast<Microsoft::Xna::Framework::Graphics::Texture2D*>(boundTexture);
-            if (texture2D == nullptr)
+            // plan_fx.md FX-110: the shader's declared sampler dimension decides which resolver
+            // the bound texture has to go through, and the two must agree. SDL_GPU binds a texture
+            // by handle rather than by target, so a cube bound where the shader declared sampler2D
+            // is a validation error at best and a wrongly-sampled image at worst -- named here
+            // instead of either.
+            using Microsoft::Xna::Framework::Graphics::Texture2D;
+            using Microsoft::Xna::Framework::Graphics::Texture3D;
+            using Microsoft::Xna::Framework::Graphics::TextureCube;
+            auto* texture2D = dynamic_cast<Texture2D*>(boundTexture);
+            auto* textureCube = dynamic_cast<TextureCube*>(boundTexture);
+            auto* texture3D = dynamic_cast<Texture3D*>(boundTexture);
+            const MOJOSHADER_samplerType boundKind =
+                textureCube != nullptr ? MOJOSHADER_SAMPLER_CUBE
+                : texture3D != nullptr ? MOJOSHADER_SAMPLER_VOLUME
+                                       : MOJOSHADER_SAMPLER_2D;
+            const auto kindName = [](MOJOSHADER_samplerType type) {
+                switch (type)
+                {
+                    case MOJOSHADER_SAMPLER_CUBE:   return "samplerCUBE (TextureCube)";
+                    case MOJOSHADER_SAMPLER_VOLUME: return "sampler3D (Texture3D)";
+                    default:                        return "sampler2D (Texture2D)";
+                }
+            };
+            if (reflectedSampler->type != boundKind)
             {
                 throw System::NotSupportedException(
-                    "CNA SDL_GPU: this compiled effect binds a 3D or cube texture to a "
-                    "sampler; this renderer's compiled-effect draw route supports 2D textures "
-                    "only so far.");
+                    std::string("CNA SDL_GPU: this compiled effect's pixel shader declares ") +
+                    kindName(reflectedSampler->type) + " at slot " + std::to_string(slot) +
+                    ", but the texture bound there is a " + kindName(boundKind) +
+                    ". The dimensions must match.");
+            }
+            if (texture3D != nullptr)
+            {
+                // Still refused, and now for a reason that is written down rather than assumed:
+                // SdlGpuTexture3DRenderer keeps its native handle as a bare pointer instead of the
+                // lifetime-tracked SdlGpuSampledTextureEXT every other sampled kind resolves to,
+                // and a compiled draw is replayed at Present() long after a short-lived public
+                // Texture3D may be gone. Adopting it means giving that class the same shared
+                // state the others have, which is a texture-lifetime task rather than an FX one.
+                throw System::NotSupportedException(
+                    "CNA SDL_GPU: this compiled effect binds a Texture3D to pixel sampler slot " +
+                    std::to_string(slot) + ". This renderer samples Texture3D elsewhere, but its "
+                    "compiled-effect draw route cannot yet keep a volume texture alive across the "
+                    "deferred replay; the limitation is specific to compiled Effects, not to the "
+                    "renderer (plan_fx.md FX-110).");
             }
 
-            samplerBinding.texture = ResolveSampledTextureEXT(&texture2D->GetRenderer(),
-                                                              "CompiledEffect.Sampler");
-            samplerBinding.filter = static_cast<int>(samplerState.getFilterProperty());
-            samplerBinding.addressU = static_cast<int>(samplerState.getAddressUProperty());
-            samplerBinding.addressV = static_cast<int>(samplerState.getAddressVProperty());
-            samplerBinding.maxAnisotropy = samplerState.getMaxAnisotropyProperty();
+            samplerBinding.texture =
+                textureCube != nullptr
+                    ? ResolveSampledCubeEXT(&textureCube->GetRenderer(),
+                                            "CompiledEffect.CubeSampler")
+                    : ResolveSampledTextureEXT(&texture2D->GetRenderer(),
+                                               "CompiledEffect.Sampler");
+            if (samplerAssigned)
+            {
+                // plan_fx.md FX-083: the pass's own sampler_state block, LOD clamp and bias
+                // included -- SDL_GPU expresses both exactly.
+                samplerBinding.filter = static_cast<int>(samplerState.getFilterProperty());
+                samplerBinding.addressU = static_cast<int>(samplerState.getAddressUProperty());
+                samplerBinding.addressV = static_cast<int>(samplerState.getAddressVProperty());
+                samplerBinding.maxAnisotropy = samplerState.getMaxAnisotropyProperty();
+                samplerBinding.maxMipLevel = samplerState.getMaxMipLevelProperty();
+                samplerBinding.lodBias = samplerState.getMipMapLevelOfDetailBiasProperty();
+                samplerBinding.addressW = static_cast<int>(samplerState.getAddressWProperty());
+            }
+            else if (slot < samplerSlots_.size())
+            {
+                // No pass has assigned this slot, so what the game selected on the device stands --
+                // GraphicsDevice.SamplerStates[slot], recorded here by ApplySamplerState /
+                // ApplySamplerMipState. Filling in defaults instead would silently override it.
+                const SamplerSlotState& deviceSlot = samplerSlots_[slot];
+                samplerBinding.filter = deviceSlot.filter;
+                samplerBinding.addressU = deviceSlot.addressU;
+                samplerBinding.addressV = deviceSlot.addressV;
+                samplerBinding.maxAnisotropy = deviceSlot.maxAnisotropy;
+                samplerBinding.maxMipLevel = deviceSlot.maxMipLevel;
+                samplerBinding.lodBias = deviceSlot.lodBias;
+                samplerBinding.addressW = deviceSlot.addressW;
+            }
         }
 
         binding.vertexDummySamplerCount = MOJOSHADER_sdlGetSamplerSlots(vertexShaderData);
@@ -5214,6 +5347,13 @@ namespace CNA::Internal::Renderers::SdlGpu
             throw std::runtime_error(
                 "CNA SDL_GPU: the applied compiled effect was not created by this renderer.");
         }
+
+        // plan_fx.md FX-082: this renderer binds exactly one vertex stream, and reports
+        // MultiStreamVertexInput false so GraphicsDevice refuses a wider binding set before it
+        // ever reaches here. Draw*PrimitivesEx is still a public interface method a harness can
+        // call with a hand-built GpuDrawParams, and a truncated binding list looks exactly like a
+        // correct draw of the wrong data -- so it is refused by name rather than silently reduced.
+        RejectUnsupportedStreamCombination(params, "CNA SDL_GPU compiled-effect drawing");
 
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         const auto& declaration = sdlGpuVb.Declaration();
@@ -5312,7 +5452,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                 gpuSamplerBinding.texture = samplerBinding.texture.texture;
                 gpuSamplerBinding.sampler = GetOrCreateSampler(
                     samplerBinding.filter, samplerBinding.addressU, samplerBinding.addressV,
-                    samplerBinding.maxAnisotropy, "CompiledEffect");
+                    samplerBinding.maxAnisotropy, "CompiledEffect",
+                    samplerBinding.maxMipLevel, samplerBinding.lodBias, samplerBinding.addressW);
                 samplerBindings.push_back(gpuSamplerBinding);
             }
             SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings.data(),
@@ -7884,6 +8025,12 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (begun_)
             throw std::logic_error("CNA SDL_GPU SpriteBatch.Begin called twice without End");
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        // plan_fx.md FX-102: a batch starts empty even if the previous one threw out of its flush.
+        // Nothing else clears this, and a leftover sprite would be replayed into an unrelated batch
+        // with that batch's transform and sampler.
+        pendingSprites_.clear();
+#endif
         begun_ = true;
     }
 
@@ -7891,8 +8038,71 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (!begun_)
             throw std::logic_error("CNA SDL_GPU SpriteBatch.End called without Begin");
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        FlushPendingCompiledSpritesEXT();
+#endif
         begun_ = false;
     }
+
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+    void SdlGpuSpriteBatchRenderer::FlushPendingCompiledSpritesEXT()
+    {
+        if (pendingSprites_.empty()) return;
+
+        // plan_fx.md FX-102: XNA's own batching granularity, reproduced exactly.
+        //
+        // FNA's SpriteBatch.FlushBatch walks the (already sorted) sprites and splits them into
+        // CONTIGUOUS RUNS OF ONE TEXTURE; DrawPrimitives then draws each run once per pass of the
+        // effect's current technique -- `foreach (pass) { pass.Apply(); Textures[0] = texture;
+        // Draw(run); }`. So the order is run-major, then pass-major, then sprite: pass 0 covers the
+        // whole run before pass 1 begins.
+        //
+        // This route used to apply the passes inside Draw() and queue the sprite once per pass, so
+        // two sprites and two passes came out sprite-major -- s0p0, s0p1, s1p0, s1p1 instead of
+        // s0p0, s1p0, s0p1, s1p1. Under any order-dependent blend that is a different image, and it
+        // is not a shape a game can work around: XNA guarantees the batch order.
+        //
+        // Immediate mode is the exception and is NOT routed here at all: XNA flushes per Draw()
+        // there, so a run is one sprite and the per-sprite pass loop in Draw() is already correct.
+        Microsoft::Xna::Framework::Graphics::EffectTechnique* technique =
+            customEffect_ != nullptr ? customEffect_->getCurrentTechniqueProperty() : nullptr;
+        const int passCount =
+            technique != nullptr ? technique->getPassesProperty().getCountProperty() : 0;
+        if (passCount == 0)
+        {
+            pendingSprites_.clear();
+            throw std::logic_error(
+                "CNA SDL_GPU: a compiled Effect used with SpriteBatch must have a current "
+                "technique with at least one pass.");
+        }
+
+        ICompiledEffectRuntime* runtime = customEffect_->GetCompiledRuntimePtr();
+        std::size_t runStart = 0;
+        while (runStart < pendingSprites_.size())
+        {
+            std::size_t runEnd = runStart + 1;
+            while (runEnd < pendingSprites_.size() &&
+                   pendingSprites_[runEnd].texture == pendingSprites_[runStart].texture)
+            {
+                ++runEnd;
+            }
+            for (int pass = 0; pass < passCount; ++pass)
+            {
+                technique->getPassesProperty()[pass].Apply();
+                for (std::size_t i = runStart; i < runEnd; ++i)
+                {
+                    const PendingSpriteEXT& sprite = pendingSprites_[i];
+                    owner_->QueueSprite(*sprite.texture, sprite.nativeTexture, sprite.destination,
+                                        sprite.source, sprite.color, sprite.rotation, sprite.origin,
+                                        sprite.effects, sprite.layerDepth, transform_,
+                                        textureFilter_, addressU_, addressV_, nullptr, runtime);
+                }
+            }
+            runStart = runEnd;
+        }
+        pendingSprites_.clear();
+    }
+#endif
 
     void SdlGpuSpriteBatchRenderer::SetCustomEffect(Effect* effect)
     {
@@ -7942,6 +8152,48 @@ namespace CNA::Internal::Renderers::SdlGpu
         // null for a ShaderEffect and GetEffectRendererPtr() returns null for a compiled effect.
         ICompiledEffectRuntime* compiledEffectRuntime =
             customEffect_ ? customEffect_->GetCompiledRuntimePtr() : nullptr;
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        if (compiledEffectRuntime != nullptr)
+        {
+            // plan_fx.md FX-080: SpriteBatch applies the effect's passes itself, exactly as FNA's
+            // SpriteBatch.DrawPrimitives does -- once per pass of the current technique, drawing
+            // the sprite again for each. Before this the route silently relied on the caller
+            // having applied a pass already, so a game using only the public
+            // SpriteBatch.Begin(..., effect) API queued a sprite whose binding was captured from
+            // whatever pass happened to be applied last, or from none at all.
+            Microsoft::Xna::Framework::Graphics::EffectTechnique* technique =
+                customEffect_->getCurrentTechniqueProperty();
+            const int passCount =
+                technique != nullptr ? technique->getPassesProperty().getCountProperty() : 0;
+            if (passCount == 0)
+            {
+                throw std::logic_error(
+                    "CNA SDL_GPU: a compiled Effect used with SpriteBatch must have a current "
+                    "technique with at least one pass.");
+            }
+            if (!immediateMode_)
+            {
+                // Deferred and every sorted mode: XNA applies the passes when the batch FLUSHES,
+                // over whole texture runs, so the sprite is only recorded here. See
+                // FlushPendingCompiledSpritesEXT.
+                pendingSprites_.push_back(PendingSpriteEXT{
+                    &texture, nativeTexture, destinationRectangle, sourceRectangle, color,
+                    rotation, origin, effects, layerDepth});
+                return;
+            }
+            // Immediate: XNA's SpriteBatch flushes this one sprite now, so its run IS this sprite
+            // and applying the passes around it here is the same order XNA produces.
+            for (int pass = 0; pass < passCount; ++pass)
+            {
+                technique->getPassesProperty()[pass].Apply();
+                owner_->QueueSprite(texture, nativeTexture, destinationRectangle, sourceRectangle,
+                                    color, rotation, origin, effects, layerDepth, transform_,
+                                    textureFilter_, addressU_, addressV_, customEffectRenderer,
+                                    compiledEffectRuntime);
+            }
+            return;
+        }
+#endif
         owner_->QueueSprite(texture, nativeTexture, destinationRectangle, sourceRectangle, color, rotation,
                             origin, effects, layerDepth, transform_, textureFilter_, addressU_, addressV_,
                             customEffectRenderer, compiledEffectRuntime);

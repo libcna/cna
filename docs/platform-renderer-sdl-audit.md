@@ -3,22 +3,22 @@
 **Generated** by `tools/platform/renderer_sdl_audit.py`. Regenerate with `--out`, gate with
 `--check` (PLAT-76). Do not hand-edit.
 
-46 renderer identities over 42 module families.
+49 renderer identities over 45 module families.
 
 | Verdict | Families | Meaning |
 |---|---:|---|
 | `sdl-native` | 2 | Identity **is** an SDL3 API. Permanently allowlisted. |
 | `sdl-upstream` | 2 | Own sources are effectively SDL-free; the wrapped third-party library links SDL3. Allowlisted for a dependency reason. |
-| `sdl-free` | 38 | No SDL references at all. |
+| `sdl-free` | 41 | No SDL references at all. |
 
 ## Per-family detail
 
 | Family | Identities | Verdict | SDL refs (all / in code) | Platform services needed | Presentation calls |
 |---|---|---|---:|---|---|
-| `sdl-gpu` | SDL_GPU | `sdl-native` | 1705 / 1512 | `window` | — |
-| `sdl-renderer` | SDL_RENDERER | `sdl-native` | 308 / 204 | `window` | `SDL_CreateRenderer`, `SDL_CreateTexture`, `SDL_DestroyRenderer`, `SDL_DestroyTexture`, `SDL_GetRenderLogicalPresentationRect`, `SDL_GetRenderOutputSize`, `SDL_RenderClear`, `SDL_RenderPresent`, `SDL_RenderReadPixels`, `SDL_RenderTexture`, `SDL_SetRenderClipRect`, `SDL_SetRenderDrawColor`, `SDL_SetRenderLogicalPresentation`, `SDL_SetRenderTarget`, `SDL_SetRenderVSync`, `SDL_SetTextureBlendMode`, `SDL_SetTextureScaleMode`, `SDL_UpdateTexture` |
+| `sdl-gpu` | SDL_GPU | `sdl-native` | 1812 / 1613 | `window` | — |
+| `sdl-renderer` | SDL_RENDERER | `sdl-native` | 309 / 204 | `window` | `SDL_CreateRenderer`, `SDL_CreateTexture`, `SDL_DestroyRenderer`, `SDL_DestroyTexture`, `SDL_GetRenderLogicalPresentationRect`, `SDL_GetRenderOutputSize`, `SDL_RenderClear`, `SDL_RenderPresent`, `SDL_RenderReadPixels`, `SDL_RenderTexture`, `SDL_SetRenderClipRect`, `SDL_SetRenderDrawColor`, `SDL_SetRenderLogicalPresentation`, `SDL_SetRenderTarget`, `SDL_SetRenderVSync`, `SDL_SetTextureBlendMode`, `SDL_SetTextureScaleMode`, `SDL_UpdateTexture` |
 | `freedirect` | FREEDIRECT | `sdl-upstream` | 19 / 3 | `window` | — |
-| `fna3d` | FNA3D | `sdl-upstream` | 10 / 8 | `window` | — |
+| `fna3d` | FNA3D | `sdl-upstream` | 13 / 10 | `window` | — |
 | `bgfx` | BGFX | `sdl-free` | 0 / 0 | — | — |
 | `blend2d` | BLEND2D | `sdl-free` | 0 / 0 | — | — |
 | `canvas` | CANVAS | `sdl-free` | 0 / 0 | — | — |
@@ -40,6 +40,7 @@
 | `glide` | GLIDE | `sdl-free` | 0 / 0 | — | — |
 | `headless` | HEADLESS | `sdl-free` | 0 / 0 | — | — |
 | `html-dom` | HTML_DOM | `sdl-free` | 0 / 0 | — | — |
+| `igl` | IGL | `sdl-free` | 0 / 0 | — | — |
 | `llgl` | LLGL | `sdl-free` | 0 / 0 | — | — |
 | `magnum` | MAGNUM | `sdl-free` | 0 / 0 | — | — |
 | `metal` | METAL | `sdl-free` | 0 / 0 | — | — |
@@ -48,12 +49,14 @@
 | `opengl4` | OPENGL4 | `sdl-free` | 0 / 0 | — | — |
 | `opengles1` | OPENGLES1 | `sdl-free` | 0 / 0 | — | — |
 | `openvg` | OPENVG | `sdl-free` | 0 / 0 | — | — |
+| `pixijs` | PIXIJS | `sdl-free` | 0 / 0 | — | — |
 | `portablegl` | PORTABLEGL | `sdl-free` | 0 / 0 | — | — |
 | `skia` | SKIA | `sdl-free` | 0 / 0 | — | — |
 | `software` | SOFTWARE | `sdl-free` | 0 / 0 | — | — |
 | `sokol` | SOKOL | `sdl-free` | 0 / 0 | — | — |
 | `stub` | STUB | `sdl-free` | 0 / 0 | — | — |
 | `svg-dom` | SVG_DOM | `sdl-free` | 0 / 0 | — | — |
+| `tinygl` | TINYGL | `sdl-free` | 0 / 0 | — | — |
 | `vulkan` | VULKAN | `sdl-free` | 0 / 0 | — | — |
 | `webgpu` | WEBGPU | `sdl-free` | 0 / 0 | — | — |
 | `wicked` | WICKED | `sdl-free` | 0 / 0 | — | — |

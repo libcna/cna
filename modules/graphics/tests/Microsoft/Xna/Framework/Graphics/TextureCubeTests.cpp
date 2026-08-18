@@ -108,14 +108,34 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 //
 // PIXIJS (plan_pixijs.md PIXIJS-71) is in this "no cube resource exists" set too: no cube override
 // written, so it keeps the shared nullptr CreateTextureCube default, v1 scope being 2D-only.
+// ODR: these helpers were `inline` at namespace scope, and
+// modules/content/tests/CNA/Internal/Xnb/Texture3DTextureCubeContentTypeReaderTests.cpp defines the
+// same three names the same way. Two `inline` definitions of one name with different bodies is an
+// ODR violation, and the linker keeps whichever it saw first -- so an edit to the table below could
+// silently have no effect on this file's own tests, which is exactly what happened when IGL was
+// added to it. Internal linkage keeps each suite's table its own.
+namespace
+{
 [[nodiscard]] inline bool CubeStorageSupported()
 {
     return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi, Blend2D,
                             OpenVg, PortableGL, TinyGL, PixiJs);
 }
 
-/// Level-0 readback and storage are the same set: a renderer either owns cube pixels or it does not.
-[[nodiscard]] inline bool CubeLevel0ReadbackSupported() { return CubeStorageSupported(); }
+/// Level-0 readback and storage are the same set again.
+///
+/// This briefly was not an alias: IGL exposes readback through `IFramebuffer` rather than
+/// `ITexture`, and a plain `TextureCube` owns no framebuffer, so its `GetData` refused (plan_igl.md
+/// IGL-17). That turned out to be a limit of the renderer rather than of IGL -- a framebuffer is a
+/// cheap descriptor over an existing image, and `IglTextureCubeRenderer::GetData` now builds a
+/// throwaway one to read the requested face, the same move its own render-target readback already
+/// made for an MSAA resolve. Kept as its own named predicate rather than folded back into
+/// `CubeStorageSupported`, because the two really are different questions and the next renderer to
+/// own cube pixels without being able to fetch them back should say so here.
+[[nodiscard]] inline bool CubeLevel0ReadbackSupported()
+{
+    return CubeStorageSupported();
+}
 
 /// Readback ABOVE level 0 is a separate question. OpenGL ES 1.1 reads a cube face back by attaching
 /// it to a framebuffer, and GL_OES_framebuffer_object requires the attached level to be 0, so no mip
@@ -136,6 +156,7 @@ void ExpectUploadStoredOrRefused(Fn&& upload)
     else
         EXPECT_THROW(upload(), System::NotSupportedException);
 }
+} // namespace
 
 // -----------------------------------------------------------------------
 // Constructor / properties

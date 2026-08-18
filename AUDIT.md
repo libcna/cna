@@ -33,7 +33,7 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > view and the two CNAEXT queue routes, leaving the whole `net` module mapped. `CBIND-037A` then
 > opens `CBIND-037` by closing CNA's own `core` module: the logger, the process-wide minimum level,
 > the compile-time platform, desktop operating system, renderer identity and renderer name, and
-> both backend classifications for any of the 46 public renderer identities, and `CBIND-037B1`
+> both backend classifications for any public renderer identity, and `CBIND-037B1`
 > adds the gamepad controller type and the complete gamepad-capabilities value, and `CBIND-037B2`
 > adds the five gamepad value types — button set, directional pad, thumbsticks, triggers and the
 > snapshot itself — with every constructor, comparison, hash and string operation, and
@@ -142,6 +142,20 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > owner **approved those twelve on 2026-08-16**, which closes `CBIND-044` and with it the whole
 > CBIND campaign: 6,415 public C++ declarations, 6,083 implemented, 12 approved partial, 0 planned,
 > 320 not applicable, and an experimental release gate that reads ready.
+>
+> **Update (2026-08-17):** merging `next` reopened the matrix a third time — the compiled Effect
+> Framework campaign and the IGL renderer, 12 planned rows. `CBIND-052A` bound the `IGL` and
+> `PIXIJS` renderer identities and the `CompiledEffects` capability, published a `_MAXIMUM` for
+> both identity ranges, and turned on the strict warnings the adapter **library** had never had —
+> which is how `TINYGL` was found recorded as implemented with no C constant existing for it at
+> all. The inventory is now 420 headers, 6,693 declarations, **6,286 implemented, 12 approved
+> partial, 9 planned, 386 not applicable**. `CBIND-052B` then bound the remaining `Effect`
+> object-graph rows and found that the C adapter's `Clone()` override had begun silently dropping a
+> compiled effect's runtime and parameter values, because the canonical `Clone()` stopped being pure
+> virtual; it also added the public `EffectPass::getIndexInternal()` the owner ruled for on
+> 2026-08-17, mirroring `EffectTechnique`'s. The inventory is **6,296 implemented, 12 approved
+> partial, 0 planned, 386 not applicable** and the release gate reads **ready** again. Do not read
+> any of this as a finished state: a closed matrix is a snapshot between merges, not an end.
 
 ---
 
@@ -260,7 +274,7 @@ whole surface is a CNA extension (`plan_runtimerenderer.md`).
 | `CNA::GraphicsRendererSelection::GetFallbackHistory()` | ✅ | empty on first-attempt success, ordered otherwise, reason + message |
 | `CNA::GraphicsRendererSelection::ResetForTestingEXT()` | ✅ | test-only; documented as not part of the supported API |
 | `GraphicsDevice::GetGraphicsRendererType()` / `GetGraphicsRendererName()` | ✅ | report the device's real renderer (no longer `constexpr` — see below) |
-| `CNA::getGraphicsRendererName(GraphicsRendererType)` | ✅ | all 46 identities, distinct, non-placeholder |
+| `CNA::getGraphicsRendererName(GraphicsRendererType)` | ✅ | every public identity (49 today), distinct, non-placeholder. The test derives the identity list from the enum rather than restating it — the restated list it replaced had been frozen at 46 while `TINYGL`, `IGL` and `PIXIJS` were added, so it silently stopped covering the three newest names |
 | `CNA::tryParseGraphicsRendererName()` | ✅ | round-trips every identity, case-insensitive |
 
 **Intentional deviation.** `GraphicsDevice::GetGraphicsRendererType()` and

@@ -103,10 +103,9 @@ namespace
         PbrFallbackStrategy strategy = PbrFallbackStrategy::NeutralTexture;
     };
 
-    // These fragments name the actual null branch (or the preselected default for Wicked, or the
-    // feature-flag guard for IGL) for each semantic. Whitespace is ignored, but the map/fallback
-    // pairing is not: changing a normal slot to white, or any other slot to the flat-normal
-    // texture, fails this table.
+    // These fragments name the actual null branch (or the preselected default for Wicked) for
+    // each semantic. Whitespace is ignored, but the map/fallback pairing is not: changing a normal
+    // slot to white, or any other slot to the flat-normal texture, fails this table.
     constexpr std::array<RendererAudit, 16> kAudits{{
         {"bgfx",
          "params.pbrNormalMap, defaultFlatNormalTexture3D_",
@@ -143,12 +142,20 @@ namespace
         // the feature-flag guards that decide which variant is built -- see
         // IglShaderLibrary.cpp's `cnaHas(CNA_NORMAL_MAP)` and friends for the consuming half, which
         // `EveryPbrMapReachesTheShaderBindingIntendedByItsRenderer` audits separately.
+        // MERGE (origin/next, IGL-65..IGL-69): this renderer used to be the one pure
+        // ShaderFeatureVariant entry -- it bound nothing for an absent map and let the shader's
+        // feature bit skip the sample. Vulkan requires every declared descriptor to have a
+        // resource behind it, so it now binds a semantically neutral texture as well, which is
+        // what puts it in the NeutralTexture half. Both mechanisms are live and neither is
+        // redundant: the bind satisfies the descriptor, the feature bit still means the sample
+        // never happens. The evidence below names the null branch, because that is what this
+        // field is for; `cnaHas(CNA_NORMAL_MAP)` and friends are pinned by the shader-side tests.
         {"igl",
-         "if (params.pbrNormalMap != nullptr) flags |= EffectFeature::NormalMap;",
-         "if (params.pbrMetallicRoughnessMap != nullptr) flags |= EffectFeature::MetallicRoughnessMap;",
-         "if (params.pbrEmissiveMap != nullptr) flags |= EffectFeature::EmissiveMap;",
-         "if (params.pbrOcclusionMap != nullptr) flags |= EffectFeature::OcclusionMap;",
-         PbrFallbackStrategy::ShaderFeatureVariant},
+         "bindUnitNeutral(TextureUnit::NormalMap, textureOf(params.pbrNormalMap), NeutralTextureKind::FlatNormal2D)",
+         "bindUnit(TextureUnit::MetallicRoughnessMap, textureOf(params.pbrMetallicRoughnessMap), false)",
+         "bindUnit(TextureUnit::EmissiveMap, textureOf(params.pbrEmissiveMap), false)",
+         "bindUnit(TextureUnit::OcclusionMap, textureOf(params.pbrOcclusionMap), false)",
+         PbrFallbackStrategy::NeutralTexture},
         {"llgl",
          "params->pbrNormalMap, defaultFlatNormalPbrTexture_",
          "params->pbrMetallicRoughnessMap, defaultWhitePbrTexture_",

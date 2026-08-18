@@ -57,7 +57,7 @@ Two orthogonal classifications are mapped, each with the same three-route shape:
 - `cna_graphics_backend_get_maturity` / `_get_current_maturity` — recommendation confidence
   (production, supported, experimental, historical, deprecated).
 
-Both classify **any** of the 46 public renderer identities, not only the one compiled into this
+Both classify **any** of the 49 public renderer identities, not only the one compiled into this
 build, exactly as the canonical functions do. An identity outside that set — including
 `CNA_GRAPHICS_RENDERER_UNKNOWN` — is refused rather than silently classified.
 

@@ -18,6 +18,7 @@
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
 
 #include "CNA/Internal/Renderers/EasyGL/EasyGLCompiledEffect.hpp"
+#include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
 #include "CNA/TestSupport/CompiledEffectConformance.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -361,13 +362,214 @@ TEST(EasyGLCompiledEffectDrawTest, RendersTheAppliedPassesExpectedPixelsIntoARen
 TEST(EasyGLCompiledEffectTest, SharedBackendConformanceContract)
 {
     // plan_fx.md FX-060/FX-062: the same cross-renderer contract FNA3D's and SDL_GPU's own
-    // SharedBackendConformanceContract tests run -- format, reflection, techniques/passes, render
-    // state, state policy, samplers, texture binding, clone and lifetime -- now through the public
-    // Effect/GraphicsDevice API, since SupportsCompiledEffects() is true.
+    // SharedBackendConformanceContract tests run -- format, reflection, parameter API,
+    // techniques/passes, render state, state policy, samplers, texture binding, clone and
+    // lifetime -- through the public Effect/GraphicsDevice API, since SupportsCompiledEffects()
+    // is true.
     GraphicsDevice device;
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectContract(device);
+}
+
+// plan_fx.md FX-084/FX-086: the shared draw matrix. Each of these renders the compiled effect's
+// own Tint parameter into a render target and reads it back, so a draw that silently used a stock
+// shader -- or bound an attribute from the wrong stream -- fails instead of passing quietly.
+
+TEST(EasyGLCompiledEffectDrawTest, SharedDrawMatrixContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectDrawContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedMultiStreamDrawContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectMultiStreamDrawContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedInstancingDrawContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectInstancingDrawContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedSpriteBatchContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedOrientationContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectOrientationContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedEffectSwitchingContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSwitchingContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedSamplerPixelContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::CompiledEffectSamplerContractOptions options;
+    // OpenGL ES has no GL_TEXTURE_LOD_BIAS at all, so this renderer applies the bias only on
+    // the desktop-core profiles -- see docs/sampler-state-support.md. The ES-profile builds run
+    // every other section; the bias one is a named gap rather than a weakened assertion.
+    options.supportsLodBias = CNA::Internal::Renderers::EasyGL::IsDesktopCoreProfile(
+        CNA::Internal::Renderers::EasyGL::ActiveGlProfile());
+    CNA::TestSupport::RunCompiledEffectSamplerPixelContract(device, options);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedPassSelectionContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectPassSelectionContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedStockDrawIsolationContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectStockDrawIsolationContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedRenderTargetSourceContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectRenderTargetSourceContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedSpriteBatchMultiPassContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchMultiPassContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedSpriteBatchTextureSlotContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchTextureSlotContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, CompiledDrawObjectsSurviveAContextRecreation)
+{
+    // plan_fx.md FX-108. The compiled route owns two GL objects outside easy-gl's recovery
+    // registry: one shared vertex-array object and, per sampler slot, the row-order-corrected copy
+    // of a render-target source. Their creation flags used to stay true across a context
+    // recreation while the names behind them died with the old context, so every later compiled
+    // draw bound array object 0 and rasterized nothing -- silently.
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    namespace Fx = CNA::TestSupport::EffectFormat;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticSamplingEffect({
+        {Fx::SampMagFilter, Fx::FilterPoint},
+        {Fx::SampMinFilter, Fx::FilterPoint},
+        {Fx::SampMipFilter, Fx::FilterPoint},
+        {Fx::SampAddressU, Fx::AddressClamp},
+        {Fx::SampAddressV, Fx::AddressClamp},
+    }));
+    auto& parameters = effect.getParametersProperty();
+    parameters["Transform"]->SetValue(Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+    parameters["Tint"]->SetValue(Microsoft::Xna::Framework::Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+
+    Texture2D source(device, 1, 1);
+    const Color sourcePixel[1] = {Color(255, 0, 0, 255)};
+    source.SetData(sourcePixel, 1);
+    parameters["FxTexture"]->SetValue(&source);
+
+    const auto drawAndRead = [&]() -> Color {
+        CNA::TestSupport::SamplingQuadVertex quad[6];
+        CNA::TestSupport::FillSamplingQuad(quad, 0.5f, 0.5f);
+        RenderTarget2D target(device, 8, 8);
+        device.SetRenderTarget(&target);
+        device.Clear(Color(9, 19, 29, 255));
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2,
+                                  CNA::TestSupport::SamplingQuadDeclaration());
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color pixel(0, 0, 0, 0);
+        const Rectangle centre(4, 4, 1, 1);
+        target.GetData(0, &centre, &pixel, 0, 1);
+        return pixel;
+    };
+
+    const Color before = drawAndRead();
+    ASSERT_NEAR(before.getRProperty(), 255, 3) << "the baseline draw must sample the red texel";
+
+    device.GetRenderer().DebugSimulateContextLoss();
+
+    // What the renderer may legitimately do here is refuse: this renderer does not yet recreate
+    // its MojoShader context, which is a documented limitation. What it must NOT do is silently
+    // draw nothing, or draw with a stale array object, which is what an unreset creation flag
+    // produced.
+    try
+    {
+        const Color after = drawAndRead();
+        EXPECT_NEAR(after.getRProperty(), 255, 3)
+            << "a compiled draw after a context recreation must rebuild its own GL objects";
+        EXPECT_NEAR(after.getGProperty(), 0, 3);
+    }
+    catch (const std::exception& error)
+    {
+        EXPECT_FALSE(std::string(error.what()).empty())
+            << "an explicit refusal must name what could not be restored";
+    }
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedManyDrawsContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectManyDrawsContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedTruncationContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectTruncationContract(device);
 }
 
 #endif  // CNA_EASYGL_COMPILED_EFFECTS

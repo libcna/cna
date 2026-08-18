@@ -323,7 +323,29 @@ namespace CNA::Internal::Renderers::Fna3d
         // half-pixel term stays visible next to the sprite geometry it compensates for.
         int viewportWidth = 0;
         int viewportHeight = 0;
-        GetViewportSize(viewportWidth, viewportHeight);
+        // plan_fx.md FX-100: a bound RenderTarget2D is what sprites rasterize into, so it -- not
+        // the back buffer -- is what their pixel-space projection must be built from.
+        // GetViewportSize() is the renderer-wide LOGICAL extent (input coordinate transforms read
+        // the same method), and it always reported the back buffer. A batch drawn into a target
+        // smaller than the window therefore projected its pixels into a fraction of clip space and
+        // rasterized into a corner of the target -- for an 8x8 target against an 800x600 back
+        // buffer, into nothing at all. EasyGL and SDL_GPU both size this from the bound target.
+        if (!boundTargets_.empty() &&
+            boundTargets_.front().binding.type == FNA3D_RENDERTARGET_TYPE_2D)
+        {
+            viewportWidth = boundTargets_.front().binding.twod.width;
+            viewportHeight = boundTargets_.front().binding.twod.height;
+        }
+        else if (!boundTargets_.empty() &&
+                 boundTargets_.front().binding.type == FNA3D_RENDERTARGET_TYPE_CUBE)
+        {
+            viewportWidth = boundTargets_.front().binding.cube.size;
+            viewportHeight = boundTargets_.front().binding.cube.size;
+        }
+        else
+        {
+            GetViewportSize(viewportWidth, viewportHeight);
+        }
         const float width = viewportWidth > 0 ? static_cast<float>(viewportWidth) : 1.0f;
         const float height = viewportHeight > 0 ? static_cast<float>(viewportHeight) : 1.0f;
 
@@ -339,14 +361,27 @@ namespace CNA::Internal::Renderers::Fna3d
         effect.SetMatrix("MatrixTransform", Matrix::Multiply(transform, projection));
         effect.Apply(device_);
 
-        FNA3D_SamplerState sampler = samplerStates_[0];
+        // plan_fx.md FX-092: built from the batch's own state and XNA's SamplerState defaults, NOT
+        // copied from samplerStates_[0]. It used to start as that slot's current contents and
+        // override only the filter and addressing, so `maxAnisotropy`, `maxMipLevel` and
+        // `mipMapLevelOfDetailBias` were inherited from whatever wrote the slot last -- a compiled
+        // Effect's own sampler_state block, for one, which clamped every later stock sprite draw to
+        // the mip level that effect asked for. FNA has no such inheritance: PrepRenderState assigns
+        // `GraphicsDevice.SamplerStates[0] = samplerState` wholesale before VerifySampler reads it,
+        // so every field comes from the batch. The three defaults below are SamplerState's own, and
+        // are what every XNA preset (LinearClamp, PointWrap, ...) carries.
+        FNA3D_SamplerState sampler{};
         sampler.filter = ToFna3dTextureFilter(filter);
         sampler.addressU = ToFna3dTextureAddressMode(addressU);
         sampler.addressV = ToFna3dTextureAddressMode(addressV);
         sampler.addressW = sampler.addressU;
+        sampler.maxAnisotropy = 4;
+        sampler.maxMipLevel = 0;
+        sampler.mipMapLevelOfDetailBias = 0.0f;
         if (customEffect == nullptr)
         {
             FNA3D_VerifySampler(device_, 0, texture, &sampler);
+            samplerStates_[0] = sampler;
             boundPixelTextures_[0] = texture;
         }
 

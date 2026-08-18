@@ -26,10 +26,15 @@ namespace CNA::Internal::Renderers::EasyGL
     }
 }
 
+#include "CNA/Logger.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "System/NotSupportedException.hpp"
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -2884,6 +2889,18 @@ if (ProfileUsesGlslEs100())
     {
         if (pending_vertices_.empty()) return;
 
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        // plan_fx.md FX-080: a compiled XNA Effect gets its own route. Before this branch existed
+        // the code below silently kept the stock sprite program for one -- GetEffectRendererPtr()
+        // returns null for a compiled effect, so `prog` stayed `&program_` -- and rendered the
+        // batch with a shader the game never asked for, reporting nothing.
+        if (customEffect_ != nullptr && customEffect_->GetCompiledRuntimePtr() != nullptr)
+        {
+            FlushBatchWithCompiledEffect();
+            return;
+        }
+#endif
+
         // Determine which GL program to use: built-in or custom Effect.
         // Task 1077 fix: bind the SAME compiled program the Effect itself owns
         // (Effect::GetEffectRendererPtr(), overridden by ShaderEffect) instead of recompiling a
@@ -2995,6 +3012,97 @@ if (ProfileUsesGlslEs100())
         pending_indices_.clear();
         current_texture_ = nullptr;
     }
+
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+    void EasyGLSpriteBatchRenderer::FlushBatchWithCompiledEffect()
+    {
+        // plan_fx.md FX-080. Sprite vertices reach a custom effect in the target's own pixel
+        // space, exactly as in FNA: `SpriteBatch` sets `MatrixTransform` on the STOCK sprite
+        // effect only (`PrepRenderState`), never on a custom one, so a ported XNA sprite effect
+        // carries its own projection parameter and the game assigns it. Nothing is invented here.
+        ICompiledEffectRuntime* runtime = customEffect_->GetCompiledRuntimePtr();
+        if (graphicsRenderer_ == nullptr || runtime == nullptr || current_texture_ == nullptr)
+        {
+            pending_vertices_.clear();
+            pending_indices_.clear();
+            current_texture_ = nullptr;
+            return;
+        }
+
+        // The sprite vertex is the one this renderer builds above: two floats of position, two of
+        // texture coordinate and four of colour, tightly packed.
+        static const VertexDeclaration kSpriteDeclaration(
+            static_cast<int>(sizeof(Vertex)),
+            {
+                VertexElement(static_cast<int>(offsetof(Vertex, x)),
+                              VertexElementFormat::Vector2, VertexElementUsage::Position, 0),
+                VertexElement(static_cast<int>(offsetof(Vertex, u)),
+                              VertexElementFormat::Vector2,
+                              VertexElementUsage::TextureCoordinate, 0),
+                VertexElement(static_cast<int>(offsetof(Vertex, r)),
+                              VertexElementFormat::Vector4, VertexElementUsage::Color, 0),
+            });
+
+        const int vertexCount = static_cast<int>(pending_vertices_.size());
+        const int indexCount = static_cast<int>(pending_indices_.size());
+        auto vertexBuffer = graphicsRenderer_->CreateVertexBuffer(vertexCount);
+        vertexBuffer->SetVertexDeclaration(kSpriteDeclaration);
+        vertexBuffer->SetData(pending_vertices_.data(), vertexCount, sizeof(Vertex));
+        auto indexBuffer = graphicsRenderer_->CreateIndexBuffer16(indexCount);
+        indexBuffer->SetData16(pending_indices_.data(), indexCount);
+        auto* easyVertexBuffer =
+            static_cast<EasyGLVertexBufferRenderer*>(vertexBuffer.get());
+        auto* easyIndexBuffer = static_cast<EasyGLIndexBufferRenderer*>(indexBuffer.get());
+
+        // The viewport is still this renderer's own business: a batch drawn into a RenderTarget2D
+        // rasterizes at the target's size, not the window's, whatever shader runs.
+        int rtW = 0, rtH = 0;
+        if (graphicsRenderer_->GetCurrentRenderTarget2DSize(rtW, rtH) && rtW > 0 && rtH > 0)
+        {
+            device_.set_viewport(0, 0, rtW, rtH);
+        }
+        else
+        {
+            int physW = 0, physH = 0;
+            graphicsRenderer_->getPhysicalSize(physW, physH);
+            if (physW > 0 && physH > 0) device_.set_viewport(0, 0, physW, physH);
+        }
+        graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_,
+                                             pendingAddressV_, 1);
+
+        EasyGLRenderer::CompiledEffectStreamEXT stream;
+        stream.buffer = easyVertexBuffer;
+        stream.stride = sizeof(Vertex);
+
+        // FNA draws the batch once per pass of the effect's current technique, applying each pass
+        // and then overwriting Textures[0] with the drawn texture. Both are reproduced here.
+        EffectTechnique* technique = customEffect_->getCurrentTechniqueProperty();
+        const int passCount =
+            technique != nullptr ? technique->getPassesProperty().getCountProperty() : 0;
+        if (passCount == 0)
+        {
+            throw System::InvalidOperationException(
+                "CNA EasyGL: a compiled Effect used with SpriteBatch must have a current "
+                "technique with at least one pass.");
+        }
+        ::easygl::VertexArray& vao = graphicsRenderer_->EnsureCompiledEffectVaoEXT();
+        for (int pass = 0; pass < passCount; ++pass)
+        {
+            technique->getPassesProperty()[pass].Apply();
+            vao.bind();
+            graphicsRenderer_->BindCompiledEffectForDrawEXT(&stream, 1, *runtime,
+                                                            current_texture_);
+            easyIndexBuffer->ibo.bind(::easygl::BufferTarget::ElementArray);
+            device_.draw_elements(::easygl::PrimitiveType::Triangles, indexCount,
+                                  ::easygl::DataType::UnsignedShort, nullptr);
+            vao.unbind();
+        }
+
+        pending_vertices_.clear();
+        pending_indices_.clear();
+        current_texture_ = nullptr;
+    }
+#endif  // CNA_EASYGL_COMPILED_EFFECTS
 
     void EasyGLSpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {
@@ -3174,8 +3282,11 @@ if (ProfileUsesGlslEs100())
         device.initialize(glProcAddressLoader);
         if (ProfileIsDesktopCore())
             EnableVertexProgramPointSize();
-        std::cout << "EasyGLRenderer initialized with OpenGL "
-            << device.capabilities().context_info().version_string << std::endl;
+        // Same reason as the capability dump below: a startup diagnostic goes to the logger (and
+        // therefore stderr), never to the program's own stdout.
+        CNA::Logger::Info(std::string("EasyGLRenderer initialized with OpenGL ")
+                              + device.capabilities().context_info().version_string,
+                          CNA::LogCategory::RENDER);
 
         // Task 456: one-time startup capability dump. Task 918 wired up real
         // GL_EXT_texture_filter_anisotropic support in ApplySamplerState(); report the real,
@@ -3226,7 +3337,14 @@ if (ProfileUsesGlslEs100())
             GLfloat maxAnisoCap = 1.0f;
             if (hasAniso)
                 metagl::glGetFloatv(::metagl::GetParameter::MaxTextureMaxAnisotropy, &maxAnisoCap);
-            std::cout << "CNA: EasyGL capabilities -- MSAA up to " << maxSamplesCap
+            // A startup diagnostic belongs on stderr, through the logger that honours log levels
+            // -- stdout is the program's own output channel, and a library writing to it corrupts
+            // anything that pipes a game's output. GraphicsDeviceRendererTest::
+            // StartupDiagnosticNeverWritesToStdout pins that for the renderer-name line; this one
+            // had been left on std::cout and broke it.
+            std::ostringstream capabilityMessage;
+            capabilityMessage
+                      << "CNA: EasyGL capabilities -- MSAA up to " << maxSamplesCap
                       << "x; MRT up to " << maxMrtTargets_
                       << " targets (GL draw buffers=" << maxDrawBuffers
                       << ", color attachments=" << maxColorAttachments
@@ -3236,7 +3354,8 @@ if (ProfileUsesGlslEs100())
                          "anisotropic filtering: "
                       << (hasAniso ? ("supported (Task 918, up to " + std::to_string(static_cast<int>(maxAnisoCap)) + "x)")
                                    : std::string("NOT supported (falls back to trilinear)"))
-                      << "; SurfaceFormat: Color only (Task 176)" << std::endl;
+                      << "; SurfaceFormat: Color only (Task 176)";
+            CNA::Logger::Info(capabilityMessage.str(), CNA::LogCategory::RENDER);
         }
 
         platformContext_->SetSwapInterval(swapInterval);
@@ -3496,6 +3615,16 @@ if (ProfileIsEs2ApiGeneration())
         default_white_texture_ready_ = false;
         default_flat_normal_texture_.reset_handle_no_gl();
         default_flat_normal_texture_ready_ = false;
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        // plan_fx.md FX-108: the compiled-effect route's own GL objects live on this renderer
+        // rather than in the recovery registry (they are not `RecoverableResource`s, because they
+        // hold nothing to recreate CONTENT from -- a fresh empty array object and a fresh scratch
+        // copy are as good as the originals). They still have to be forgotten here, or their
+        // pre-loss names would be bound into the new context: `compiledEffectVaoCreated_` stayed
+        // true across a recreation, so `EnsureCompiledEffectVaoEXT` handed back a dead name and
+        // every compiled draw bound array object 0.
+        ReleaseCompiledEffectGlObjectsForContextLossEXT();
+#endif
 
         // 2. Recreate the native context through the platform-owned transaction.
         platformContext_->Recreate();
@@ -4445,6 +4574,42 @@ else
         s.set_parameter(::easygl::SamplerParameter::WrapS, toWrap(addressU));
         s.set_parameter(::easygl::SamplerParameter::WrapT, toWrap(addressV));
 
+        // plan_fx.md FX-092: samplers_[slot] is ONE long-lived GL object, mutated in place and
+        // reused for every later application on that slot -- the same shape that made REMED-GFX-174
+        // necessary for anisotropy. Every property this call does not write therefore survives from
+        // whoever wrote it last, and ApplySamplerMipState (a compiled Effect's own MaxMipLevel and
+        // MipMapLevelOfDetailBias) writes three of them. A SpriteBatch flush calls only
+        // ApplySamplerState, so an effect that clamped the slot to mip 3 left every later stock
+        // sprite sampling from mip 3 as well.
+        //
+        // This block makes the sampler's complete state a function of THIS call's arguments and
+        // nothing else. GraphicsDevice::applySamplerStatesToRenderer runs before every draw and
+        // follows this call with ApplySamplerMipState and ApplySamplerAddressW, so a device-driven
+        // application overwrites the three defaults below with the real SamplerState values
+        // immediately; only a caller that applies filter/addressing alone -- SpriteBatch's own
+        // flush -- keeps them, which is exactly the XNA default it means.
+        //
+        // The W axis follows addressU because every XNA 4.0 SamplerState preset (PointClamp,
+        // LinearWrap, AnisotropicClamp, ...) sets all three axes to the same mode, and a
+        // SpriteBatch's sampler state is always one of those shapes.
+        s.set_parameter(::easygl::SamplerParameter::WrapR, toWrap(addressU));
+        // MaxMipLevel's default of 0 under ApplySamplerMipState's own mapping, and GL's default
+        // upper bound. Both written unconditionally so a previous MinLod cannot survive here.
+        s.set_parameter(::easygl::SamplerParameter::MinLod, 0.0f);
+        s.set_parameter(::easygl::SamplerParameter::MaxLod, 1000.0f);
+        if (ProfileIsDesktopCore())
+        {
+            // Spelled numerically for the same reason ApplySamplerMipState spells it that way:
+            // GL_TEXTURE_LOD_BIAS does not exist in OpenGL ES, and one translation unit serves
+            // both profiles.
+            constexpr unsigned int kGlTextureLodBias = 0x8501u;
+            s.set_parameter(static_cast<::easygl::SamplerParameter>(kGlTextureLodBias), 0.0f);
+        }
+        // XNA 4.0 has no shadow-comparison sampler at all, so nothing in CNA ever enables one --
+        // but the property is mutable on this shared object, and "nothing writes it today" is
+        // exactly the assumption the mip states were built on. GL_NONE, written every time.
+        s.set_parameter(::easygl::SamplerParameter::CompareMode, 0);
+
         s.bind(static_cast<unsigned int>(slot));
 
         if (SamplerTraceEnabled())
@@ -4466,6 +4631,227 @@ else
                << " minUsesMipChain=" << (GlMinFilterUsesMipChain(gotMin) ? 1 : 0);
             SamplerTrace("apply-sampler", os.str());
         }
+}
+    }
+
+    void EasyGLRenderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
+    {
+        if (metagl::IsContextLost()) return;
+        if (slot < 0 || slot >= kMaxSamplerSlots) return;
+if (ProfileIsEs2ApiGeneration())
+{
+        // GLES 2.0 / WebGL 1 have neither sampler objects nor GL_TEXTURE_MIN_LOD, so neither of
+        // these two states is representable. Documented in docs/sampler-state-support.md rather
+        // than approximated: silently applying a nearby state would be worse than not applying it.
+        (void) maxMipLevel;
+        (void) lodBias;
+        return;
+}
+else
+{
+        ::easygl::Sampler& s = samplers_[slot];
+        if (!s.is_created()) s.create();
+        // XNA's MaxMipLevel is the most detailed level the sampler may use, which is a lower bound
+        // on the computed level of detail -- GL_TEXTURE_MIN_LOD, the same mapping FNA3D's SDL_GPU
+        // driver makes with min_lod.
+        s.set_parameter(::easygl::SamplerParameter::MinLod,
+                        static_cast<float>(std::max(maxMipLevel, 0)));
+        if (ProfileIsDesktopCore())
+        {
+            // Desktop-only: GL_TEXTURE_LOD_BIAS (0x8501) does not exist in OpenGL ES at all, which
+            // is why FNA3D's own GL driver guards the identical write with !renderer->useES3. It
+            // is spelled as its numeric token because the ES headers an ES-profile build compiles
+            // against do not declare the name, and this one translation unit serves both.
+            constexpr unsigned int kGlTextureLodBias = 0x8501u;
+            s.set_parameter(static_cast<::easygl::SamplerParameter>(kGlTextureLodBias), lodBias);
+        }
+        s.bind(static_cast<unsigned int>(slot));
+}
+    }
+
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+    const ::easygl::Texture& EasyGLRenderer::AcquireCompiledEffectFlippedSourceEXT(
+        int slot, const EasyGLRenderTargetRenderer& source)
+    {
+        // plan_fx.md FX-099. See the declaration for why the correction is applied to the pixels
+        // rather than to the sampling coordinate.
+        if (ProfileIsEs2ApiGeneration())
+        {
+            // glBlitFramebuffer is OpenGL ES 3.0. Refused by name rather than served upside down,
+            // which is the whole point of this function existing.
+            throw System::NotSupportedException(
+                "CNA EasyGL: a compiled Effect cannot sample a RenderTarget2D on the OpenGL ES 2.0 "
+                "/ WebGL 1 profiles -- correcting the target's row order needs glBlitFramebuffer, "
+                "which those profiles do not have.");
+        }
+        if (slot < 0 || slot >= kMaxSamplerSlots)
+        {
+            throw System::NotSupportedException(
+                "CNA EasyGL: a compiled Effect's sampler slot is outside this renderer's range.");
+        }
+        // Reading a target while drawing into it is undefined in XNA too, and here it would also
+        // be an invalid framebuffer blit. Named, not silently produced.
+        bool sourceIsCurrentTarget = bound_->rt2D == static_cast<const IRenderTargetRenderer*>(&source);
+        for (int i = 0; i < bound_->mrtCount; ++i)
+        {
+            sourceIsCurrentTarget = sourceIsCurrentTarget ||
+                bound_->mrt[static_cast<std::size_t>(i)] == &source;
+        }
+        if (sourceIsCurrentTarget)
+        {
+            throw System::NotSupportedException(
+                "CNA EasyGL: a compiled Effect cannot sample the RenderTarget2D it is drawing "
+                "into.");
+        }
+
+        // Saved BEFORE anything below binds a framebuffer of its own. The lazy creation further
+        // down binds this slot's copy as the draw target to attach its texture, so reading the
+        // binding after that block would record the copy's framebuffer as the one to restore --
+        // and the compiled draw that follows would render into the copy instead of into the
+        // caller's render target, leaving that target showing nothing but its clear colour.
+        GLint previousDrawFramebuffer = 0;
+        GLint previousReadFramebuffer = 0;
+        metagl::glGetIntegerv(::metagl::GetParameter::DrawFramebufferBinding,
+                              &previousDrawFramebuffer);
+        metagl::glGetIntegerv(::metagl::GetParameter::ReadFramebufferBinding,
+                              &previousReadFramebuffer);
+
+        const int width = source.GetWidth();
+        const int height = source.GetHeight();
+        const int levelCount = std::max(1, source.levelCount_);
+        CompiledEffectFlippedSourceEXT& copy =
+            compiledFlippedSources_[static_cast<std::size_t>(slot)];
+        if (copy.created &&
+            (copy.width != width || copy.height != height || copy.levelCount != levelCount))
+        {
+            copy.framebuffer.destroy();
+            copy.texture.destroy();
+            copy.created = false;
+        }
+        if (!copy.created)
+        {
+            copy.texture.create();
+            copy.texture.bind(::easygl::TextureTarget::Texture2D);
+            int levelW = width, levelH = height;
+            for (int level = 0; level < levelCount; ++level)
+            {
+                copy.texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
+                                          RgbaTexImageInternalFormat(), levelW, levelH,
+                                          ::metagl::PixelFormat::Rgba,
+                                          ::metagl::PixelType::UnsignedByte, nullptr);
+                levelW = std::max(1, levelW / 2);
+                levelH = std::max(1, levelH / 2);
+            }
+            // Same completeness clamp REMED-GFX-174 applies to every other sampleable kind: GL
+            // evaluates mipmap completeness over [BASE_LEVEL, MAX_LEVEL] and defaults MAX_LEVEL to
+            // 1000, so without this a one-level copy samples black under any mip-using filter.
+            copy.texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                                       ::easygl::TextureParameterSetter::MaxLevel, levelCount - 1);
+            copy.framebuffer.create();
+            copy.framebuffer.bind(::easygl::FramebufferTarget::DrawFramebuffer);
+            copy.framebuffer.attach_texture_2d(::easygl::FramebufferTarget::DrawFramebuffer,
+                                               ::metagl::to_framebuffer_attachment(
+                                                   ::metagl::ColorAttachment::Color0),
+                                               ::easygl::TextureTarget::Texture2D,
+                                               copy.texture, 0);
+            copy.width = width;
+            copy.height = height;
+            copy.levelCount = levelCount;
+            copy.created = true;
+        }
+        if (!compiledFlipReadFboCreated_)
+        {
+            compiledFlipReadFbo_.create();
+            compiledFlipReadFboCreated_ = true;
+        }
+
+        // The source's OWN colour texture is attached to this renderer's read framebuffer rather
+        // than binding the target's framebuffers, so a multisample target -- whose fbo_ carries a
+        // renderbuffer, not the texture -- is read from its already-resolved single-sample texture
+        // and neither of its framebuffers is disturbed.
+        //
+        // glBlitFramebuffer is subject to the scissor test; a game's active scissor rectangle has
+        // nothing to do with this internal copy.
+        const bool scissorWasEnabled = metagl::glIsEnabled(::metagl::Capability::ScissorTest);
+        if (scissorWasEnabled) device.set_scissor_test_enabled(false);
+
+        compiledFlipReadFbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+        compiledFlipReadFbo_.attach_texture_2d(::easygl::FramebufferTarget::ReadFramebuffer,
+                                               ::metagl::to_framebuffer_attachment(
+                                                   ::metagl::ColorAttachment::Color0),
+                                               ::easygl::TextureTarget::Texture2D,
+                                               source.GetEasyGLColorTexture(), 0);
+        copy.framebuffer.bind(::easygl::FramebufferTarget::DrawFramebuffer);
+        // The destination Y range runs the other way, which is the whole correction.
+        ::easygl::Framebuffer::blit(0, 0, width, height,
+                                    0, height, width, 0,
+                                    ::metagl::ClearBufferBit::Color,
+                                    ::metagl::BlitFilter::Nearest);
+
+        if (scissorWasEnabled) device.set_scissor_test_enabled(true);
+        metagl::glBindFramebuffer(::metagl::FramebufferTarget::ReadFramebuffer,
+                                  ::metagl::FramebufferId{
+                                      static_cast<unsigned int>(previousReadFramebuffer)});
+        metagl::glBindFramebuffer(::metagl::FramebufferTarget::DrawFramebuffer,
+                                  ::metagl::FramebufferId{
+                                      static_cast<unsigned int>(previousDrawFramebuffer)});
+
+        if (levelCount > 1)
+        {
+            // The blit fills level 0 only; the rest of the chain is rebuilt from it, exactly as
+            // UnbindAsRenderTarget does for the target itself.
+            copy.texture.bind(::easygl::TextureTarget::Texture2D);
+            copy.texture.generate_mipmap(::easygl::TextureTarget::Texture2D);
+        }
+        return copy.texture;
+    }
+#endif  // CNA_EASYGL_COMPILED_EFFECTS
+
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+    void EasyGLRenderer::ReleaseCompiledEffectGlObjectsForContextLossEXT()
+    {
+        // plan_fx.md FX-108. Handles are dropped WITHOUT a GL call: the names belong to a context
+        // that is gone, and deleting them would either be a no-op or address someone else's object
+        // in the replacement context. The `*Created`/extent bookkeeping is reset with them so the
+        // lazy creators rebuild on next use instead of trusting a stale flag.
+        compiledEffectVao_.reset_handle_no_gl();
+        compiledEffectVaoCreated_ = false;
+        for (CompiledEffectFlippedSourceEXT& copy : compiledFlippedSources_)
+        {
+            copy.texture.reset_handle_no_gl();
+            copy.framebuffer.reset_handle_no_gl();
+            copy.width = 0;
+            copy.height = 0;
+            copy.levelCount = 1;
+            copy.created = false;
+        }
+        compiledFlipReadFbo_.reset_handle_no_gl();
+        compiledFlipReadFboCreated_ = false;
+    }
+#endif
+
+    void EasyGLRenderer::ApplySamplerAddressW(int slot, int addressW)
+    {
+        if (metagl::IsContextLost()) return;
+        if (slot < 0 || slot >= kMaxSamplerSlots) return;
+if (ProfileIsEs2ApiGeneration())
+{
+        // OpenGL ES 2.0 / WebGL 1 have neither sampler objects nor GL_TEXTURE_WRAP_R, and no
+        // volume textures for the axis to address. Documented as unrepresentable rather than
+        // approximated, exactly like ApplySamplerMipState's own ES 2 branch above.
+        (void) addressW;
+        return;
+}
+else
+{
+        ::easygl::Sampler& s = samplers_[slot];
+        if (!s.is_created()) s.create();
+        // Same TextureAddressMode -> GL wrap table ApplySamplerState uses for S and T.
+        int wrap = static_cast<int>(::easygl::TextureWrapMode::Repeat);
+        if (addressW == 1) wrap = static_cast<int>(::easygl::TextureWrapMode::ClampToEdge);
+        else if (addressW == 2) wrap = static_cast<int>(::easygl::TextureWrapMode::MirroredRepeat);
+        s.set_parameter(::easygl::SamplerParameter::WrapR, wrap);
+        s.bind(static_cast<unsigned int>(slot));
 }
     }
 
@@ -7720,6 +8106,67 @@ else
             renderer.SetUniformMat4("View", viewCM);
             renderer.SetUniformMat4("Projection", projCM);
         }
+
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        /// plan_fx.md FX-082: the streams a compiled-effect draw reads its attributes from, in
+        /// public binding-slot order. The internal staged routes (`DrawUser*`, SpriteBatch,
+        /// `DrawColoredPrimitives`) bind no public `VertexBufferBinding` and leave
+        /// `vertexStreamCount` at 0; they contribute the one buffer the draw named, at its own
+        /// stride. A per-instance stream keeps its `InstanceFrequency` so the divisor can be set
+        /// after the program is ready.
+        std::vector<EasyGLRenderer::CompiledEffectStreamEXT> CollectCompiledEffectStreams(
+            const EasyGLVertexBufferRenderer& primary, const GpuDrawParams& params)
+        {
+            std::vector<EasyGLRenderer::CompiledEffectStreamEXT> streams;
+            streams.reserve(static_cast<std::size_t>(std::max(params.vertexStreamCount, 1)));
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const GpuVertexStreamBinding& stream =
+                    params.vertexStreams[static_cast<std::size_t>(i)];
+                const auto* buffer =
+                    static_cast<const EasyGLVertexBufferRenderer*>(stream.buffer);
+                if (buffer == nullptr) continue;
+                const std::size_t stride = stream.strideInBytes > 0
+                    ? static_cast<std::size_t>(stream.strideInBytes)
+                    : buffer->GetStride();
+                EasyGLRenderer::CompiledEffectStreamEXT entry;
+                entry.buffer = buffer;
+                entry.stride = stride;
+                entry.baseByteOffset =
+                    static_cast<std::size_t>(std::max(stream.vertexOffset, 0)) * stride;
+                entry.instanceFrequency = stream.instanceFrequency > 0
+                    ? static_cast<unsigned int>(stream.instanceFrequency) : 0u;
+                streams.push_back(entry);
+            }
+            if (streams.empty())
+            {
+                EasyGLRenderer::CompiledEffectStreamEXT entry;
+                entry.buffer = &primary;
+                entry.stride = primary.GetStride();
+                streams.push_back(entry);
+            }
+            return streams;
+        }
+
+        /// A compiled effect's vertex shader declares arbitrary semantics, so a stride alone
+        /// cannot describe its input. Every bound stream must therefore carry a real declaration.
+        void RequireCompiledEffectDeclarations(
+            const std::vector<EasyGLRenderer::CompiledEffectStreamEXT>& streams)
+        {
+            for (const auto& stream : streams)
+            {
+                if (stream.buffer != nullptr &&
+                    !stream.buffer->GetDeclarationElements().empty())
+                {
+                    continue;
+                }
+                throw System::NotSupportedException(
+                    "CNA EasyGL: a compiled-effect draw needs every bound vertex buffer's own "
+                    "VertexDeclaration; this renderer does not infer one from stride for this "
+                    "route.");
+            }
+        }
+#endif
     }
 
     void EasyGLRenderer::DrawPrimitivesEx(const IVertexBufferRenderer& vb_in,
@@ -7739,21 +8186,17 @@ else
         if (params.compiledEffectRuntime != nullptr)
         {
             const auto& compiledVb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
-            const auto& declaredElements = compiledVb.GetDeclarationElements();
-            if (declaredElements.empty())
-            {
-                throw System::NotSupportedException(
-                    "CNA EasyGL: a compiled-effect draw needs the vertex buffer's own "
-                    "VertexDeclaration; this renderer does not infer one from stride for this "
-                    "route.");
-            }
-            const std::size_t stride = CombinedVertexStrideOr(params, compiledVb.GetStride());
-            compiledVb.vao.bind();
-            compiledVb.vbo.bind(::easygl::BufferTarget::Array);
-            BindCompiledEffectForDrawEXT(declaredElements, stride, *params.compiledEffectRuntime);
+            const auto compiledStreams = CollectCompiledEffectStreams(compiledVb, params);
+            RequireCompiledEffectDeclarations(compiledStreams);
+            ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
+            compiledVao.bind();
+            BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
+                                         *params.compiledEffectRuntime);
             const int compiledVertexCount = VertexCountForPrimitives(primitive, primitiveCount);
+            // glDrawArrays' `first` advances every bound stream by that many of its own records,
+            // which is the same rule the stock multi-stream route relies on.
             device.draw_arrays(ToEasyGl(primitive), params.vertexStart, compiledVertexCount);
-            compiledVb.vao.unbind();
+            compiledVao.unbind();
             return;
         }
 #endif
@@ -7834,18 +8277,12 @@ else
         {
             const auto& compiledVb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
             const auto& compiledIb = static_cast<const EasyGLIndexBufferRenderer&>(ib_in);
-            const auto& declaredElements = compiledVb.GetDeclarationElements();
-            if (declaredElements.empty())
-            {
-                throw System::NotSupportedException(
-                    "CNA EasyGL: a compiled-effect draw needs the vertex buffer's own "
-                    "VertexDeclaration; this renderer does not infer one from stride for this "
-                    "route.");
-            }
-            const std::size_t stride = CombinedVertexStrideOr(params, compiledVb.GetStride());
-            compiledVb.vao.bind();
-            compiledVb.vbo.bind(::easygl::BufferTarget::Array);
-            BindCompiledEffectForDrawEXT(declaredElements, stride, *params.compiledEffectRuntime);
+            const auto compiledStreams = CollectCompiledEffectStreams(compiledVb, params);
+            RequireCompiledEffectDeclarations(compiledStreams);
+            ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
+            compiledVao.bind();
+            BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
+                                         *params.compiledEffectRuntime);
             compiledIb.ibo.bind(::easygl::BufferTarget::ElementArray);
             const int compiledIndexCount = VertexCountForPrimitives(primitive, primitiveCount);
             const auto compiledIdxType = compiledIb.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
@@ -7872,7 +8309,7 @@ else
                                                    params.baseVertex);
 #endif
             }
-            compiledVb.vao.unbind();
+            compiledVao.unbind();
             return;
         }
 #endif
@@ -8005,6 +8442,47 @@ if (ProfileIsEs2ApiGeneration())
 }
 else
 {
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        // plan_fx.md FX-082: an instanced draw recognizes a compiled effect exactly as the other
+        // two routes do. Before this branch existed the compiled runtime was ignored here and the
+        // draw silently fell through to SelectProgram() -- a stock shader rendering geometry the
+        // game had asked a compiled Effect to render. The per-instance streams keep their real
+        // InstanceFrequency: BindCompiledEffectForDrawEXT sets each matched attribute's divisor
+        // from the stream it was bound from.
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            const auto& compiledVb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
+            const auto& compiledIb = static_cast<const EasyGLIndexBufferRenderer&>(ib_in);
+            const auto compiledStreams = CollectCompiledEffectStreams(compiledVb, params);
+            RequireCompiledEffectDeclarations(compiledStreams);
+            ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
+            compiledVao.bind();
+            BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
+                                         *params.compiledEffectRuntime);
+            compiledIb.ibo.bind(::easygl::BufferTarget::ElementArray);
+            const int compiledIndexCount = VertexCountForPrimitives(primitive, primitiveCount);
+            const auto compiledIdxType = compiledIb.thirtyTwoBit
+                ? ::easygl::DataType::UnsignedInt : ::easygl::DataType::UnsignedShort;
+            const int compiledIndexSize = compiledIb.thirtyTwoBit ? 4 : 2;
+            const void* compiledIndexOffset = reinterpret_cast<const void*>(
+                static_cast<std::uintptr_t>(params.startIndex) *
+                static_cast<std::uintptr_t>(compiledIndexSize));
+            if (params.baseVertex == 0)
+            {
+                device.draw_elements_instanced(ToEasyGl(primitive), compiledIndexCount,
+                                               compiledIdxType, compiledIndexOffset,
+                                               instanceCount);
+            }
+            else
+            {
+                ::metagl::glDrawElementsInstancedBaseVertex(
+                    ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
+                    compiledIndexOffset, instanceCount, params.baseVertex);
+            }
+            compiledVao.unbind();
+            return;
+        }
+#endif
         // REMED-GFX-DECL-GUARD (REMED-GFX-218): before the VAO is touched, before a program is
         // selected and before any draw is issued. A custom ShaderEffect owns its own
         // element-index attribute convention and is deliberately untouched.

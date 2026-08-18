@@ -8,6 +8,7 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Igl/IglShaderLibrary.hpp"
+#include "CNA/Internal/Renderers/Igl/IglSurfaceFormats.hpp"
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
@@ -216,33 +217,10 @@ namespace CNA::Internal::Renderers::Igl
         return primitiveCount * 3;
     }
 
-    /**
-     * @brief Maps an XNA `SurfaceFormat` ordinal to an IGL texture format.
-     *
-     * Only the uncompressed formats this renderer genuinely stores are mapped; anything else
-     * resolves to RGBA8, which is what the shared texture layer already converts its pixels to.
-     */
-    [[nodiscard]] inline igl::TextureFormat ToIglSurfaceFormat(const int surfaceFormat)
-    {
-        switch (surfaceFormat)
-        {
-            case 1:  return igl::TextureFormat::B5G6R5_UNorm;      // Bgr565
-            case 2:  return igl::TextureFormat::B5G5R5A1_UNorm;    // Bgra5551
-            case 3:  return igl::TextureFormat::ABGR_UNorm4;       // Bgra4444
-            case 9:  return igl::TextureFormat::RGB10_A2_UNorm_Rev; // Rgba1010102
-            case 10: return igl::TextureFormat::RG_UNorm16;        // Rg32
-            case 11: return igl::TextureFormat::RGBA_UInt32;       // Rgba64 (widest available match)
-            case 12: return igl::TextureFormat::A_UNorm8;          // Alpha8
-            case 13: return igl::TextureFormat::R_F32;             // Single
-            case 14: return igl::TextureFormat::RG_F32;            // Vector2
-            case 15: return igl::TextureFormat::RGBA_F32;          // Vector4
-            case 16: return igl::TextureFormat::R_F16;             // HalfSingle
-            case 17: return igl::TextureFormat::RG_F16;            // HalfVector2
-            case 18: return igl::TextureFormat::RGBA_F16;          // HalfVector4
-            case 19: return igl::TextureFormat::RGBA_F16;          // HdrBlendable
-            default: return igl::TextureFormat::RGBA_UNorm8;       // Color and everything else
-        }
-    }
+    // The XNA-SurfaceFormat-to-IGL mapping and the transfer byte arithmetic live in
+    // IglSurfaceFormats.{hpp,cpp}, included above: they are a real table with real refusals rather
+    // than a translation, they are shared with the renderer's own format-capability answers, and
+    // they are the part of this family a host-portable unit test can measure without a device.
 
     /**
      * @brief Maps an XNA `DepthFormat` ordinal to an IGL depth/stencil format.

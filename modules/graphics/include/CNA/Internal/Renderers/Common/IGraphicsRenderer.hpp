@@ -654,6 +654,40 @@ namespace CNA::Internal::Renderers
 
     /// Renderer handle for a compiled shader program (vertex + fragment).
     /// Created via IGraphicsRenderer::CreateEffectRenderer().
+    /**
+     * @brief The shading dialect a renderer's custom `ShaderEffect` sources must be written in.
+     * CNAEXT.
+     *
+     * A `ShaderEffect` has always been renderer-specific source text -- the framework hands the
+     * string to the renderer and the renderer's own compiler decides. What was missing was any
+     * SUPPORTED way for an application to ask which dialect it should supply, so the only way to
+     * know was to infer it from the build's renderer identity. That is wrong twice over: in a
+     * multi-renderer build the identity is not the active renderer, and a renderer that is itself
+     * an abstraction over several native APIs (IGL, LLGL, Diligent) does not have one answer per
+     * build at all -- IGL's is chosen per process by `CNA_IGL_BACKEND`.
+     *
+     * `Unknown` is the honest default and what every renderer that has not declared one answers.
+     * It does not mean "no shaders"; it means this renderer has not stated a dialect, and an
+     * application should not guess.
+     */
+    enum class ShaderDialectEXT : int
+    {
+        /** @brief Not declared by this renderer. */
+        Unknown,
+        /** @brief Desktop OpenGL GLSL (`#version 3xx core` / `4xx core`). */
+        GlslDesktop,
+        /** @brief OpenGL ES / WebGL GLSL (`#version 100` / `300 es`). */
+        GlslEs,
+        /** @brief GLSL compiled to SPIR-V: explicit `location`/`set`/`binding` are mandatory. */
+        GlslVulkan,
+        /** @brief Direct3D High Level Shader Language. */
+        Hlsl,
+        /** @brief Metal Shading Language. */
+        Msl,
+        /** @brief WebGPU Shading Language. */
+        Wgsl
+    };
+
     class IEffectRenderer
     {
     public:
@@ -669,6 +703,33 @@ namespace CNA::Internal::Renderers
         [[nodiscard]] virtual bool IsValid() const = 0;
         /// Returns the last compilation error string, or empty if no error.
         [[nodiscard]] virtual std::string GetCompileError() const = 0;
+        /**
+         * @brief Declares the std140 uniform block this effect's parameters live in. CNAEXT.
+         *
+         * Needed only where loose (non-block) uniforms do not exist -- which is every SPIR-V
+         * target, including IGL's Vulkan backend. There a `SetUniformFloat("tint", ...)` has
+         * nowhere to go: the shader's parameters are members of a block, and reaching them means
+         * knowing each one's byte offset.
+         *
+         * That mapping is DECLARED rather than discovered, and that is a finding rather than a
+         * preference: IGL `v1.1.1` returns an empty reflection on Vulkan
+         * (`vulkan::RenderPipelineState` constructs a default `RenderPipelineReflection` and its
+         * `getIndexByName` is `IGL_DEBUG_ASSERT_NOT_IMPLEMENTED`), so there is no name-to-offset
+         * information to be had from the API. An application already has to supply a separate
+         * Vulkan shader source (see @ref ShaderDialectEXT); declaring the block it wrote is a
+         * smaller, explicit step than having CNA parse that source to guess at it.
+         *
+         * Ignored by a renderer whose uniforms are loose, which is why it is a no-op by default:
+         * the same application code then runs unchanged on both.
+         *
+         * @param blockSizeBytes Size of the whole block, std140-padded.
+         * @param names          Member names, `count` of them; must outlive this call only.
+         * @param offsets        Each member's byte offset from the start of the block.
+         * @param count          Number of members.
+         */
+        virtual void DeclareUniformBlockEXT(int blockSizeBytes, const char* const* names,
+                                            const int* offsets, int count) {}
+
         /// Sets a float uniform by name.
         virtual void SetUniformFloat(const char* name, float value) {}
         /// Sets an int uniform by name.
@@ -1614,6 +1675,18 @@ namespace CNA::Internal::Renderers
          * @param surfaceFormat SurfaceFormat ordinal.
          * @return This renderer's verdict, or Defer to accept the framework's rule.
          */
+        /**
+         * @brief The dialect a custom `ShaderEffect`'s sources must be written in. CNAEXT.
+         *
+         * @return This renderer's dialect, or `ShaderDialectEXT::Unknown` if it has not declared
+         *         one. Answered at RUNTIME, so a renderer that picks its native API per process
+         *         reports what it actually picked rather than what the build defaulted to.
+         */
+        [[nodiscard]] virtual ShaderDialectEXT GetShaderDialectEXT() const
+        {
+            return ShaderDialectEXT::Unknown;
+        }
+
         [[nodiscard]] virtual RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const
         {
             (void)surfaceFormat;
@@ -2415,13 +2488,21 @@ namespace CNA::Internal::Renderers
         std::function<void(RendererDeviceEvent)> deviceEventCallback;
     };
 
-    // plan_runtimerenderer.md design decision 4: the factory used to be declared here, once, and
-    // defined once per renderer family with an identical signature -- which is exactly why two
-    // renderer archives could never link into the same binary. Each family now declares and
-    // defines CNA::Internal::Renderers::<Family>::CreateGraphicsRenderer instead, and
+    // plan_runtimerenderer.md design decision 4: the renderer factory is NOT declared here.
+    //
+    // It used to be -- declared once in this header and defined once per renderer family with an
+    // identical signature, which is exactly why two renderer archives could never link into the
+    // same binary. Each family now declares and defines
+    // CNA::Internal::Renderers::<Family>::CreateGraphicsRenderer in its own namespace, and
     // GraphicsRendererRegistry reaches it through GraphicsRendererDescriptor::create.
-    // Factory function to be implemented by each renderer. The creation contract deliberately
-    // contains only platform value types; renderer-family-specific native API work starts behind
-    // this boundary.
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args);
+    //
+    // The declaration outlived the change and was removed only later, because a leftover
+    // declaration is not inert: it is a name any family's own factory call has to be qualified
+    // against (EasyGL's own suite carried a comment about the resulting ambiguity), and it is a
+    // standing invitation for a newly added family to define the colliding symbol and appear to
+    // work -- which PIXIJS did, undetected until a build tried to link it beside another
+    // renderer. scripts/check_runtime_renderer_discipline.py now fails on such a definition.
+    //
+    // The creation contract itself (GraphicsRendererCreateArgs above) deliberately contains only
+    // platform value types; renderer-family-specific native API work starts behind that boundary.
 }

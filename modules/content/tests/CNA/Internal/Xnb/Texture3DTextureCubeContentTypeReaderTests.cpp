@@ -77,6 +77,17 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
     return !CNA_RENDERER_IS(OpenGLES1) && CubeLevel0ReadbackSupported();
 }
 
+/// Whether this renderer can fetch a volume texture's voxels back to the CPU.
+///
+/// The same split cube faces already have here. IGL owns real volume pixels but IGL v1.1.1 cannot
+/// attach a 3D texture to a framebuffer, which is its only readback route -- verified by attempting
+/// it (`GL_INVALID_OPERATION ... invalid textarget GL_TEXTURE_3D`), see plan_igl.md IGL-17. GetData
+/// refuses rather than fabricating voxels, and the shared layer raises NotSupportedException.
+[[nodiscard]] inline bool VolumeReadbackSupported()
+{
+    return !CNA_RENDERER_IS(Igl);
+}
+
 namespace
 {
     std::string ReadWholeFile(const std::string& path)
@@ -247,6 +258,13 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderParsesHandConst
     EXPECT_EQ(texture->getFormatProperty(), SurfaceFormat::Color);
 
     std::vector<Color> readBack(4, Color(0, 0, 0, 0));
+    if (!VolumeReadbackSupported())
+    {
+        // The reader's own parsing is what this test is about, and it has been fully checked above;
+        // only the round trip needs a renderer that can fetch voxels back.
+        EXPECT_THROW((void)texture->GetData(readBack.data(), 4), System::NotSupportedException);
+        return;
+    }
     texture->GetData(readBack.data(), 4);
     for (std::size_t i = 0; i < pixels.size(); ++i)
     {

@@ -4,9 +4,17 @@
 [facebook/igl](https://github.com/facebook/igl), Meta's "Intermediate Graphics Library", pinned at
 `v1.1.1`.
 
-> **Status: experimental, and not yet compiled.** The implementation is complete in shape but has
-> never been built; see `plan_igl.md` §1 and §7. Treat every capability below as *intended and
-> written*, not *verified*, until the Phase H tasks close.
+> **Status: experimental, and built.** This banner used to read "not yet compiled"; that stopped
+> being true on 2026-08-16, when the renderer first configured, compiled, rendered a frame and
+> passed its pixel-conformance tests against Mesa llvmpipe, and it has been built and run in every
+> session since. What is *verified* is narrower than what is *implemented*, and `plan_igl.md` §1
+> is the per-phase record of which is which. The short version: the OpenGL/GLX backend is verified
+> across the whole example suite; the Vulkan backend brings up a device, renders 3D, depth and
+> render targets, `SpriteBatch`, MSAA and custom `ShaderEffect`s — parameters included — correctly.
+> As of 2026-08-18 the registered suite is 70/70 green (34 host-portable unit cases plus 36 example
+> tests), and running all 27 example binaries explicitly on each backend gives **27/27 on OpenGL and
+> 27/27 on Vulkan**. The remaining boundaries are upstream limits of IGL `v1.1.1` rather than
+> unfinished work, and each is in the gap table below with the evidence that established it.
 
 ## What this renderer is
 
@@ -26,6 +34,22 @@ The choice is **resolved once, cached, and never falls back**. It has to be: `Gr
 it to decide the platform window's render intent *before the renderer exists*, and a native window
 cannot be both OpenGL- and Vulkan-capable. An explicit backend this build does not contain is an
 error by name, not a silent substitution.
+
+That resolution is what the renderer's own `GraphicsRendererDescriptor` is built from
+(`IglRendererDescriptor.cpp`), so all three of its window-facing answers follow the backend rather
+than the compile-time fact that CNA selected IGL:
+
+| Backend | `windowKind` | `glFramebuffer` | `needsGlContext` |
+|---------|--------------|-----------------|------------------|
+| OpenGL | `RendererWindowKind::OpenGL` | depth 24, stencil 8, double-buffered, multisample-capable | yes — it adopts the platform's GL context |
+| Vulkan | `RendererWindowKind::Vulkan` | none (a Vulkan-intent window carries no GL visual) | no — it builds its surface from the native window handle |
+
+Both halves matter. The window kind is what `AreWindowKindsCompatible` compares when a fallback
+chain moves from one renderer to another, so recording OpenGL for a Vulkan run would let a
+later candidate adopt a window it cannot render into. The framebuffer request matters because GLX
+fixes a window's visual — and therefore its depth, stencil and multisample bits — when the window
+is created: asking afterwards silently yields whatever the default visual carried, in practice a
+0-bit stencil buffer that turns every `DepthStencilState.StencilEnable` into a no-op.
 
 OpenGL leads the default preference because IGL's OpenGL backend can **adopt** the GL context CNA's
 own `CNA::Platform::IPlatformGlContext` already creates for the window
@@ -49,13 +73,53 @@ own display connection and leaves the drawable unset, which cannot present to a 
 | `MultipleRenderTargets` | Yes, 2–4 `RenderTarget2D` slots (`IGL_COLOR_ATTACHMENTS_MAX`) |
 | `MultiStreamVertexInput` | Yes — `igl::VertexAttribute::bufferIndex` expresses it natively |
 | `Instancing` | Yes — `VertexSampleFunction::Instance` |
-| `CustomEffects` | Yes on OpenGL; parameters are refused on Vulkan (see below) |
-| `Texture3D` | Yes (real volume storage) |
+| `CustomEffects` | Yes on both backends, parameters included — Vulkan needs the shader's std140 block declared through `ShaderEffect::DeclareUniformBlockEXT` (see *Writing a custom ShaderEffect* below) |
+| `Texture3D` | Yes (real volume storage, sampling verified); voxels cannot be read back — see the gap table |
 | `AnisotropicFiltering` | Yes |
 | `MultiSampleAntiAliasing` | Yes on render targets; on the back buffer only via the OpenGL visual |
 | `WireFrame` | OpenGL only — Vulkan needs `fillModeNonSolid`, which IGL does not request |
 | `OcclusionQuery` | **No** — IGL exposes no query object on any backend at `v1.1.1` |
 | `AdditiveBlending` | Yes |
+
+## Surface formats
+
+`igl::TextureFormat` is not a superset of XNA's `SurfaceFormat`, and the gaps are not all missing
+names: several IGL formats carry a familiar name and a different texel layout, and a few differ
+between IGL's own two backends. Since this renderer picks its backend at run time, a format whose
+layout depends on which backend was chosen is no use to it.
+
+These formats have an IGL counterpart with the same texel size, channel order and
+normalized/integer/float interpretation on **both** backends:
+
+`Color`, `ColorBgraEXT`, `ColorSrgbEXT`, `ByteEXT`, `UShortEXT`, `Rg32`, `Single`, `Vector2`,
+`Vector4`, `HalfSingle`, `HalfVector2`, `HalfVector4`, `HdrBlendable`.
+
+Everything else is **refused by name** rather than substituted:
+
+| Format | Why |
+|--------|-----|
+| `Bgr565` | XNA packs R5G6B5; IGL's `B5G6R5_UNorm` is the reverse order, and its OpenGL backend refuses that format outright |
+| `Bgra5551` | XNA packs A1R5G5B5; IGL offers only B5G5R5A1 and R5G5B5A1 |
+| `Bgra4444` | XNA packs A4R4G4B4; IGL's `ABGR_UNorm4` is R4G4B4A4 on OpenGL and B4G4R4A4 on Vulkan |
+| `Rgba1010102` | XNA packs A2B10G10R10; IGL's `RGB10_A2_UNorm_Rev` is that on OpenGL and A2R10G10B10 on Vulkan |
+| `Rgba64` | An 8-byte R16G16B16A16 unsigned-normalized texel. IGL v1.1.1 has no 16-bit-per-channel RGBA format; `RGBA_UInt32` is a 16-byte integer-sampled texel, not a wider match |
+| `Alpha8` | `VK_FORMAT_UNDEFINED` on Vulkan, and the `GL_ALPHA` family is not in the OpenGL core profile this renderer requests |
+| `Dxt1` / `Dxt3` / `Dxt5` / `Dxt5SrgbEXT` | IGL v1.1.1 carries no BC1/BC2/BC3 format |
+| `Bc7EXT` / `Bc7SrgbEXT` | IGL has the format, but this renderer has no compressed-block upload path — every transfer goes through `ITexture::upload`, which moves linear rows |
+| `NormalizedByte2` / `NormalizedByte4` | IGL v1.1.1 has no signed-normalized texture format |
+
+**What a game sees today.** The renderer reports `Unsupported` for the refused set and `Defer` for
+the supported one, so the framework's own rule (`Texture::ValidateFormat`, `SurfaceFormat.Color`
+only — the same rule 47 of the 49 renderers use) still decides what a public `Texture2D` or
+`RenderTarget2D` may be. The supported set above is reachable through the renderer contract
+(`IGraphicsRenderer::CreateTexture`, `CreateRenderTarget2DEXT`), which is where
+`igl_surfaceformat_test.cpp` exercises it. Promoting those formats to the public API is a
+deliberate non-goal for now: it would need per-format end-to-end verification of upload, sampling
+*and* readback, not just of storage.
+
+Transfer sizes come from the shared `Texture::GetFormatSizeEXT` / `GetBlockSizeSquaredEXT`
+metadata, never from `width * 4` — a texel here may be 1, 2, 4, 8 or 16 bytes, and an upload whose
+row pitch is shorter than one packed row is refused rather than read past.
 
 ## Known gaps, and why
 
@@ -65,8 +129,79 @@ own display connection and leaves the drawable unset, which cannot present to a 
 | Back-buffer MSAA on Vulkan | IGL's swap-chain images are single-sample and this renderer adds no resolve pass of its own | `GetMultiSampleCount()` returns 0 — the count that is genuinely in effect |
 | Swap interval on Vulkan | Present mode is fixed when the swap chain is created | `SetSwapInterval` returns false |
 | Sampler LOD bias | `igl::SamplerStateDesc` has no such field | recorded for diagnostics, not applied |
+| `Texture3D.GetData` (volume readback) | IGL `v1.1.1` cannot attach a 3D texture to a framebuffer, which is its only readback route. `opengl::TextureBufferBase::attach` falls through to `glFramebufferTexture2D` for a volume — `getNumLayers()` counts array layers, of which a volume has one — and the driver answers `GL_INVALID_OPERATION … invalid textarget GL_TEXTURE_3D`; the Vulkan copy is 2D-only in the same way | `GetData` returns false and the shared layer raises `NotSupportedException` rather than fabricating voxels. Upload and sampling are unaffected (`plan_igl.md` IGL-17) |
 | Cube render-target MSAA | `igl::FramebufferDesc` cannot express a multisampled cube attachment with a per-face resolve | applied count reported as 1 |
-| `ShaderEffect` parameters on Vulkan | Loose (non-block) uniforms do not exist in Vulkan GLSL, and IGL's Vulkan encoder leaves `bindUniform` unimplemented | the draw throws by name; use a std140 block, or `CNA_IGL_BACKEND=opengl` |
+| Non-`Color` surface formats in the public API, beyond `Rg32` and `Single` | Promotion promises a whole path — the typed `SetData`/`GetData` overloads, sampling, render-target use, and the framework's four-byte colour-transfer rule — so each format needs that verified end to end on both backends. `Rg32` and `Single` now have it (`Igl_PublicSurfaceFormat`); the rest do not. `ByteEXT`, `UShortEXT` and `HalfSingle` additionally have texels that are not a multiple of four bytes, so they would be admitted by the renderer gate and then mishandled by the layer above it | the renderer refuses what IGL cannot store, accepts the two verified formats, and defers the rest to the framework's `Color`-only rule (see *Surface formats* above) |
+| A custom `ShaderEffect`'s sampler-unit uniform on Vulkan | An int uniform naming a texture UNIT is an OpenGL idea; on a SPIR-V target the sampler is bound by its own `layout(set, binding)` qualifier | `SetUniformInt("SomeSampler", 0)` is OpenGL-only. Setting it on Vulkan is a parameter with no member in the declared block, and is refused by name (`plan_igl.md` IGL-43) |
+| A custom `ShaderEffect`'s GLSL is not portable between the two backends | SPIR-V requires an explicit `layout(location = N)` on every user input and output — the varyings between stages included — and `layout(set = N, binding = N)` on samplers; desktop GLSL 4.10 requires neither, and the two backends do not accept the same `#version` | Ask `GraphicsDevice::GetShaderDialectEXT()` and supply two sources. A shader that violates this is refused with glslang's own line-and-reason text plus the requirement in words (`plan_igl.md` IGL-70); `igl_custom_effect_backend_test.cpp` is the worked example of both variants |
+
+## Writing a custom `ShaderEffect` for this renderer
+
+`ShaderEffect` is renderer-specific source text, and this renderer is two renderers. Ask which
+dialect the process resolved rather than inferring it from the build:
+
+```cpp
+const bool vulkan = device.GetShaderDialectEXT() ==
+                    CNA::Internal::Renderers::ShaderDialectEXT::GlslVulkan;
+ShaderEffect effect(device, vulkan ? kVulkanVert : kGlVert,
+                            vulkan ? kVulkanFrag : kGlFrag);
+```
+
+A single source cannot serve both, and that is a property of SPIR-V rather than of CNA: it requires
+an explicit `layout(location = N)` on every user input and output, the varyings between stages
+included, which desktop GLSL 4.10 does not; and the two backends do not accept the same `#version`
+(llvmpipe reports GL 4.5 here, so `#version 460` is unavailable on the OpenGL side).
+
+**Parameters.** On OpenGL they are loose uniforms and nothing else is needed. On Vulkan they must be
+members of a std140 block, at the binding this renderer reserves for a custom effect — set 1,
+binding 2, the generated shaders using only 0 and 1:
+
+```glsl
+layout(set = 1, binding = 2, std140) uniform CnaCustom {
+    vec2 screenSize;
+    vec2 cnaPad0;      // std140: a vec4 that follows a vec2 starts at 16
+    vec4 tint;
+};
+```
+
+Tell CNA that layout once. It is a no-op on OpenGL, so the call can sit unconditionally beside the
+effect's construction:
+
+```cpp
+static const char* const kNames[]   = {"screenSize", "tint"};
+static const int         kOffsets[] = {0, 16};
+effect.DeclareUniformBlockEXT(/*blockSizeBytes=*/32, kNames, kOffsets, 2);
+```
+
+The layout is declared rather than discovered because there is nothing to discover it from: IGL
+`v1.1.1` returns an empty reflection on Vulkan (`vulkan::RenderPipelineState` builds a default
+`RenderPipelineReflection`, and its `getIndexByName` is `IGL_DEBUG_ASSERT_NOT_IMPLEMENTED`). Having
+CNA parse your GLSL to guess at the offsets would be a worse contract than asking for them.
+
+A parameter you set that has no member in the declaration is **refused by name** at draw time.
+Dropping it silently would render a zero where you set a value, which is the failure this whole
+path exists to prevent.
+
+One asymmetry is real: `SetUniformInt("SomeSampler", 0)` — an int uniform naming a texture unit — is
+an OpenGL idea. On Vulkan the sampler is bound by its own `layout(set, binding)` qualifier, so make
+that call only on the OpenGL side.
+
+`modules/renderers/igl/examples/igl_custom_effect_backend_test.cpp` is the worked example of all of
+the above, and the three custom-effect tests beside it (`Igl_ShaderEffectTexture3D`,
+`Igl_SpriteBatchShaderEffect`, `Igl_Instancing`) each carry both variants and run on both backends.
+
+## IGL's debug trap is turned off deliberately
+
+IGL's debug builds answer an internal failure by logging it **and** raising `SIGTRAP`
+(`igl::_IGLDebugBreak`, reached from every `IGL_DEBUG_ABORT` and `IGL_SOFT_ASSERT`). That is the
+right default for IGL's own samples and the wrong one for an embedder: the same call sites also fill
+in the `igl::Result` this renderer already checks, so the trap removes CNA's ability to report a
+failure it is equipped to handle — a `ShaderEffect` whose GLSL does not compile used to take the
+process down instead of raising the compile error.
+
+`IglRenderer`'s constructor therefore calls `igl::setDebugBreakEnabled(false)` once per process.
+Only the break is disabled: IGL still logs every such failure at error level, and CNA still checks
+every `Result` and throws by name.
 
 ## glTF material inputs
 
@@ -109,10 +244,18 @@ viewport specifically so its coordinate system matches OpenGL's. Two consequence
    `Viewport` rectangle and the letterbox/overscan rectangle into a clip-space scale/offset matrix.
    Clipping is done by the scissor rectangle, whose Y origin *is* converted per backend (OpenGL
    measures it from the bottom, Vulkan from the top).
-2. **Off-screen targets render Y-flipped.** That stores their rows top-first, so
-   `RenderTarget2D.GetData()` and sampling a target both agree with an uploaded `Texture2D`. The
-   pipeline's front-face winding is reversed to match, so `CullClockwiseFace` culls the same
-   triangles whether you are drawing to the back buffer or to a target.
+2. **Off-screen targets render Y-flipped — on the OpenGL backend only.** That stores their rows
+   top-first, so `RenderTarget2D.GetData()` and sampling a target both agree with an uploaded
+   `Texture2D`, and the pipeline's front-face winding is reversed to match so `CullClockwiseFace`
+   culls the same triangles either way. The Vulkan backend needs neither, because "up the screen"
+   is a different direction through image memory in each: a GL texture's row 0 sits at `t=0`, the
+   bottom, while a Vulkan image's row 0 is the top. Applying it on both stored rendered content
+   upside down relative to uploaded content (`plan_igl.md` IGL-67).
+3. **Vulkan readbacks undo one row flip.** `igl::vulkan::Framebuffer::copyBytesColorAttachment`
+   reverses the rows of every rectangle it copies and its OpenGL counterpart reverses none, so
+   exactly one has to be undone for both backends to owe a caller the same bytes. The back buffer's
+   readback additionally converts the requested rectangle's Y origin, for the same reason the
+   scissor rectangle already did (`plan_igl.md` IGL-60).
 
 Clip depth is corrected with `z' = 2z − w` only when `IDevice::getNormalizedZRange()` reports
 `NegOneToOne` (the OpenGL backend); XNA's projections target Direct3D's `[0, w]`.

@@ -105,8 +105,20 @@ namespace
             owner.Recreate();
         }
 
+        // The last three entries used to be "create", "bind", "destroy": Recreate() unbound before
+        // destroying but the DESTRUCTOR did not, so the owner's own two teardown paths disagreed
+        // about the same operation. That asymmetry is now gone, and this trace is where it is
+        // pinned -- both paths unbind first.
+        //
+        // It was not cosmetic. Destroying a context that is still current leaves the platform's GL
+        // state pointing at a dead context, and on GLX that outlives the window: after `next`'s
+        // RTR-P5-15 balanced GraphicsDevice's surplus video-subsystem reference -- so the subsystem
+        // genuinely shuts down between devices instead of never coming down at all -- the IGL
+        // renderer could no longer initialise SDL video for a second device in the same process
+        // ("x11 not available"). IGL's Vulkan backend, OPENGLES3 and OPENGL1 all survived the same
+        // loop, which is what narrowed it to this one line.
         const std::vector<std::string> expected{
-            "create", "bind", "swap", "unbind", "destroy", "create", "bind", "destroy"};
+            "create", "bind", "swap", "unbind", "destroy", "create", "bind", "unbind", "destroy"};
         EXPECT_EQ(service.trace, expected);
     }
 

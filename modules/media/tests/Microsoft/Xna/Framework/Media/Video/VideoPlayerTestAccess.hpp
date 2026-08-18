@@ -3,7 +3,13 @@
 
 #include <cstddef>
 
+// plan_platform.md PLAT-SDL2-8: the mixer engine exists only under SOUND_ENABLED (the SDL3_mixer
+// selection). The two accessors that need it are guarded with it; the rest reach VideoPlayer's own
+// state and stay available in every audio profile, so a suite that only asks about the decoder or
+// the scratch buffer still builds under SDL2/NULL audio.
+#ifdef SOUND_ENABLED
 #include "CNA/Internal/Audio/MixerEngine.hpp"
+#endif
 #include "CNA/Internal/Media/VideoDecoder.hpp"
 #include "Microsoft/Xna/Framework/Media/Video/VideoPlayer.hpp"
 
@@ -40,10 +46,12 @@ namespace Microsoft::Xna::Framework::Media
             return player.audioStream_ != nullptr;
         }
 
+#ifdef SOUND_ENABLED
         static bool IsAudioStreamDevicePaused(const VideoPlayer& player)
         {
             return CNA::Internal::Audio::IsMixerStreamPaused(player.audioStream_);
         }
+#endif
 
         // Raw pointer identity, not just presence/pause-state -- proves a track switch that
         // shouldn't touch the audio stream at all (e.g. a video-only track switch) genuinely left
@@ -69,6 +77,7 @@ namespace Microsoft::Xna::Framework::Media
         // same way that function's own failure path does, without touching any other state. Lets a
         // test exercise the "no audio device" code path deterministically against a fixture that
         // genuinely has audio, rather than depending on this sandbox's real audio driver failing.
+#ifdef SOUND_ENABLED
         static void SimulateAudioDeviceBecomingUnavailable(VideoPlayer& player)
         {
             if (player.audioStream_)
@@ -77,5 +86,6 @@ namespace Microsoft::Xna::Framework::Media
                 player.audioStream_ = nullptr;
             }
         }
+#endif
     };
 }

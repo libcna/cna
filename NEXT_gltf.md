@@ -8,7 +8,7 @@ session needs to start work without re-deriving the state.
 
 - **Branch:** `feature/gltf`, with local commits. The owner explicitly requested a push when the
   current autonomous run reaches its weekly-limit cutoff; no pull request has been requested.
-- **Working document:** `plan_gltf.md`, **477** numbered rows. **Three remain open: `GLTF-344` and
+- **Working document:** `plan_gltf.md`, **478** numbered rows. **Three remain open: `GLTF-344` and
   `GLTF-465` (both `✅/⬜`), and `GLTF-459` (`⬜`).** The campaign retrospective
   (`GLTF-460`) is written: `docs/gltf-campaign-retrospective.md`. Read it before starting the next
   subsystem campaign — its central finding is that this campaign's own L0–L7 ladder reads data and
@@ -25,6 +25,16 @@ session needs to start work without re-deriving the state.
   "factor-only". It now consumes all twenty, verified on a live IGL OpenGL device in the new
   `cmake-build-igl` tree (40/40 IGL witnesses, 720/720 glTF/PBR tests), which also moved `GLTF-344`
   to 14 of 16.
+- **`origin/next` (`aa12a5bdc`, 62 commits) is merged in as of 2026-08-18 (`GLTF-478`).** One textual
+  conflict, in `GltfRendererPbrFallbackPolicyTests.cpp`, resolved hunk by hunk. The merge's own
+  finding: `next` fixed a double `AcquireSubsystem(Video)` that had kept the video subsystem alive
+  for the whole process, and with the reference balanced **IGL's OpenGL/GLX backend could not bring
+  it back up for a second device**. Half of that is fixed here — `PlatformGlContextOwner`'s
+  destructor destroyed a context that was still current, while its own `Recreate()` always unbound
+  first — and the rest is a per-cycle leak in IGL's GLX path that costs one test in a long `*Gltf*`
+  run on that one configuration. **It is not masked**: no test was skipped, relaxed or filtered.
+  IGL's Vulkan backend, `OPENGLES3` and `OPENGL1` all survive the same loop, which is how it was
+  narrowed. Owned by `plan_igl.md` from here.
 - **`GLTF-477` widened the audit past the seventeen and found two more third-state renderers.**
   `FNA3D` shaded every `PbrEffect` draw with FNA's own BasicEffect (its `SelectStockEffect` has no
   PBR case and it reads 0 of the 20 PBR draw parameters); `OPENGL1` drew every record wider than 32

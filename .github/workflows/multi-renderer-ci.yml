@@ -68,6 +68,12 @@ jobs:
           python3 scripts/check_renderer_identities.py
           python3 scripts/check_renderer_combinations.py
           python3 scripts/check_runtime_renderer_discipline.py
+          python3 scripts/check_renderer_target_discipline.py
+          # The discipline gate above is regex-only: it checks that each family HAS a descriptor,
+          # never that the descriptor parses. Three of them sat on `next` with unbalanced braces
+          # while it reported "OK: 45 renderer families". This runs before any configure, and the
+          # cna_renderer_descriptor_gate target below compiles them for real.
+          python3 scripts/check_renderer_descriptors.py
 
       - name: Configure and build (multi-renderer)
         run: |
@@ -77,7 +83,11 @@ jobs:
             -DCNA_GRAPHICS_RENDERER=HEADLESS \
             -DCNA_GRAPHICS_RENDERERS="HEADLESS;SOFTWARE;STUB" \
             -DCNA_BUILD_TESTS=ON
-          cmake --build build-multi --target CnaTests cna_demo_renderer_selection -j2
+          # cna_renderer_descriptor_gate compiles the descriptor of every registered family this
+          # configuration does not enter (cmake/RendererDescriptorGate.cmake). Named explicitly
+          # because this step builds specific targets rather than `all`.
+          cmake --build build-multi \
+            --target CnaTests cna_demo_renderer_selection cna_renderer_descriptor_gate -j2
 
       - name: Every compiled-in renderer is reachable at runtime
         run: |
@@ -95,6 +105,16 @@ jobs:
           actual=$(CNA_GRAPHICS_RENDERER=SOFTWARE ./build-multi/cna_demo_renderer_selection \
                    | sed -n 's/^Active renderer: //p')
           [ "${actual}" = "SOFTWARE" ] || { echo "FAIL: env var ignored, got '${actual}'" >&2; exit 1; }
+
+      # plan_runtimerenderer.md RTR-P6-1. The interesting case is the REJECT one: an invalid default
+      # used to be replaced by the list's first entry with only a STATUS line, so a build asking for
+      # one default and getting another succeeded and then answered every later renderer question
+      # about a renderer nobody asked for. A CI job that only ever configures VALID sets cannot
+      # notice that, which is why the refusal is asserted rather than assumed.
+      - name: The default renderer must be a member of the compiled-in set
+        run: |
+          set -euo pipefail
+          ctest --test-dir build-multi -R '^CnaRendererDefaultSelection_' --output-on-failure
 
       - name: Multi-renderer test suite
         run: |

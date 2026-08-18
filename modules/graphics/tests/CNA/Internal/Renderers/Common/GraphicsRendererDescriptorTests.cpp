@@ -11,6 +11,7 @@
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 
 #include <array>
+#include <cstddef>
 #include <string_view>
 #include <type_traits>
 
@@ -24,34 +25,37 @@ using CNA::Internal::Renderers::RendererWindowKind;
 
 namespace
 {
-    /// Every public identity, in enum order. Kept in one place so the name-table test below cannot
-    /// silently pass by testing fewer identities than exist; scripts/check_renderer_identities.py
-    /// is what pins the count itself at 46.
-    constexpr std::array<GraphicsRendererType, 46> AllRendererTypes{
-        GraphicsRendererType::SdlRenderer, GraphicsRendererType::OpenGLES2,
-        GraphicsRendererType::OpenGLES3,   GraphicsRendererType::OpenGL33,
-        GraphicsRendererType::WebGL1,      GraphicsRendererType::WebGL2,
-        GraphicsRendererType::Bgfx,        GraphicsRendererType::Vulkan,
-        GraphicsRendererType::WebGPU,      GraphicsRendererType::Magnum,
-        GraphicsRendererType::Headless,    GraphicsRendererType::Software,
-        GraphicsRendererType::Stub,        GraphicsRendererType::DirectX11,
-        GraphicsRendererType::DirectX12,   GraphicsRendererType::Direct2D,
-        GraphicsRendererType::Canvas,      GraphicsRendererType::HtmlDom,
-        GraphicsRendererType::Skia,        GraphicsRendererType::Blend2D,
-        GraphicsRendererType::FreeDirect,  GraphicsRendererType::DirectX9,
-        GraphicsRendererType::DirectX1,    GraphicsRendererType::DirectX2,
-        GraphicsRendererType::DirectX3,    GraphicsRendererType::DirectX5,
-        GraphicsRendererType::DirectX6,    GraphicsRendererType::DirectX7,
-        GraphicsRendererType::DirectX8,    GraphicsRendererType::DirectX10,
-        GraphicsRendererType::SdlGpu,      GraphicsRendererType::OpenGLES1,
-        GraphicsRendererType::OpenGL4,     GraphicsRendererType::OpenGL1,
-        GraphicsRendererType::OpenGL2,     GraphicsRendererType::Wicked,
-        GraphicsRendererType::Sokol,       GraphicsRendererType::Diligent,
-        GraphicsRendererType::Glide,       GraphicsRendererType::Gdi,
-        GraphicsRendererType::Llgl,        GraphicsRendererType::Metal,
-        GraphicsRendererType::Fna3d,       GraphicsRendererType::SvgDom,
-        GraphicsRendererType::OpenVg,      GraphicsRendererType::PortableGL,
-    };
+    /// Every public identity, DERIVED from the enum rather than restated beside it.
+    ///
+    /// It used to be a hand-written list of 46 entries carrying a comment about not silently
+    /// testing fewer identities than exist -- and then it did exactly that: TINYGL, IGL and
+    /// PIXIJS were added to the enum and never to this list, so the completeness test below
+    /// stopped covering the three newest names without anything failing. A restated list cannot
+    /// keep that promise; a derived one can. PixiJs is the last enumerator, which is the same
+    /// range tryParseGraphicsRendererName() itself walks, so a new identity is covered the moment
+    /// it is declared.
+    constexpr std::size_t RendererIdentityCount =
+        static_cast<std::size_t>(GraphicsRendererType::PixiJs) + 1;
+
+    /// scripts/check_renderer_identities.py is the registry gate for the public count; this
+    /// restates it deliberately, as a tripwire rather than as a second list -- adding an identity
+    /// fails here until the gate, the documentation and this number are updated together.
+    static_assert(RendererIdentityCount == 49,
+                  "the number of public renderer identities changed -- update "
+                  "scripts/check_renderer_identities.py, cmake/RendererRegistry.cmake and the "
+                  "documented count in the same change (plan_runtimerenderer.md design "
+                  "decision 10)");
+
+    constexpr std::array<GraphicsRendererType, RendererIdentityCount> MakeAllRendererTypes()
+    {
+        std::array<GraphicsRendererType, RendererIdentityCount> types{};
+        for (std::size_t ordinal = 0; ordinal < RendererIdentityCount; ++ordinal)
+            types[ordinal] = static_cast<GraphicsRendererType>(ordinal);
+        return types;
+    }
+
+    constexpr std::array<GraphicsRendererType, RendererIdentityCount> AllRendererTypes =
+        MakeAllRendererTypes();
 
     constexpr std::array<RendererWindowKind, 5> AllWindowKinds{
         RendererWindowKind::None,   RendererWindowKind::Plain, RendererWindowKind::OpenGL,
@@ -203,7 +207,7 @@ TEST(GraphicsRendererFallbackRecordTest, EveryReasonHasItsOwnName)
 }
 
 // ---------------------------------------------------------------------------
-// Name table (RTR-P7-5: the 46 names must exist exactly once, and be complete)
+// Name table (RTR-P7-5: every identity's name must exist exactly once, and be complete)
 // ---------------------------------------------------------------------------
 
 TEST(GraphicsRendererNameTest, EveryIdentityHasItsOwnNonPlaceholderName)

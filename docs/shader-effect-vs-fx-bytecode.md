@@ -6,7 +6,7 @@ for one never implies support for the other.
 | API | Input | Capability | Current renderer support |
 |---|---|---|---|
 | `CNAEXT::ShaderEffect` | Caller-authored GLSL, SPIR-V, or another backend-native source pair | `CustomEffects` | Renderer-specific |
-| `Effect(GraphicsDevice&, byte[])` | XNA/FNA Direct3D 9 Effect Framework binary (`.fxb`, normally stored in XNB) | `CompiledEffects` | FNA3D |
+| `Effect(GraphicsDevice&, byte[])` | XNA/FNA Direct3D 9 Effect Framework binary (`.fxb`, normally stored in XNB) | `CompiledEffects` | FNA3D; SDL_GPU and the EasyGL/OpenGL family behind their own build options |
 
 The six stock effects remain portable CNA APIs and do not require either custom-effect capability.
 
@@ -72,12 +72,21 @@ Malformed content and an unsupported backend are intentionally distinguishable:
 format/backend mismatch. The XNB reader translates either into an asset-scoped
 `ContentLoadException`.
 
-## Non-FNA3D renderers
+## The other renderers
 
-Every other renderer currently inherits the common `CreateCompiledEffect()` refusal and reports
+**Updated 2026-08-17.** Two more backends have since passed the gate: `SDL_GPU`
+(`CNA_SDL_GPU_COMPILED_EFFECTS`) and the EasyGL/OpenGL family (`CNA_EASYGL_COMPILED_EFFECTS`), both
+opt-in at configure time because MojoShader is a fetched dependency neither renderer otherwise
+needs. With the option off they report `CompiledEffects == false` and refuse, exactly like any
+unsupported backend. `fx-compiled-effects.md` §10 carries the current matrix and each backend's
+remaining refusals.
+
+Every other renderer inherits the common `CreateCompiledEffect()` refusal and reports
 `CompiledEffects == false`. This is the correct quality gate: parsing metadata alone, translating
 only one shader stage, ignoring pass state, or falling back to pass zero is not advertised as
-support.
+support. The gate was widened in 2026-08-17's repair pass after three backends were found passing
+it while several of their draw routes still rendered with a stock shader -- the shared suite now
+reads pixels back for every draw shape it covers.
 
 Future programmable backends should implement the renderer-neutral `ICompiledEffectRuntime` and
 pass the same reflection, mutation, clone, draw, SpriteBatch, state, sampler, malformed-input, and

@@ -104,14 +104,27 @@ surface (`plan_runtimerenderer.md`):
       `scripts/check_runtime_renderer_discipline.py` — exactly one per family.
 - [ ] `CreateGraphicsRenderer` defined in the family's **own namespace**, not in
       `CNA::Internal::Renderers`. A shared factory symbol is what made multi-renderer builds
-      impossible.
-- [ ] The descriptor answers all four pre-window questions honestly: `needsWindow`,
-      `needsVideoSubsystem`, `prepareWindowFlags()`, `applyPreWindowAttributes()`.
+      impossible. Enforced by the discipline gate.
+- [ ] The descriptor answers the pre-window questions honestly: `needsWindow`,
+      `needsVideoSubsystem`, `windowKind`, `wantsHighDpi`, `glFramebuffer`, and which platform
+      services the family receives (`needsSurfacePresenter`, `needsGlContext`,
+      `needsVulkanSurface`). These are **data**, not hooks — a descriptor never names a windowing
+      library.
 - [ ] `windowKind` set to the kind the renderer's window really is — fallback uses it to decide
-      whether a window can be reused or must be recreated.
+      whether a window can be reused or must be recreated. A family whose native API is chosen at
+      runtime (`BGFX`, `LLGL`, `FNA3D`, `DILIGENT`, `IGL`) must report the kind it will *actually*
+      ask for, from the same resolution the renderer itself uses; BGFX once hardcoded `Vulkan`
+      while asking for a GL window, which only became visible when the cross-kind branch went live.
 - [ ] `isAvailable()` is a real probe where one is cheap and side-effect-free; `AlwaysAvailable`
       otherwise. Returning true is not a promise construction will succeed.
-- [ ] The family's identity registered in `cmake/RendererRegistry.cmake`'s namespace map.
+- [ ] The family's identity registered in `cmake/RendererRegistry.cmake`'s namespace map. Enforced
+      by the discipline gate, which checks the whole chain — identity → namespace → descriptor
+      accessor — for **every** public identity. `PIXIJS` shipped without this entry and could
+      therefore never have configured; the gate exists because nothing caught that.
+- [ ] The identity's `CNA_RENDERER_<X>` macro announced in `cmake/RendererSelection.cmake` with
+      `list(APPEND _cna_identity_defines ...)`, never `add_compile_definitions()`. The latter is
+      directory-scoped and would define a non-default identity's macro project-wide. Enforced by
+      the discipline gate.
 - [ ] Any renderer-specific behaviour reaches the XNA layer through an `IGraphicsRenderer` virtual
       or a `GraphicsRendererDescriptor::adapterQueries` hook — **never** an `#ifdef` in
       `modules/graphics/src`. Enforced by the discipline gate.

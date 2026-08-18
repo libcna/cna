@@ -180,6 +180,11 @@ protected:
     GraphicsDevice gd;
 };
 
+// plan_platform.md PLAT-SDL2-8: needs the decoder/mixer engine, which is the SDL3_mixer
+// implementation and is absent from the archive for every other CNA_AUDIO_PLATFORM value.
+// Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
+// so this case is unobservable there rather than merely untested.
+#ifdef SOUND_ENABLED
 TEST_F(CnjCapabilityMatrixTest, SoundEffectDelegatesViaSourceFile)
 {
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
@@ -194,6 +199,7 @@ TEST_F(CnjCapabilityMatrixTest, SoundEffectDelegatesViaSourceFile)
     SoundEffect loaded = cm.Load<SoundEffect>("beep");
     EXPECT_GT(loaded.getDurationProperty().getTotalMillisecondsProperty(), 0.0);
 }
+#endif  // SOUND_ENABLED
 
 
 // REMED-GFX-135: does THIS build's renderer actually store a cube face? Native 2D, ASCII, Canvas

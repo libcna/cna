@@ -3,6 +3,18 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+#include "CNA/Internal/Renderers/Vulkan/VulkanCompiledEffect.hpp"
+namespace {
+    /// plan_fx.md FX-112: the stream descriptor is spelled often enough in this file that the
+    /// fully-qualified nested name is noise.
+    using VkFxStreamEXT =
+        CNA::Internal::Renderers::Vulkan::VulkanCompiledEffect::CompiledVertexStreamEXT;
+}
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#endif
 #include <bit>
 #include <algorithm>
 #include <cassert>
@@ -1157,6 +1169,9 @@ namespace CNA::Internal::Renderers::Vulkan
         indices_.clear();
         draws_.clear();
         currentTexture_  = nullptr;
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+        pendingCompiledSprites_.clear();
+#endif
         batchFirstIndex_ = 0;
         activeRT_        = renderer_->currentRT_;
         activeSegment_   = renderer_->currentSegment_;
@@ -1188,6 +1203,14 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanSpriteBatchRenderer::End()
     {
         if (!active_) return;
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+        if (!pendingCompiledSprites_.empty())
+        {
+            FlushPendingCompiledSpritesEXT();
+            active_ = false;
+            return;
+        }
+#endif
         renderer_->activeCustomEffect_ = nullptr;
         if (customEffect_) customEffect_->Apply(); // may set renderer_->activeCustomEffect_
         customEffectRenderer_ = renderer_->activeCustomEffect_;
@@ -1274,6 +1297,114 @@ namespace CNA::Internal::Renderers::Vulkan
         }
     }
 
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+    void VulkanSpriteBatchRenderer::FlushPendingCompiledSpritesEXT()
+    {
+        // plan_fx.md FX-102. XNA runs a compiled Effect's passes at FLUSH granularity over a whole
+        // contiguous run of same-texture sprites: FNA's SpriteBatch.FlushBatch splits the batch
+        // into texture runs and DrawPrimitives wraps each run's draw in `foreach (pass)`. So the
+        // submission order for two sprites sharing a texture and two passes is s0p0, s1p0, s0p1,
+        // s1p1 -- pass-major within a run, not sprite-major. Under a non-opaque blend the two
+        // orders produce visibly different pixels.
+        ICompiledEffectRuntime* runtime =
+            customEffect_ != nullptr ? customEffect_->GetCompiledRuntimePtr() : nullptr;
+        Microsoft::Xna::Framework::Graphics::EffectTechnique* technique =
+            customEffect_ != nullptr ? customEffect_->getCurrentTechniqueProperty() : nullptr;
+        const int passCount =
+            technique != nullptr ? technique->getPassesProperty().getCountProperty() : 0;
+        if (runtime == nullptr || passCount == 0)
+        {
+            pendingCompiledSprites_.clear();
+            throw std::logic_error(
+                "CNA Vulkan: a compiled Effect used with SpriteBatch must have a current "
+                "technique with at least one pass.");
+        }
+
+        std::size_t runStart = 0;
+        while (runStart < pendingCompiledSprites_.size())
+        {
+            std::size_t runEnd = runStart + 1;
+            while (runEnd < pendingCompiledSprites_.size() &&
+                   pendingCompiledSprites_[runEnd].texture ==
+                       pendingCompiledSprites_[runStart].texture)
+            {
+                ++runEnd;
+            }
+            for (int pass = 0; pass < passCount; ++pass)
+            {
+                technique->getPassesProperty()[pass].Apply();
+                for (std::size_t i = runStart; i < runEnd; ++i)
+                    QueueCompiledSpriteEXT(pendingCompiledSprites_[i], runtime);
+            }
+            runStart = runEnd;
+        }
+        pendingCompiledSprites_.clear();
+    }
+
+    void VulkanSpriteBatchRenderer::QueueCompiledSpriteEXT(
+        const PendingCompiledSpriteEXT& sprite, ICompiledEffectRuntime* runtime)
+    {
+        const ITextureRenderer& texture = *sprite.texture;
+        const float tw = static_cast<float>(texture.GetWidth());
+        const float th = static_cast<float>(texture.GetHeight());
+
+        float u1 = static_cast<float>(sprite.source.X) / tw;
+        float v1 = static_cast<float>(sprite.source.Y) / th;
+        float u2 = static_cast<float>(sprite.source.X + sprite.source.Width) / tw;
+        float v2 = static_cast<float>(sprite.source.Y + sprite.source.Height) / th;
+        if (static_cast<int>(sprite.effects) & static_cast<int>(SpriteEffects::FlipHorizontally))
+            std::swap(u1, u2);
+        if (static_cast<int>(sprite.effects) & static_cast<int>(SpriteEffects::FlipVertically))
+            std::swap(v1, v2);
+
+        const float r = sprite.color.getRProperty() / 255.f;
+        const float g = sprite.color.getGProperty() / 255.f;
+        const float b = sprite.color.getBProperty() / 255.f;
+        const float a = sprite.color.getAProperty() / 255.f;
+
+        // Identical corner math to the stock path above, so a compiled sprite lands exactly where
+        // the same sprite drawn without an Effect would.
+        const float dx = static_cast<float>(sprite.destination.X);
+        const float dy = static_cast<float>(sprite.destination.Y);
+        const float dw = static_cast<float>(sprite.destination.Width);
+        const float dh = static_cast<float>(sprite.destination.Height);
+        const float sw = static_cast<float>(sprite.source.Width);
+        const float sh = static_cast<float>(sprite.source.Height);
+        const float ox = sprite.origin.X;
+        const float oy = sprite.origin.Y;
+        const float sx = dw / sw;
+        const float sy = dh / sh;
+
+        const float cosR = std::cos(sprite.rotation);
+        const float sinR = std::sin(sprite.rotation);
+        auto corner = [&](float lx, float ly) {
+            const float px = (lx - ox) * sx;
+            const float py = (ly - oy) * sy;
+            return Vector2::Transform(
+                Vector2(dx + px * cosR - py * sinR, dy + px * sinR + py * cosR), transform_);
+        };
+        const Vector2 c0 = corner(0.f, 0.f);
+        const Vector2 c1 = corner(sw, 0.f);
+        const Vector2 c2 = corner(sw, sh);
+        const Vector2 c3 = corner(0.f, sh);
+
+        // Six vertices rather than four plus indices: the compiled draw route is non-indexed, and
+        // a quad is small enough that the duplication costs nothing worth an index buffer.
+        const Sprite2DVertex quad[6] = {
+            {c0.X, c0.Y, u1, v1, r, g, b, a},
+            {c1.X, c1.Y, u2, v1, r, g, b, a},
+            {c2.X, c2.Y, u2, v2, r, g, b, a},
+            {c2.X, c2.Y, u2, v2, r, g, b, a},
+            {c3.X, c3.Y, u1, v2, r, g, b, a},
+            {c0.X, c0.Y, u1, v1, r, g, b, a},
+        };
+        const auto* samplable = dynamic_cast<const IVulkanSamplable*>(&texture);
+        if (samplable == nullptr)
+            throw std::runtime_error("Vulkan SpriteBatch: texture is not IVulkanSamplable");
+        renderer_->QueueCompiledEffectSpriteEXT(quad, samplable->GetVkImageView(), runtime);
+    }
+#endif  // CNA_VULKAN_COMPILED_EFFECTS
+
     void VulkanSpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {
         float w = static_cast<float>(texture.GetWidth());
@@ -1298,6 +1429,52 @@ namespace CNA::Internal::Renderers::Vulkan
                                         float /*layerDepth*/)
     {
         if (!active_) throw std::runtime_error("Vulkan SpriteBatch: Draw called outside Begin/End");
+
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+        // plan_fx.md FX-071/FX-080: customEffect_ is either ShaderEffect-derived or compiled,
+        // never both. A compiled Effect owns the whole program including the projection, so its
+        // sprites leave the stock sprite pipeline entirely -- letting them fall through to it
+        // would render the sprite with the stock shader and ignore the Effect silently.
+        if (ICompiledEffectRuntime* compiledRuntime =
+                customEffect_ != nullptr ? customEffect_->GetCompiledRuntimePtr() : nullptr)
+        {
+            const PendingCompiledSpriteEXT sprite{&texture, dest, src, color,
+                                                  rotation, origin, effects};
+            if (!immediateMode_)
+            {
+                // Deferred and every sorted mode: XNA applies the passes when the batch FLUSHES,
+                // over whole texture runs, so the sprite is only recorded here.
+                pendingCompiledSprites_.push_back(sprite);
+                return;
+            }
+            // Immediate: XNA flushes this one sprite now, so its run IS this sprite and applying
+            // the passes around it here produces the same order.
+            Microsoft::Xna::Framework::Graphics::EffectTechnique* technique =
+                customEffect_->getCurrentTechniqueProperty();
+            const int passCount =
+                technique != nullptr ? technique->getPassesProperty().getCountProperty() : 0;
+            if (passCount == 0)
+            {
+                throw std::logic_error(
+                    "CNA Vulkan: a compiled Effect used with SpriteBatch must have a current "
+                    "technique with at least one pass.");
+            }
+            for (int pass = 0; pass < passCount; ++pass)
+            {
+                technique->getPassesProperty()[pass].Apply();
+                QueueCompiledSpriteEXT(sprite, compiledRuntime);
+            }
+            return;
+        }
+#else
+        if (customEffect_ != nullptr && customEffect_->GetCompiledRuntimePtr() != nullptr)
+        {
+            throw System::NotSupportedException(
+                "CNA Vulkan: this build has no compiled-effect support "
+                "(CNA_VULKAN_COMPILED_EFFECTS is off); SpriteBatch would silently draw with the "
+                "stock sprite shader instead of the Effect.");
+        }
+#endif
 
         const auto* samplable = dynamic_cast<const IVulkanSamplable*>(&texture);
         if (!samplable)
@@ -1764,6 +1941,47 @@ namespace CNA::Internal::Renderers::Vulkan
         if (descriptorPoolFogTex3D_      != VK_NULL_HANDLE) { vkDestroyDescriptorPool(device_, descriptorPoolFogTex3D_, nullptr);      descriptorPoolFogTex3D_      = VK_NULL_HANDLE; }
         if (descriptorSetLayoutFogTex3D_ != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(device_, descriptorSetLayoutFogTex3D_, nullptr); descriptorSetLayoutFogTex3D_ = VK_NULL_HANDLE; }
         if (pipelineLayout2D_      != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayout2D_, nullptr);       pipelineLayout2D_      = VK_NULL_HANDLE; }
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+        // plan_fx.md FX-065.
+        for (auto& [k, module] : compiledEffectShaderModules_)
+            if (module != VK_NULL_HANDLE) vkDestroyShaderModule(device_, module, nullptr);
+        compiledEffectShaderModules_.clear();
+        for (auto& [k, pipe] : compiledEffectPipelines_)
+            if (pipe != VK_NULL_HANDLE) vkDestroyPipeline(device_, pipe, nullptr);
+        compiledEffectPipelines_.clear();
+        for (auto& [k, layout] : compiledEffectPipelineLayouts_)
+            if (layout != VK_NULL_HANDLE) vkDestroyPipelineLayout(device_, layout, nullptr);
+        compiledEffectPipelineLayouts_.clear();
+        for (auto& [k, layout] : compiledEffectSamplerSetLayouts_)
+            if (layout != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(device_, layout, nullptr);
+        compiledEffectSamplerSetLayouts_.clear();
+        for (auto& cache : compiledEffectSamplerSets_) cache.clear(); // freed with the pool
+        if (compiledEffectDescriptorPool_ != VK_NULL_HANDLE) {
+            vkDestroyDescriptorPool(device_, compiledEffectDescriptorPool_, nullptr);
+            compiledEffectDescriptorPool_ = VK_NULL_HANDLE;
+        }
+        if (compiledEffectUniformSetLayoutVS_ != VK_NULL_HANDLE) {
+            vkDestroyDescriptorSetLayout(device_, compiledEffectUniformSetLayoutVS_, nullptr);
+            compiledEffectUniformSetLayoutVS_ = VK_NULL_HANDLE;
+        }
+        if (compiledEffectUniformSetLayoutPS_ != VK_NULL_HANDLE) {
+            vkDestroyDescriptorSetLayout(device_, compiledEffectUniformSetLayoutPS_, nullptr);
+            compiledEffectUniformSetLayoutPS_ = VK_NULL_HANDLE;
+        }
+        if (compiledEffectEmptySetLayout_ != VK_NULL_HANDLE) {
+            vkDestroyDescriptorSetLayout(device_, compiledEffectEmptySetLayout_, nullptr);
+            compiledEffectEmptySetLayout_ = VK_NULL_HANDLE;
+        }
+        for (auto& chunks : compiledEffectUBOChunks_) {
+            for (auto& chunk : chunks) {
+                if (chunk.vsBuffer != VK_NULL_HANDLE) vkDestroyBuffer(device_, chunk.vsBuffer, nullptr);
+                if (chunk.vsMemory != VK_NULL_HANDLE) vkFreeMemory(device_, chunk.vsMemory, nullptr);
+                if (chunk.psBuffer != VK_NULL_HANDLE) vkDestroyBuffer(device_, chunk.psBuffer, nullptr);
+                if (chunk.psMemory != VK_NULL_HANDLE) vkFreeMemory(device_, chunk.psMemory, nullptr);
+            }
+            chunks.clear();
+        }
+#endif
         for (auto fb : swapchainFramebuffers_)
             if (fb != VK_NULL_HANDLE) vkDestroyFramebuffer(device_, fb, nullptr);
         swapchainFramebuffers_.clear();
@@ -3068,17 +3286,61 @@ namespace CNA::Internal::Renderers::Vulkan
                                                    int maxAnisotropy)
     {
         if (slot < 0 || slot >= 16) return;
+        // plan_fx.md FX-092: the slot's state is a function of THIS call's arguments and nothing
+        // else. GraphicsDevice::applySamplerStatesToRenderer runs before every draw and follows
+        // this call with ApplySamplerMipState and ApplySamplerAddressW, so a device-driven
+        // application overwrites the three defaults below with the real SamplerState values
+        // immediately. Only a caller that applies filter and addressing alone -- SpriteBatch's own
+        // flush -- keeps them, which is exactly the XNA default it means. Without this, a compiled
+        // Effect that clamped slot 0 to mip 1 left every later stock sprite sampling mip 1 too.
+        //
+        // The W axis follows addressU because every XNA 4.0 SamplerState preset (PointClamp,
+        // LinearWrap, AnisotropicClamp, ...) sets all three axes to the same mode, and a
+        // SpriteBatch's sampler state is always one of those shapes.
+        SamplerStateKey& state = samplerSlotState_[slot];
+        state.filter = filter;
+        state.addressU = addressU;
+        state.addressV = addressV;
+        state.addressW = addressU;
+        state.maxAnisotropy = maxAnisotropy;
+        state.maxMipLevel = 0;
+        state.lodBias = 0.0f;
+        RebuildSlotSamplerEXT(slot);
+        VkSamplerTraceEXT("apply.slot       slot=%d filter=%d addrU=%d addrV=%d aniso=%d "
+                          "sampler=0x%llx default=0x%llx",
+                          slot, filter, addressU, addressV, maxAnisotropy,
+                          VkH(slotSamplers_[slot]), VkH(defaultSampler_));
+    }
 
-        SamplerStateKey key{ filter, addressU, addressV, maxAnisotropy };
+    void VulkanRenderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
+    {
+        if (slot < 0 || slot >= 16) return;
+        samplerSlotState_[slot].maxMipLevel = maxMipLevel;
+        samplerSlotState_[slot].lodBias = lodBias;
+        RebuildSlotSamplerEXT(slot);
+    }
+
+    void VulkanRenderer::ApplySamplerAddressW(int slot, int addressW)
+    {
+        if (slot < 0 || slot >= 16) return;
+        samplerSlotState_[slot].addressW = addressW;
+        RebuildSlotSamplerEXT(slot);
+    }
+
+    void VulkanRenderer::RebuildSlotSamplerEXT(int slot)
+    {
+        const VkSampler sampler = GetOrCreateSamplerEXT(samplerSlotState_[slot]);
+        if (sampler != VK_NULL_HANDLE) slotSamplers_[slot] = sampler;
+    }
+
+    VkSampler VulkanRenderer::GetOrCreateSamplerEXT(const SamplerStateKey& key)
+    {
+        const int filter = key.filter;
+        const int addressU = key.addressU;
+        const int addressV = key.addressV;
+        const int maxAnisotropy = key.maxAnisotropy;
         auto it = samplerCache_.find(key);
-        if (it != samplerCache_.end()) {
-            slotSamplers_[slot] = it->second;
-            VkSamplerTraceEXT("apply.slot       slot=%d filter=%d addrU=%d addrV=%d aniso=%d "
-                              "sampler=0x%llx cached=1 default=0x%llx",
-                              slot, filter, addressU, addressV, maxAnisotropy,
-                              VkH(it->second), VkH(defaultSampler_));
-            return;
-        }
+        if (it != samplerCache_.end()) return it->second;
 
         // XNA TextureFilter int values:
         //  0=Linear, 1=Point, 2=Anisotropic, 3=LinearMipPoint, 4=PointMipLinear,
@@ -3114,12 +3376,16 @@ namespace CNA::Internal::Renderers::Vulkan
         ci.minFilter    = minF;
         ci.addressModeU = toAddr(addressU);
         ci.addressModeV = toAddr(addressV);
-        ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        ci.addressModeW = toAddr(key.addressW);
         ci.mipmapMode   = mipMode;
         ci.borderColor  = VK_BORDER_COLOR_INT_TRANSPARENT_BLACK;
         // Task 878: see CreateSampler()'s identical comment -- without this, every per-slot
         // sampler variant would silently clamp to mip level 0 too.
         ci.maxLod       = VK_LOD_CLAMP_NONE;
+        // plan_fx.md FX-091. XNA's MaxMipLevel names the most DETAILED level the sampler may
+        // select, so it is Vulkan's minLod, not its maxLod -- the two names run opposite ways.
+        ci.minLod       = static_cast<float>(std::max(0, key.maxMipLevel));
+        ci.mipLodBias   = key.lodBias;
         if (enableAniso && anisotropySupported_) {
             ci.anisotropyEnable = VK_TRUE;
             ci.maxAnisotropy    = std::min(static_cast<float>(std::max(1, maxAnisotropy)),
@@ -3128,13 +3394,9 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkSampler sampler = VK_NULL_HANDLE;
         if (vkCreateSampler(device_, &ci, nullptr, &sampler) != VK_SUCCESS)
-            return; // fallback: keep existing slot sampler
-        samplerCache_[key]   = sampler;
-        slotSamplers_[slot] = sampler;
-        VkSamplerTraceEXT("apply.slot       slot=%d filter=%d addrU=%d addrV=%d aniso=%d "
-                          "sampler=0x%llx cached=0 default=0x%llx",
-                          slot, filter, addressU, addressV, maxAnisotropy,
-                          VkH(sampler), VkH(defaultSampler_));
+            return VK_NULL_HANDLE; // caller keeps whatever it already had
+        samplerCache_[key] = sampler;
+        return sampler;
     }
 
     VkDescriptorSet VulkanRenderer::GetOrCreateTexSamplerDescSet(VkImageView view,
@@ -4226,9 +4488,17 @@ namespace CNA::Internal::Renderers::Vulkan
     // Position@0 + Color@12 layout for a stride the canonical table does not list -- which is why
     // a position-only stride-12 buffer renders correctly here today -- while the Instanced3D
     // module is position-only for every stride PackedColorOffsetForStride below does not list.
+    // plan_fx.md FX-065: `compiledEffect` exempts a draw from this gate, and only this gate. The
+    // gate exists because the stock routes pick their VkVertexInputAttributeDescription set from
+    // the buffer's STRIDE, so a declaration that set cannot represent would be rendered from the
+    // wrong bytes. A compiled effect derives its attributes from the declaration itself, one per
+    // shader input at that element's own format and offset, so any declaration it can satisfy is
+    // faithful by construction -- and one it cannot is refused by name in LinkAndGetShadersEXT.
     static void RequireFaithfulDeclarationEXT(const IVertexBufferRenderer& vb_in, const char* route,
-                                              bool positionOnlyFallback = false)
+                                              bool positionOnlyFallback = false,
+                                              bool compiledEffect = false)
     {
+        if (compiledEffect) return;
         const auto& vb = static_cast<const VulkanVertexBufferRenderer&>(vb_in);
         CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
             vb.GetDeclarationEXT(), static_cast<int>(vb.GetStride()),
@@ -5968,6 +6238,672 @@ namespace CNA::Internal::Renderers::Vulkan
         cache[key] = EffectDescSetEntry{ ds, { view2D, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE } };
         return ds;
     }
+
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+    // ---- Compiled XNA effects (plan_fx.md FX-065) -------------------------------------------
+    //
+    // MojoShader's SPIR-V profile fixes its descriptor sets at 0 = vertex samplers, 1 = vertex
+    // uniform block, 2 = pixel samplers, 3 = pixel uniform block. Every pipeline layout declares
+    // all four; the ones a shader does not use get an empty layout, which is what
+    // vkCreatePipelineLayout needs at that index. Vertex-stage sampling is refused before we get
+    // here (plan_fx.md FX-109), so set 0 is always the empty one.
+
+    void VulkanRenderer::PrepareCompiledEffectDrawEXT(
+        Pending3DDraw& d, const IVertexBufferRenderer& vb_in, const GpuDrawParams& params)
+    {
+        // This renderer binds one vertex stream, and reports MultiStreamVertexInput false, so a
+        // wider binding set is refused by GraphicsDevice first. Draw*PrimitivesEx is still a public
+        // entry point a harness can call directly, and a silently truncated binding list looks
+        // exactly like a correct draw of the wrong data.
+        RejectUnsupportedStreamCombination(params, "CNA Vulkan compiled-effect drawing");
+
+        const auto& vb = static_cast<const VulkanVertexBufferRenderer&>(vb_in);
+        const auto& declaration = vb.GetDeclarationEXT();
+        if (declaration.IsEmpty())
+        {
+            throw System::NotSupportedException(
+                "CNA Vulkan: a compiled-effect draw needs the vertex buffer's own "
+                "VertexDeclaration; this renderer does not infer one from stride for this route.");
+        }
+        const std::vector<VkFxStreamEXT> streams{
+            {&declaration.GetElements(), static_cast<std::uint32_t>(d.stride), false}};
+        PrepareCompiledEffectDrawEXT(d, streams, params.compiledEffectRuntime);
+    }
+
+    void VulkanRenderer::PrepareCompiledEffectDrawEXT(
+        Pending3DDraw& d,
+        const std::vector<CNA::Internal::Renderers::Vulkan::VulkanCompiledEffect::
+                              CompiledVertexStreamEXT>& streams,
+        ICompiledEffectRuntime* runtime)
+    {
+        using Microsoft::Xna::Framework::Graphics::Texture2D;
+        using Microsoft::Xna::Framework::Graphics::Texture3D;
+        using Microsoft::Xna::Framework::Graphics::TextureCube;
+        namespace VkFx = CNA::Internal::Renderers::Vulkan;
+
+        auto* effect = dynamic_cast<VkFx::VulkanCompiledEffect*>(runtime);
+        if (effect == nullptr)
+        {
+            throw std::runtime_error(
+                "CNA Vulkan: the applied compiled effect was not created by this renderer.");
+        }
+
+        auto& compiled = d.compiledEffect;
+        compiled.pass = effect->LinkAndGetShadersEXT(streams);
+
+        VkFx::VulkanCompiledShaderEXT* vertexShader = nullptr;
+        VkFx::VulkanCompiledShaderEXT* pixelShader = nullptr;
+        effect->GetBoundShadersEXT(vertexShader, pixelShader);
+        if (vertexShader != nullptr && vertexShader->parseData != nullptr &&
+            vertexShader->parseData->sampler_count > 0)
+        {
+            // plan_fx.md FX-109: MojoShader's SPIR-V profile reserves descriptor set 0 for them,
+            // but nothing above this renderer routes VertexSamplerStates down here, so a bound
+            // vertex sampler would read an undefined image rather than the intended one.
+            throw System::NotSupportedException(
+                "CNA Vulkan: this compiled effect's vertex shader samples a texture; vertex-stage "
+                "sampling is not implemented by this renderer's compiled-effect draw route yet.");
+        }
+
+        effect->CaptureUniformSnapshotEXT(compiled.vertexUniforms, compiled.pixelUniforms);
+        const auto requireFits = [](const std::vector<std::uint8_t>& bytes, const char* stage) {
+            if (bytes.size() > kCompiledEffectUBOStride)
+            {
+                throw System::NotSupportedException(
+                    std::string("CNA Vulkan: this compiled effect's ") + stage +
+                    " uniform block is " + std::to_string(bytes.size()) +
+                    " bytes, larger than this renderer's " +
+                    std::to_string(kCompiledEffectUBOStride) +
+                    "-byte compiled-effect uniform slice.");
+            }
+        };
+        requireFits(compiled.vertexUniforms, "vertex");
+        requireFits(compiled.pixelUniforms, "pixel");
+
+        const auto kindName = [](MOJOSHADER_samplerType type) {
+            switch (type)
+            {
+                case MOJOSHADER_SAMPLER_CUBE:   return "samplerCUBE (TextureCube)";
+                case MOJOSHADER_SAMPLER_VOLUME: return "sampler3D (Texture3D)";
+                default:                        return "sampler2D (Texture2D)";
+            }
+        };
+
+        for (const MOJOSHADER_sampler& reflected : compiled.pass.pixelSamplers)
+        {
+            const auto slot = static_cast<std::uint32_t>(reflected.index);
+            Microsoft::Xna::Framework::Graphics::Texture* boundTexture = nullptr;
+            Microsoft::Xna::Framework::Graphics::SamplerState samplerState;
+            bool samplerAssigned = false;
+            effect->GetBoundSamplerEXT(static_cast<int>(slot), /*vertexStage=*/false, boundTexture,
+                                       samplerState, &samplerAssigned);
+            if (boundTexture == nullptr)
+            {
+                const char* name =
+                    reflected.name != nullptr ? reflected.name : "<unnamed>";
+                throw std::runtime_error(
+                    std::string("CNA Vulkan: this compiled effect's pixel shader samples '") +
+                    name + "', but no texture is bound to it.");
+            }
+
+            auto* texture2D = dynamic_cast<Texture2D*>(boundTexture);
+            auto* textureCube = dynamic_cast<TextureCube*>(boundTexture);
+            auto* texture3D = dynamic_cast<Texture3D*>(boundTexture);
+            const MOJOSHADER_samplerType boundKind =
+                textureCube != nullptr ? MOJOSHADER_SAMPLER_CUBE
+                : texture3D != nullptr ? MOJOSHADER_SAMPLER_VOLUME
+                                       : MOJOSHADER_SAMPLER_2D;
+            // plan_fx.md FX-110: a VkImageView carries its own view type, so binding a cube view
+            // where the shader declared sampler2D is undefined behaviour that a validation layer
+            // catches and a release build renders. Named here instead of either.
+            if (reflected.type != boundKind)
+            {
+                throw System::NotSupportedException(
+                    std::string("CNA Vulkan: this compiled effect's pixel shader declares ") +
+                    kindName(reflected.type) + " at slot " + std::to_string(slot) +
+                    ", but the texture bound there is a " + kindName(boundKind) +
+                    ". The dimensions must match.");
+            }
+
+            VkImageView view = VK_NULL_HANDLE;
+            const ITextureRenderer* sampledSource = nullptr;
+            if (textureCube != nullptr)
+            {
+                const auto* cube =
+                    dynamic_cast<const IVulkanCubeSamplable*>(&textureCube->GetRenderer());
+                if (cube != nullptr) view = cube->GetVkCubeImageView();
+            }
+            else if (texture3D != nullptr)
+            {
+                // plan_fx.md FX-110: VulkanTexture3DRenderer's image already carries
+                // VK_IMAGE_USAGE_SAMPLED_BIT and a VK_IMAGE_VIEW_TYPE_3D view, and SetData leaves
+                // it in SHADER_READ_ONLY_OPTIMAL, so sampling a volume needed an accessor rather
+                // than any new resource handling.
+                const auto* volume =
+                    dynamic_cast<const IVulkanVolumeSamplable*>(&texture3D->GetRenderer());
+                if (volume != nullptr) view = volume->GetVkVolumeImageView();
+            }
+            else if (texture2D != nullptr)
+            {
+                sampledSource = &texture2D->GetRenderer();
+                const auto* samplable = dynamic_cast<const IVulkanSamplable*>(sampledSource);
+                if (samplable != nullptr) view = samplable->GetVkImageView();
+            }
+            if (view == VK_NULL_HANDLE)
+            {
+                throw std::runtime_error(
+                    "CNA Vulkan: the texture bound to this compiled effect's pixel sampler slot " +
+                    std::to_string(slot) + " has no sampleable image view.");
+            }
+            // REMED-GFX-151: a compiled effect can sample a render target just as a stock draw
+            // can, so its sources have to join the same dependency closure -- otherwise the
+            // producing pass is still queued when this consumer replays.
+            if (sampledSource != nullptr)
+            {
+                NoteSampledRenderTargetGroupEXT(currentSegment_,
+                                                SampledRenderTargetGroupEXT(sampledSource));
+            }
+
+            SamplerStateKey samplerKey{};
+            if (samplerAssigned)
+            {
+                // plan_fx.md FX-083: the pass's own sampler_state block, LOD clamp and bias
+                // included -- the key expresses all of it, so none of it is lost on the way to a
+                // VkSampler.
+                samplerKey.filter = static_cast<int>(samplerState.getFilterProperty());
+                samplerKey.addressU = static_cast<int>(samplerState.getAddressUProperty());
+                samplerKey.addressV = static_cast<int>(samplerState.getAddressVProperty());
+                samplerKey.addressW = static_cast<int>(samplerState.getAddressWProperty());
+                samplerKey.maxAnisotropy = samplerState.getMaxAnisotropyProperty();
+                samplerKey.maxMipLevel = samplerState.getMaxMipLevelProperty();
+                samplerKey.lodBias = samplerState.getMipMapLevelOfDetailBiasProperty();
+            }
+            else if (slot < 16u)
+            {
+                // No pass assigned this slot, so what the game selected on the device stands --
+                // GraphicsDevice.SamplerStates[slot], recorded whole in samplerSlotState_.
+                samplerKey = samplerSlotState_[slot];
+            }
+            VkSampler sampler = GetOrCreateSamplerEXT(samplerKey);
+            if (sampler == VK_NULL_HANDLE) sampler = defaultSampler_;
+            compiled.samplerViews.push_back(view);
+            compiled.samplerBindings.push_back(slot);
+            compiled.samplers.push_back(sampler);
+        }
+
+        d.useCompiledEffect = true;
+    }
+
+    void VulkanRenderer::QueueCompiledEffectSpriteEXT(const Sprite2DVertex (&quad)[6],
+                                                      VkImageView spriteView,
+                                                      ICompiledEffectRuntime* runtime)
+    {
+        using Microsoft::Xna::Framework::Graphics::VertexElement;
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+        // SpriteBatch geometry is this renderer's own, so its declaration is fixed rather than
+        // caller-supplied. It has to describe Sprite2DVertex exactly: the compiled vertex shader
+        // reads its inputs by semantic, and a mismatched offset here is a wrongly-drawn sprite.
+        static const std::vector<VertexElement> kSpriteDeclaration = {
+            VertexElement(0,  VertexElementFormat::Vector2, VertexElementUsage::Position, 0),
+            VertexElement(8,  VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(16, VertexElementFormat::Vector4, VertexElementUsage::Color, 0),
+        };
+
+        Pending3DDraw d{};
+        d.vbData.resize(sizeof(quad));
+        std::memcpy(d.vbData.data(), quad, sizeof(quad));
+        d.stride = sizeof(Sprite2DVertex);
+        d.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        d.drawCount = 6;
+        d.indexType = VK_INDEX_TYPE_UINT16;
+        // A sprite is 2D geometry the batch orders itself, so it neither tests nor writes depth --
+        // the same choice the stock sprite pipeline makes. Everything the batch DOES own (blend,
+        // scissor, viewport, blend factor) comes from the current device state, exactly as the
+        // stock sprite path snapshots it.
+        d.depthTest = false;
+        d.depthWrite = false;
+        d.dsParams = dsParams_;
+        d.stencilReadMask = stencilReadMask_;
+        d.stencilWriteMask = stencilWriteMask_;
+        d.referenceStencil = referenceStencil_;
+        d.blend = blendEnabled_;
+        d.blendParams = blendParams_;
+        d.cullMode = 0;
+        d.wireframe = false;
+        d.depthBias = 0.0f;
+        d.slopeScaleDepthBias = 0.0f;
+        d.rt = currentRT_;
+        const std::vector<VkFxStreamEXT> streams{
+            {&kSpriteDeclaration, static_cast<std::uint32_t>(sizeof(Sprite2DVertex)), false}};
+        PrepareCompiledEffectDrawEXT(d, streams, runtime);
+
+        // plan_fx.md FX-103. FNA's SpriteBatch.DrawPrimitives sets GraphicsDevice.Textures[0] =
+        // texture immediately AFTER pass.Apply(), with the comment "Set this _after_ Apply,
+        // otherwise EffectParameters override it!". So the sprite being drawn wins slot 0
+        // unconditionally, whatever the effect's own texture parameter names -- a backend that
+        // binds the effect's texture instead renders a plausible image of the wrong thing. The
+        // sampler is NOT overridden: SpriteBatch.Begin's SamplerState is selected before Apply, so
+        // a pass that assigns slot 0's sampler_state still wins that half.
+        auto& compiled = d.compiledEffect;
+        for (std::size_t i = 0; i < compiled.samplerBindings.size(); ++i)
+        {
+            if (compiled.samplerBindings[i] == 0) compiled.samplerViews[i] = spriteView;
+        }
+        PushPending3DDraw(std::move(d));
+    }
+
+    VkShaderModule VulkanRenderer::GetOrCreateCompiledEffectShaderModuleEXT(
+        const void* code, std::size_t codeBytes)
+    {
+        const auto* bytes = static_cast<const std::uint8_t*>(code);
+        std::uint64_t hash = 1469598103934665603ull;  // FNV-1a
+        for (std::size_t i = 0; i < codeBytes; ++i)
+        {
+            hash ^= bytes[i];
+            hash *= 1099511628211ull;
+        }
+        // Length is folded in as well, so two different-length bodies cannot collide on a prefix.
+        hash ^= codeBytes * 0x9E3779B97F4A7C15ull;
+
+        auto it = compiledEffectShaderModules_.find(hash);
+        if (it != compiledEffectShaderModules_.end()) return it->second;
+
+        VkShaderModuleCreateInfo info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+        info.codeSize = codeBytes;
+        info.pCode = static_cast<const std::uint32_t*>(code);
+        VkShaderModule module = VK_NULL_HANDLE;
+        if (vkCreateShaderModule(device_, &info, nullptr, &module) != VK_SUCCESS)
+            throw std::runtime_error("CNA Vulkan: vkCreateShaderModule failed.");
+        compiledEffectShaderModules_.emplace(hash, module);
+        return module;
+    }
+
+    void VulkanRenderer::EnsureCompiledEffectResourcesEXT()
+    {
+        if (compiledEffectDescriptorPool_ != VK_NULL_HANDLE) return;
+
+        const auto makeLayout = [&](const VkDescriptorSetLayoutBinding* bindings, uint32_t count) {
+            VkDescriptorSetLayoutCreateInfo li{};
+            li.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+            li.bindingCount = count;
+            li.pBindings = bindings;
+            VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+            if (vkCreateDescriptorSetLayout(device_, &li, nullptr, &layout) != VK_SUCCESS)
+                throw std::runtime_error("vkCreateDescriptorSetLayout (compiled effect) failed");
+            return layout;
+        };
+
+        compiledEffectEmptySetLayout_ = makeLayout(nullptr, 0);
+
+        VkDescriptorSetLayoutBinding uniformBinding{};
+        uniformBinding.binding = 0;
+        uniformBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        uniformBinding.descriptorCount = 1;
+        uniformBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        compiledEffectUniformSetLayoutVS_ = makeLayout(&uniformBinding, 1);
+        uniformBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        compiledEffectUniformSetLayoutPS_ = makeLayout(&uniformBinding, 1);
+
+        const uint32_t maxSets = 256u * MaxFramesInFlight;
+        VkDescriptorPoolSize ps[2]{};
+        ps[0] = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxSets * 4u };
+        ps[1] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, maxSets };
+        VkDescriptorPoolCreateInfo pi{};
+        pi.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        pi.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+        pi.maxSets = maxSets;
+        pi.poolSizeCount = 2;
+        pi.pPoolSizes = ps;
+        if (vkCreateDescriptorPool(device_, &pi, nullptr, &compiledEffectDescriptorPool_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateDescriptorPool (compiled effect) failed");
+
+    }
+
+    VulkanRenderer::CompiledEffectUniformChunkEXT&
+    VulkanRenderer::EnsureCompiledEffectUniformChunkEXT(uint32_t frameIdx, std::size_t chunkIndex)
+    {
+        EnsureCompiledEffectResourcesEXT();
+        auto& chunks = compiledEffectUBOChunks_[frameIdx];
+        const VkDeviceSize chunkSize = static_cast<VkDeviceSize>(kCompiledEffectUBOStride) *
+                                       kCompiledEffectUBODrawsPerChunk;
+        // One descriptor set per chunk for each uniform block: the set names only the chunk's
+        // buffer, and which slice of it a draw uses travels as a dynamic offset.
+        const auto allocateUniformSet = [&](VkDescriptorSetLayout layout, VkBuffer buffer) {
+            VkDescriptorSetAllocateInfo ai{};
+            ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            ai.descriptorPool = compiledEffectDescriptorPool_;
+            ai.descriptorSetCount = 1;
+            ai.pSetLayouts = &layout;
+            VkDescriptorSet set = VK_NULL_HANDLE;
+            if (vkAllocateDescriptorSets(device_, &ai, &set) != VK_SUCCESS)
+                throw std::runtime_error("vkAllocateDescriptorSets (compiled effect) failed");
+            VkDescriptorBufferInfo bi{};
+            bi.buffer = buffer;
+            bi.offset = 0;
+            bi.range = kCompiledEffectUBOStride;
+            VkWriteDescriptorSet w{};
+            w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            w.dstSet = set;
+            w.dstBinding = 0;
+            w.descriptorCount = 1;
+            w.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+            w.pBufferInfo = &bi;
+            vkUpdateDescriptorSets(device_, 1, &w, 0, nullptr);
+            return set;
+        };
+        while (chunks.size() <= chunkIndex)
+        {
+            CompiledEffectUniformChunkEXT chunk;
+            CreateBuffer(chunkSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                         chunk.vsBuffer, chunk.vsMemory, &chunk.vsPtr);
+            CreateBuffer(chunkSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                         chunk.psBuffer, chunk.psMemory, &chunk.psPtr);
+            chunk.vsSet = allocateUniformSet(compiledEffectUniformSetLayoutVS_, chunk.vsBuffer);
+            chunk.psSet = allocateUniformSet(compiledEffectUniformSetLayoutPS_, chunk.psBuffer);
+            chunks.push_back(chunk);
+        }
+        return chunks[chunkIndex];
+    }
+
+    VkPipelineLayout VulkanRenderer::GetOrCreateCompiledEffectPipelineLayoutEXT(
+        const std::vector<std::uint32_t>& pixelSamplerBindings)
+    {
+        EnsureCompiledEffectResourcesEXT();
+        // The signature is the exact set of sampler registers the pixel shader declares. Two
+        // effects that sample the same registers share a layout; two that do not cannot be given
+        // each other's, which is what stops a binding landing on the wrong slot.
+        std::uint64_t signature = 0;
+        for (const std::uint32_t binding : pixelSamplerBindings)
+        {
+            if (binding < 64u) signature |= (1ull << binding);
+        }
+
+        auto layoutIt = compiledEffectSamplerSetLayouts_.find(signature);
+        if (layoutIt == compiledEffectSamplerSetLayouts_.end())
+        {
+            std::vector<VkDescriptorSetLayoutBinding> bindings;
+            bindings.reserve(pixelSamplerBindings.size());
+            for (const std::uint32_t binding : pixelSamplerBindings)
+            {
+                VkDescriptorSetLayoutBinding b{};
+                b.binding = binding;
+                b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                b.descriptorCount = 1;
+                b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+                bindings.push_back(b);
+            }
+            VkDescriptorSetLayoutCreateInfo li{};
+            li.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+            li.bindingCount = static_cast<uint32_t>(bindings.size());
+            li.pBindings = bindings.empty() ? nullptr : bindings.data();
+            VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+            if (vkCreateDescriptorSetLayout(device_, &li, nullptr, &layout) != VK_SUCCESS)
+                throw std::runtime_error("vkCreateDescriptorSetLayout (compiled sampler) failed");
+            layoutIt = compiledEffectSamplerSetLayouts_.emplace(signature, layout).first;
+        }
+
+        auto pipelineLayoutIt = compiledEffectPipelineLayouts_.find(signature);
+        if (pipelineLayoutIt != compiledEffectPipelineLayouts_.end())
+            return pipelineLayoutIt->second;
+
+        const VkDescriptorSetLayout setLayouts[4] = {
+            compiledEffectEmptySetLayout_,      // MOJOSHADER_SPIRV_VS_SAMPLER_SET
+            compiledEffectUniformSetLayoutVS_,  // MOJOSHADER_SPIRV_VS_UNIFORM_SET
+            layoutIt->second,                   // MOJOSHADER_SPIRV_PS_SAMPLER_SET
+            compiledEffectUniformSetLayoutPS_,  // MOJOSHADER_SPIRV_PS_UNIFORM_SET
+        };
+        VkPipelineLayoutCreateInfo pli{};
+        pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pli.setLayoutCount = 4;
+        pli.pSetLayouts = setLayouts;
+        VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+        if (vkCreatePipelineLayout(device_, &pli, nullptr, &pipelineLayout) != VK_SUCCESS)
+            throw std::runtime_error("vkCreatePipelineLayout (compiled effect) failed");
+        compiledEffectPipelineLayouts_.emplace(signature, pipelineLayout);
+        return pipelineLayout;
+    }
+
+    VkPipeline VulkanRenderer::GetOrCreateCompiledEffectPipelineEXT(
+        const Pending3DDraw& draw, uint32_t colorAttachmentCount, bool msaa,
+        VkFormat targetDepthFmt)
+    {
+        const auto& compiled = draw.compiledEffect;
+        VkPipelineLayout pipelineLayout =
+            GetOrCreateCompiledEffectPipelineLayoutEXT(compiled.samplerBindings);
+
+        // The shader pair's identity is part of the key alongside the usual render state: the
+        // modules are recreated whenever the pass is re-linked for a different vertex layout, so a
+        // new pair genuinely wants a new pipeline.
+        const uint64_t stateKey = FoldDepthFormatIntoKey(
+            MakeExt3DKey(draw.stride, draw.topology, draw.depthTest, draw.depthWrite, draw.blend,
+                         draw.cullMode, colorAttachmentCount, draw.wireframe, msaa, draw.dsParams),
+            targetDepthFmt);
+        // MakeExt3DKey buckets the stride rather than carrying it (it folds 16 and every stride it
+        // does not recognise into bucket 0), which is fine for the stock routes because a bucket
+        // decides their whole vertex input. A compiled effect's vertex input comes from its own
+        // declaration instead, so the raw stride has to be in the key: without it two draws of
+        // different strides in the same bucket share a pipeline whose binding stride fits only the
+        // first, and the second reads its vertices from the wrong offsets.
+        PipelineKey key = { stateKey ^ (compiled.pass.pipelineKey * 1099511628211ull) ^
+                                (static_cast<std::uint64_t>(draw.stride) * 0x9E3779B97F4A7C15ull),
+                            PackBlendBits(draw.blend, draw.blendParams),
+                            PackColorWriteBits(draw.blendParams), draw.blendParams.sampleMask };
+        auto it = compiledEffectPipelines_.find(key);
+        if (it != compiledEffectPipelines_.end()) return it->second;
+
+        VkPipelineVertexInputStateCreateInfo vis{};
+        vis.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vis.vertexBindingDescriptionCount =
+            static_cast<uint32_t>(compiled.pass.vertexBindings.size());
+        vis.pVertexBindingDescriptions = compiled.pass.vertexBindings.empty()
+                                             ? nullptr : compiled.pass.vertexBindings.data();
+        vis.vertexAttributeDescriptionCount =
+            static_cast<uint32_t>(compiled.pass.vertexAttributes.size());
+        vis.pVertexAttributeDescriptions = compiled.pass.vertexAttributes.empty()
+                                               ? nullptr : compiled.pass.vertexAttributes.data();
+
+        VkPipelineShaderStageCreateInfo stages[2]{};
+        stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+                      VK_SHADER_STAGE_VERTEX_BIT, compiled.pass.vertexModule,
+                      compiled.pass.vertexEntryPoint, nullptr };
+        stages[1] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+                      VK_SHADER_STAGE_FRAGMENT_BIT, compiled.pass.pixelModule,
+                      compiled.pass.pixelEntryPoint, nullptr };
+
+        VkPipelineInputAssemblyStateCreateInfo ias{};
+        ias.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        ias.topology = draw.topology;
+
+        VkPipelineViewportStateCreateInfo vpst{};
+        vpst.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        vpst.viewportCount = 1;
+        vpst.scissorCount = 1;
+
+        VkCullModeFlags vkCull = VK_CULL_MODE_NONE;
+        if (draw.cullMode == 1) vkCull = VK_CULL_MODE_FRONT_BIT;
+        if (draw.cullMode == 2) vkCull = VK_CULL_MODE_BACK_BIT;
+
+        VkPipelineRasterizationStateCreateInfo rs{};
+        rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rs.polygonMode = draw.wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
+        rs.cullMode = vkCull;
+        rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        rs.lineWidth = 1.f;
+        rs.depthBiasEnable = VK_TRUE;
+
+        VkPipelineMultisampleStateCreateInfo ms{};
+        ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        const VkSampleMask sampleMask = draw.blendParams.sampleMask;
+        if (sampleMask != 0xFFFFFFFFu) ms.pSampleMask = &sampleMask;
+
+        VkPipelineDepthStencilStateCreateInfo ds{};
+        ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        ds.depthTestEnable = draw.depthTest ? VK_TRUE : VK_FALSE;
+        ds.depthWriteEnable = draw.depthWrite ? VK_TRUE : VK_FALSE;
+        FillDepthStencilState(ds, draw.dsParams);
+
+        std::vector<VkPipelineColorBlendAttachmentState> cbaVec(
+            std::max(colorAttachmentCount, 1u));
+        for (uint32_t i = 0; i < cbaVec.size(); ++i)
+            FillBlendAttachmentState(cbaVec[i], draw.blend, draw.blendParams, static_cast<int>(i));
+
+        VkPipelineColorBlendStateCreateInfo cbs{};
+        cbs.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        cbs.attachmentCount = static_cast<uint32_t>(cbaVec.size());
+        cbs.pAttachments = cbaVec.data();
+
+        VkDynamicState dynStates[7] = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_DEPTH_BIAS,
+            VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+            VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+            VK_DYNAMIC_STATE_STENCIL_REFERENCE,
+        };
+        const uint32_t dynStateCount =
+            AppendBlendConstantsDynamicState(dynStates, 6, draw.blend, draw.blendParams);
+        VkPipelineDynamicStateCreateInfo dyn{};
+        dyn.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dyn.dynamicStateCount = dynStateCount;
+        dyn.pDynamicStates = dynStates;
+
+        VkGraphicsPipelineCreateInfo pci{};
+        pci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pci.stageCount = 2;
+        pci.pStages = stages;
+        pci.pVertexInputState = &vis;
+        pci.pInputAssemblyState = &ias;
+        pci.pViewportState = &vpst;
+        pci.pRasterizationState = &rs;
+        pci.pMultisampleState = &ms;
+        pci.pDepthStencilState = &ds;
+        pci.pColorBlendState = &cbs;
+        pci.pDynamicState = &dyn;
+        pci.layout = pipelineLayout;
+        pci.renderPass = PickRTPipelineRenderPass(colorAttachmentCount, msaa, targetDepthFmt);
+        pci.subpass = 0;
+
+        VkPipeline pipeline = VK_NULL_HANDLE;
+        if (vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline) !=
+            VK_SUCCESS)
+        {
+            throw std::runtime_error("vkCreateGraphicsPipelines (compiled effect) failed");
+        }
+        compiledEffectPipelines_[key] = pipeline;
+        return pipeline;
+    }
+
+    VkDescriptorSet VulkanRenderer::GetOrCreateCompiledEffectSamplerSetEXT(
+        uint32_t frameIdx, VkDescriptorSetLayout layout,
+        const std::vector<std::uint32_t>& bindings, const std::vector<VkImageView>& views,
+        const std::vector<VkSampler>& samplers)
+    {
+        std::uint64_t key = 0x9E3779B97F4A7C15ull;
+        for (std::size_t i = 0; i < views.size(); ++i)
+        {
+            key ^= (reinterpret_cast<std::uint64_t>(views[i]) + 0x9E3779B97F4A7C15ull +
+                    (key << 6) + (key >> 2)) *
+                   (static_cast<std::uint64_t>(bindings[i]) + 1ull);
+            key ^= (reinterpret_cast<std::uint64_t>(samplers[i]) * 1099511628211ull) +
+                   (key << 5) + (key >> 3);
+        }
+        auto& cache = compiledEffectSamplerSets_[frameIdx];
+        auto it = cache.find(key);
+        if (it != cache.end()) return it->second;
+
+        VkDescriptorSetAllocateInfo ai{};
+        ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        ai.descriptorPool = compiledEffectDescriptorPool_;
+        ai.descriptorSetCount = 1;
+        ai.pSetLayouts = &layout;
+        VkDescriptorSet set = VK_NULL_HANDLE;
+        if (vkAllocateDescriptorSets(device_, &ai, &set) != VK_SUCCESS)
+            throw std::runtime_error("vkAllocateDescriptorSets (compiled sampler) failed");
+
+        std::vector<VkDescriptorImageInfo> images(views.size());
+        std::vector<VkWriteDescriptorSet> writes(views.size());
+        for (std::size_t i = 0; i < views.size(); ++i)
+        {
+            images[i].sampler = samplers[i];
+            images[i].imageView = views[i];
+            images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            writes[i] = {};
+            writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[i].dstSet = set;
+            writes[i].dstBinding = bindings[i];
+            writes[i].descriptorCount = 1;
+            writes[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            writes[i].pImageInfo = &images[i];
+        }
+        if (!writes.empty())
+            vkUpdateDescriptorSets(device_, static_cast<uint32_t>(writes.size()), writes.data(),
+                                   0, nullptr);
+        cache.emplace(key, set);
+        return set;
+    }
+
+    void VulkanRenderer::RecordCompiledEffectDrawEXT(
+        VkCommandBuffer cb, const Pending3DDraw& draw, uint32_t frameIdx)
+    {
+        // The pipeline itself, and every dynamic state the pipelines share, are bound by the
+        // common replay path -- this records only what is specific to a compiled effect.
+        const auto& compiled = draw.compiledEffect;
+        VkPipelineLayout pipelineLayout =
+            GetOrCreateCompiledEffectPipelineLayoutEXT(compiled.samplerBindings);
+
+        // The uniform bytes were packed at apply time; copy them into this frame's own slice and
+        // point the dynamic offsets at it. Each draw gets a slice of its own for the whole
+        // recording -- chunks are appended as the cursor runs past them, because two draws sharing
+        // a slice means the earlier one silently renders with the later one's constants.
+        const uint32_t index = compiledEffectUBOCursor_[frameIdx]++;
+        CompiledEffectUniformChunkEXT& chunk = EnsureCompiledEffectUniformChunkEXT(
+            frameIdx, index / kCompiledEffectUBODrawsPerChunk);
+        const uint32_t offset = (index % kCompiledEffectUBODrawsPerChunk) *
+                                kCompiledEffectUBOStride;
+        // PrepareCompiledEffectDrawEXT already refused a block that does not fit the stride, so
+        // this copy is whole -- truncating one here would be exactly the silent wrong-pixels case
+        // the refusal exists to prevent.
+        if (!compiled.vertexUniforms.empty())
+        {
+            std::memcpy(static_cast<uint8_t*>(chunk.vsPtr) + offset,
+                        compiled.vertexUniforms.data(), compiled.vertexUniforms.size());
+        }
+        if (!compiled.pixelUniforms.empty())
+        {
+            std::memcpy(static_cast<uint8_t*>(chunk.psPtr) + offset,
+                        compiled.pixelUniforms.data(), compiled.pixelUniforms.size());
+        }
+
+        std::uint64_t samplerSignature = 0;
+        for (const std::uint32_t binding : compiled.samplerBindings)
+            if (binding < 64u) samplerSignature |= (1ull << binding);
+        VkDescriptorSetLayout samplerLayout =
+            compiledEffectSamplerSetLayouts_.at(samplerSignature);
+        VkDescriptorSet samplerSet = GetOrCreateCompiledEffectSamplerSetEXT(
+            frameIdx, samplerLayout, compiled.samplerBindings, compiled.samplerViews,
+            compiled.samplers);
+
+        const VkDescriptorSet sets[4] = {
+            VK_NULL_HANDLE,       // set 0: vertex samplers, always empty
+            chunk.vsSet,
+            samplerSet,
+            chunk.psSet,
+        };
+        // Set 0 has no descriptors, so it is never bound; sets 1..3 are bound as one range with
+        // both dynamic offsets in the order Vulkan expects (ascending set, then ascending binding).
+        const uint32_t dynamicOffsets[2] = { offset, offset };
+        vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 3,
+                                &sets[1], 2, dynamicOffsets);
+        (void)sets[0];
+    }
+#endif  // CNA_VULKAN_COMPILED_EFFECTS
 
     VkPipeline VulkanRenderer::GetOrCreatePipelineFogColored3D(
         VkPrimitiveTopology topo,
@@ -7872,6 +8808,9 @@ namespace CNA::Internal::Renderers::Vulkan
 
         // UBO slot counters (reset once per frame, shared across all RT passes).
         uint32_t envMapUBOSlot  = 0;
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+        compiledEffectUBOCursor_[currentFrame_] = 0;
+#endif
         uint32_t skinnedUBOSlot = 0;
         uint32_t litTexturedUBOSlot = 0;
         uint32_t fogTex3DUBOSlot    = 0; // Task 899: colored3d/textured3d/colored_textured3d
@@ -8001,6 +8940,19 @@ namespace CNA::Internal::Renderers::Vulkan
                                                      draw.viewportW, draw.viewportH,
                                                      draw.viewportMinDepth, draw.viewportMaxDepth,
                                                      fbW, fbH);
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+                    // plan_fx.md FX-065: Vulkan's clip space has Y pointing down where D3D9's and
+                    // OpenGL's point up, and every stock shader here compensates with an explicit
+                    // `pos.y = -pos.y` (see colored3d.vert.glsl). A MojoShader-translated D3D9
+                    // shader carries no such line and cannot be asked to, so the flip moves to the
+                    // viewport for this draw -- a negative height is core Vulkan 1.1, which is the
+                    // version this renderer requests. Without it a compiled effect renders
+                    // vertically mirrored against every other draw the renderer issues.
+                    if (draw.useCompiledEffect) {
+                        dvp.y += dvp.height;
+                        dvp.height = -dvp.height;
+                    }
+#endif
                     vkCmdSetViewport(cb, 0, 1, &dvp);
                 }
 
@@ -8025,6 +8977,15 @@ namespace CNA::Internal::Renderers::Vulkan
                 // PickRTPipelineRenderPass()).
                 const VkFormat targetDepthFmt = targetRT ? targetRT->GetDepthFormat() : depthFormat_;
                 VkPipeline pipe;
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+                // plan_fx.md FX-065: a compiled Effect brings its own linked SPIR-V pair, vertex
+                // input layout and descriptor layout, so it selects a pipeline of its own instead
+                // of any of the stock stride-dispatched ones below.
+                if (draw.useCompiledEffect) {
+                    pipe = GetOrCreateCompiledEffectPipelineEXT(draw, nColor, drawMsaa,
+                                                                targetDepthFmt);
+                } else
+#endif
                 if (draw.useAlphaTest) {
                     pipe = GetOrCreatePipelineAlphaTest3D(draw.stride, draw.topology,
                                                           draw.depthTest, draw.depthWrite,
@@ -8113,6 +9074,11 @@ namespace CNA::Internal::Renderers::Vulkan
                                          static_cast<uint32_t>(draw.stencilWriteMask));
                 vkCmdSetStencilReference(cb, VK_STENCIL_FACE_FRONT_AND_BACK,
                                          static_cast<uint32_t>(draw.referenceStencil));
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+                if (draw.useCompiledEffect) {
+                    RecordCompiledEffectDrawEXT(cb, draw, currentFrame_);
+                } else
+#endif
                 if (draw.useAlphaTest) {
                     vkCmdPushConstants(cb, pipelineLayoutAlphaTest3D_,
                                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -9872,7 +10838,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // REMED-GFX-DECL-GUARD: before anything is recorded, queued or created. This renderer
         // still picks its VkVertexInputAttributeDescription set from the stride, so a declaration
         // that set cannot represent is refused here rather than rendered from the wrong bytes.
-        RequireFaithfulDeclarationEXT(vb_in, "ordinary-nonindexed");
+        RequireFaithfulDeclarationEXT(vb_in, "ordinary-nonindexed", /*positionOnlyFallback=*/false,
+                                      params.compiledEffectRuntime != nullptr);
         // REMED-GFX-151: record which render targets this draw SAMPLES, so a mid-frame readback
         // flush replays their producing cycles before this one. See NoteSampledSourcesEXT.
         NoteSampledSourcesEXT(params);
@@ -10129,6 +11096,21 @@ namespace CNA::Internal::Renderers::Vulkan
                 d.fogTex3DUboData[6] = params.fogVector[2]; d.fogTex3DUboData[7] = params.fogVector[3];
             }
         }
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+        // plan_fx.md FX-065: a compiled Effect owns the whole program, so it replaces the stock
+        // stride-dispatched selection above rather than layering on it. Everything the deferred
+        // replay needs is captured now, while the pass is still the applied one.
+        if (params.compiledEffectRuntime != nullptr)
+            PrepareCompiledEffectDrawEXT(d, vb_in, params);
+#else
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            throw System::NotSupportedException(
+                "CNA Vulkan: this build has no compiled-effect support "
+                "(CNA_VULKAN_COMPILED_EFFECTS is off); drawing with a compiled Effect would "
+                "silently use a stock shader instead.");
+        }
+#endif
         PushPending3DDraw(std::move(d));
     }
 
@@ -10138,7 +11120,8 @@ namespace CNA::Internal::Renderers::Vulkan
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
         // REMED-GFX-DECL-GUARD: see DrawPrimitivesEx above.
-        RequireFaithfulDeclarationEXT(vb_in, "ordinary-indexed");
+        RequireFaithfulDeclarationEXT(vb_in, "ordinary-indexed", /*positionOnlyFallback=*/false,
+                                      params.compiledEffectRuntime != nullptr);
         // REMED-GFX-151: record which render targets this draw SAMPLES, so a mid-frame readback
         // flush replays their producing cycles before this one. See NoteSampledSourcesEXT.
         NoteSampledSourcesEXT(params);
@@ -10391,6 +11374,21 @@ namespace CNA::Internal::Renderers::Vulkan
                 d.fogTex3DUboData[6] = params.fogVector[2]; d.fogTex3DUboData[7] = params.fogVector[3];
             }
         }
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+        // plan_fx.md FX-065: a compiled Effect owns the whole program, so it replaces the stock
+        // stride-dispatched selection above rather than layering on it. Everything the deferred
+        // replay needs is captured now, while the pass is still the applied one.
+        if (params.compiledEffectRuntime != nullptr)
+            PrepareCompiledEffectDrawEXT(d, vb_in, params);
+#else
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            throw System::NotSupportedException(
+                "CNA Vulkan: this build has no compiled-effect support "
+                "(CNA_VULKAN_COMPILED_EFFECTS is off); drawing with a compiled Effect would "
+                "silently use a stock shader instead.");
+        }
+#endif
         PushPending3DDraw(std::move(d));
     }
 
@@ -10410,10 +11408,26 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         // REMED-GFX-202: one stream of each rate (REMED-GFX-203 tracks widening it).
         RejectUnsupportedStreamCombination(params, "The Vulkan renderer");
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+        const bool compiledEffectDraw = params.compiledEffectRuntime != nullptr;
+#else
+        constexpr bool compiledEffectDraw = false;
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            throw System::NotSupportedException(
+                "CNA Vulkan: this build has no compiled-effect support "
+                "(CNA_VULKAN_COMPILED_EFFECTS is off); this instanced draw would silently use a "
+                "stock shader instead.");
+        }
+#endif
         // REMED-GFX-DECL-GUARD: the geometry stream's declaration, against the Instanced3D
         // module's own inferred layout -- which binds a packed colour only at the two strides
-        // PackedColorOffsetForStride lists and is position-only everywhere else.
-        RequireFaithfulDeclarationEXT(vb_in, "instanced", /*positionOnlyFallback=*/true);
+        // PackedColorOffsetForStride lists and is position-only everywhere else. plan_fx.md
+        // FX-112: not applied to a compiled draw, which builds its vertex input from the
+        // declarations rather than from the stride, so any declaration it can satisfy is faithful
+        // by construction.
+        RequireFaithfulDeclarationEXT(vb_in, "instanced", /*positionOnlyFallback=*/true,
+                                      compiledEffectDraw);
 
         // REMED-GFX-151: as in the two Ex draws above. The `instanceVb == nullptr` branch already
         // returned through DrawIndexedPrimitivesEx, which notes them itself.
@@ -10535,6 +11549,31 @@ namespace CNA::Internal::Renderers::Vulkan
         d.baseVertex   = static_cast<int32_t>(params.baseVertex + perVertexOffset);
         d.useInstanced = true;
         d.descSet      = defaultWhiteDescSet_;  // no per-draw texture for now
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+        // plan_fx.md FX-112: two streams, per-vertex first, so binding 0 is the geometry and
+        // binding 1 the per-instance records this route has already expanded to divisor 1 (see the
+        // REMED-GFX-213 copy above -- the frequency is a data-copy concern here, never a pipeline
+        // one). Everything else the compiled draw needs was captured by the block above; the
+        // replay path already binds binding 1 and passes instanceCount for `useInstanced` draws,
+        // so nothing there changes.
+        if (compiledEffectDraw)
+        {
+            const auto& pvDeclaration = vb.GetDeclarationEXT();
+            const auto& instDeclaration = instVb.GetDeclarationEXT();
+            if (pvDeclaration.IsEmpty() || instDeclaration.IsEmpty())
+            {
+                throw System::NotSupportedException(
+                    "CNA Vulkan: a compiled-effect instanced draw needs both bound buffers' own "
+                    "VertexDeclarations; this renderer does not infer one from stride for this "
+                    "route.");
+            }
+            const std::vector<VkFxStreamEXT> streams{
+                {&pvDeclaration.GetElements(), static_cast<std::uint32_t>(pvStride), false},
+                {&instDeclaration.GetElements(), static_cast<std::uint32_t>(instStride), true},
+            };
+            PrepareCompiledEffectDrawEXT(d, streams, params.compiledEffectRuntime);
+        }
+#endif
         PushPending3DDraw(std::move(d));
     }
 

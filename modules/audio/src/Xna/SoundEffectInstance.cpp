@@ -57,14 +57,15 @@ namespace Microsoft::Xna::Framework::Audio
         float pan         = 0.0f;
     };
 
-#ifdef SOUND_ENABLED
+    // plan_platform.md PLAT-SDL2-8: these three are pure XNA math -- 2^pitch, the FAudio
+    // crossfeed matrix and the F3DAudio Doppler ratio -- and reference no mixer type at all. They
+    // sit OUTSIDE the SOUND_ENABLED block on purpose: the public INTERNAL_calculate* shims that
+    // forward to them are compiled in every profile, so leaving them behind the guard made
+    // SoundEffectInstance.cpp fail to compile under every non-SDL3 audio selection
+    // (CNA_AUDIO_PLATFORM=SDL2 and =NULL alike), which is how an entire configuration stopped
+    // building without any gate noticing.
     namespace
     {
-        CNA::Internal::Audio::MixerTrack* AsTrack(void* p)
-        {
-            return static_cast<CNA::Internal::Audio::MixerTrack*>(p);
-        }
-
         // P12-PITCH-001: the real implementation behind
         // SoundEffectInstance::INTERNAL_calculatePitchRatio (a thin forwarding shim, defined
         // further down) -- lives here, not as a class member body, purely so ApplyTrackProperties
@@ -82,41 +83,6 @@ namespace Microsoft::Xna::Framework::Audio
         {
             return std::pow(2.0f, pitch);
         }
-
-        // CP-16: master volume is applied once, globally, via the mixer engine's own
-        // master gain stage), not baked into each track's own gain here -- doing both would
-        // double-apply it, and only the mixer-level gain re-applies live to already-playing
-        // tracks without this function needing to be called again.
-        // P9-3D-005: `doppler` is a multiplier applied on top of the pitch-derived ratio, matching
-        // FNA's UpdatePitch() (`(2^INTERNAL_pitch) * doppler`, SoundEffectInstance.cs) -- defaults
-        // to 1.0f (no-op) for every caller except Apply3D.
-        // P11-PAN-001 (RFC-1): `filterState` receives the pan value instead of asking the mixer
-        // to compute per-channel gains directly -- its stereo gain has no crossfeed
-        // term (CHECKLIST.md CP-19), so it's fixed to unity here and CNA owns 100% of the stereo
-        // image via the crossfeed matrix applied in the shared filter/pan cooked callback
-        // (ApplyPanCrossfeed below). `filterState` may be null (SOUND_ENABLED-less builds aside,
-        // this only happens if EnsureTrackDspState's allocation somehow failed) -- in that case
-        // the pan write is simply skipped, matching this function's existing null-`track` guard.
-        void ApplyTrackProperties(CNA::Internal::Audio::MixerTrack* track,
-                                   FilterState* filterState,
-                                   float volume, float pan, float pitch, float doppler = 1.0f)
-        {
-            if (!track) return;
-
-            CNA::Internal::Audio::SetMixerTrackGain(track, volume);
-            CNA::Internal::Audio::SetMixerTrackStereoUnity(track);
-
-            if (filterState)
-            {
-                CNA::Internal::Audio::MixerLock lock;
-                filterState->pan = pan;
-            }
-
-            const float ratio = ComputePitchRatio(pitch) * doppler;
-            CNA::Internal::Audio::SetMixerTrackFrequencyRatio(
-                track, ratio < 0.01f ? 0.01f : ratio);
-        }
-
         // P9-3D-005: matches FAudio's F3DAudio.c CalculateDoppler exactly -- a relative-velocity
         // frequency-ratio formula computed purely from Position/Velocity (both already exposed on
         // AudioListener/AudioEmitter), needing no native 3D audio API. Unlike stereo crossfeed
@@ -160,6 +126,81 @@ namespace Microsoft::Xna::Framework::Audio
             // "Limit the pitch shifting to 2 octaves up and 1 octave down" (F3DAudio.c's own
             // comment).
             return std::clamp(dopplerFactor, 0.5f, 4.0f);
+        }
+        // P11-PAN-001 (RFC-1): the real implementation behind
+        // SoundEffectInstance::INTERNAL_calculatePanCrossfeedMatrix (a thin forwarding shim,
+        // defined further down) -- lives here, not as a class member body, purely so
+        // ApplyPanCrossfeed below (an anonymous-namespace free function, called from the
+        // real-time mixing callback) can call it without needing class-member access. Matches
+        // FNA's SetPanMatrixCoefficients exactly (SoundEffectInstance.cs,
+        // dspSettings.SrcChannelCount == 2 && DstChannelCount == 2 branch): hard panning does NOT
+        // eliminate an entire channel -- the two source channels are blended together on
+        // whichever output speaker `pan` favors, and the OTHER speaker goes silent, rather than
+        // each speaker only ever hearing its own matching input channel (CHECKLIST.md CP-19, the
+        // deviation this method fixes).
+        void ComputePanCrossfeedMatrix(float pan, float& ll, float& rl, float& lr, float& rr)
+        {
+            if (pan <= 0.0f)
+            {
+                // Left speaker blends left/right channels; right speaker gets less of the right
+                // channel (and none of the left).
+                ll = 0.5f * pan + 1.0f;
+                rl = 0.5f * -pan;
+                lr = 0.0f;
+                rr = pan + 1.0f;
+            }
+            else
+            {
+                // Left speaker gets less of the left channel (and none of the right); right
+                // speaker blends right/left channels.
+                ll = -pan + 1.0f;
+                rl = 0.0f;
+                lr = 0.5f * pan;
+                rr = 0.5f * -pan + 1.0f;
+            }
+        }
+    }
+
+#ifdef SOUND_ENABLED
+    namespace
+    {
+        CNA::Internal::Audio::MixerTrack* AsTrack(void* p)
+        {
+            return static_cast<CNA::Internal::Audio::MixerTrack*>(p);
+        }
+
+        // CP-16: master volume is applied once, globally, via the mixer engine's own
+        // master gain stage), not baked into each track's own gain here -- doing both would
+        // double-apply it, and only the mixer-level gain re-applies live to already-playing
+        // tracks without this function needing to be called again.
+        // P9-3D-005: `doppler` is a multiplier applied on top of the pitch-derived ratio, matching
+        // FNA's UpdatePitch() (`(2^INTERNAL_pitch) * doppler`, SoundEffectInstance.cs) -- defaults
+        // to 1.0f (no-op) for every caller except Apply3D.
+        // P11-PAN-001 (RFC-1): `filterState` receives the pan value instead of asking the mixer
+        // to compute per-channel gains directly -- its stereo gain has no crossfeed
+        // term (CHECKLIST.md CP-19), so it's fixed to unity here and CNA owns 100% of the stereo
+        // image via the crossfeed matrix applied in the shared filter/pan cooked callback
+        // (ApplyPanCrossfeed below). `filterState` may be null (SOUND_ENABLED-less builds aside,
+        // this only happens if EnsureTrackDspState's allocation somehow failed) -- in that case
+        // the pan write is simply skipped, matching this function's existing null-`track` guard.
+        void ApplyTrackProperties(CNA::Internal::Audio::MixerTrack* track,
+                                   FilterState* filterState,
+                                   float volume, float pan, float pitch, float doppler = 1.0f)
+        {
+            if (!track) return;
+
+            CNA::Internal::Audio::SetMixerTrackGain(track, volume);
+            CNA::Internal::Audio::SetMixerTrackStereoUnity(track);
+
+            if (filterState)
+            {
+                CNA::Internal::Audio::MixerLock lock;
+                filterState->pan = pan;
+            }
+
+            const float ratio = ComputePitchRatio(pitch) * doppler;
+            CNA::Internal::Audio::SetMixerTrackFrequencyRatio(
+                track, ratio < 0.01f ? 0.01f : ratio);
         }
 
         // AUD-04-008/009: trackGeneration is the mixer engine generation
@@ -226,39 +267,6 @@ namespace Microsoft::Xna::Framework::Audio
                         default: break; // Not reachable -- caller already checked kind != None.
                     }
                 }
-            }
-        }
-
-        // P11-PAN-001 (RFC-1): the real implementation behind
-        // SoundEffectInstance::INTERNAL_calculatePanCrossfeedMatrix (a thin forwarding shim,
-        // defined further down) -- lives here, not as a class member body, purely so
-        // ApplyPanCrossfeed below (an anonymous-namespace free function, called from the
-        // real-time mixing callback) can call it without needing class-member access. Matches
-        // FNA's SetPanMatrixCoefficients exactly (SoundEffectInstance.cs,
-        // dspSettings.SrcChannelCount == 2 && DstChannelCount == 2 branch): hard panning does NOT
-        // eliminate an entire channel -- the two source channels are blended together on
-        // whichever output speaker `pan` favors, and the OTHER speaker goes silent, rather than
-        // each speaker only ever hearing its own matching input channel (CHECKLIST.md CP-19, the
-        // deviation this method fixes).
-        void ComputePanCrossfeedMatrix(float pan, float& ll, float& rl, float& lr, float& rr)
-        {
-            if (pan <= 0.0f)
-            {
-                // Left speaker blends left/right channels; right speaker gets less of the right
-                // channel (and none of the left).
-                ll = 0.5f * pan + 1.0f;
-                rl = 0.5f * -pan;
-                lr = 0.0f;
-                rr = pan + 1.0f;
-            }
-            else
-            {
-                // Left speaker gets less of the left channel (and none of the right); right
-                // speaker blends right/left channels.
-                ll = -pan + 1.0f;
-                rl = 0.0f;
-                lr = 0.5f * pan;
-                rr = 0.5f * -pan + 1.0f;
             }
         }
 

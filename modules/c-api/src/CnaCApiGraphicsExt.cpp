@@ -31,7 +31,9 @@ namespace {
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
 
-[[nodiscard]] CNA_Result ExtensionUnavailable()
+// Every caller is in the #ifndef CNA_CNAEXT half below, so a build that has the extension layer
+// compiles this without using it. The routes stay exported either way, which is the point.
+[[nodiscard, maybe_unused]] CNA_Result ExtensionUnavailable()
 {
     return Fail(
         CNA_RESULT_NOT_SUPPORTED,

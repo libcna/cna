@@ -23,8 +23,9 @@
  * OpenGL adapter keeps its "currently bound program" as context-level state, not an object this
  * class would need to hand back.
  *
- * `GraphicsCapability::CompiledEffects` stays **false** until the FX-060 shared conformance suite
- * and a golden-pixel test both pass here, matching FX-061/FX-071's own staged approach.
+ * `GraphicsCapability::CompiledEffects` is **true** for this renderer: the FX-060 shared
+ * conformance suite passes here in full -- including its draw matrix, multi-stream, instancing,
+ * SpriteBatch and orientation sections -- alongside this renderer's own golden-pixel test.
  */
 
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
@@ -130,12 +131,18 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param slot Sampler register index.
          * @param vertexStage True for a vertex-stage sampler, false for a pixel-stage one.
          * @param texture Receives the bound texture, or null if the slot was never assigned.
-         * @param sampler Receives the bound sampler state; only meaningful when @p texture is
-         *        non-null.
+         * @param sampler Receives the bound sampler state; only meaningful when @p samplerAssigned
+         *        comes back true.
+         * @param samplerAssigned Receives whether any applied pass has assigned sampler state to
+         *        this slot at all. plan_fx.md FX-083: the draw route pushes an assigned state to
+         *        the GPU, and must leave the slot exactly as the game selected it otherwise --
+         *        writing a default-constructed SamplerState there would silently override, for
+         *        example, the filter SpriteBatch.Begin just installed.
          */
         CNAEXT void GetBoundSamplerEXT(std::uint32_t slot, bool vertexStage,
                                        Texture*& texture,
-                                       Microsoft::Xna::Framework::Graphics::SamplerState& sampler) const;
+                                       Microsoft::Xna::Framework::Graphics::SamplerState& sampler,
+                                       bool& samplerAssigned) const;
 
     private:
         EasyGLCompiledEffect(EasyGLRenderer& renderer, const EasyGLCompiledEffect& cloneSource);
@@ -162,6 +169,12 @@ namespace CNA::Internal::Renderers::EasyGL
         std::array<Microsoft::Xna::Framework::Graphics::SamplerState,
                    Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
             boundVertexSamplers_{};
+        // FX-083: which of those slots an applied pass has actually assigned. A default-constructed
+        // SamplerState is a legitimate value, so "assigned" cannot be inferred from the value.
+        std::array<bool, Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
+            samplerAssigned_{};
+        std::array<bool, Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
+            vertexSamplerAssigned_{};
     };
 }
 

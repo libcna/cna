@@ -15,6 +15,46 @@
 
 ## 0. Current checkpoint (supersedes stale counts below)
 
+**2026-08-17 — post-merge re-audit.** Read this before the 2026-08-13 checkpoint underneath it.
+
+The ledger is now **163 decisions: 162 implemented, PLAT-45 deliberately cut** — the original 155
+(141 numeric IDs plus 14 lettered follow-ups) and Phase 11's 8 `PLAT-SDL2-n` rows, which are all
+closed. Every SDL2 task carries real evidence; none is 🟨 or ⏳ any more.
+
+**The 2026-08-13 record was true of the tree it was written against and had stopped being true.**
+Work merged afterwards reopened three guarantees with no row's status changing:
+
+1. `PIXIJS` arrived constructing from `SDL_Window*`, overriding three methods PLAT-59/60 had
+   deleted (so it did not compile), with no descriptor and no registry entry (so
+   `-DCNA_GRAPHICS_RENDERER=PIXIJS` was a hard CMake error) — and the response had been to run
+   `sdl_ratchet.py --update --allow-increase`, taking PLAT-121's floor from 0/0 to 4 files / 14
+   references. Now migrated onto `GraphicsRendererCreateArgs`/`RendererSurfaceInfo`, linking no
+   windowing library, and the floor is **data** in `sdl_budget.json` that `--allow-increase` cannot
+   override.
+2. `CNA_AUDIO_PLATFORM=SDL2` and `=NULL` could not build `cna_audio` at all.
+3. The CI gate step ran five of seven gates, and ran the ratchet **without** `--strict`.
+
+Four more, each found by building or running something for the first time: `CnaTests` linked both
+SDL generations in an SDL2 build; SDL2 advertised `multipleDisplays` with a null service; SDL2
+mistranslated every navigation/editing/keypad key (one range test spanned F1..F24 across a scancode
+gap those keys sit inside); and 32 sound-engine assertions had never run outside the SDL3 profile.
+
+**Current verification, all on an Xvfb display rather than the dummy video driver:**
+
+| Profile | Full non-network run | Registered platform CTest |
+|---|---:|---:|
+| SDL2 + SDL2 audio + OPENGLES3 (`cmake-build-sdl2`) | **6,680 passed / 70 skipped / 0 failed** | **4/4** (incl. `CnaSdl2PlatformTests`, `CnaSdl2AudioDeviceTests`) |
+
+SDL2 is now a real parameter of the implementation-neutral suite: **87/87** conformance instances
+over SDL2, Headless and Terminal. `cna_demo_2d --smoke 6` runs to completion on an SDL2-created
+GL ES 3.2 context. All seven gates pass, ratchet strict at **0/0**.
+
+**The lesson, because it will recur:** a gate only covers the configurations somebody builds and
+runs. Three of these survived a "completed and re-audited" review because the configuration that
+exposes them had never been executed end to end.
+
+### 2026-08-13 checkpoint (historical)
+
 All 155 ledger decisions have a terminal status: **154 implemented and PLAT-45 deliberately cut**.
 A post-completion source and behavioural audit on 2026-08-13 corrected capability refusals,
 fullscreen semantics, surface-frame validation, SDL graphics global-state handling and several

@@ -92,6 +92,20 @@ if(UNIX AND NOT APPLE)
 endif()
 
 target_compile_definitions(cna_c_api PRIVATE CNA_C_API_BUILD)
+# CBIND-052A: the adapter library gets the same strict warnings every one of its tests already
+# had. It did not before, which is how three renderers reached CNA::GraphicsRendererType with no
+# C identity while -Wswitch had been reporting exactly that on an unread diagnostic stream. Two
+# deliberate exclusions, so the flags mean something rather than being turned off again later:
+# -Wpedantic fires only inside Sharp Runtime's Decimal.hpp, on the __int128 extension that is a
+# sibling project's decision to make; and -Wmissing-field-initializers contradicts this ABI's own
+# versioned-structure idiom, where `{sizeof(T), version}` leaves the remaining members
+# value-initialized on purpose.
+if(MSVC)
+    target_compile_options(cna_c_api PRIVATE /W4 /WX)
+else()
+    target_compile_options(cna_c_api PRIVATE
+        -Wall -Wextra -Werror -Wno-missing-field-initializers)
+endif()
 target_include_directories(cna_c_api
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -135,6 +149,10 @@ if(CNA_C_API_BUILD_STATIC AND UNIX AND NOT APPLE AND Python3_Interpreter_FOUND)
         COMMAND Python3::Interpreter
             "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/c-api/generate_static_archive.py"
             --build-dir "${CMAKE_BINARY_DIR}"
+            # The module's own binary directory, because CMAKE_BINARY_DIR is the *consumer's*
+            # root when CNA is consumed with add_subdirectory() -- the C API then lives at
+            # <build>/<subdir>/modules/c-api and the link line is not where the build root says.
+            --module-binary-dir "${CMAKE_CURRENT_BINARY_DIR}"
             --output "${CNA_C_API_STATIC_ARCHIVE}"
             --targets-file "${CNA_C_API_STATIC_TARGETS}"
             --work-dir "${CMAKE_CURRENT_BINARY_DIR}/static-archive"

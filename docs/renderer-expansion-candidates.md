@@ -12,7 +12,7 @@ Date: 2026-08-13
 
 Authoritative companions:
 
-- `docs/renderer-registry.md` — the **live** 47 public identities (canonical; this file never
+- `docs/renderer-registry.md` — the **live** public identities (canonical; this file never
   overrides it).
 - `FUTURE.md` §"Phase 2 — renderer expansion" — the already-planned, owner-visible additions.
 - `docs/graphics-renderer-feature-matrix.md` — what the established renderers actually prove.
@@ -21,9 +21,9 @@ Authoritative companions:
 
 ## 1. What CNA supports today
 
-**47 public renderer identities**, mechanically verified by `scripts/check_renderer_identities.py`
+**49 public renderer identities**, mechanically verified by `scripts/check_renderer_identities.py`
 against `modules/core/include/CNA/GraphicsRendererType.hpp` and `cmake/RendererSelection.cmake`
-(`OK: 47 public renderer identities preserved in both registries`). Selected at configure time via
+(`OK: 49 public renderer identities preserved in both registries`). Selected at configure time via
 `-DCNA_GRAPHICS_RENDERER=<selector>`; implementations live in `modules/renderers/<family>/`.
 
 The 47 map to 43 concrete factories, because the five GL profiles (`OPENGLES2`, `OPENGLES3`,

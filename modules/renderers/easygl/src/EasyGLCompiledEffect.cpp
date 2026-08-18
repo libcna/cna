@@ -16,12 +16,14 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "System/NotSupportedException.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
 #include <type_traits>
+#include <vector>
 
 namespace CNA::Internal::Renderers::EasyGL
 {
@@ -35,16 +37,96 @@ namespace CNA::Internal::Renderers::EasyGL
         constexpr std::size_t kMaximumReflectedItems = 64u * 1024u;
 
         /// Resolves a public texture to the EasyGL resource behind it, or null if it is not one.
+        ///
+        /// plan_fx.md FX-099: a `RenderTarget2D` is a `Texture2D` whose renderer is an
+        /// EasyGLRenderTargetRenderer, not an EasyGLTextureRenderer. Recognising only the latter
+        /// refused every render-target source outright -- so `SpriteBatch.Begin(..., postProcess)`
+        /// over a rendered scene, the most ordinary use a compiled Effect has, could not run at
+        /// all. Both are ITextureRenderer and both bind through BindGL(); what differs is the row
+        /// order, which AcquireCompiledEffectFlippedSourceEXT corrects at bind time.
         const ITextureRenderer* AsEasyGLTexture(Texture* texture)
         {
             if (texture == nullptr) return nullptr;
             using namespace Microsoft::Xna::Framework::Graphics;
             if (auto* texture2D = dynamic_cast<Texture2D*>(texture))
-                return dynamic_cast<const EasyGLTextureRenderer*>(&texture2D->GetRenderer());
-            // plan_fx.md FX-062, matching FX-071's own scope: 3D/cube sampler binding for a
-            // compiled effect is refused explicitly at draw time rather than silently mishandled,
-            // so this resolver only needs to recognize a 2D texture's own renderer identity here.
+            {
+                ITextureRenderer& renderer = texture2D->GetRenderer();
+                if (auto* plain = dynamic_cast<const EasyGLTextureRenderer*>(&renderer))
+                    return plain;
+                return dynamic_cast<const EasyGLRenderTargetRenderer*>(&renderer);
+            }
             return nullptr;
+        }
+
+        /**
+         * @brief One compiled sampler's texture, resolved to whichever EasyGL kind backs it.
+         *
+         * plan_fx.md FX-110. `ITextureRenderer`, `ITexture3DRenderer` and `ITextureCubeRenderer`
+         * are three unrelated interfaces rather than a hierarchy, so a compiled sampler's texture
+         * cannot be carried as one pointer. Exactly one member is non-null when `Resolved()`.
+         */
+        struct ResolvedSamplerTextureEXT
+        {
+            const ITextureRenderer* texture2D = nullptr;
+            const EasyGLTexture3DRenderer* volume = nullptr;
+            const EasyGLTextureCubeRenderer* cube = nullptr;
+
+            [[nodiscard]] bool Resolved() const
+            {
+                return texture2D != nullptr || volume != nullptr || cube != nullptr;
+            }
+
+            /// The shader-side sampler dimension this texture can legally serve.
+            [[nodiscard]] MOJOSHADER_samplerType Kind() const
+            {
+                if (cube != nullptr) return MOJOSHADER_SAMPLER_CUBE;
+                if (volume != nullptr) return MOJOSHADER_SAMPLER_VOLUME;
+                return MOJOSHADER_SAMPLER_2D;
+            }
+
+            /// Binds to @p unit through whichever renderer owns it; each binds its own GL target.
+            void BindGL(int unit) const
+            {
+                if (cube != nullptr) cube->BindGL(unit);
+                else if (volume != nullptr) volume->BindGL(unit);
+                else if (texture2D != nullptr) texture2D->BindGL(unit);
+            }
+        };
+
+        /// plan_fx.md FX-110: resolves a public texture of ANY dimension to its EasyGL renderer.
+        /// This renderer samples `Texture3D` and `TextureCube` in its ordinary draw families, and
+        /// a compiled Effect can bind either to a sampler just as a game's own shader can, so the
+        /// compiled route resolves all three kinds rather than refusing two of them by name.
+        ResolvedSamplerTextureEXT ResolveSamplerTexture(Texture* texture)
+        {
+            ResolvedSamplerTextureEXT resolved;
+            if (texture == nullptr) return resolved;
+            using namespace Microsoft::Xna::Framework::Graphics;
+            if (auto* textureCube = dynamic_cast<TextureCube*>(texture))
+            {
+                resolved.cube = dynamic_cast<const EasyGLTextureCubeRenderer*>(
+                    &textureCube->GetRenderer());
+                return resolved;
+            }
+            if (auto* texture3D = dynamic_cast<Texture3D*>(texture))
+            {
+                resolved.volume = dynamic_cast<const EasyGLTexture3DRenderer*>(
+                    &texture3D->GetRenderer());
+                return resolved;
+            }
+            resolved.texture2D = AsEasyGLTexture(texture);
+            return resolved;
+        }
+
+        /// The public XNA name of a reflected sampler's dimension, for a refusal's text.
+        [[nodiscard]] const char* SamplerKindName(MOJOSHADER_samplerType type)
+        {
+            switch (type)
+            {
+                case MOJOSHADER_SAMPLER_CUBE:   return "samplerCUBE (TextureCube)";
+                case MOJOSHADER_SAMPLER_VOLUME: return "sampler3D (Texture3D)";
+                default:                        return "sampler2D (Texture2D)";
+            }
         }
 
         /// Wires MojoShader's own OpenGL adapter as the backend the effect parser compiles with.
@@ -253,6 +335,8 @@ namespace CNA::Internal::Renderers::EasyGL
             boundVertexTextures_ = cloneSource.boundVertexTextures_;
             boundSamplers_ = cloneSource.boundSamplers_;
             boundVertexSamplers_ = cloneSource.boundVertexSamplers_;
+            samplerAssigned_ = cloneSource.samplerAssigned_;
+            vertexSamplerAssigned_ = cloneSource.vertexSamplerAssigned_;
             SetTechnique(techniqueIndex_);
         }
         catch (...)
@@ -330,7 +414,7 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             throw std::invalid_argument("EasyGL compiled effect: parameter is not a texture.");
         }
-        if (texture != nullptr && AsEasyGLTexture(texture) == nullptr)
+        if (texture != nullptr && !ResolveSamplerTexture(texture).Resolved())
         {
             throw std::invalid_argument(
                 "EasyGL compiled effect: texture was not created by the active EasyGL renderer, "
@@ -402,8 +486,13 @@ namespace CNA::Internal::Renderers::EasyGL
             if (sampler.slot >= maxSlots) continue;
             auto& textureSlot = sampler.vertexStage ? boundVertexTextures_ : boundTextures_;
             auto& samplerSlot = sampler.vertexStage ? boundVertexSamplers_ : boundSamplers_;
+            auto& assignedSlot = sampler.vertexStage ? vertexSamplerAssigned_ : samplerAssigned_;
             if (sampler.textureChanged) textureSlot[sampler.slot] = sampler.texture;
-            if (sampler.samplerChanged) samplerSlot[sampler.slot] = sampler.sampler;
+            if (sampler.samplerChanged)
+            {
+                samplerSlot[sampler.slot] = sampler.sampler;
+                assignedSlot[sampler.slot] = true;
+            }
         }
 
         // Native sampler/texture binding does not happen here. This renderer draws immediately
@@ -414,16 +503,18 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLCompiledEffect::GetBoundSamplerEXT(
         std::uint32_t slot, bool vertexStage, Texture*& texture,
-        Microsoft::Xna::Framework::Graphics::SamplerState& sampler) const
+        Microsoft::Xna::Framework::Graphics::SamplerState& sampler, bool& samplerAssigned) const
     {
         using Microsoft::Xna::Framework::Graphics::SamplerStateCollection;
         if (slot >= static_cast<std::uint32_t>(SamplerStateCollection::MaxSamplers))
         {
             texture = nullptr;
+            samplerAssigned = false;
             return;
         }
         texture = vertexStage ? boundVertexTextures_[slot] : boundTextures_[slot];
         sampler = vertexStage ? boundVertexSamplers_[slot] : boundSamplers_[slot];
+        samplerAssigned = vertexStage ? vertexSamplerAssigned_[slot] : samplerAssigned_[slot];
     }
 
     // ---- EasyGLRenderer hooks (plan_fx.md FX-062) ------------------------------------------
@@ -451,25 +542,57 @@ namespace CNA::Internal::Renderers::EasyGL
         mojoShaderContext_ = MOJOSHADER_glCreateContext(
             profile, GlProcAddressTrampoline, loaderData, nullptr, nullptr, nullptr);
         if (mojoShaderContext_ != nullptr)
+        {
             MOJOSHADER_glMakeContextCurrent(mojoShaderContext_);
+            // plan_fx.md FX-108: remember which GL context this one belongs to.
+            mojoShaderContextGeneration_ = metagl::GetContextGeneration();
+        }
         return mojoShaderContext_;
+    }
+
+    void EasyGLRenderer::RequireCompiledEffectContextEXT(const char* operation) const
+    {
+        if (mojoShaderContext_ == nullptr) return;
+        if (mojoShaderContextGeneration_ == metagl::GetContextGeneration()) return;
+        throw System::NotSupportedException(
+            std::string("CNA EasyGL: ") + operation + " cannot run after the GL context was "
+            "recreated -- MojoShader's context and every program it linked for a compiled Effect "
+            "belong to the destroyed context, and this renderer does not yet rebuild them. Create "
+            "the Effect again from its bytecode after a context loss.");
     }
 
     std::unique_ptr<ICompiledEffectRuntime> EasyGLRenderer::CreateCompiledEffect(
         const std::uint8_t* effectCode, std::size_t effectCodeBytes)
     {
+        RequireCompiledEffectContextEXT("creating a compiled Effect");
         return std::make_unique<EasyGLCompiledEffect>(*this, effectCode, effectCodeBytes);
     }
 
-    void EasyGLRenderer::BindCompiledEffectForDrawEXT(
-        const std::vector<VertexElement>& declaredElements, std::size_t stride,
-        ICompiledEffectRuntime& runtime)
+    ::easygl::VertexArray& EasyGLRenderer::EnsureCompiledEffectVaoEXT()
     {
+        if (!compiledEffectVaoCreated_)
+        {
+            compiledEffectVao_.create();
+            compiledEffectVaoCreated_ = true;
+        }
+        return compiledEffectVao_;
+    }
+
+    void EasyGLRenderer::BindCompiledEffectForDrawEXT(
+        const CompiledEffectStreamEXT* streams, std::size_t streamCount,
+        ICompiledEffectRuntime& runtime, const ITextureRenderer* spriteBatchSlotZeroTexture)
+    {
+        RequireCompiledEffectContextEXT("a compiled-effect draw");
         auto* effect = dynamic_cast<EasyGLCompiledEffect*>(&runtime);
         if (effect == nullptr)
         {
             throw std::runtime_error(
                 "EasyGL compiled effect: the applied effect was not created by this renderer.");
+        }
+        if (streams == nullptr || streamCount == 0)
+        {
+            throw std::runtime_error(
+                "EasyGL compiled effect: a compiled-effect draw needs at least one vertex stream.");
         }
 
         MOJOSHADER_glShader* vertexShader = nullptr;
@@ -480,6 +603,28 @@ namespace CNA::Internal::Renderers::EasyGL
             throw std::runtime_error(
                 "EasyGL compiled effect: the applied pass bound no shader pair.");
         }
+
+        // plan_fx.md FX-098: force MojoShader to re-issue glUseProgram for this pass.
+        //
+        // MOJOSHADER_glBindProgram SHADOWS the current GL program (`if (program ==
+        // ctx->bound_program) return;`) and MOJOSHADER_glProgramReady never calls glUseProgram at
+        // all -- it only pushes uniforms. Nothing else in MojoShader's OpenGL adapter re-issues it
+        // either. So the moment any other part of this renderer binds its own program -- every
+        // stock 3D draw's `p.prog.use()`, every SpriteBatch flush's `program_.use()`, and even the
+        // `program_.use()` inside EasyGLSpriteBatchRenderer's constructor -- MojoShader still
+        // believes its program is current and the next compiled draw runs the STOCK program
+        // instead. That is a silent wrong-pixels fallback of exactly the kind FX-080 removed from
+        // the other routes: constructing a SpriteBatch was enough to break every later compiled
+        // draw in the process, permanently, with no diagnostic.
+        //
+        // Unbinding and rebinding the SAME shader pair is the public API for "assume nothing about
+        // the GL program". The pair comes from the linker cache the second call hits, so nothing is
+        // recompiled or relinked; the program's refcount goes 2 -> 1 -> 2 and the cache's own
+        // reference keeps it alive throughout. The bounce also resets MojoShader's enabled-array
+        // bookkeeping, which the attribute binding below repopulates -- deliberately, since that
+        // shadow state has the same "some other code touched GL" exposure.
+        MOJOSHADER_glBindShaders(nullptr, nullptr);
+        MOJOSHADER_glBindShaders(vertexShader, pixelShader);
 
         const MOJOSHADER_parseData* vertexParseData = MOJOSHADER_glGetShaderParseData(vertexShader);
         const MOJOSHADER_parseData* pixelParseData = MOJOSHADER_glGetShaderParseData(pixelShader);
@@ -494,26 +639,53 @@ namespace CNA::Internal::Renderers::EasyGL
         // renderer's compiled-effect draw route does not bind vertex-stage sampler textures.
         if (vertexParseData->sampler_count > 0)
         {
+            // plan_fx.md FX-109: a DIFFERENT limitation from the 3D/cube one below, and recorded
+            // as such. Vertex-stage texture sampling is unreachable on this renderer by ANY route
+            // -- GraphicsDevice.VertexTextures and VertexSamplerStates exist in the public API but
+            // no renderer consumes them (FX-110) -- so this is renderer-wide, not compiled-Effect
+            // specific.
             throw System::NotSupportedException(
-                "CNA EasyGL: this compiled effect's vertex shader samples a texture, which this "
-                "renderer's compiled-effect draw route does not yet support.");
+                "CNA EasyGL: this compiled effect's vertex shader samples a texture. Vertex-stage "
+                "texture sampling is not implemented in this renderer at all, by any draw route.");
         }
 
         // Vertex attributes: MOJOSHADER_glSetVertexAttribute no-ops for an attribute the bound
         // program's vertex shader does not use, so every declared element could be bound
-        // unconditionally -- but a shader input the declaration does NOT supply has to fail
-        // loudly rather than sample stale/undefined vertex data.
+        // unconditionally -- but a shader input no bound stream supplies has to fail loudly
+        // rather than sample stale/undefined vertex data.
+        //
+        // plan_fx.md FX-082: the search runs across every bound stream, and each match is bound
+        // from ITS OWN buffer, at ITS OWN stride, from ITS OWN VertexOffset. MojoShader's OpenGL
+        // adapter calls glVertexAttribPointer immediately (not deferred to ProgramReady), so the
+        // array buffer bound at this moment is what each attribute captures -- which is exactly
+        // what makes a genuine multi-stream compiled-effect draw expressible here.
+        struct BoundAttribute
+        {
+            MOJOSHADER_usage usage;
+            int index;
+            unsigned int divisor;
+        };
+        std::vector<BoundAttribute> boundAttributes;
+        boundAttributes.reserve(static_cast<std::size_t>(std::max(vertexParseData->attribute_count, 0)));
+
         for (int i = 0; i < vertexParseData->attribute_count; ++i)
         {
             const MOJOSHADER_attribute& shaderInput = vertexParseData->attributes[i];
             const VertexElement* match = nullptr;
-            for (const VertexElement& element : declaredElements)
+            const CompiledEffectStreamEXT* matchStream = nullptr;
+            for (std::size_t s = 0; s < streamCount && match == nullptr; ++s)
             {
-                if (ToMojoShaderUsage(element.getVertexElementUsageProperty()) == shaderInput.usage &&
-                    element.getUsageIndexProperty() == shaderInput.index)
+                const CompiledEffectStreamEXT& stream = streams[s];
+                if (stream.buffer == nullptr) continue;
+                for (const VertexElement& element : stream.buffer->GetDeclarationElements())
                 {
-                    match = &element;
-                    break;
+                    if (ToMojoShaderUsage(element.getVertexElementUsageProperty()) == shaderInput.usage &&
+                        element.getUsageIndexProperty() == shaderInput.index)
+                    {
+                        match = &element;
+                        matchStream = &stream;
+                        break;
+                    }
                 }
             }
             if (match == nullptr)
@@ -523,16 +695,22 @@ namespace CNA::Internal::Renderers::EasyGL
                     "CNA EasyGL: this compiled effect's vertex shader requires attribute '" +
                     std::string(name) + "' (usage " + std::to_string(static_cast<int>(shaderInput.usage)) +
                     ", index " + std::to_string(shaderInput.index) +
-                    "), but the VertexDeclaration supplied to this draw does not declare an "
-                    "element with that usage and usage index.");
+                    "), but none of the " + std::to_string(streamCount) +
+                    " vertex stream(s) supplied to this draw declares an element with that usage "
+                    "and usage index.");
             }
 
             const GlAttributeFormat glFormat = ToGlAttributeFormat(match->getVertexElementFormatProperty());
             const void* offset = reinterpret_cast<const void*>(
+                static_cast<std::uintptr_t>(matchStream->baseByteOffset) +
                 static_cast<std::uintptr_t>(match->getOffsetProperty()));
+            matchStream->buffer->vbo.bind(::easygl::BufferTarget::Array);
             MOJOSHADER_glSetVertexAttribute(
                 shaderInput.usage, shaderInput.index, glFormat.size, glFormat.type,
-                glFormat.normalized, static_cast<unsigned int>(stride), offset);
+                glFormat.normalized, static_cast<unsigned int>(matchStream->stride), offset);
+            boundAttributes.push_back(
+                BoundAttribute{shaderInput.usage, shaderInput.index,
+                               matchStream->instanceFrequency});
         }
 
         // Pixel-stage sampler textures: every reflected sampler must have a texture bound (a
@@ -544,19 +722,85 @@ namespace CNA::Internal::Renderers::EasyGL
             const MOJOSHADER_sampler& sampler = pixelParseData->samplers[i];
             Texture* texture = nullptr;
             Microsoft::Xna::Framework::Graphics::SamplerState samplerState;
+            bool samplerAssigned = false;
             effect->GetBoundSamplerEXT(static_cast<std::uint32_t>(sampler.index), /*vertexStage=*/false,
-                                       texture, samplerState);
-            const ITextureRenderer* nativeTexture = AsEasyGLTexture(texture);
-            if (nativeTexture == nullptr)
+                                       texture, samplerState, samplerAssigned);
+            ResolvedSamplerTextureEXT nativeTexture = ResolveSamplerTexture(texture);
+            // plan_fx.md FX-080: SpriteBatch overwrites slot 0 with the drawn texture after the
+            // effect's pass applies, exactly as FNA's SpriteBatch.DrawPrimitives does with
+            // GraphicsDevice.Textures[0] -- unconditionally, whatever the effect bound there.
+            if (sampler.index == 0 && spriteBatchSlotZeroTexture != nullptr)
+            {
+                nativeTexture = ResolvedSamplerTextureEXT{};
+                nativeTexture.texture2D = spriteBatchSlotZeroTexture;
+            }
+            const std::string slotName = std::to_string(sampler.index) + " ('" +
+                (sampler.name != nullptr ? sampler.name : "<unnamed>") + "')";
+            if (!nativeTexture.Resolved())
             {
                 throw System::NotSupportedException(
-                    "CNA EasyGL: this compiled effect's pixel shader samples slot " +
-                    std::to_string(sampler.index) + " ('" +
-                    (sampler.name != nullptr ? sampler.name : "<unnamed>") +
-                    "'), but no 2D texture is bound there (an unbound slot, or a 3D/cube texture, "
-                    "which this renderer's compiled-effect draw route does not yet support).");
+                    "CNA EasyGL: this compiled effect's pixel shader samples slot " + slotName +
+                    ", but no texture is bound there. Assign the effect's texture parameter, or "
+                    "select one on GraphicsDevice.Textures, before drawing.");
             }
-            nativeTexture->BindGL(sampler.index);
+            // plan_fx.md FX-110: the shader's declared sampler dimension and the bound texture's
+            // kind have to agree. GL binds a texture per TARGET, so a cube texture bound where the
+            // shader declared sampler2D leaves that sampler reading an incomplete 2D target --
+            // black, silently -- rather than erroring. Named instead.
+            if (sampler.type != nativeTexture.Kind())
+            {
+                throw System::NotSupportedException(
+                    "CNA EasyGL: this compiled effect's pixel shader declares " +
+                    std::string(SamplerKindName(sampler.type)) + " at slot " + slotName +
+                    ", but the texture bound there is a " +
+                    SamplerKindName(nativeTexture.Kind()) + ". The dimensions must match.");
+            }
+            // plan_fx.md FX-099: a render target's colour texture stores its rows the other way up
+            // from an uploaded texture, and MojoShader's generated GLSL carries none of this
+            // renderer's own sampling-time correction. Bind a corrected copy instead, and only for
+            // the sources that need one -- SampledRowOrderIsBottomUp is the same single source of
+            // truth every stock sampling path asks.
+            if (SampledRowOrderIsBottomUp(nativeTexture.texture2D))
+            {
+                const auto* renderTarget =
+                    dynamic_cast<const EasyGLRenderTargetRenderer*>(nativeTexture.texture2D);
+                if (renderTarget == nullptr)
+                {
+                    throw System::NotSupportedException(
+                        "CNA EasyGL: this compiled effect samples a rendered texture whose row "
+                        "order this renderer cannot correct (slot " +
+                        std::to_string(sampler.index) + ").");
+                }
+                const ::easygl::Texture& corrected = AcquireCompiledEffectFlippedSourceEXT(
+                    static_cast<int>(sampler.index), *renderTarget);
+                corrected.active_bind(
+                    static_cast<::easygl::TextureUnit>(
+                        static_cast<unsigned int>(::easygl::TextureUnit::Texture0) +
+                        sampler.index),
+                    ::easygl::TextureTarget::Texture2D);
+            }
+            else
+            {
+                nativeTexture.BindGL(static_cast<int>(sampler.index));
+            }
+            // plan_fx.md FX-083: the pass's own sampler_state block reaches the GPU here. Before
+            // this, only the texture object's creation-time GL filter/wrap applied and an
+            // effect-declared MinFilter/AddressU/MaxAnisotropy was silently ignored at draw time
+            // even though it was published correctly on GraphicsDevice.SamplerStates. A slot no
+            // pass has assigned keeps whatever the game (or SpriteBatch.Begin) selected.
+            if (samplerAssigned)
+            {
+                ApplySamplerState(static_cast<int>(sampler.index),
+                                  static_cast<int>(samplerState.getFilterProperty()),
+                                  static_cast<int>(samplerState.getAddressUProperty()),
+                                  static_cast<int>(samplerState.getAddressVProperty()),
+                                  samplerState.getMaxAnisotropyProperty());
+                ApplySamplerAddressW(static_cast<int>(sampler.index),
+                                     static_cast<int>(samplerState.getAddressWProperty()));
+                ApplySamplerMipState(static_cast<int>(sampler.index),
+                                     samplerState.getMaxMipLevelProperty(),
+                                     samplerState.getMipMapLevelOfDetailBiasProperty());
+            }
         }
 
         // Pushes uniforms from the shared register files (already populated by ApplyPass()'s
@@ -564,22 +808,47 @@ namespace CNA::Internal::Renderers::EasyGL
         // vertex attribute arrays MOJOSHADER_glSetVertexAttribute flagged above.
         MOJOSHADER_glProgramReady();
 
+        // plan_fx.md FX-082: instance step rates. MOJOSHADER_glSetVertexAttribDivisor asserts on
+        // ctx->have_GL_ARB_instanced_arrays, which the pinned adapter only sets for desktop GL
+        // 3.3+ or an explicit GL_ARB_instanced_arrays string -- never for an OpenGL ES 3 context,
+        // where the entry point is core under a different name. The public
+        // MOJOSHADER_glGetVertexAttribLocation gives the same answer without that gate, so the
+        // divisor is set through this renderer's own array object. It is written for EVERY bound
+        // attribute, including the per-vertex ones: the compiled-effect array object is shared by
+        // all compiled draws, so a divisor left over from a previous instanced draw would
+        // otherwise still be in force.
+        for (const BoundAttribute& attribute : boundAttributes)
+        {
+            const int location =
+                MOJOSHADER_glGetVertexAttribLocation(attribute.usage, attribute.index);
+            if (location >= 0)
+                compiledEffectVao_.set_attribute_divisor(
+                    static_cast<unsigned int>(location), attribute.divisor);
+        }
+
         // GL/D3D9 coordinate-system fixups the generated GLSL applies via injected uniforms
         // (vpFlip, and a D3D9 [0,1] -> GL [-1,1] depth remap): unlike the Effect Framework's
         // ordinary register-file uniforms, these are NOT populated by MOJOSHADER_effectCommitChanges
         // at all -- they need this separate call, after ProgramReady, every time the render target
         // could have changed (tools/graphics/mojoshader_gl_probe.cpp's existence-gate finding).
-        int viewportW = 0, viewportH = 0;
-        const bool renderTargetBound = GetCurrentRenderTarget2DSize(viewportW, viewportH);
-        int backbufferW = 0, backbufferH = 0;
-        getPhysicalSize(backbufferW, backbufferH);
-        if (!renderTargetBound)
-        {
-            viewportW = backbufferW;
-            viewportH = backbufferH;
-        }
-        MOJOSHADER_glProgramViewportInfo(viewportW, viewportH, backbufferW, backbufferH,
-                                         renderTargetBound ? 1 : 0);
+        //
+        // plan_fx.md FX-088: `renderTargetBound` is reported as 0 even when one IS bound, and that
+        // is deliberate. The flag makes MojoShader negate `gl_Position.y`, which is how FNA3D's
+        // OpenGL driver emulates Direct3D 9's top-down render targets -- and FNA3D pairs it with an
+        // inverted front face so winding still works out. EasyGL has a different, equally complete
+        // orientation model: geometry is never flipped for an FBO, and the bottom-up texel order
+        // is corrected where it is observed instead (`uRtFlipV` when sampling a render target,
+        // a row flip in `GetData`). Reporting a bound render target here would mirror compiled-
+        // effect geometry against every other draw this renderer issues -- which showed up as a
+        // SpriteBatch quad culled away entirely, its winding reversed by that negation.
+        //
+        // The sizes still describe the real target, so `VPOS`'s own flip (vposFlip = (-1, height))
+        // converts `gl_FragCoord.y` using the height actually being rendered into.
+        int targetW = 0, targetH = 0;
+        if (!GetCurrentRenderTarget2DSize(targetW, targetH))
+            getPhysicalSize(targetW, targetH);
+        MOJOSHADER_glProgramViewportInfo(targetW, targetH, targetW, targetH,
+                                         /*renderTargetBound=*/0);
     }
 }
 

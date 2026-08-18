@@ -7,8 +7,8 @@
 #include <igl/Device.h>
 
 #include <algorithm>
-#include <cstring>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace CNA::Internal::Renderers::Igl
@@ -30,21 +30,6 @@ namespace CNA::Internal::Renderers::Igl
             if (alignment <= 1)
                 return value;
             return (value + alignment - 1) / alignment * alignment;
-        }
-
-        /// Flips a tightly packed RGBA8 image vertically, in place.
-        void FlipRowsInPlace(std::uint8_t* pixels, const int width, const int height)
-        {
-            const std::size_t rowBytes = static_cast<std::size_t>(width) * 4;
-            std::vector<std::uint8_t> scratch(rowBytes);
-            for (int y = 0; y < height / 2; ++y)
-            {
-                std::uint8_t* top = pixels + static_cast<std::size_t>(y) * rowBytes;
-                std::uint8_t* bottom = pixels + static_cast<std::size_t>(height - 1 - y) * rowBytes;
-                std::memcpy(scratch.data(), top, rowBytes);
-                std::memcpy(top, bottom, rowBytes);
-                std::memcpy(bottom, scratch.data(), rowBytes);
-            }
         }
     }
 
@@ -126,12 +111,14 @@ namespace CNA::Internal::Renderers::Igl
 
     IglTextureRenderer::IglTextureRenderer(IglRenderer* owner,
                                            std::shared_ptr<igl::ITexture> texture,
-                                           const int width, const int height, const int mipLevels)
+                                           const int width, const int height, const int mipLevels,
+                                           const int surfaceFormat)
         : owner_(owner)
         , texture_(std::move(texture))
         , width_(width)
         , height_(height)
         , mipLevels_(std::max(1, mipLevels))
+        , surfaceFormat_(surfaceFormat)
     {
     }
 
@@ -139,6 +126,18 @@ namespace CNA::Internal::Renderers::Igl
     {
         if (!texture_ || rgba == nullptr)
             return;
+
+        // A row narrower than one packed row of this format cannot hold the level, and IGL would
+        // read whatever follows the caller's buffer to fill the rest of it. Refusing by name beats
+        // an out-of-bounds read that only shows up as corrupted pixels.
+        const int tightStride = FormatRowByteCount(surfaceFormat_, width_);
+        if (stride > 0 && tightStride > 0 && stride < tightStride)
+        {
+            throw std::runtime_error(
+                "IGL renderer: a " + std::string(GetSurfaceFormatName(surfaceFormat_)) +
+                " row of " + std::to_string(width_) + " texels is " + std::to_string(tightStride) +
+                " bytes, but the upload supplied a row pitch of " + std::to_string(stride));
+        }
 
         const igl::TextureRangeDesc range = igl::TextureRangeDesc::new2D(
             0, 0, static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_));
@@ -192,11 +191,13 @@ namespace CNA::Internal::Renderers::Igl
 
     IglTextureCubeRenderer::IglTextureCubeRenderer(IglRenderer* owner,
                                                    std::shared_ptr<igl::ITexture> texture,
-                                                   const int size, const int mipLevels)
+                                                   const int size, const int mipLevels,
+                                                   const int surfaceFormat)
         : owner_(owner)
         , texture_(std::move(texture))
         , size_(size)
         , mipLevels_(std::max(1, mipLevels))
+        , surfaceFormat_(surfaceFormat)
     {
     }
 
@@ -208,7 +209,7 @@ namespace CNA::Internal::Renderers::Igl
             return false;
         if (face < 0 || face > 5 || level < 0 || level >= mipLevels_)
             return false;
-        if (w <= 0 || h <= 0 || dataLength < w * h * 4)
+        if (w <= 0 || h <= 0 || dataLength < FormatRegionByteCount(surfaceFormat_, w, h))
             return false;
 
         const igl::TextureRangeDesc range = igl::TextureRangeDesc::newCubeFace(
@@ -218,14 +219,51 @@ namespace CNA::Internal::Renderers::Igl
         return texture_->upload(range, data, 0).isOk();
     }
 
-    bool IglTextureCubeRenderer::GetData(int /*face*/, int /*level*/, int /*x*/, int /*y*/,
-                                         int /*w*/, int /*h*/, void* /*data*/,
-                                         int /*dataLength*/) const
+    bool IglTextureCubeRenderer::GetData(const int face, const int level, const int x, const int y,
+                                         const int w, const int h, void* const data,
+                                         const int dataLength) const
     {
-        // IGL exposes readback through IFramebuffer, not ITexture, and a plain TextureCube owns no
-        // framebuffer. RenderTargetCube does, and overrides this. Refusing is the honest answer for
-        // a resource whose bytes this renderer genuinely cannot fetch back.
-        return false;
+        // IGL exposes readback through IFramebuffer rather than ITexture, and a plain TextureCube
+        // owns no framebuffer -- which is why this used to refuse. It does not have to: a
+        // framebuffer is a cheap descriptor over an existing image, and IglRenderTargetRenderer
+        // already builds a throwaway one over another texture for its MSAA-resolve readback. The
+        // same move works here, so the bytes really are reachable and the refusal was a limit of
+        // this renderer rather than of IGL.
+        //
+        // Any defined level, not just 0: the range's own mipLevel reaches the attachment on both
+        // backends -- OpenGL's toReadAttachmentParams copies it into AttachmentParams::mipLevel for
+        // glFramebufferTexture2D, and Vulkan passes it to getImageData2D as the copy's level -- so
+        // the face AND the mip are both selected by the range this builds.
+        if (!texture_ || data == nullptr || owner_ == nullptr)
+            return false;
+        if (face < 0 || face > 5 || level < 0 || level >= mipLevels_)
+            return false;
+        if (w <= 0 || h <= 0 || dataLength < FormatRegionByteCount(surfaceFormat_, w, h))
+            return false;
+
+        owner_->FlushPendingFrameEXT();
+
+        igl::FramebufferDesc desc;
+        desc.colorAttachments[0].texture = texture_;
+        desc.debugName = "CNA TextureCube readback";
+
+        igl::Result result;
+        const std::shared_ptr<igl::IFramebuffer> framebuffer =
+            owner_->GetDevice().createFramebuffer(desc, &result);
+        if (!framebuffer || !result.isOk())
+            return false;
+
+        // newCubeFace, not new2D: a plain new2D range silently defaults to face 0 regardless of
+        // which face was asked for, exactly as IglRenderTargetCubeRenderer::GetData already notes.
+        const igl::TextureRangeDesc range = igl::TextureRangeDesc::newCubeFace(
+            static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y),
+            static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h),
+            static_cast<std::uint32_t>(face), static_cast<std::uint32_t>(level));
+        framebuffer->copyBytesColorAttachment(owner_->GetCommandQueue(), 0, data, range, 0);
+        // The same unconditional Vulkan row flip every other readback here undoes (IGL-67).
+        if (owner_->IsVulkanBackend())
+            FlipRowsInPlace(surfaceFormat_, w, h, data);
+        return true;
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -235,13 +273,14 @@ namespace CNA::Internal::Renderers::Igl
     IglTexture3DRenderer::IglTexture3DRenderer(IglRenderer* owner,
                                                std::shared_ptr<igl::ITexture> texture,
                                                const int width, const int height, const int depth,
-                                               const int mipLevels)
+                                               const int mipLevels, const int surfaceFormat)
         : owner_(owner)
         , texture_(std::move(texture))
         , width_(width)
         , height_(height)
         , depth_(depth)
         , mipLevels_(std::max(1, mipLevels))
+        , surfaceFormat_(surfaceFormat)
     {
     }
 
@@ -253,7 +292,7 @@ namespace CNA::Internal::Renderers::Igl
             return false;
         if (level < 0 || level >= mipLevels_ || w <= 0 || h <= 0 || depth <= 0)
             return false;
-        if (dataLength < w * h * depth * 4)
+        if (dataLength < FormatBoxByteCount(surfaceFormat_, w, h, depth))
             return false;
 
         const igl::TextureRangeDesc range = igl::TextureRangeDesc::new3D(
@@ -268,8 +307,25 @@ namespace CNA::Internal::Renderers::Igl
                                        int /*h*/, int /*depth*/, void* /*data*/,
                                        int /*dataLength*/) const
     {
-        // As for TextureCube above: IGL has no volume-texture readback path, so this refuses rather
-        // than fabricating voxels.
+        // Refused, and unlike the TextureCube case above this one really is an upstream limit --
+        // established by trying it, not by assuming it (plan_igl.md IGL-17).
+        //
+        // The cube path works because a framebuffer is a cheap descriptor over an existing image,
+        // so GetData can build a throwaway one and read the face back. That does not carry over to
+        // a volume: IGL v1.1.1 cannot attach a 3D texture to a framebuffer at all.
+        // `opengl::TextureBufferBase::attach` branches on multisample, stereo and array-layer and
+        // otherwise calls `glFramebufferTexture2D`, and a 3D texture takes that last branch because
+        // `getNumLayers()` counts ARRAY layers, of which a volume has one. The driver answers
+        // exactly what the API says it should: `GL_INVALID_OPERATION in
+        // glFramebufferTexture2D(invalid textarget GL_TEXTURE_3D)`. There is no
+        // `glFramebufferTexture3D`/`glFramebufferTextureLayer` path to reach, and the Vulkan side
+        // is no better -- its copy is `ivkGetBufferImageCopy2D` with `extent.depth` fixed at 1 and
+        // `getVkLayer()` feeding a volume's slice index into `baseArrayLayer`, which is invalid for
+        // a 3D image.
+        //
+        // So this is not a slice loop waiting to be written; there is nothing underneath it to
+        // call. Answering false keeps the "never invent content" contract -- the shared layer
+        // raises NotSupportedException rather than handing back fabricated voxels.
         return false;
     }
 
@@ -421,7 +477,7 @@ namespace CNA::Internal::Renderers::Igl
         std::shared_ptr<igl::ITexture> multisampleColor, std::shared_ptr<igl::ITexture> depth,
         std::shared_ptr<igl::IFramebuffer> framebuffer, const int width, const int height,
         const int mipLevels, const int sampleCount, const bool preserveContents,
-        const int appliedDepthStencilFormat)
+        const int appliedDepthStencilFormat, const int surfaceFormat)
         : owner_(owner)
         , color_(std::move(color))
         , multisampleColor_(std::move(multisampleColor))
@@ -433,6 +489,7 @@ namespace CNA::Internal::Renderers::Igl
         , sampleCount_(std::max(1, sampleCount))
         , preserveContents_(preserveContents)
         , appliedDepthStencilFormat_(appliedDepthStencilFormat)
+        , surfaceFormat_(surfaceFormat)
     {
     }
 
@@ -440,6 +497,16 @@ namespace CNA::Internal::Renderers::Igl
     {
         if (!color_ || rgba == nullptr)
             return;
+
+        const int tightStride = FormatRowByteCount(surfaceFormat_, width_);
+        if (stride > 0 && tightStride > 0 && stride < tightStride)
+        {
+            throw std::runtime_error(
+                "IGL renderer: a " + std::string(GetSurfaceFormatName(surfaceFormat_)) +
+                " row of " + std::to_string(width_) + " texels is " + std::to_string(tightStride) +
+                " bytes, but the render-target upload supplied a row pitch of " +
+                std::to_string(stride));
+        }
 
         const igl::TextureRangeDesc range = igl::TextureRangeDesc::new2D(
             0, 0, static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_));
@@ -483,7 +550,7 @@ namespace CNA::Internal::Renderers::Igl
     {
         if (!framebuffer_ || data == nullptr || w <= 0 || h <= 0)
             return false;
-        if (dataLength < w * h * 4)
+        if (dataLength < FormatRegionByteCount(surfaceFormat_, w, h))
             return false;
         if (level != 0)
         {
@@ -523,11 +590,30 @@ namespace CNA::Internal::Renderers::Igl
 
             resolvedFramebuffer->copyBytesColorAttachment(owner_->GetCommandQueue(), 0, data, range,
                                                           0);
+            UndoVulkanReadbackRowFlip(w, h, data);
             return true;
         }
 
         framebuffer_->copyBytesColorAttachment(owner_->GetCommandQueue(), 0, data, range, 0);
+        UndoVulkanReadbackRowFlip(w, h, data);
         return true;
+    }
+
+    void IglRenderTargetRenderer::UndoVulkanReadbackRowFlip(const int w, const int h,
+                                                            void* const data) const noexcept
+    {
+        // igl::vulkan::Framebuffer::copyBytesColorAttachment passes flipImageVertical = true to
+        // VulkanStagingDevice::getImageData2D UNCONDITIONALLY, so the rectangle it hands back has
+        // its rows reversed; its OpenGL counterpart is a plain glReadPixels and reverses nothing.
+        // A target's rows are stored top-first on both backends (IglRenderer::SubmitDraw keeps
+        // rendered content in the same order SetData uploads it), so exactly one of the two has to
+        // be undone, and this is it.
+        //
+        // A single-row read is unaffected by either convention, which is why this discrepancy was
+        // invisible to every per-pixel test the renderer had and only surfaced through a
+        // full-surface GetData of an UPLOADED target (Igl_ReadbackOrientation).
+        if (owner_ != nullptr && owner_->IsVulkanBackend())
+            FlipRowsInPlace(surfaceFormat_, w, h, data);
     }
 
     int IglRenderTargetRenderer::GetAppliedDepthStencilFormatEXT(
@@ -571,7 +657,8 @@ namespace CNA::Internal::Renderers::Igl
         IglRenderer* owner, std::shared_ptr<igl::ITexture> color,
         std::shared_ptr<igl::ITexture> depth,
         std::array<std::shared_ptr<igl::IFramebuffer>, 6> faces, const int size,
-        const int mipLevels, const int sampleCount, const bool preserveContents)
+        const int mipLevels, const int sampleCount, const bool preserveContents,
+        const int surfaceFormat)
         : owner_(owner)
         , color_(std::move(color))
         , depth_(std::move(depth))
@@ -580,6 +667,7 @@ namespace CNA::Internal::Renderers::Igl
         , faceFramebuffers_(std::move(faces))
         , sampleCount_(std::max(1, sampleCount))
         , preserveContents_(preserveContents)
+        , surfaceFormat_(surfaceFormat)
     {
         for (int face = 0; face < 6; ++face)
         {
@@ -601,7 +689,7 @@ namespace CNA::Internal::Renderers::Igl
             return false;
         if (face < 0 || face > 5 || level < 0 || level >= mipLevels_)
             return false;
-        if (w <= 0 || h <= 0 || dataLength < w * h * 4)
+        if (w <= 0 || h <= 0 || dataLength < FormatRegionByteCount(surfaceFormat_, w, h))
             return false;
 
         const igl::TextureRangeDesc range = igl::TextureRangeDesc::newCubeFace(
@@ -615,8 +703,11 @@ namespace CNA::Internal::Renderers::Igl
                                               const int y, const int w, const int h, void* data,
                                               const int dataLength) const
     {
-        if (data == nullptr || w <= 0 || h <= 0 || dataLength < w * h * 4)
+        if (data == nullptr || w <= 0 || h <= 0 ||
+            dataLength < FormatRegionByteCount(surfaceFormat_, w, h))
+        {
             return false;
+        }
         if (face < 0 || face > 5 || level != 0 || owner_ == nullptr)
             return false;
 
@@ -636,6 +727,10 @@ namespace CNA::Internal::Renderers::Igl
             static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h),
             static_cast<std::uint32_t>(face));
         framebuffer->copyBytesColorAttachment(owner_->GetCommandQueue(), 0, data, range, 0);
+        // Same unconditional Vulkan row flip as RenderTarget2D's own readback undoes; a cube face
+        // is read through the identical IGL entry point.
+        if (owner_->IsVulkanBackend())
+            FlipRowsInPlace(surfaceFormat_, w, h, data);
         return true;
     }
 

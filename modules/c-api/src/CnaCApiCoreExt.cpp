@@ -174,9 +174,22 @@ using ConditionalLoggerRoute = void (*)(std::string_view, bool);
     return CNA_RESULT_SUCCESS;
 }
 
+// The number of renderers CNA::GraphicsRendererType actually declares, counted through the
+// canonical namer rather than written down: it answers "UNKNOWN" for an ordinal past the last
+// enumerator, and the enumeration is dense.
+[[nodiscard]] consteval std::size_t CanonicalRendererCount()
+{
+    std::size_t count = 0;
+    while (CNA::getGraphicsRendererName(static_cast<CNA::GraphicsRendererType>(count)) !=
+           std::string_view{"UNKNOWN"}) {
+        ++count;
+    }
+    return count;
+}
+
 // Every public renderer identity, paired explicitly so neither side depends on the other's
 // declaration order.
-constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererType>, 46>
+constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererType>, 49>
     RendererIdentities{{
         {CNA_GRAPHICS_RENDERER_SDL_RENDERER, CNA::GraphicsRendererType::SdlRenderer},
         {CNA_GRAPHICS_RENDERER_OPENGLES2, CNA::GraphicsRendererType::OpenGLES2},
@@ -224,7 +237,19 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
         {CNA_GRAPHICS_RENDERER_SVG_DOM, CNA::GraphicsRendererType::SvgDom},
         {CNA_GRAPHICS_RENDERER_OPENVG, CNA::GraphicsRendererType::OpenVg},
         {CNA_GRAPHICS_RENDERER_PORTABLEGL, CNA::GraphicsRendererType::PortableGL},
+        {CNA_GRAPHICS_RENDERER_TINYGL, CNA::GraphicsRendererType::TinyGL},
+        {CNA_GRAPHICS_RENDERER_IGL, CNA::GraphicsRendererType::Igl},
+        {CNA_GRAPHICS_RENDERER_PIXIJS, CNA::GraphicsRendererType::PixiJs},
     }};
+
+// A renderer this table has never heard of resolves to CNA_GRAPHICS_RENDERER_UNKNOWN and is
+// refused by every route that takes an identity, which is how TINYGL, IGL and PIXIJS were
+// unreachable from C while the coverage matrix still called them mapped. Neither the table nor
+// the published identity range may fall behind the canonical enumeration again.
+static_assert(RendererIdentities.size() == CanonicalRendererCount(),
+              "A renderer was added to CNA::GraphicsRendererType without a C identity.");
+static_assert(CNA_GRAPHICS_RENDERER_MAXIMUM == RendererIdentities.size(),
+              "CNA_GRAPHICS_RENDERER_MAXIMUM must name the last published renderer identity.");
 
 [[nodiscard]] CNA_Result MapRendererType(
     const CNA_GraphicsRendererType type,

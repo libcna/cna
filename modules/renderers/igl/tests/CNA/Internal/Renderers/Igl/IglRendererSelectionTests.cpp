@@ -2,7 +2,13 @@
 
 #include <gtest/gtest.h>
 
-#if defined(CNA_RENDERER_IGL)
+// plan_runtimerenderer.md RTR-P9-9: PRESENT_, not only the identity macro. This suite is
+// device-free policy coverage for its own renderer, so it is worth compiling and running whenever
+// that renderer is COMPILED IN -- in a multi-renderer build it need not be the selected one.
+#if defined(CNA_RENDERER_IGL) || defined(CNA_RENDERER_PRESENT_IGL)
+#include "CNA/GraphicsRendererType.hpp"
+#include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
+#include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
 #include "CNA/Internal/Renderers/Igl/IglRendererSelection.hpp"
 #include "CNA/Internal/Renderers/Igl/IglShaderLibrary.hpp"
 
@@ -14,6 +20,8 @@ namespace
 {
     namespace Detail = CNA::Internal::Renderers::Igl::Detail;
     using Detail::RendererBackend;
+    using CNA::Internal::Renderers::RendererGlFramebufferRequest;
+    using CNA::Internal::Renderers::RendererWindowKind;
     using CNA::Internal::Renderers::Igl::BuildEffectShaderSources;
     using CNA::Internal::Renderers::Igl::GetSamplerUniformName;
     using CNA::Internal::Renderers::Igl::GetUniformBlockName;
@@ -107,6 +115,119 @@ TEST(IglRendererSelection, TheResolvedBackendIsStableWithinTheProcess)
     const RendererBackend first = Detail::ResolveRendererBackend();
     EXPECT_EQ(first, Detail::ResolveRendererBackend());
     EXPECT_TRUE(Detail::IsRendererBackendCompiledIn(first));
+}
+
+// ---------------------------------------------------------------------------
+// Window kind and pre-window framebuffer request
+// ---------------------------------------------------------------------------
+
+TEST(IglRendererSelection, EachBackendMapsToItsOwnWindowKind)
+{
+    // The regression this pins: the renderer descriptor recorded RendererWindowKind::OpenGL
+    // unconditionally, so CNA_IGL_BACKEND=vulkan built a Vulkan device against a window created
+    // with an OpenGL render intent -- and the fallback rule (design decision 8) compared a window
+    // kind the window did not have.
+    EXPECT_EQ(RendererWindowKind::OpenGL,
+              Detail::GetRendererBackendWindowKind(RendererBackend::OpenGL));
+    EXPECT_EQ(RendererWindowKind::Vulkan,
+              Detail::GetRendererBackendWindowKind(RendererBackend::Vulkan));
+}
+
+TEST(IglRendererSelection, WindowKindAgreesWithTheBooleanFormOfTheSameQuestion)
+{
+    // One source of truth: the kind is derived from these two, not stated a second time.
+    for (const RendererBackend backend : {RendererBackend::OpenGL, RendererBackend::Vulkan})
+    {
+        const RendererWindowKind kind = Detail::GetRendererBackendWindowKind(backend);
+        EXPECT_EQ(Detail::RendererBackendNeedsOpenGLWindow(backend),
+                  kind == RendererWindowKind::OpenGL);
+        EXPECT_EQ(Detail::RendererBackendNeedsVulkanWindow(backend),
+                  kind == RendererWindowKind::Vulkan);
+    }
+}
+
+TEST(IglRendererSelection, AVulkanWindowIsNotCompatibleWithAnOpenGlOne)
+{
+    using CNA::Internal::Renderers::AreWindowKindsCompatible;
+
+    // What makes the kind above matter: a fallback across these two must recreate the window
+    // rather than hand a Vulkan device a window created for OpenGL.
+    EXPECT_FALSE(AreWindowKindsCompatible(
+        Detail::GetRendererBackendWindowKind(RendererBackend::OpenGL),
+        Detail::GetRendererBackendWindowKind(RendererBackend::Vulkan)));
+    EXPECT_FALSE(AreWindowKindsCompatible(
+        Detail::GetRendererBackendWindowKind(RendererBackend::Vulkan),
+        Detail::GetRendererBackendWindowKind(RendererBackend::OpenGL)));
+    EXPECT_TRUE(AreWindowKindsCompatible(
+        Detail::GetRendererBackendWindowKind(RendererBackend::Vulkan),
+        Detail::GetRendererBackendWindowKind(RendererBackend::Vulkan)));
+}
+
+TEST(IglRendererSelection, TheOpenGlBackendStatesItsFramebufferBeforeTheWindowExists)
+{
+    // GLX fixes a window's visual when the window is created. Without this request the window got
+    // the default visual -- in practice 0 stencil bits, which silently turns every
+    // DepthStencilState::StencilEnable into a no-op no matter what the renderer asks for later.
+    const RendererGlFramebufferRequest request =
+        Detail::GetRendererBackendGlFramebufferRequest(RendererBackend::OpenGL);
+
+    EXPECT_EQ(24, request.depthBits);
+    EXPECT_EQ(8, request.stencilBits);
+    EXPECT_TRUE(request.doubleBuffered);
+    // Back-buffer MSAA on this backend is the visual's own multisample buffer; there is no resolve
+    // pass here that could add it after the window exists.
+    EXPECT_TRUE(request.wantsMultiSample);
+}
+
+TEST(IglRendererSelection, TheVulkanBackendMakesNoOpenGlFramebufferRequest)
+{
+    // A Vulkan-intent window carries no GL visual at all, so asking for depth/stencil bits on it
+    // would be a statement about something that does not exist.
+    const RendererGlFramebufferRequest request =
+        Detail::GetRendererBackendGlFramebufferRequest(RendererBackend::Vulkan);
+
+    EXPECT_EQ(0, request.depthBits);
+    EXPECT_EQ(0, request.stencilBits);
+    EXPECT_FALSE(request.doubleBuffered);
+    EXPECT_FALSE(request.wantsMultiSample);
+}
+
+TEST(IglRendererSelection, ThePreWindowResolutionMatchesTheRendererIsOwnAndNeverThrows)
+{
+    // The descriptor carrying the window kind is built from a static initializer (the generated
+    // registry publishes the compiled-in set before main()), where a throw would terminate the
+    // process. It must still agree with the answer the device is later built from.
+    RendererBackend forWindow = RendererBackend::OpenGL;
+    EXPECT_NO_THROW(forWindow = Detail::ResolveRendererBackendForWindow());
+    EXPECT_EQ(Detail::ResolveRendererBackend(), forWindow);
+    EXPECT_TRUE(Detail::IsRendererBackendCompiledIn(forWindow));
+}
+
+TEST(IglRendererSelection, TheRegisteredDescriptorFollowsTheResolvedBackend)
+{
+    namespace Registry = CNA::Internal::Renderers::GraphicsRendererRegistry;
+
+    const auto* descriptor = Registry::Find(CNA::GraphicsRendererType::Igl);
+    if (descriptor == nullptr)
+        GTEST_SKIP() << "the Igl family is compiled in but not registered in this build";
+
+    const RendererBackend backend = Detail::ResolveRendererBackendForWindow();
+
+    EXPECT_EQ(Detail::GetRendererBackendWindowKind(backend), descriptor->windowKind);
+    EXPECT_EQ(Detail::GetRendererBackendGlFramebufferRequest(backend).depthBits,
+              descriptor->glFramebuffer.depthBits);
+    EXPECT_EQ(Detail::GetRendererBackendGlFramebufferRequest(backend).stencilBits,
+              descriptor->glFramebuffer.stencilBits);
+    EXPECT_EQ(Detail::GetRendererBackendGlFramebufferRequest(backend).doubleBuffered,
+              descriptor->glFramebuffer.doubleBuffered);
+    EXPECT_EQ(Detail::GetRendererBackendGlFramebufferRequest(backend).wantsMultiSample,
+              descriptor->glFramebuffer.wantsMultiSample);
+    // Only the OpenGL backend adopts the platform's GL context; the Vulkan one builds its surface
+    // from the native window handle and never reads that service.
+    EXPECT_EQ(Detail::RendererBackendNeedsOpenGLWindow(backend), descriptor->needsGlContext);
+    EXPECT_FALSE(descriptor->needsVulkanSurface);
+    EXPECT_TRUE(descriptor->needsWindow);
+    EXPECT_TRUE(descriptor->needsVideoSubsystem);
 }
 
 TEST(IglShaderLibrary, EveryDeclaredSlotAndBindingHasAName)

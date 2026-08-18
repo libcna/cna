@@ -187,7 +187,13 @@ namespace CNA::Internal::Renderers::Igl
         // off-screen target additionally renders with a flipped Y projection -- see
         // IglRenderer::SubmitDraw -- which reverses the winding once more, and the pipeline follows
         // that so CullClockwiseFace keeps culling the same triangles either way.
-        desc.frontFaceWinding = boundTarget_ != nullptr && boundTarget_ != backBufferTarget_.get()
+        //
+        // The extra off-screen flip is OpenGL-only (see IglRenderer::SubmitDraw for why the two
+        // backends need different corrections), so the winding that follows it must be too --
+        // reversing it on Vulkan, where no flip is applied, would cull the wrong triangles.
+        desc.frontFaceWinding = boundTarget_ != nullptr &&
+                                        boundTarget_ != backBufferTarget_.get() &&
+                                        !IsVulkanBackend()
                                     ? igl::WindingMode::Clockwise
                                     : igl::WindingMode::CounterClockwise;
 
@@ -361,15 +367,35 @@ namespace CNA::Internal::Renderers::Igl
 
     igl::ITexture* IglRenderer::ResolveDummyTexture(const bool cube)
     {
+        return ResolveNeutralTexture(cube ? NeutralTextureKind::WhiteCube
+                                          : NeutralTextureKind::White2D);
+    }
+
+    igl::ITexture* IglRenderer::ResolveNeutralTexture(const NeutralTextureKind kind)
+    {
         // Vulkan requires every descriptor a shader declares to be bound, and the generated
         // fragment shader declares all seven sampler slots whether or not a given draw uses them.
-        // A 1x1 opaque-white image is the neutral stand-in: a slot the shader never reads costs one
-        // texel of memory, and a slot it reads by mistake shows white rather than undefined memory.
-        std::shared_ptr<igl::ITexture>& slot = cube ? dummyTextureCube_ : dummyTexture2D_;
-        if (slot)
-            return slot.get();
+        // A 1x1 image is the stand-in -- but *which* 1x1 image is a rendering decision, not a
+        // memory one (GLTF-374): white is neutral for base colour, metallic-roughness, emissive and
+        // occlusion, and wrong for a tangent-space normal map. White decodes to the normal
+        // (1,1,1), which normalizes to a vector 55 degrees off the surface, so a PBR material with
+        // no normal map was lit as though every one of its pixels were tilted. The flat-normal
+        // texel (128,128,255) is the encoding of (0,0,1) -- "no perturbation" -- and is what every
+        // other PBR renderer in the tree binds for that slot.
+        std::shared_ptr<igl::ITexture>* slot = nullptr;
+        switch (kind)
+        {
+        case NeutralTextureKind::White2D:      slot = &dummyTexture2D_;      break;
+        case NeutralTextureKind::WhiteCube:    slot = &dummyTextureCube_;    break;
+        case NeutralTextureKind::FlatNormal2D: slot = &dummyFlatNormal2D_;   break;
+        }
+        if (*slot)
+            return slot->get();
 
-        const std::uint8_t white[4] = {255, 255, 255, 255};
+        const bool cube = kind == NeutralTextureKind::WhiteCube;
+        const std::uint8_t white[4]      = {255, 255, 255, 255};
+        const std::uint8_t flatNormal[4] = {128, 128, 255, 255};
+        const std::uint8_t* texel = kind == NeutralTextureKind::FlatNormal2D ? flatNormal : white;
 
         igl::TextureDesc desc =
             cube ? igl::TextureDesc::newCube(igl::TextureFormat::RGBA_UNorm8, 1, 1,
@@ -377,11 +403,13 @@ namespace CNA::Internal::Renderers::Igl
                                              "CNA dummy cube")
                  : igl::TextureDesc::new2D(igl::TextureFormat::RGBA_UNorm8, 1, 1,
                                            igl::TextureDesc::TextureUsageBits::Sampled,
-                                           "CNA dummy 2D");
+                                           kind == NeutralTextureKind::FlatNormal2D
+                                               ? "CNA flat-normal 2D"
+                                               : "CNA dummy 2D");
 
         igl::Result result;
-        slot = GetDevice().createTexture(desc, &result);
-        if (!slot || !result.isOk())
+        *slot = GetDevice().createTexture(desc, &result);
+        if (!*slot || !result.isOk())
         {
             throw std::runtime_error("IGL renderer: could not create the dummy texture (" +
                                      result.message + ")");
@@ -393,14 +421,14 @@ namespace CNA::Internal::Renderers::Igl
             {
                 const igl::TextureRangeDesc range =
                     igl::TextureRangeDesc::newCubeFace(0, 0, 1, 1, face);
-                (void)slot->upload(range, white, 0);
+                (void)(*slot)->upload(range, texel, 0);
             }
         }
         else
         {
-            (void)slot->upload(igl::TextureRangeDesc::new2D(0, 0, 1, 1), white, 0);
+            (void)(*slot)->upload(igl::TextureRangeDesc::new2D(0, 0, 1, 1), texel, 0);
         }
 
-        return slot.get();
+        return slot->get();
     }
 }

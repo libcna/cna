@@ -72,6 +72,19 @@ namespace CNA::Internal::Renderers
 
         ~PlatformGlContextOwner()
         {
+            // Unbind before destroying, exactly as Recreate() below already does. Destroying a
+            // context that is still current leaves the platform's GL state pointing at a dead
+            // context, and on GLX that survives the window: the next SDL video-subsystem
+            // initialisation in the same process then fails with "x11 not available".
+            //
+            // The asymmetry was invisible while GraphicsDevice held a surplus video-subsystem
+            // reference, because the subsystem never actually shut down and so never had to come
+            // back up. `next`'s RTR-P5-15 fix balanced that reference, and the IGL renderer -- the
+            // one that drives GLX through igl::opengl::glx::Context, which does its own
+            // glXMakeCurrent and context registration -- immediately could not create a second
+            // device in a process. IGL's Vulkan backend, OPENGLES3 and OPENGL1 all survived the
+            // same loop, which is what narrowed it to this line.
+            service_.MakeCurrent(window_, nullptr);
             service_.DestroyContext(context_);
         }
 

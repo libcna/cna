@@ -90,8 +90,34 @@ static int validate_base_effect(const CNA_Handle device)
 
     REQUIRE(cna_effect_create_empty(device, &effect) == CNA_RESULT_SUCCESS &&
             effect != CNA_INVALID_HANDLE);
+    /* CBIND-052A: compiled Effect Framework bytecode is a real format now, so creating one is
+       refused for a reason rather than refused wholesale. The three refusals below are decided
+       before any renderer is consulted, which is why they hold in every build: an empty buffer
+       and bytes without a structurally valid Direct3D 9 effect header are bad arguments, while
+       MonoGame's distinct MGFX container is a recognized format this constructor does not
+       accept. Whether *valid* bytecode is then accepted is the renderer's answer, and the point
+       of asserting the capability here is that it does not change any of the three: an argument
+       is judged before a renderer is asked, so these hold identically wherever the suite runs.
+       Valid bytecode itself is a fixture this suite does not carry. */
     REQUIRE(cna_effect_create_compiled(device, 0, 0U, &compiled) ==
-                CNA_RESULT_NOT_SUPPORTED && compiled == CNA_INVALID_HANDLE);
+                CNA_RESULT_INVALID_ARGUMENT && compiled == CNA_INVALID_HANDLE);
+    {
+        static const uint8_t mgfx[4] = {(uint8_t)'M', (uint8_t)'G', (uint8_t)'F', (uint8_t)'X'};
+        static const uint8_t garbage[4] = {1U, 2U, 3U, 4U};
+        CNA_EffectHandle refused = UINT64_MAX;
+        CNA_Bool compiled_effects = UINT8_C(9);
+        REQUIRE(cna_graphics_device_supports_capability(
+                    device, CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS, &compiled_effects) ==
+                    CNA_RESULT_SUCCESS &&
+                (compiled_effects == CNA_FALSE || compiled_effects == CNA_TRUE));
+        REQUIRE(cna_effect_create_compiled(device, mgfx, (uint64_t)sizeof(mgfx), &refused) ==
+                    CNA_RESULT_NOT_SUPPORTED && refused == CNA_INVALID_HANDLE);
+        refused = UINT64_MAX;
+        REQUIRE(cna_effect_create_compiled(device, garbage, (uint64_t)sizeof(garbage), &refused) ==
+                    CNA_RESULT_INVALID_ARGUMENT && refused == CNA_INVALID_HANDLE);
+        REQUIRE(cna_effect_create_compiled(device, garbage, (uint64_t)sizeof(garbage), 0) ==
+                    CNA_RESULT_INVALID_ARGUMENT);
+    }
     REQUIRE(cna_effect_get_graphics_device(effect, &owner) == CNA_RESULT_SUCCESS &&
             owner == device);
     REQUIRE(expect_effect_string(
@@ -135,6 +161,124 @@ static int validate_base_effect(const CNA_Handle device)
             cna_effect_set_current_technique(effect, foreign) ==
                 CNA_RESULT_INVALID_ARGUMENT);
 
+    /* CBIND-052B: the reflected technique shape a compiled effect produces. Both parameters are
+       observable, which is why they get a route at all: the index reads back, and the default-pass
+       flag decides whether the technique starts with the canonical P0 pass or with an empty list
+       for reflected passes to be appended to. A technique built the ordinary way reports index 0,
+       because it belongs to no compiled effect. */
+    {
+        CNA_EffectTechniqueHandle reflected = CNA_INVALID_HANDLE;
+        CNA_EffectTechniqueHandle empty = CNA_INVALID_HANDLE;
+        CNA_EffectTechniqueHandle refused = UINT64_MAX;
+        CNA_EffectPassCollectionHandle reflected_passes = CNA_INVALID_HANDLE;
+        uint32_t index = UINT32_MAX;
+        uint64_t passes_count = UINT64_MAX;
+
+        REQUIRE(cna_effect_technique_get_index_ext(current, &index) == CNA_RESULT_SUCCESS &&
+                index == UINT32_C(0));
+        REQUIRE(cna_effect_technique_get_index_ext(foreign, &index) == CNA_RESULT_SUCCESS &&
+                index == UINT32_C(0));
+        REQUIRE(cna_effect_technique_get_index_ext(current, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+                cna_effect_technique_get_index_ext(UINT64_MAX, &index) ==
+                    CNA_RESULT_INVALID_HANDLE);
+
+        REQUIRE(cna_effect_technique_create_reflected_ext(
+                    string_view("Reflected"), UINT32_C(3), CNA_TRUE, &reflected) ==
+                CNA_RESULT_SUCCESS);
+        REQUIRE(cna_effect_technique_get_index_ext(reflected, &index) == CNA_RESULT_SUCCESS &&
+                index == UINT32_C(3));
+        REQUIRE(cna_effect_technique_get_passes(reflected, &reflected_passes) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_effect_pass_collection_get_count(reflected_passes, &passes_count) ==
+                    CNA_RESULT_SUCCESS && passes_count == UINT64_C(1));
+        REQUIRE(cna_effect_pass_collection_destroy(reflected_passes) == CNA_RESULT_SUCCESS);
+
+        REQUIRE(cna_effect_technique_create_reflected_ext(
+                    string_view("Empty"), UINT32_C(7), CNA_FALSE, &empty) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_effect_technique_get_index_ext(empty, &index) == CNA_RESULT_SUCCESS &&
+                index == UINT32_C(7));
+        reflected_passes = CNA_INVALID_HANDLE;
+        REQUIRE(cna_effect_technique_get_passes(empty, &reflected_passes) == CNA_RESULT_SUCCESS &&
+                cna_effect_pass_collection_get_count(reflected_passes, &passes_count) ==
+                    CNA_RESULT_SUCCESS && passes_count == UINT64_C(0));
+        REQUIRE(cna_effect_pass_collection_destroy(reflected_passes) == CNA_RESULT_SUCCESS);
+
+        /* A flag that is neither of the two CNA_Bool values, invalid text and a null output are
+           each refused without producing a handle. */
+        REQUIRE(cna_effect_technique_create_reflected_ext(
+                    string_view("Bad"), UINT32_C(0), UINT8_C(9), &refused) ==
+                    CNA_RESULT_INVALID_ARGUMENT && refused == CNA_INVALID_HANDLE);
+        REQUIRE(cna_effect_technique_create_reflected_ext(
+                    string_view("Bad"), UINT32_C(0), CNA_TRUE, 0) == CNA_RESULT_INVALID_ARGUMENT);
+
+        REQUIRE(cna_effect_technique_destroy(reflected) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_effect_technique_destroy(empty) == CNA_RESULT_SUCCESS);
+    }
+
+    /* CBIND-052B: the same reflected shape for a pass. The owning technique and the position
+       inside it are separate facts, so two passes claiming the same technique still report their
+       own indices. The canonical default P0 pass and a pass built the ordinary way report zero. */
+    {
+        CNA_EffectPassHandle indexed_pass = CNA_INVALID_HANDLE;
+        CNA_EffectPassHandle sibling_pass = CNA_INVALID_HANDLE;
+        CNA_EffectPassHandle plain_pass = CNA_INVALID_HANDLE;
+        uint32_t index = UINT32_MAX;
+
+        REQUIRE(cna_effect_pass_get_index_ext(pass, &index) == CNA_RESULT_SUCCESS &&
+                index == UINT32_C(0));
+        REQUIRE(cna_effect_pass_create(string_view("Plain"), UINT64_C(0), &plain_pass) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_effect_pass_get_index_ext(plain_pass, &index) == CNA_RESULT_SUCCESS &&
+                index == UINT32_C(0));
+
+        REQUIRE(cna_effect_pass_create_indexed_ext(
+                    string_view("P1"), UINT64_C(100), UINT32_C(1), &indexed_pass) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_effect_pass_get_index_ext(indexed_pass, &index) == CNA_RESULT_SUCCESS &&
+                index == UINT32_C(1));
+        REQUIRE(cna_effect_pass_create_indexed_ext(
+                    string_view("P3"), UINT64_C(100), UINT32_C(3), &sibling_pass) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_effect_pass_get_index_ext(sibling_pass, &index) == CNA_RESULT_SUCCESS &&
+                index == UINT32_C(3));
+        /* The name still arrives through the ordinary count/copy pair, so the added argument
+           displaced nothing. */
+        {
+            char name_bytes[8];
+            uint64_t name_count = UINT64_MAX;
+            memset(name_bytes, 0, sizeof(name_bytes));
+            REQUIRE(cna_effect_pass_get_name_byte_count(indexed_pass, &name_count) ==
+                        CNA_RESULT_SUCCESS && name_count == UINT64_C(2) &&
+                    cna_effect_pass_copy_name(
+                        indexed_pass, name_bytes, (uint64_t)sizeof(name_bytes), &name_count) ==
+                        CNA_RESULT_SUCCESS &&
+                    memcmp(name_bytes, "P1", 2U) == 0);
+        }
+
+        REQUIRE(cna_effect_pass_create_indexed_ext(
+                    string_view("P"), UINT64_C(0), UINT32_C(0), 0) == CNA_RESULT_INVALID_ARGUMENT);
+        REQUIRE(cna_effect_pass_get_index_ext(indexed_pass, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+                cna_effect_pass_get_index_ext(UINT64_MAX, &index) == CNA_RESULT_INVALID_HANDLE);
+
+        REQUIRE(cna_effect_pass_destroy(plain_pass) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_effect_pass_destroy(indexed_pass) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_effect_pass_destroy(sibling_pass) == CNA_RESULT_SUCCESS);
+    }
+
+    /* CBIND-052B: an effect built by hand carries no compiled runtime, and neither does anything
+       cloned or derived from it. The true branch needs real Effect Framework bytecode on a
+       renderer that advertises CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS, which none of this
+       campaign's four verification trees provides -- recorded in LIMITATIONS.md rather than
+       faked here. */
+    {
+        CNA_Bool is_compiled = UINT8_C(9);
+        REQUIRE(cna_effect_get_is_compiled_ext(effect, &is_compiled) == CNA_RESULT_SUCCESS &&
+                is_compiled == CNA_FALSE);
+        REQUIRE(cna_effect_get_is_compiled_ext(effect, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+                cna_effect_get_is_compiled_ext(UINT64_MAX, &is_compiled) ==
+                    CNA_RESULT_INVALID_HANDLE);
+    }
+
     WrongThreadState wrong_thread = {effect, CNA_RESULT_SUCCESS};
     thrd_t thread;
     REQUIRE(thrd_create(&thread, inspect_on_wrong_thread, &wrong_thread) == thrd_success &&
@@ -145,6 +289,17 @@ static int validate_base_effect(const CNA_Handle device)
             expect_effect_string(
                 clone, "Microsoft.Xna.Framework.Graphics.Effect",
                 cna_effect_get_type_name_byte_count, cna_effect_copy_type_name));
+    /* CBIND-052B: a clone carries its source's compiled state, asserted as a relationship rather
+       than as a constant. The C adapter used to override Clone() with "make a fresh empty effect",
+       which was right while the canonical Clone() was pure virtual and is wrong now that it clones
+       the compiled runtime and copies parameter values; this is the arm that states the rule. */
+    {
+        CNA_Bool source_compiled = UINT8_C(9);
+        CNA_Bool clone_compiled = UINT8_C(9);
+        REQUIRE(cna_effect_get_is_compiled_ext(effect, &source_compiled) == CNA_RESULT_SUCCESS &&
+                cna_effect_get_is_compiled_ext(clone, &clone_compiled) == CNA_RESULT_SUCCESS &&
+                clone_compiled == source_compiled);
+    }
     REQUIRE(cna_effect_material_create(effect, &material) == CNA_RESULT_SUCCESS &&
             expect_effect_string(
                 material, "Microsoft.Xna.Framework.Graphics.EffectMaterial",

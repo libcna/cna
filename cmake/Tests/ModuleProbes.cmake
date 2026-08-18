@@ -286,4 +286,40 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_target_discipline.py")
     endif()
+
+    # plan_runtimerenderer.md RTR-P6-1: CNA_GRAPHICS_RENDERER names the DEFAULT renderer chosen
+    # from CNA_GRAPHICS_RENDERERS, so it must be a member of that list.
+    #
+    # Each case runs cmake/RendererDefaultSelection.cmake for real in `cmake -P` script mode, which
+    # is why the resolution was split into its own file. Testing it by configuring the whole
+    # project three times would take minutes and write three build trees; this takes milliseconds
+    # and exercises the same code. Same pattern as CnaAudioPlatformSelection_* above.
+    #
+    # The REJECT case is the one that matters: the contract used to be enforced by substituting the
+    # list's first entry and printing a STATUS line, so an invalid default produced a build that
+    # succeeded and then answered every later renderer question about a renderer nobody asked for.
+    set(_cna_renderer_default_cases
+        # name|renderer|set (commas, or EMPTY)|outcome|expected text
+        "SingleRenderer|HEADLESS|EMPTY|ACCEPT|renderer set -- HEADLESS"
+        "DefaultInsideTheSet|SOFTWARE|HEADLESS,SOFTWARE,STUB|ACCEPT|renderer set -- SOFTWARE"
+        "DefaultIsListedFirst|STUB|HEADLESS,SOFTWARE,STUB|ACCEPT|renderer set -- STUB"
+        "DefaultOutsideTheSet|SOFTWARE|OPENGL4,VULKAN|REJECT|is not a member of")
+    foreach(_cna_renderer_default_case IN LISTS _cna_renderer_default_cases)
+        string(REPLACE "|" ";" _cna_renderer_default_fields "${_cna_renderer_default_case}")
+        list(GET _cna_renderer_default_fields 0 _cna_case_name)
+        list(GET _cna_renderer_default_fields 1 _cna_case_renderer)
+        list(GET _cna_renderer_default_fields 2 _cna_case_set)
+        list(GET _cna_renderer_default_fields 3 _cna_case_outcome)
+        list(GET _cna_renderer_default_fields 4 _cna_case_expected)
+        add_test(NAME CnaRendererDefaultSelection_${_cna_case_name}
+            COMMAND ${CMAKE_COMMAND}
+                -DCNA_RENDERER_DEFAULT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/RendererDefaultSelection.cmake
+                -DCNA_RENDERER_DEFAULT_RENDERER=${_cna_case_renderer}
+                -DCNA_RENDERER_DEFAULT_SET=${_cna_case_set}
+                -DCNA_RENDERER_DEFAULT_OUTCOME=${_cna_case_outcome}
+                -DCNA_RENDERER_DEFAULT_EXPECTED=${_cna_case_expected}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/RendererDefaultCase.cmake)
+        set_tests_properties(CnaRendererDefaultSelection_${_cna_case_name}
+            PROPERTIES LABELS "renderer;configuration")
+    endforeach()
 endif()

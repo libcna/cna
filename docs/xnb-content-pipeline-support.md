@@ -206,7 +206,7 @@ without changing either method's observable behavior for any valid input.
 | Area | Status |
 |---|---|
 | `ReflectiveReader<T>` (implicit custom readers) | ❌ Not supported, by design — see above |
-| General `EffectReader` on non-FNA3D renderers | ❌ `CompiledEffects` is false; loading fails with an asset-specific capability diagnostic rather than a silent shader fallback |
+| General `EffectReader` on a renderer without `CompiledEffects` | ❌ loading fails with an asset-specific capability diagnostic rather than a silent shader fallback. True for every identity except FNA3D, and SDL_GPU / the EasyGL family with their own build option on |
 | LZ4 compression | ❌ Not supported yet — deferred (`plan_xnb.md` XNB-30C) |
 | Generic collection readers for an unregistered `T` combination | ❌ Not supported — each closed combination needs its own explicit registration |
 | `Texture2D`/`Texture3D`/`TextureCube` formats beyond `Color`/`Dxt1`/`Dxt3`/`Dxt5` | ❌ Not supported yet |

@@ -93,6 +93,7 @@ namespace CNA::Platform::Sdl2 {
         KeyCode ToKeyCode(const SDL_Keycode key)
         {
             // SDL's printable keycodes are Unicode while CNA uses Windows virtual-key values.
+            // These two ranges are ASCII and therefore genuinely contiguous.
             if (key >= SDLK_a && key <= SDLK_z)
             {
                 return static_cast<KeyCode>(static_cast<std::uint16_t>('A' + (key - SDLK_a)));
@@ -101,9 +102,25 @@ namespace CNA::Platform::Sdl2 {
             {
                 return static_cast<KeyCode>(static_cast<std::uint16_t>('0' + (key - SDLK_0)));
             }
-            if (key >= SDLK_F1 && key <= SDLK_F24)
+            // The function keys are TWO ranges, not one, on both sides of the mapping, and this
+            // used to be written as a single `key >= SDLK_F1 && key <= SDLK_F24` test. That was
+            // wrong twice over. SDL2 leaves a gap between F12 (scancode 69) and F13 (scancode
+            // 104) and fills it with the navigation, editing and keypad keys, so the single range
+            // swallowed SDLK_LEFT, SDLK_HOME, SDLK_DELETE, SDLK_KP_1 and about thirty others
+            // before the switch below could ever see them -- SDLK_LEFT (scancode 80) came out as
+            // 112 + (80 - 58) = 134, an F-key, so on this backend every arrow key reported as F23.
+            // Windows virtual-key codes have their own gap in the same place: F1..F12 are
+            // 0x70..0x7B and F13..F24 restart at 0x7C, so arithmetic from F1 would be off by the
+            // scancode gap even if nothing sat inside it. PLAT-137 hit the identical shape in the
+            // terminal keyboard against HID usage codes; two independent keyboard mappings making
+            // the same mistake is what makes it worth a comment this long.
+            if (key >= SDLK_F1 && key <= SDLK_F12)
             {
                 return static_cast<KeyCode>(static_cast<std::uint16_t>(112 + (key - SDLK_F1)));
+            }
+            if (key >= SDLK_F13 && key <= SDLK_F24)
+            {
+                return static_cast<KeyCode>(static_cast<std::uint16_t>(124 + (key - SDLK_F13)));
             }
             switch (key)
             {
@@ -203,11 +220,16 @@ namespace CNA::Platform::Sdl2 {
     PlatformCapabilities Sdl2Platform::GetCapabilities() const
     {
         PlatformCapabilities capabilities;
-        capabilities.multipleWindows = true;
-        capabilities.highDpi = true;
-        capabilities.multipleDisplays = true;
-        capabilities.borderlessFullscreen = true;
-        capabilities.openGlContext = true;
+        // PLAT-SDL2-5. Each flag below names the service that backs it; PLAT-117's conformance
+        // rule is that a service is non-null exactly when its presence capability is true, so a
+        // flag may only be turned on in the same change that wires its accessor.
+        capabilities.multipleWindows = true;       // CreateWindow has no single-window slot.
+        capabilities.highDpi = true;               // Sdl2Window measures drawable-vs-logical size.
+        capabilities.multipleDisplays = true;      // GetDisplays() -> Sdl2Displays.
+        capabilities.borderlessFullscreen = true;  // SDL_WINDOW_FULLSCREEN_DESKTOP.
+        capabilities.openGlContext = true;         // GetGlContext() -> Sdl2Platform::GlContext.
+        // A quality flag, not a presence one: the keyboard service exists and its snapshot comes
+        // straight from SDL_GetKeyboardState, so every press really does have a matching release.
         capabilities.exactKeyboardState = true;
         // The remaining SDL2 services arrive only when their contract implementation does.
         // Reporting them false protects existing games through the capability fallback path.
@@ -402,7 +424,7 @@ namespace CNA::Platform::Sdl2 {
     IPlatformHaptics* Sdl2Platform::GetHaptics() { return nullptr; }
     IPlatformInputDevices* Sdl2Platform::GetInputDevices() { return nullptr; }
     IPlatformClipboard* Sdl2Platform::GetClipboard() { return nullptr; }
-    IPlatformDisplays* Sdl2Platform::GetDisplays() { return nullptr; }
+    IPlatformDisplays* Sdl2Platform::GetDisplays() { return &displays_; }
     IPlatformDialogs* Sdl2Platform::GetDialogs() { return nullptr; }
     IPlatformTray* Sdl2Platform::GetTray() { return nullptr; }
     IPlatformCameraProvider* Sdl2Platform::GetCamera() { return nullptr; }

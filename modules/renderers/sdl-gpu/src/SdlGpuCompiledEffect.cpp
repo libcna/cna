@@ -29,17 +29,52 @@ namespace CNA::Internal::Renderers::SdlGpu
         constexpr std::size_t kMaximumReflectedItems = 64u * 1024u;
 
         /// Resolves a public texture to the SDL_GPU resource behind it, or null if it is not one.
-        const SdlGpuTextureRenderer* AsSdlGpuTexture(Texture* texture)
+        /// plan_fx.md FX-099: a `RenderTarget2D` is a `Texture2D` whose renderer is an
+        /// SdlGpuRenderTargetRenderer, not an SdlGpuTextureRenderer. Recognising only the latter
+        /// refused every rendered source outright, so the most ordinary use a compiled Effect has
+        /// -- post-processing a scene the game just drew -- could not be expressed at all, even
+        /// though BuildCompiledEffectBindingEXT already resolves both through
+        /// ResolveSampledTextureEXT at draw time. This renderer's targets store their rows the same
+        /// way up as an uploaded texture, so unlike EasyGL nothing has to be corrected here.
+        const ITextureRenderer* AsSdlGpuTexture(Texture* texture)
         {
             if (texture == nullptr) return nullptr;
             using namespace Microsoft::Xna::Framework::Graphics;
+            const auto sampleable = [](ITextureRenderer& renderer) -> const ITextureRenderer* {
+                if (auto* uploaded = dynamic_cast<const SdlGpuTextureRenderer*>(&renderer))
+                    return uploaded;
+                return dynamic_cast<const SdlGpuRenderTargetRenderer*>(&renderer);
+            };
             if (auto* texture2D = dynamic_cast<Texture2D*>(texture))
-                return dynamic_cast<const SdlGpuTextureRenderer*>(&texture2D->GetRenderer());
-            if (auto* texture3D = dynamic_cast<Texture3D*>(texture))
-                return dynamic_cast<const SdlGpuTextureRenderer*>(&texture3D->GetRenderer());
-            if (auto* textureCube = dynamic_cast<TextureCube*>(texture))
-                return dynamic_cast<const SdlGpuTextureRenderer*>(&textureCube->GetRenderer());
+                return sampleable(texture2D->GetRenderer());
             return nullptr;
+        }
+
+        /// plan_fx.md FX-110: whether this renderer owns @p texture at all, whatever its dimension.
+        ///
+        /// `ITextureRenderer`, `ITexture3DRenderer` and `ITextureCubeRenderer` are three unrelated
+        /// interfaces rather than a hierarchy, so a cube or volume texture cannot be answered by
+        /// AsSdlGpuTexture's single pointer -- and a cross-cast between them returns null even for
+        /// a texture this renderer created. Assigning one to a compiled Effect's texture parameter
+        /// is legitimate regardless; whether a DRAW can bind it is decided at draw time against the
+        /// shader's own declared sampler dimension, which is a different question.
+        bool OwnsSampleableTexture(Texture* texture)
+        {
+            if (texture == nullptr) return false;
+            using namespace Microsoft::Xna::Framework::Graphics;
+            if (auto* textureCube = dynamic_cast<TextureCube*>(texture))
+            {
+                return dynamic_cast<const SdlGpuTextureCubeRenderer*>(
+                           &textureCube->GetRenderer()) != nullptr ||
+                       dynamic_cast<const SdlGpuRenderTargetCubeRenderer*>(
+                           &textureCube->GetRenderer()) != nullptr;
+            }
+            if (auto* texture3D = dynamic_cast<Texture3D*>(texture))
+            {
+                return dynamic_cast<const SdlGpuTexture3DRenderer*>(
+                           &texture3D->GetRenderer()) != nullptr;
+            }
+            return AsSdlGpuTexture(texture) != nullptr;
         }
 
         /// Wires MojoShader's own SDL_GPU adapter as the backend the effect parser compiles with.
@@ -123,6 +158,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             boundVertexTextures_ = cloneSource.boundVertexTextures_;
             boundSamplers_ = cloneSource.boundSamplers_;
             boundVertexSamplers_ = cloneSource.boundVertexSamplers_;
+            samplerAssigned_ = cloneSource.samplerAssigned_;
+            vertexSamplerAssigned_ = cloneSource.vertexSamplerAssigned_;
             SetTechnique(techniqueIndex_);
         }
         catch (...)
@@ -200,7 +237,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             throw std::invalid_argument("SDL_GPU compiled effect: parameter is not a texture.");
         }
-        if (texture != nullptr && AsSdlGpuTexture(texture) == nullptr)
+        if (texture != nullptr && !OwnsSampleableTexture(texture))
         {
             throw std::invalid_argument(
                 "SDL_GPU compiled effect: texture was not created by the active SDL_GPU renderer.");
@@ -271,7 +308,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             auto& textureSlot = sampler.vertexStage ? boundVertexTextures_ : boundTextures_;
             auto& samplerSlot = sampler.vertexStage ? boundVertexSamplers_ : boundSamplers_;
             if (sampler.textureChanged) textureSlot[sampler.slot] = sampler.texture;
-            if (sampler.samplerChanged) samplerSlot[sampler.slot] = sampler.sampler;
+            if (sampler.samplerChanged)
+            {
+                samplerSlot[sampler.slot] = sampler.sampler;
+                (sampler.vertexStage ? vertexSamplerAssigned_ : samplerAssigned_)[sampler.slot] =
+                    true;
+            }
         }
 
         // Native sampler/texture binding does not happen here, unlike the FNA3D backend. This
@@ -281,9 +323,11 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuCompiledEffect::GetBoundSamplerEXT(
         std::uint32_t slot, bool vertexStage, Texture*& texture,
-        Microsoft::Xna::Framework::Graphics::SamplerState& sampler) const
+        Microsoft::Xna::Framework::Graphics::SamplerState& sampler,
+        bool* samplerAssigned) const
     {
         using Microsoft::Xna::Framework::Graphics::SamplerStateCollection;
+        if (samplerAssigned != nullptr) *samplerAssigned = false;
         if (slot >= static_cast<std::uint32_t>(SamplerStateCollection::MaxSamplers))
         {
             texture = nullptr;
@@ -291,6 +335,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
         texture = vertexStage ? boundVertexTextures_[slot] : boundTextures_[slot];
         sampler = vertexStage ? boundVertexSamplers_[slot] : boundSamplers_[slot];
+        if (samplerAssigned != nullptr)
+        {
+            *samplerAssigned =
+                vertexStage ? vertexSamplerAssigned_[slot] : samplerAssigned_[slot];
+        }
     }
 
     std::vector<SDL_GPUVertexAttribute> SdlGpuCompiledEffect::LinkAndGetShadersEXT(
