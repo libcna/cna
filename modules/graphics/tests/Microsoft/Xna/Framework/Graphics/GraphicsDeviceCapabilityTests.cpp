@@ -196,13 +196,18 @@ struct CapabilityExpectation
 }
 
 // FNA3D has no separate compiled-effects opt-in: MojoShader is already its own graphics
-// dependency, so support is unconditional whenever this renderer is selected at all. SDL_GPU and
-// EasyGL both pull MojoShader in only as an extra, off-by-default dependency neither otherwise
-// needs (CNA_SDL_GPU_COMPILED_EFFECTS / CNA_EASYGL_COMPILED_EFFECTS) -- selecting the renderer
-// alone is not enough to expect the capability true for either of those two.
+// dependency, so support is unconditional whenever this renderer is selected at all. SDL_GPU,
+// EasyGL and Vulkan all pull MojoShader in only as an extra, off-by-default dependency none of
+// them otherwise needs (CNA_SDL_GPU_COMPILED_EFFECTS / CNA_EASYGL_COMPILED_EFFECTS /
+// CNA_VULKAN_COMPILED_EFFECTS) -- selecting the renderer alone is not enough to expect the
+// capability true for any of those three.
 #if defined(CNA_RENDERER_FNA3D) || \
     (defined(CNA_RENDERER_SDL_GPU) && defined(CNA_SDL_GPU_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_EASYGL) && defined(CNA_EASYGL_COMPILED_EFFECTS))
+// Vulkan is deliberately NOT in this list yet even with CNA_VULKAN_COMPILED_EFFECTS on: plan_fx.md
+// FX-065's runtime exists and passes the shared contract's non-drawing sections, but its draw route
+// does not, and a capability that says true while a compiled draw silently renders with a stock
+// shader is the exact defect FX-080 removed elsewhere.
 constexpr bool kExpectCompiledEffects = true;
 #else
 constexpr bool kExpectCompiledEffects = false;

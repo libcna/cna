@@ -2,6 +2,9 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+#include "CNA/Internal/Renderers/Vulkan/VulkanCompiledEffect.hpp"
+#endif
 #include "CNA/Internal/Renderers/Common/PlatformVulkanRendererState.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include <vulkan/vulkan.h>
@@ -1060,6 +1063,60 @@ namespace CNA::Internal::Renderers::Vulkan
         friend class VulkanMRTProxy;
 
     public:
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+        /**
+         * @brief Still **false**: the runtime exists, the draw route does not yet.
+         *
+         * plan_fx.md FX-065. `VulkanCompiledEffect` is complete and passes every non-drawing
+         * section of the FX-060 shared contract -- format, reflection, the parameter API,
+         * techniques and passes, render state, state policy, samplers, texture binding, clone and
+         * lifecycle. What is missing is the part that turns an applied pass into a Vulkan draw:
+         * a pipeline built from the linked SPIR-V pair, the four descriptor sets MojoShader's
+         * SPIR-V profile expects, and the uniform ring buffers a `Present()`-deferred replay needs.
+         *
+         * The capability stays false until that exists, and this is not a formality. Reporting true
+         * would let `GraphicsDevice` hand a compiled effect to `DrawPrimitivesEx`, which would
+         * ignore it and render with a stock shader -- precisely the silent fallback `FX-080` was
+         * created to remove from the other three backends. False means construction refuses by
+         * name instead, which is the honest state.
+         * @return false.
+         */
+        [[nodiscard]] bool SupportsCompiledEffects() const override { return false; }
+
+        /**
+         * @brief Creates a compiled-effect runtime for this device.
+         *
+         * @param effectCode Compiled effect bytes.
+         * @param effectCodeBytes Number of bytes at @p effectCode.
+         * @return The runtime.
+         */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
+
+        /**
+         * @brief CNAEXT. Returns this renderer's shared MojoShader effect-backend state.
+         *
+         * plan_fx.md FX-065. One per renderer, exactly as `MOJOSHADER_glContext` and
+         * `MOJOSHADER_sdlContext` are for the other two backends -- which is why the constant
+         * register files it holds are shared, and why a deferred draw snapshots its uniforms.
+         * @return The context; never null once the device exists.
+         */
+        CNAEXT [[nodiscard]] VulkanMojoShaderContextEXT* GetMojoShaderContextEXT();
+
+        /**
+         * @brief CNAEXT. Whether this renderer created @p texture, whatever its dimension.
+         *
+         * plan_fx.md FX-065/FX-110. `ITextureRenderer`, `ITexture3DRenderer` and
+         * `ITextureCubeRenderer` are three unrelated interfaces, so this cannot be answered by one
+         * pointer cast; whether a DRAW can bind the texture is a separate question decided against
+         * the shader's own declared sampler dimension.
+         * @param texture Public texture to test.
+         * @return True if this renderer owns it.
+         */
+        CNAEXT [[nodiscard]] bool OwnsSampleableTextureEXT(
+            Microsoft::Xna::Framework::Graphics::Texture* texture) const;
+#endif
+
         explicit VulkanRenderer(const GraphicsRendererCreateArgs& args);
         ~VulkanRenderer() override;
 
@@ -1318,6 +1375,11 @@ namespace CNA::Internal::Renderers::Vulkan
         VkSurfaceKHR     surface_        = VK_NULL_HANDLE;
         VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
         VkDevice         device_         = VK_NULL_HANDLE;
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+        // plan_fx.md FX-065: one MojoShader effect-backend state per renderer, created lazily on
+        // the first CreateCompiledEffect() call. See VulkanCompiledEffect.hpp.
+        std::unique_ptr<VulkanMojoShaderContextEXT> mojoShaderContext_;
+#endif
 
         uint32_t graphicsQueueFamily_ = 0;
         uint32_t presentQueueFamily_  = 0;
