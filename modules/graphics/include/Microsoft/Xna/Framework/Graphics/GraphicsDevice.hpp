@@ -1047,6 +1047,33 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT [[nodiscard]] bool SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat format) const;
 
         /**
+         * @brief Returns the largest number of compute work groups a dispatch may request.
+         *
+         * plan_modern.md `MOD-1505`. Zero on every renderer without compute, which is also what a
+         * renderer that supports it but has not been asked yet reports -- so a caller checks
+         * `GraphicsCapability::ComputeShaders` first and reads these to size its dispatch.
+         *
+         * @param axis 0 for x, 1 for y, 2 for z.
+         * @return The limit, or 0 where compute is unsupported or the axis is out of range.
+         */
+        CNAEXT [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const;
+
+        /**
+         * @brief Returns the largest local size a compute shader may declare on one axis.
+         *
+         * @param axis 0 for x, 1 for y, 2 for z.
+         * @return The limit, or 0 where compute is unsupported or the axis is out of range.
+         */
+        CNAEXT [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const;
+
+        /**
+         * @brief Returns the largest product of a compute shader's declared local sizes.
+         *
+         * @return The limit, or 0 where compute is unsupported.
+         */
+        CNAEXT [[nodiscard]] int GetMaxComputeWorkGroupInvocationsEXT() const;
+
+        /**
          * @brief Returns the active renderer's real maximum single-axis texture dimension.
          *
          * REMED-CONTENT-001: query this before creating or accepting a texture of

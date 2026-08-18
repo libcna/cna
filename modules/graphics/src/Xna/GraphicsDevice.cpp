@@ -2152,7 +2152,27 @@ namespace Microsoft::Xna::Framework::Graphics
         // false, never by a capability switch whose default is true.
         if (capability == CNA::GraphicsCapability::HalfFloatTextureLinearFiltering)
             return GetRenderer().SupportsHalfFloatTextureLinearFilteringEXT();
+        // MOD-1500: compute is derived for exactly the same reason.
+        if (capability == CNA::GraphicsCapability::ComputeShaders)
+            return GetRenderer().SupportsComputeShadersEXT();
         return GetRenderer().SupportsCapability(capability);
+    }
+
+    int GraphicsDevice::GetMaxComputeWorkGroupCountEXT(const int axis) const
+    {
+        if (axis < 0 || axis > 2) return 0;
+        return GetRenderer().GetMaxComputeWorkGroupCountEXT(axis);
+    }
+
+    int GraphicsDevice::GetMaxComputeWorkGroupSizeEXT(const int axis) const
+    {
+        if (axis < 0 || axis > 2) return 0;
+        return GetRenderer().GetMaxComputeWorkGroupSizeEXT(axis);
+    }
+
+    int GraphicsDevice::GetMaxComputeWorkGroupInvocationsEXT() const
+    {
+        return GetRenderer().GetMaxComputeWorkGroupInvocationsEXT();
     }
 
     bool GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat format) const

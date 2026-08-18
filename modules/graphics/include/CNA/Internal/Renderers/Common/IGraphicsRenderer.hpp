@@ -197,6 +197,108 @@ namespace CNA::Internal::Renderers
         [[nodiscard]] virtual int  PixelCount() const = 0;
     };
 
+    class ITextureRenderer;
+
+    /**
+     * @brief A GPU buffer a compute shader reads and writes (an SSBO, in GL terms).
+     *
+     * plan_modern.md `MOD-1501`. Deliberately byte-oriented and free of every XNA type: a storage
+     * buffer holds whatever a shader says it holds, and the public `CNA::Graphics::StorageBuffer`
+     * wrapper is where a typed view over it belongs.
+     */
+    class IStorageBufferRenderer
+    {
+    public:
+        /** @brief Virtual destructor. */
+        virtual ~IStorageBufferRenderer() = default;
+
+        /**
+         * @brief Uploads bytes into the buffer, starting at its beginning.
+         *
+         * @param data     The source bytes; must hold at least @p byteSize readable bytes.
+         * @param byteSize How many bytes to upload; must not exceed @ref GetByteSize.
+         */
+        virtual void SetData(const void* data, std::size_t byteSize) = 0;
+
+        /**
+         * @brief Reads bytes back out of the buffer, starting at its beginning.
+         *
+         * @param out      Receives the bytes; must have room for at least @p byteSize.
+         * @param byteSize How many bytes to read; must not exceed @ref GetByteSize.
+         */
+        virtual void GetData(void* out, std::size_t byteSize) const = 0;
+
+        /** @brief Returns the buffer's size in bytes. */
+        [[nodiscard]] virtual std::size_t GetByteSize() const = 0;
+    };
+
+    /**
+     * @brief One compiled compute program, and the bindings a dispatch of it reads.
+     *
+     * plan_modern.md `MOD-1500`. Mirrors `IEffectRenderer`'s shape: the renderer owns the compiled
+     * object, the interface exposes only what a caller must be able to say about it, and no XNA
+     * type appears in a signature -- an image binding arrives as an `ITextureRenderer`, and the
+     * access mode as an ordinal (`CNA::GraphicsImageAccess`) rather than as an enumeration this
+     * header would have to include.
+     */
+    class IComputeShaderRenderer
+    {
+    public:
+        /** @brief Virtual destructor. */
+        virtual ~IComputeShaderRenderer() = default;
+
+        /**
+         * @brief Compiles and links the program.
+         *
+         * @param computeSrc The compute-shader source, in whatever language the renderer takes.
+         * @return True when the program linked; @ref GetCompileError says why when it did not.
+         */
+        virtual bool CompileProgram(const std::string& computeSrc) = 0;
+
+        /** @brief Makes this the program a following dispatch runs. */
+        virtual void Bind() = 0;
+
+        /**
+         * @brief Sets a scalar integer uniform.
+         *
+         * @param name  The uniform's name in the source.
+         * @param value The value.
+         */
+        virtual void SetUniformInt(const char* /*name*/, int /*value*/) {}
+
+        /**
+         * @brief Sets a scalar float uniform.
+         *
+         * @param name  The uniform's name in the source.
+         * @param value The value.
+         */
+        virtual void SetUniformFloat(const char* /*name*/, float /*value*/) {}
+
+        /**
+         * @brief Binds a storage buffer to one of the program's binding points.
+         *
+         * @param binding The binding index the shader declares.
+         * @param buffer  The buffer, or null to unbind.
+         */
+        virtual void BindStorageBuffer(int /*binding*/, IStorageBufferRenderer* /*buffer*/) {}
+
+        /**
+         * @brief Binds a texture as a readable/writable image.
+         *
+         * @param unit       The image unit the shader declares.
+         * @param texture    The texture, or null to unbind.
+         * @param accessMode A `CNA::GraphicsImageAccess` ordinal.
+         */
+        virtual void BindImageTexture(int /*unit*/, ITextureRenderer* /*texture*/,
+                                      int /*accessMode*/) {}
+
+        /** @brief Returns whether a program is currently linked and usable. */
+        [[nodiscard]] virtual bool IsValid() const = 0;
+
+        /** @brief Returns the compiler/linker log from the last failed @ref CompileProgram. */
+        [[nodiscard]] virtual std::string GetCompileError() const = 0;
+    };
+
     /**
      * @brief Renderer interface for a cube map texture.
      *
@@ -1880,6 +1982,56 @@ namespace CNA::Internal::Renderers
         /// values added after they were written. GraphicsDevice consults this method for
         /// CompiledEffects so an old catch-all cannot accidentally advertise a native runtime.
         [[nodiscard]] virtual bool SupportsCompiledEffects() const { return false; }
+
+        /// plan_modern.md MOD-1502: compute shaders and storage buffers. Every default is the
+        /// honest "this renderer cannot", so all renderer families compile unchanged and none of
+        /// them accidentally claims a feature it has never heard of -- the same opt-in shape
+        /// SupportsCompiledEffects uses, and for the same reason.
+        virtual std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
+            const std::string& /*computeSrc*/)
+        {
+            return nullptr;
+        }
+
+        /// Creates a storage buffer of @p byteSize bytes, or null where unsupported.
+        virtual std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(
+            std::size_t /*byteSize*/)
+        {
+            return nullptr;
+        }
+
+        /// Runs the bound compute program over a grid of work groups. A no-op where unsupported.
+        virtual void DispatchCompute(IComputeShaderRenderer* /*shader*/, int /*groupsX*/,
+                                     int /*groupsY*/, int /*groupsZ*/) {}
+
+        /// Orders memory access after a dispatch. `barrierBits` is a `CNA::GraphicsMemoryBarrier`
+        /// bitmask, which each renderer translates into its own native bits.
+        virtual void MemoryBarrierEXT(int /*barrierBits*/) {}
+
+        /// plan_modern.md MOD-1500: whether this renderer really implements compute. False by
+        /// default, and consulted by GraphicsDevice for GraphicsCapability::ComputeShaders rather
+        /// than that capability being answered by a renderer's own switch -- many of those end in
+        /// `default: return true`.
+        [[nodiscard]] virtual bool SupportsComputeShadersEXT() const { return false; }
+
+        /// plan_modern.md MOD-1514: whether a `Texture2D` can be bound to a compute shader as an
+        /// image. Separate from `SupportsComputeShadersEXT` because the two genuinely differ: GL ES
+        /// 3.1 requires an *immutable* texture (`glTexStorage2D`) for `glBindImageTexture`, and
+        /// CNA's textures are allocated mutably (`glTexImage2D`), so an ES context that fully
+        /// supports compute still cannot bind one. Desktop GL accepts a mutable texture. False by
+        /// default, like every other promise here.
+        [[nodiscard]] virtual bool SupportsComputeImageBindingEXT() const { return false; }
+
+        /// plan_modern.md MOD-1505: the dispatch limits this context guarantees, per axis
+        /// (0 = x, 1 = y, 2 = z). Zero means "unknown or unsupported", which is what every
+        /// renderer without compute returns.
+        [[nodiscard]] virtual int GetMaxComputeWorkGroupCountEXT(int /*axis*/) const { return 0; }
+
+        /// The largest local size a compute shader may declare, per axis.
+        [[nodiscard]] virtual int GetMaxComputeWorkGroupSizeEXT(int /*axis*/) const { return 0; }
+
+        /// The largest product of a compute shader's local sizes.
+        [[nodiscard]] virtual int GetMaxComputeWorkGroupInvocationsEXT() const { return 0; }
 
         /// Activates a specific face of a cube-map render target for rendering.
         /// Pass nullptr to restore the default back buffer.

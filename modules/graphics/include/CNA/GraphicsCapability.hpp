@@ -175,6 +175,21 @@ namespace CNA
          * `HdrBlendable`), which are what the engine layer's targets use; 32-bit float filtering is
          * rarer still and no CNA pass depends on it.
          */
-        HalfFloatTextureLinearFiltering
+        HalfFloatTextureLinearFiltering,
+
+        /**
+         * @brief Compute shaders and the storage buffers they read and write.
+         *
+         * GL ES 3.1 / desktop GL 4.3 and later, Vulkan, D3D11 and D3D12 can express this; every
+         * fixed-function and 2D-only renderer cannot, and neither can the GL profiles below 3.1
+         * that several CNA renderers target.
+         *
+         * @note **Derived**, like `FloatRenderTargets` and `CompiledEffects` and for the same
+         * reason: it is answered by `IGraphicsRenderer::SupportsComputeShadersEXT()`, whose default
+         * is false, never by a renderer's own capability switch -- many of those end in
+         * `default: return true`, which would have every renderer claim compute it has never heard
+         * of. See `plan_modern.md` MOD-1500.
+         */
+        ComputeShaders
     };
 } // CNA

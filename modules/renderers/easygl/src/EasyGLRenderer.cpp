@@ -26,6 +26,8 @@ namespace CNA::Internal::Renderers::EasyGL
     }
 }
 
+#include "CNA/GraphicsImageAccess.hpp"
+#include "CNA/GraphicsMemoryBarrier.hpp"
 #include "CNA/Logger.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
@@ -33,6 +35,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/NotSupportedException.hpp"
 #include <cstdint>
+#include <cstring>
 #include <cstdlib>
 #include <iostream>
 #include <span>
@@ -1870,6 +1873,116 @@ if (!ProfileIsEs2ApiGeneration())
         const int loc = ArrayUniformLocation(name);
         if (loc >= 0 && count > 0)
             ::metagl::glUniformMatrix4fv(::metagl::UniformLocation{loc}, count, 0, matrices);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // plan_modern.md MOD-1511..MOD-1515: compute shaders and shader storage buffers.
+
+    EasyGLStorageBufferRenderer::EasyGLStorageBufferRenderer(const std::size_t byteSize)
+        : byteSize_(byteSize)
+    {
+        buffer_.create();
+        // Allocated once with no initial data; DynamicDraw because the whole point of a storage
+        // buffer is that something writes it repeatedly -- usually the GPU itself.
+        buffer_.set_data(::easygl::BufferTarget::ShaderStorage, nullptr, byteSize_,
+                         ::easygl::BufferUsage::DynamicDraw);
+    }
+
+    EasyGLStorageBufferRenderer::~EasyGLStorageBufferRenderer() = default;
+
+    void EasyGLStorageBufferRenderer::SetData(const void* data, const std::size_t byteSize)
+    {
+        if (data == nullptr || byteSize == 0) return;
+        buffer_.set_sub_data(::easygl::BufferTarget::ShaderStorage, data,
+                             byteSize > byteSize_ ? byteSize_ : byteSize, 0);
+    }
+
+    void EasyGLStorageBufferRenderer::GetData(void* out, const std::size_t byteSize) const
+    {
+        if (out == nullptr || byteSize == 0) return;
+        const std::size_t bytes = byteSize > byteSize_ ? byteSize_ : byteSize;
+        // glGetBufferSubData is desktop-only; mapping for read is the portable form and is what
+        // the GL ES 3.1 contexts this renderer usually holds actually provide.
+        void* mapped = buffer_.map_range(::easygl::BufferTarget::ShaderStorage, 0,
+                                         static_cast<std::ptrdiff_t>(bytes),
+                                         ::metagl::MapBufferAccessMask::Read);
+        if (mapped == nullptr) return;
+        std::memcpy(out, mapped, bytes);
+        buffer_.unmap(::easygl::BufferTarget::ShaderStorage);
+    }
+
+    void EasyGLStorageBufferRenderer::BindBase(const int binding) const
+    {
+        buffer_.bind_base(::easygl::BufferTarget::ShaderStorage,
+                          static_cast<unsigned int>(binding));
+    }
+
+    bool EasyGLComputeShaderRenderer::CompileProgram(const std::string& computeSrc)
+    {
+        compileError_.clear();
+        valid_ = false;
+        ::easygl::Shader cs(::easygl::ShaderType::Compute);
+        cs.create();
+        cs.compile_from_source(computeSrc.c_str());
+        if (!cs.is_compiled())
+        {
+            compileError_ = "CS: " + cs.info_log();
+            return false;
+        }
+        program_.create();
+        program_.attach(cs);
+        program_.link();
+        if (!program_.is_linked())
+        {
+            compileError_ = "Link: " + program_.info_log();
+            return false;
+        }
+        valid_ = true;
+        return true;
+    }
+
+    void EasyGLComputeShaderRenderer::Bind()
+    {
+        if (valid_) program_.use();
+    }
+
+    void EasyGLComputeShaderRenderer::SetUniformInt(const char* name, const int value)
+    {
+        if (!valid_) return;
+        const int location = program_.uniform_location(name);
+        if (location >= 0) program_.set_uniform(location, value);
+    }
+
+    void EasyGLComputeShaderRenderer::SetUniformFloat(const char* name, const float value)
+    {
+        if (!valid_) return;
+        const int location = program_.uniform_location(name);
+        if (location >= 0) program_.set_uniform(location, value);
+    }
+
+    void EasyGLComputeShaderRenderer::BindStorageBuffer(const int binding,
+                                                        IStorageBufferRenderer* buffer)
+    {
+        if (buffer == nullptr) return;
+        static_cast<EasyGLStorageBufferRenderer*>(buffer)->BindBase(binding);
+    }
+
+    void EasyGLComputeShaderRenderer::BindImageTexture(const int unit, ITextureRenderer* texture,
+                                                        const int accessMode)
+    {
+        if (texture == nullptr) return;
+        auto access = ::metagl::ImageAccess::ReadWrite;
+        if (accessMode == static_cast<int>(CNA::GraphicsImageAccess::ReadOnly))
+            access = ::metagl::ImageAccess::ReadOnly;
+        else if (accessMode == static_cast<int>(CNA::GraphicsImageAccess::WriteOnly))
+            access = ::metagl::ImageAccess::WriteOnly;
+
+        // RGBA8 because every CNA texture is SurfaceFormat::Color (Texture::ValidateFormat admits
+        // nothing else), so the image format is not a choice the caller could make differently.
+        ::metagl::glBindImageTexture(
+            static_cast<::metagl::ImageUnit>(unit),
+            ::metagl::TextureId{static_cast<EasyGLTextureRenderer*>(texture)->texture.native_handle()},
+            0, GL_FALSE, 0, access, ::metagl::InternalFormat::Rgba8);
     }
 
     void EasyGLEffectRenderer::BindTexture(int unit, ITextureRenderer* texture)
@@ -4148,6 +4261,106 @@ if (!ProfileIsEs2ApiGeneration())
         return ProbeFloatRenderTargetSupportEXT(storage.isFullFloat)
             ? RendererFormatVerdict::Supported
             : RendererFormatVerdict::Unsupported;
+    }
+
+    bool EasyGLRenderer::SupportsComputeShadersEXT() const
+    {
+        // The runtime context decides, not the compile-time profile: this renderer asks for ES 3.0
+        // and Mesa routinely hands it 3.2. WebGL has no compute in any version, so it is excluded
+        // by name rather than by version comparison.
+        const auto& capabilities = device.capabilities();
+        if (capabilities.is_webgl()) return false;
+        if (capabilities.is_opengles()) return capabilities.is_at_least(3, 1);
+        if (capabilities.is_opengl()) return capabilities.is_at_least(4, 3);
+        return false;
+    }
+
+    bool EasyGLRenderer::SupportsComputeImageBindingEXT() const
+    {
+        // Desktop GL only, and not because ES lacks the entry point: ES 3.1 requires the texture
+        // bound as an image to be immutable (glTexStorage2D), and every CNA texture is allocated
+        // with glTexImage2D. Changing that is a change to the texture path every draw in the engine
+        // goes through, so this reports the truth instead -- and CNA::Graphics::ComputeShader
+        // refuses the binding rather than issuing one the driver will reject silently.
+        return SupportsComputeShadersEXT() && device.capabilities().is_opengl();
+    }
+
+    int EasyGLRenderer::GetMaxComputeWorkGroupCountEXT(const int axis) const
+    {
+        if (!SupportsComputeShadersEXT() || axis < 0 || axis > 2) return 0;
+        GLint value = 0;
+        ::metagl::glGetIntegeri_v(::metagl::GetParameter::MaxComputeWorkGroupCount,
+                                  static_cast<GLuint>(axis), &value);
+        return static_cast<int>(value);
+    }
+
+    int EasyGLRenderer::GetMaxComputeWorkGroupSizeEXT(const int axis) const
+    {
+        if (!SupportsComputeShadersEXT() || axis < 0 || axis > 2) return 0;
+        GLint value = 0;
+        ::metagl::glGetIntegeri_v(::metagl::GetParameter::MaxComputeWorkGroupSize,
+                                  static_cast<GLuint>(axis), &value);
+        return static_cast<int>(value);
+    }
+
+    int EasyGLRenderer::GetMaxComputeWorkGroupInvocationsEXT() const
+    {
+        if (!SupportsComputeShadersEXT()) return 0;
+        GLint value = 0;
+        ::metagl::glGetIntegerv(::metagl::GetParameter::MaxComputeWorkGroupInvocations, &value);
+        return static_cast<int>(value);
+    }
+
+    std::unique_ptr<IComputeShaderRenderer> EasyGLRenderer::CreateComputeShader(
+        const std::string& computeSrc)
+    {
+        if (!SupportsComputeShadersEXT()) return nullptr;
+        auto shader = std::make_unique<EasyGLComputeShaderRenderer>();
+        // A failed compile still returns the object: its GetCompileError() is the diagnostic the
+        // caller needs, and returning null here would throw that log away.
+        (void)shader->CompileProgram(computeSrc);
+        return shader;
+    }
+
+    std::unique_ptr<IStorageBufferRenderer> EasyGLRenderer::CreateStorageBuffer(
+        const std::size_t byteSize)
+    {
+        if (!SupportsComputeShadersEXT() || byteSize == 0) return nullptr;
+        return std::make_unique<EasyGLStorageBufferRenderer>(byteSize);
+    }
+
+    void EasyGLRenderer::DispatchCompute(IComputeShaderRenderer* shader, const int groupsX,
+                                         const int groupsY, const int groupsZ)
+    {
+        if (shader == nullptr || !shader->IsValid()) return;
+        if (groupsX <= 0 || groupsY <= 0 || groupsZ <= 0) return;
+        shader->Bind();
+        device.dispatch_compute(static_cast<unsigned int>(groupsX),
+                                static_cast<unsigned int>(groupsY),
+                                static_cast<unsigned int>(groupsZ));
+    }
+
+    void EasyGLRenderer::MemoryBarrierEXT(const int barrierBits)
+    {
+        if (!SupportsComputeShadersEXT() || barrierBits == 0) return;
+        using CNA::GraphicsMemoryBarrier;
+        const auto requested = static_cast<GraphicsMemoryBarrier>(barrierBits);
+        // Translated bit by bit rather than passed through: the ordinals are CNA's own, and a
+        // renderer that forwarded them raw would be depending on them happening to match GL's.
+        GLbitfield native = 0;
+        const auto add = [&](const GraphicsMemoryBarrier bit, const ::metagl::MemoryBarrierMask gl) {
+            if (CNA::HasBarrier(requested, bit)) native |= static_cast<GLbitfield>(gl);
+        };
+        add(GraphicsMemoryBarrier::VertexAttribArray, ::metagl::MemoryBarrierMask::VertexAttribArray);
+        add(GraphicsMemoryBarrier::ElementArray, ::metagl::MemoryBarrierMask::ElementArray);
+        add(GraphicsMemoryBarrier::Uniform, ::metagl::MemoryBarrierMask::Uniform);
+        add(GraphicsMemoryBarrier::TextureFetch, ::metagl::MemoryBarrierMask::TextureFetch);
+        add(GraphicsMemoryBarrier::ShaderImageAccess, ::metagl::MemoryBarrierMask::ShaderImageAccess);
+        add(GraphicsMemoryBarrier::ShaderStorage, ::metagl::MemoryBarrierMask::ShaderStorage);
+        add(GraphicsMemoryBarrier::BufferUpdate, ::metagl::MemoryBarrierMask::BufferUpdate);
+        add(GraphicsMemoryBarrier::Framebuffer, ::metagl::MemoryBarrierMask::Framebuffer);
+        if (native == 0) return;
+        device.memory_barrier(static_cast<::metagl::MemoryBarrierMask>(native));
     }
 
     bool EasyGLRenderer::SupportsHalfFloatTextureLinearFilteringEXT() const

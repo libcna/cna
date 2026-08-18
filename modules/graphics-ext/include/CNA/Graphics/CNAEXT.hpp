@@ -52,6 +52,10 @@
 #include "CNA/Graphics/EnvironmentProcessor.hpp"
 #include "CNA/Graphics/Skybox.hpp"
 
+// ---- Compute -----------------------------------------------------------------------------
+#include "CNA/Graphics/ComputeShader.hpp"
+#include "CNA/Graphics/StorageBuffer.hpp"
+
 // ---- Instancing, LOD and culling -------------------------------------------------------------
 #include "CNA/Graphics/FrustumCullerEXT.hpp"
 #include "CNA/Graphics/InstancedRendererEXT.hpp"

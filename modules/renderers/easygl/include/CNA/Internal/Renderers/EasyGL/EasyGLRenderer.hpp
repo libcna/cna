@@ -478,6 +478,55 @@ namespace CNA::Internal::Renderers::EasyGL
         bool  rtFlipVUploaded_ = false;
     };
 
+    /**
+     * @brief plan_modern.md MOD-1512: a shader storage buffer.
+     *
+     * Read-back goes through `glMapBufferRange` rather than `glGetBufferSubData`, which is desktop
+     * GL only -- the same code then works on the GL ES 3.1 contexts this renderer mostly runs on.
+     */
+    class EasyGLStorageBufferRenderer : public IStorageBufferRenderer
+    {
+    public:
+        /** @brief Allocates @p byteSize bytes of storage. */
+        explicit EasyGLStorageBufferRenderer(std::size_t byteSize);
+        ~EasyGLStorageBufferRenderer() override;
+
+        void SetData(const void* data, std::size_t byteSize) override;
+        void GetData(void* out, std::size_t byteSize) const override;
+        [[nodiscard]] std::size_t GetByteSize() const override { return byteSize_; }
+
+        /// Binds this buffer to a shader storage binding point.
+        void BindBase(int binding) const;
+
+    private:
+        mutable ::easygl::Buffer buffer_;
+        std::size_t byteSize_ = 0;
+    };
+
+    /**
+     * @brief plan_modern.md MOD-1511: one compiled compute program.
+     */
+    class EasyGLComputeShaderRenderer : public IComputeShaderRenderer
+    {
+    public:
+        EasyGLComputeShaderRenderer() = default;
+        ~EasyGLComputeShaderRenderer() override = default;
+
+        bool CompileProgram(const std::string& computeSrc) override;
+        void Bind() override;
+        void SetUniformInt(const char* name, int value) override;
+        void SetUniformFloat(const char* name, float value) override;
+        void BindStorageBuffer(int binding, IStorageBufferRenderer* buffer) override;
+        void BindImageTexture(int unit, ITextureRenderer* texture, int accessMode) override;
+        [[nodiscard]] bool IsValid() const override { return valid_; }
+        [[nodiscard]] std::string GetCompileError() const override { return compileError_; }
+
+    private:
+        ::easygl::Program program_;
+        std::string compileError_;
+        bool valid_ = false;
+    };
+
     class EasyGLOcclusionQueryRenderer : public IOcclusionQueryRenderer, public ::easygl::RecoverableResource
     {
     public:
@@ -1080,6 +1129,22 @@ namespace CNA::Internal::Renderers::EasyGL
         /// desktop GL 3.0 onward; on the ES 2.0 API generation it needs an extension that this
         /// renderer does not rely on, so it is reported false there.
         [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
+
+        /// plan_modern.md MOD-1510: compute shaders, which need GL ES 3.1 or desktop GL 4.3. The
+        /// answer is the *runtime* context's version, not the compile-time profile: this renderer
+        /// asks for ES 3.0 and routinely receives 3.2, and refusing compute on a context that has
+        /// it would be as wrong as claiming it on one that does not.
+        [[nodiscard]] bool SupportsComputeShadersEXT() const override;
+        [[nodiscard]] bool SupportsComputeImageBindingEXT() const override;
+        [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const override;
+        [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const override;
+        [[nodiscard]] int GetMaxComputeWorkGroupInvocationsEXT() const override;
+        std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
+            const std::string& computeSrc) override;
+        std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(std::size_t byteSize) override;
+        void DispatchCompute(IComputeShaderRenderer* shader, int groupsX, int groupsY,
+                             int groupsZ) override;
+        void MemoryBarrierEXT(int barrierBits) override;
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
         /// plan_modern.md MOD-107: the cube counterpart of CreateRenderTarget2DEXT -- real float
         /// storage for the formats this context can render to, and a refusal for the rest.
