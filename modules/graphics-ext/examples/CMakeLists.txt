@@ -130,6 +130,10 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_graphics_ext_test(cna_test_cnaext_pointshadow cnaext_pointshadow_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_PointShadow COMMAND cna_test_cnaext_pointshadow
         TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_graphics_ext_test(cna_test_cnaext_skybox cnaext_skybox_test.cpp)
+    cna_register_renderer_test(NAME CNAEXT_Skybox COMMAND cna_test_cnaext_skybox
+        TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

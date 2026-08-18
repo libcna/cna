@@ -54,6 +54,8 @@ orchestration that pulls in extra render targets and GPU memory lives in the gat
 | `ShadowMap`, `DirectionalLightEXT` | `CNA/Graphics/ShadowMap.hpp` | Directional shadow-map generation: fits the light's volume to the scene, opens a pass the app draws its casters into. |
 | `CascadedShadowMap` | `CNA/Graphics/CascadedShadowMap.hpp` | The same, split into 2-4 depth ranges so a large scene keeps resolution near the camera. |
 | `CubeShadowMap`, `SpotShadowMap`, `PointLightEXT`, `SpotLightEXT` | `CNA/Graphics/CubeShadowMap.hpp`, `SpotShadowMap.hpp` | Punctual-light shadows: six cube faces for a point light, one perspective map for a spot. |
+| `Skybox` | `CNA/Graphics/Skybox.hpp` | Draws an environment cube map as the sky, in one fullscreen pass. |
+| `EnvironmentProcessor` | `CNA/Graphics/EnvironmentProcessor.hpp` | Turns an equirectangular panorama into a cube map. |
 | `CNAEXT.hpp` | `CNA/Graphics/CNAEXT.hpp` | Master include — pulls in every public type above. |
 
 ## Conventions for this layer
@@ -93,7 +95,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ⬜ | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
 | Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ⬜ | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Point / spot lights + shadows | ✅ punctual lighting and its cube/spot lookup on all four lit programs | ⬜ | ⬜ | ⬜ — same accepted-and-ignored convention |
-| Skybox + IBL | ⬜ | ⬜ | ⬜ | ⬜ |
+| Skybox | ✅ one fullscreen pass; needs `CustomEffects` | ⬜ | ⬜ | ⬜ — where the shader will not compile the sky is skipped and logged once |
 | Compute / storage buffers | ⬜ | ⬜ | ⬜ | ⬜ |
 
 ### Using it
@@ -269,6 +271,37 @@ effect.setPunctualLightEXT(punctual);
   six times a single map, it is a hundred times: each face rebinds a different cube attachment and
   clears it, so per-pass overhead dominates completely at low triangle counts. It is also the
   whole reason point shadows are something a game opts into per light.
+
+### The sky
+
+```cpp
+CNA::Graphics::EnvironmentProcessor processor(device);
+auto cube = processor.convertEquirectangular(panoramaTexture, 512);   // load time, once
+
+CNA::Graphics::Skybox sky(device, nullptr);
+sky.setOwnedEnvironment(std::move(cube));    // generated, so the skybox takes it
+sky.setYaw(1.2f);                            // line the sun up with the scene's key light
+sky.setIntensity(3.0f);                      // meaningful above 1 into a float scene target
+
+pipeline.setSkybox(&sky);
+pipeline.setSkyboxCamera(view, projection);  // the pipeline has no camera of its own
+```
+
+- **One fullscreen draw, no cube mesh.** The view ray comes from the inverse of the rotation-only
+  view-projection, and the direction it produces *is* the cube-map lookup — so there is no mesh to
+  orient and no seam where faces meet.
+- **The view's translation is stripped**, so walking does not move the sky and turning does.
+- **Drawn first, not last.** The sky goes in immediately after the scene target is cleared, before
+  the game's geometry. The usual technique — draw last at the far plane with `LessEqual` and depth
+  writes off — needs a depth configuration the engine layer's `SpriteBatch`-based fullscreen
+  mechanism does not carry. The guarantee is identical and is asserted; what is given up is
+  skipping sky pixels the scene will cover.
+- **Cube coordinate convention.** `EnvironmentProcessor::faceDirection` is where it is written
+  down, and `directionToEquirectangular` is its counterpart: longitude across, latitude down, with
+  **−Z at the centre of the panorama** — where a camera at its default orientation looks. The two
+  are tested as inverses, so the converter cannot disagree with itself.
+- **Cost** (`cnaext_skybox_test --benchmark`, 128×128, Mesa llvmpipe): 0.020 ms per frame against
+  0.005 ms for a clear alone — one fullscreen pass, which is what it should be.
 
 Legend: ✅ implemented and verified · 🟨 partial · ⬜ not implemented · ⛔ deliberately unsupported.
 

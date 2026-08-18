@@ -696,7 +696,7 @@ implementation precedes its per‑renderer follow‑ups.
 
 | # | Task | Status |
 |---|---|---|
-| N40 | `Skybox` renderer (cube map, fullscreen sky pass), EasyGL | ⬜ |
+| N40 | `Skybox` renderer (cube map, fullscreen sky pass), EasyGL | ✅ (one fullscreen draw, no cube mesh: the ray from the inverse rotation-only view-projection *is* the cube lookup. Comes with `EnvironmentProcessor::convertEquirectangular`, since panoramas ship equirectangular and renderers sample cubes — see `plan_modern.md` MOD-1100..1116) |
 | N41 | `EnvironmentProcessor::generateIrradiance` | ⬜ |
 | N42 | `EnvironmentProcessor::generatePrefilteredSpecular` + `generateBrdfLut`; `ImageBasedLightEXT` | ⬜ |
 | N43 | `PbrEffect`/`SkinnedPbrEffect` `setImageBasedLightEXT` hook + split‑sum ambient shader | ⬜ |
