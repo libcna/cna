@@ -4,14 +4,28 @@ This is the authoritative index of every manifest shard. Each shard file under `
 
 Manifest shards are an organizational device only (grouped roughly by subsystem/backend so progress can be tracked and committed in logical batches) — they are not called out by name in the audit prompt itself, but every eligible file from the full repository inventory appears in exactly one shard below.
 
-**Totals: 2297 AUDIT-eligible files across 105 shards, 337 EXEMPT files across 8 reason-categories, 2634 tracked files overall.**
+**Totals: 2365 AUDIT-eligible files across 105 shards, 337 EXEMPT files across 8 reason-categories, 2702 tracked files overall.**
 
-**Note (as of Task #8/#9 closing out):** every one of the 105 shards below is now fully `AUDITED`
-(`PENDING: 0` in every row), independently reconciled against each shard's own
+**Note (as of Task #8/#9 closing out):** every one of the 105 shards below was fully `AUDITED`
+(`PENDING: 0` in every row) at that point, independently reconciled against each shard's own
 `manifest/<shard>.md` file and against `audit/<path>.audit.md` existing on disk for all 2297
-AUDIT-eligible files. This full resync was originally deferred to Pass 7, but Tasks #8/#9's
-completion made it natural to do it now rather than let staleness accumulate further; Pass 7
+AUDIT-eligible files then tracked. This full resync was originally deferred to Pass 7, but Tasks
+#8/#9's completion made it natural to do it now rather than let staleness accumulate further; Pass 7
 (completeness verification) will still perform an independent final rescan.
+
+**Note (`plan_modern.md` `MOD-12`):** the statement above no longer describes the whole tree, and is
+kept as the record of where Task #8/#9 left it rather than quietly amended. The `cna-graphics` shard
+has grown from 7 files to 75: the `CNA::Graphics` engine layer was five enums and a settings bag when
+it was audited, and `plan_modern.md` has since made it the largest body of new work in the
+repository. Its 68 new rows are `PENDING` — work-queue entries, not audits — so the tree-wide claim
+is now "104 shards complete, `cna-graphics` at 7/75". Every one of those 68 files landed with its own
+tests and a verified build under its plan row; what is outstanding is the independent audit pass, not
+the implementation.
+
+**A second staleness worth stating plainly:** every path in this manifest is in the pre-modules
+layout (`include/…`, `src/…`, `tests/…`). The repository has since moved to
+`modules/<name>/{include,src,tests}/`. The paths below are therefore logical, not physical. New
+`cna-graphics` reports name both.
 
 ## Graphics backends (src+include, mirrored) (271 files)
 
@@ -39,7 +53,7 @@ completion made it natural to do it now rather than let staleness accumulate fur
 | Shard | Files | Status rollup |
 |---|---|---|
 | [`cna-devices`](manifest/cna-devices.md) | 39 | PENDING: 0 / AUDITED: 39 (complete) |
-| [`cna-graphics`](manifest/cna-graphics.md) | 7 | PENDING: 0 / AUDITED: 7 (complete) |
+| [`cna-graphics`](manifest/cna-graphics.md) | 75 | PENDING: 68 / AUDITED: 7 (grown by `plan_modern.md` MOD-12) |
 | [`cna-input`](manifest/cna-input.md) | 31 | PENDING: 0 / AUDITED: 31 (complete) |
 | [`cna-internal-core`](manifest/cna-internal-core.md) | 113 | PENDING: 0 / AUDITED: 113 (complete) |
 | [`cna-root-utilities`](manifest/cna-root-utilities.md) | 15 | PENDING: 0 / AUDITED: 15 (complete) |
