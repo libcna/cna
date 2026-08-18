@@ -868,6 +868,61 @@ section, with a date on it.
 
 ---
 
+## 9.2 What changed and why — the design decisions that did not survive contact
+
+`plan_modern.md` **MOD-1907**. This document was written before any of it was built. Most of it
+held. This section lists what did not, so a reader of §5 knows which paragraphs to distrust and, more
+usefully, *why* each one was wrong — the reasons repeat.
+
+**1. "Ask the capability" turned out to be the wrong question.** §5.2's `isSupported` design assumed
+`GraphicsCapability::CustomEffects` meant the renderer would run your shader. It means the renderer
+will *accept* one. SOFTWARE and HEADLESS accept any GLSL and keep rendering with their own fixed
+path; Vulkan's `ShaderEffect` takes SPIR-V, not the GLSL this layer writes. The result was passes
+reporting success while drawing nothing, three separate times before the lesson stuck
+(`MOD-1699`). The fix is four `…EXT()` queries on `GraphicsDevice` and a two-part question every
+shader-based subsystem now asks. **The general shape:** a capability enum describes what an API
+accepts, and the layer needed to know what a renderer *does*.
+
+**2. Four new capability enumerators became two.** §5.0 proposed `FloatRenderTargets`,
+`ComputeShaders`, `StorageBuffers` and `SeamlessCubeMapFilter`. `StorageBuffers` was a synonym of
+`ComputeShaders` — no renderer can have one without the other — and `SeamlessCubeMapFilter` had
+nothing left to ask about once the irradiance convolution ran on the CPU. Two enumerators that
+answer nothing are worse than none: they invite a caller to branch on them.
+
+**3. `CreateRenderTarget2DEx` already existed, spelled `CreateRenderTarget2DEXT`.** §5.0 proposed
+adding a virtual that was already there and already plumbed. Not an interesting mistake, but a
+recurring one: **the design document was written against a mental model of the renderer interface,
+not against the header.**
+
+**4. Golden images were planned eight times and used zero times.** Eight rows proposed a golden
+image as the acceptance criterion for a visual subsystem. Every one was met by a *measured property*
+instead — the tonemap shader compared against a CPU reference, bloom's energy monotonic in
+intensity, shadows compared inside and outside the occluded region. A golden image tells you a frame
+changed; it does not tell you the thing you cared about is true, and it fails for reasons (driver
+dithering, a one-texel viewport shift) that have nothing to do with the subsystem. `MOD-1703`'s
+harness was refused for the same reason: infrastructure for a category with no members.
+
+**5. Two scope calls, decided the same way and landing in opposite places.** Auto-exposure was
+deferred at `MOD-308` for a specific reason — a whole-frame luminance reduction is a compute problem,
+not a tonemapping one — and shipped at `MOD-1552` once compute existed (`AutoExposureEXT`, a
+log-average so a few bright pixels cannot crush the frame). SMAA and TAA were declined at `MOD-610`
+and stayed declined, for reasons that did not expire: TAA needs motion vectors and a history buffer,
+which is a different pipeline shape rather than a pass, and SMAA needs a precomputed lookup texture
+this layer has no asset path for. **A deferral with a named blocker is worth writing down; "later"
+is not.**
+
+**6. Two house rules held exactly as written.** Verbs are `lowerCamelCase` and the shader floor is
+GLSL ES 3.00. Both were argued in §5.1 and §5.7 and neither needed revisiting — the second is why
+every shader in the layer runs on the renderer with the least to offer, rather than on the
+developer's machine.
+
+**7. The layer's overall shape held.** `RenderPipeline` + settings, a `PostProcessPass` chain over a
+`RenderTargetPool`, one shadow class per light type, `Skybox` and `EnvironmentProcessor` for IBL.
+Every subsystem in Phases 3–15 landed against that shape, and none of them had to bend it. That is
+the part of §5 a reader can still trust.
+
+---
+
 ## 10. Relationship to Nova‑3D
 
 Nova‑3D is a planned CNA‑based 3D framework / Urho3D‑like renderer. It will use:
