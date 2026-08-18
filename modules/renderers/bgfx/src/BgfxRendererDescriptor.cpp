@@ -55,8 +55,6 @@ namespace CNA::Internal::Renderers::Bgfx
                 return RendererWindowKind::Plain;
             }
         }
-
-        }
     }
 
     /**

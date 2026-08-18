@@ -34,12 +34,6 @@ namespace CNA::Internal::Renderers::Llgl
      */
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args);
 
-    namespace
-    {
-            return 0;
-        }
-    }
-
     /**
      * @brief The Llgl family's descriptor.
      *
