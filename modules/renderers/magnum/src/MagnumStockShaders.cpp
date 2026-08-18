@@ -351,6 +351,13 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
                 source += "layout(location=4) in vec4 aBoneWeights;\n";
                 source += "layout(location=5) in uvec4 aBoneIndices;\n";
             }
+            // plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on
+            // base colour. One program serves both of its family's strides (48/60 rigid, 68/80
+            // skinned), so the attribute is declared unconditionally and uVertexColorEnabled decides
+            // whether it is read. The renderer raises that flag only for the two strides that
+            // actually supply the attribute: an unsupplied one reads GL's generic default (0,0,0,1),
+            // which would render the surface black rather than merely uncoloured.
+            source += "layout(location=6) in vec4 aColor;\n";
             source += kInstanceTransformDeclaration;
             source += "uniform mat4 uWVP;\n";
             source += "uniform mat4 uWorld;\n";
@@ -377,6 +384,7 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             source += "out vec2 vTexCoord;\n";
             source += "out vec3 vWorldPosition;\n";
             source += "out float vFogFactor;\n";
+            source += "out vec4 vColor;\n";
             source += "void main(){\n";
             if (skinned)
             {
@@ -412,6 +420,7 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             else
                 source += "    vBitangentSign = aTangent.w*cnaDirectionHandedness(cnaWorldDirection)*cnaInstanceSign;\n";
             source += "    vTexCoord = aTexCoord;\n";
+            source += "    vColor = aColor;\n";
             source += "    vWorldPosition = (uWorld * cnaPosition).xyz;\n";
             source += kFogVertexTerm;
             source += "}\n";
@@ -427,6 +436,8 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             source += "in vec2 vTexCoord;\n";
             source += "in vec3 vWorldPosition;\n";
             source += "in float vFogFactor;\n";
+            source += "in vec4 vColor;\n";
+            source += "uniform float uVertexColorEnabled;\n";
             source += "uniform sampler2D uTexture;\n";
             source += "uniform sampler2D uNormalMap;\n";
             source += "uniform sampler2D uMetallicRoughnessMap;\n";
@@ -507,8 +518,12 @@ vec2 cnaPbrSpecularTransformUV(vec2 uv, int slot){
             source += "void main(){\n";
             source += "    vec4 baseColor = texture(uTexture, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 0), uRtFlipV.x));\n";
             source += "    vec3 baseLinear = mix(baseColor.rgb, cnaSrgbToLinear(baseColor.rgb), uSrgb.x);\n";
-            source += "    vec3 albedo = baseLinear * uDiffuseColor.rgb;\n";
-            source += "    float alpha = baseColor.a * uDiffuseColor.a;\n";
+            // plan_gltf.md GLTF-465: COLOR_0 multiplies the base-colour product, ALPHA INCLUDED --
+            // the alpha half is where a BLEND-mode vertex-coloured primitive's transparency comes
+            // from. COLOR_0 is linear, so unlike the base-colour texture it is not sRGB-decoded.
+            source += "    vec4 cnaVertexColor = (uVertexColorEnabled > 0.5) ? vColor : vec4(1.0);\n";
+            source += "    vec3 albedo = baseLinear * uDiffuseColor.rgb * cnaVertexColor.rgb;\n";
+            source += "    float alpha = baseColor.a * uDiffuseColor.a * cnaVertexColor.a;\n";
             source += "    vec3 normal = normalize(vNormal);\n";
             // Gram-Schmidt: the interpolated tangent is no longer exactly perpendicular to the
             // interpolated normal, so it is re-orthogonalized before the basis is built.
@@ -727,14 +742,18 @@ vec2 cnaPbrSpecularTransformUV(vec2 uv, int slot){
         // frame, so `pbr && skinned` is one program rather than a choice between two.
         if (selector.pbr)
         {
+            // plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the same two records
+            // with a packed COLOR_0 (and a second UV set this renderer does not sample). They select
+            // the same programs -- the colour is a term in the base-colour product, not a different
+            // material model -- and the renderer raises uVertexColorEnabled for exactly these two.
             if (selector.skinned)
             {
-                if (selector.strideInBytes != 68)
+                if (selector.strideInBytes != 68 && selector.strideInBytes != 80)
                     return false;
                 programOut = MagnumStockProgram::PbrSkinned;
                 return true;
             }
-            if (selector.strideInBytes != 48)
+            if (selector.strideInBytes != 48 && selector.strideInBytes != 60)
                 return false;
             programOut = MagnumStockProgram::Pbr;
             return true;

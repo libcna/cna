@@ -2735,7 +2735,8 @@ TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrRendererEitherBindsTheStride8
     // Binds the record. EasyGL serves five GL profiles; SOFTWARE rasterises it on the CPU; the two
     // D3D families share one input-element table and one HLSL pair, which is why one row each of
     // shared code covers both.
-    constexpr std::array<Stride80Audit, 7> binds{{
+    constexpr std::array<Stride80Audit, 8> binds{{
+        {"magnum", "MakeAttribute(6, 76, 4, true,  4)"},
         {"easygl", "case 80:"},
         {"software", "if (stride == 80) UnpackColorBytes(raw.At(76), out.r, out.g, out.b, out.a);"},
         {"opengl2", "colorOffset = (stride == 60) ? 56u : 76u;"},
@@ -2749,8 +2750,8 @@ TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrRendererEitherBindsTheStride8
     constexpr std::array<const char*, 1> declarationDriven{{"igl"}};
     // Never sees stride 80: its skinned PBR path accepts only the strides it has layouts for, so an
     // 80-byte record refuses rather than being mis-read. GLTF-465 records what each would need.
-    constexpr std::array<const char*, 9> refuses{{
-        "bgfx", "diligent", "directx9", "llgl", "magnum",
+    constexpr std::array<const char*, 8> refuses{{
+        "bgfx", "diligent", "directx9", "llgl",
         "metal", "sdl-gpu", "webgpu", "wicked",
     }};
 
@@ -2823,8 +2824,10 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
     // table, which is exactly backwards.
     // DIRECTX11 and DIRECTX12 share one HLSL pair and one constant-buffer struct, so their single
     // shared multiply serves both identities -- the same "improve what is shared" shape as EasyGL's.
-    constexpr std::array<VertexColourPbrAudit, 8> implemented{{
+    constexpr std::array<VertexColourPbrAudit, 9> implemented{{
         {"easygl", "vec3 albedo=baseRGB*uDiffuseColor.rgb*cnaVertexColor.rgb;"},
+        // Magnum generates its PBR GLSL at runtime, so its evidence is the generated source itself.
+        {"magnum", "vec3 albedo = baseLinear * uDiffuseColor.rgb * cnaVertexColor.rgb;"},
         {"igl", "if (cnaHas(CNA_VERTEX_COLOR_ENABLED)) color *= aColor;"},
         {"software", "if (stride == 60) UnpackColorBytes(raw.At(56), out.r, out.g, out.b, out.a);"},
         {"opengl2", "albedo = baseColor * uDiffuse.rgb * cnaVertexColor.rgb;"},
@@ -2845,8 +2848,9 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
     // The multiply is only half of §3.9.2: the same factor applies to the base colour's ALPHA, which
     // is what a BLEND-mode vertex-coloured primitive's transparency comes from. A renderer that
     // multiplied only the RGB would look right on an opaque asset and be wrong on a transparent one.
-    constexpr std::array<VertexColourPbrAudit, 7> alphaProduct{{
+    constexpr std::array<VertexColourPbrAudit, 8> alphaProduct{{
         {"easygl", "alpha=baseColorTex.a*uDiffuseColor.a*cnaVertexColor.a;"},
+        {"magnum", "float alpha = baseColor.a * uDiffuseColor.a * cnaVertexColor.a;"},
         // SOFTWARE has no separate PBR fragment program: the interpolated vertex colour IS the
         // start of the product, alpha included, and the base colour factor multiplies into it.
         {"software", "float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;"},
@@ -2869,8 +2873,9 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
     // and stride-80 records always carry a colour slot, so a shader that multiplied unconditionally
     // would be relying on the opaque-white fill rather than on what the effect requested -- and would
     // silently ignore an application that set VertexColorEnabledEXT to false on coloured geometry.
-    constexpr std::array<VertexColourPbrAudit, 8> gate{{
+    constexpr std::array<VertexColourPbrAudit, 9> gate{{
         {"easygl", "vec4 cnaVertexColor=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);"},
+        {"magnum", "vec4 cnaVertexColor = (uVertexColorEnabled > 0.5) ? vColor : vec4(1.0);"},
         {"igl", "if (cnaHas(CNA_VERTEX_COLOR_ENABLED)) color *= aColor;"},
         {"software", "params.vertexColorEnabled"},
         {"opengl2", "vec4 cnaVertexColor=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);"},
@@ -2891,8 +2896,12 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
     // The gate is worthless if nothing ever uploads it, and a uniform/constant that no draw writes is
     // exactly the shape of bug this whole audit keeps finding. Each implementing renderer must carry
     // GpuDrawParams::vertexColorEnabled to its own PBR draw.
-    constexpr std::array<VertexColourPbrAudit, 6> upload{{
+    constexpr std::array<VertexColourPbrAudit, 7> upload{{
         {"easygl", "p.loc_vertexcolor"},
+        // Magnum asks the LAYOUT as well as the effect: one program serves strides 48 and 60, and
+        // only the latter supplies the attribute, so raising the flag on stride 48 would multiply
+        // base colour by GL's generic default (0,0,0,1) -- black, not merely uncoloured.
+        {"magnum", "const bool colourAttributeSupplied = !params.pbr || strideInBytes == 60 || strideInBytes == 80;"},
         {"opengl2", "if (lit || skinned || pbr || pbrSkinned)"},
         {"opengl4", "gl4_glUniform1f(vertexColorLoc, params.vertexColorEnabled ? 1.0f : 0.0f);"},
         {"vulkan", "pc[31] = p.vertexColorEnabled ? 1.f : 0.f;"},
@@ -2934,12 +2943,11 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
         const char* name;
         const char* reason;
     };
-    constexpr std::array<OpenVertexColourRenderer, 9> notYet{{
+    constexpr std::array<OpenVertexColourRenderer, 8> notYet{{
         {"bgfx", "shaders are precompiled bgfx bytecode; regenerating needs bgfx's own shaderc"},
         {"diligent", "runtime-substituted HLSL is tractable, but DiligentCore is not built here"},
         {"directx9", "vs_3_0/ps_3_0 bytecode needs the pinned native d3dcompiler_47.dll prefix"},
-        {"llgl", "the SPIR-V flavour needs glslangValidator, absent in this environment"},
-        {"magnum", "runtime-generated GLSL is tractable, but Magnum is not built here"},
+        {"llgl", "its committed SPIR-V was built by a glslang this environment cannot reproduce"},
         {"metal", "no stride-60/80 layout at all; Metal cannot be built or run on this host"},
         {"sdl-gpu", "no stride-60/80 layout at all; needs precompiled SPIR-V variants"},
         {"webgpu", "no stride-60/80 layout at all; needs new WGSL pipeline variants"},
@@ -2967,6 +2975,84 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
         EXPECT_EQ(std::string::npos, source.find(Normalize("cnaVertexColor")))
             << "this renderer grew the glTF colour product; move it into the implemented list";
     }
+}
+
+TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherAppliesVertexColourOrRefusesTheDrawExplicitly)
+{
+    // plan_gltf.md GLTF-465, and the reason this test exists rather than another prose row: the
+    // project owner rejected `GLTF CORE 2.0 CORRECT` on 2026-08-18 with an argument that decides the
+    // shape of the whole task. A renderer that ACCEPTS a valid glTF asset carrying COLOR_0 on a
+    // metallic-roughness material and then substitutes the opaque-white identity renders a visibly
+    // wrong surface and reports success. A renderer that REFUSES the combination is limited backend
+    // coverage instead -- a different thing entirely, and acceptable.
+    //
+    // So there are exactly two acceptable states and one forbidden one:
+    //
+    //   1. evaluates §3.9.2's product (RGB and alpha), or
+    //   2. calls RequireVertexColourPbrSupportEXT, the shared refusal, on its PBR draw path,
+    //
+    // and never "accepts the asset and draws it with different core semantics". This partition is the
+    // precondition for the unqualified milestone name, so it is machine-checked over all seventeen
+    // rather than tracked in a table somebody has to remember to update.
+    const std::filesystem::path renderers = RepositoryRoot() / "modules" / "renderers";
+    ASSERT_TRUE(std::filesystem::is_directory(renderers));
+
+    // Evaluates the product -- the same set VertexColourReachesTheBaseColourProduct... verifies in
+    // detail (RGB, alpha, the enable gate and the uniform upload, per renderer).
+    constexpr std::array<const char*, 9> applies{{
+        "easygl", "igl", "software", "opengl2", "opengl4", "vulkan", "directx11", "directx12",
+        "magnum",
+    }};
+    // Refuses the draw through the shared guard. Two shapes of renderer are here for two different
+    // reasons, and both end at the same behaviour: bgfx/diligent/llgl have a stride-60 layout and
+    // WOULD have drawn the asset with the identity, so for them the guard is a behavioural fix;
+    // directx9/metal/sdl-gpu/webgpu/wicked already failed such a draw somewhere downstream, but as a
+    // stride/layout mismatch that never mentioned the missing semantic, so for them it is the same
+    // refusal given for the right reason and at the same place as everyone else's.
+    constexpr std::array<const char*, 8> refuses{{
+        "bgfx", "diligent", "directx9", "llgl",
+        "metal", "sdl-gpu", "webgpu", "wicked",
+    }};
+
+    std::set<std::string> classified;
+    for (const char* name : applies) { classified.insert(name); }
+    for (const char* name : refuses) { classified.insert(name); }
+    ASSERT_EQ(17u, classified.size()) << "the two dispositions must be disjoint";
+    std::set<std::string> expected;
+    for (const RendererAudit& audit : kAudits) { expected.insert(audit.name); }
+    expected.insert("software");
+    EXPECT_EQ(expected, classified)
+        << "a PBR renderer was added or removed without a GLTF-465 disposition";
+
+    for (const char* name : refuses)
+    {
+        SCOPED_TRACE(name);
+        const std::string source = RendererSlotText(renderers, name);
+        ASSERT_FALSE(source.empty());
+        EXPECT_NE(std::string::npos, source.find(Normalize("RequireVertexColourPbrSupportEXT(")))
+            << "this renderer neither evaluates COLOR_0 nor refuses the draw, which is the one state "
+               "that is a defect rather than a limitation";
+    }
+    for (const char* name : applies)
+    {
+        SCOPED_TRACE(name);
+        const std::string source = RendererSlotText(renderers, name);
+        ASSERT_FALSE(source.empty());
+        EXPECT_EQ(std::string::npos, source.find(Normalize("RequireVertexColourPbrSupportEXT(")))
+            << "this renderer implements the product, so refusing the draw as well would reject "
+               "content it renders correctly";
+    }
+
+    // The guard itself must stay a single shared implementation rather than nine copies drifting
+    // apart -- that is what makes "refuses" one auditable behaviour instead of nine.
+    const std::filesystem::path guard = RepositoryRoot() / "modules" / "graphics" / "include" /
+        "CNA" / "Internal" / "Renderers" / "Common" / "VertexColourPbrSupport.hpp";
+    ASSERT_TRUE(std::filesystem::is_regular_file(guard)) << guard;
+    const std::string guardText = Normalize(ReadFile(guard));
+    EXPECT_NE(std::string::npos, guardText.find(Normalize(
+        "return params.pbr && params.vertexColorEnabled && (strideInBytes == 60 || strideInBytes == 80);")))
+        << "the refusal predicate changed; it must fire exactly for an enabled COLOR_0 on the two "
+           "colour-carrying PBR strides, or it starts refusing content that renders correctly";
 }
 
 TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
