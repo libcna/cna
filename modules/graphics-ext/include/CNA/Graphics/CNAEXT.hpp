@@ -48,6 +48,9 @@
 #include "CNA/Graphics/SpotLightEXT.hpp"
 #include "CNA/Graphics/SpotShadowMap.hpp"
 
+// ---- Sky -------------------------------------------------------------------------------------
+#include "CNA/Graphics/Skybox.hpp"
+
 // ---- Materials -----------------------------------------------------------------------------
 #include "CNA/Graphics/PbrMaterial.hpp"
 

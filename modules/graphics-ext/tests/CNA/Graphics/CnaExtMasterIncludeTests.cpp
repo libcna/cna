@@ -67,6 +67,7 @@ TEST(CnaExtMasterIncludeTest, EffectTypesAreVisible)
     EXPECT_GT(sizeof(CNA::Graphics::SpotShadowMap), 0u);
     EXPECT_GT(sizeof(CNA::Graphics::PointLightEXT), 0u);
     EXPECT_GT(sizeof(CNA::Graphics::SpotLightEXT), 0u);
+    EXPECT_GT(sizeof(CNA::Graphics::Skybox), 0u);
 }
 
 } // namespace

@@ -63,6 +63,23 @@ namespace CNA::Graphics {
                   Microsoft::Xna::Framework::Graphics::Effect* effect,
                   int width, int height);
 
+        /**
+         * @brief Draws across whatever target is already bound, without rebinding anything.
+         *
+         * The skybox needs this and the post-process passes do not: a pass knows both its source
+         * and its destination, while the sky is drawn into "the frame", which is the pipeline's
+         * scene target inside a frame and the back buffer outside one. Passing the bound target
+         * back in would mean the caller had to know which of the two it currently was.
+         *
+         * @param source The image to sample. Must not be null.
+         * @param effect The effect to draw with, or null for a plain copy.
+         * @param width  Target width in pixels.
+         * @param height Target height in pixels.
+         */
+        void drawOverCurrentTarget(Microsoft::Xna::Framework::Graphics::Texture2D* source,
+                                   Microsoft::Xna::Framework::Graphics::Effect* effect,
+                                   int width, int height);
+
     private:
         Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::SpriteBatch> spriteBatch_;

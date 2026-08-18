@@ -6,6 +6,7 @@
 #include "CNA/Graphics/BloomPass.hpp"
 #include "CNA/Graphics/FxaaPass.hpp"
 #include "CNA/Graphics/ShadowMap.hpp"
+#include "CNA/Graphics/Skybox.hpp"
 #include "CNA/Graphics/SsaoPass.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
@@ -21,6 +22,7 @@
 namespace CNA::Graphics {
 
     using Microsoft::Xna::Framework::Color;
+    using Microsoft::Xna::Framework::Matrix;
     using Microsoft::Xna::Framework::Graphics::DepthFormat;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
     using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
@@ -113,6 +115,7 @@ namespace CNA::Graphics {
         {
             device_.SetRenderTarget(nullptr);
             device_.Clear(clearColor);
+            DrawSkybox();
             return;
         }
 
@@ -129,6 +132,39 @@ namespace CNA::Graphics {
 
         device_.SetRenderTarget(sceneTarget_.get());
         device_.Clear(clearColor);
+        DrawSkybox();
+    }
+
+    void RenderPipeline::DrawSkybox()
+    {
+        // MOD-1104: after the target is bound and cleared, before the game draws anything. See
+        // setSkybox() for why that is the order rather than the usual draw-last-at-the-far-plane.
+        skyboxDrawn_ = false;
+        if (skybox_ == nullptr)
+            return;
+        skybox_->draw(skyboxView_, skyboxProjection_, width_, height_);
+        skyboxDrawn_ = skybox_->isSupported() && skybox_->getEnvironment() != nullptr;
+    }
+
+    void RenderPipeline::setSkybox(Skybox* skybox)
+    {
+        skybox_ = skybox;
+    }
+
+    Skybox* RenderPipeline::getSkybox() const
+    {
+        return skybox_;
+    }
+
+    void RenderPipeline::setSkyboxCamera(const Matrix& view, const Matrix& projection)
+    {
+        skyboxView_       = view;
+        skyboxProjection_ = projection;
+    }
+
+    bool RenderPipeline::didSkyboxDraw() const
+    {
+        return skyboxDrawn_;
     }
 
     void RenderPipeline::end()

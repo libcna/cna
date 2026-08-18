@@ -17,6 +17,7 @@
 #include "CNA/Graphics/RenderPipeline.hpp"
 #include "CNA/Graphics/ShadowMap.hpp"
 #include "CNA/Graphics/ShadowQuality.hpp"
+#include "CNA/Graphics/Skybox.hpp"
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
 #include "CNA/Graphics/TonemappingMode.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
@@ -26,7 +27,12 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
+#include "Microsoft/Xna/Framework/MathHelper.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
 
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -41,6 +47,7 @@ using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture;
+using Microsoft::Xna::Framework::Matrix;
 
 constexpr int kWidth  = 32;
 constexpr int kHeight = 16;
@@ -419,6 +426,62 @@ TEST(RenderPipelineTest, AShadowPassAloneDoesNotForceASceneTarget)
 
     EXPECT_TRUE(pipeline.didShadowPassRun());
     EXPECT_EQ(drawCount, 1);
+    EXPECT_EQ(pipeline.getGpuMemoryEstimateBytes(), 0u);
+}
+
+TEST(RenderPipelineTest, TheSkyIsDrawnInsideBeginAndReportsItself)
+{
+    // MOD-1104. The ordering matters and is the reason didSkyboxDraw() exists: an app cannot see
+    // from outside whether the sky went in before its geometry or not at all.
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CustomEffects))
+        GTEST_SKIP() << "this renderer cannot compile the sky shader";
+
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+
+    auto cube = std::make_unique<Microsoft::Xna::Framework::Graphics::TextureCube>(
+        gd, 4, false, SurfaceFormat::Color);
+    const std::vector<Color> texels(16, Color::White);
+    for (int face = 0; face < 6; ++face)
+        cube->SetData(static_cast<Microsoft::Xna::Framework::Graphics::CubeMapFace>(face),
+                      texels.data(), static_cast<int>(texels.size()));
+
+    CNA::Graphics::Skybox sky(gd, cube.get());
+    if (!sky.isSupported())
+        GTEST_SKIP() << "this renderer cannot compile the sky shader";
+
+    pipeline.setSkybox(&sky);
+    pipeline.setSkyboxCamera(Matrix::getIdentityProperty(),
+                             Matrix::CreatePerspectiveFieldOfView(1.0f, 1.0f, 0.1f, 10.0f));
+    EXPECT_EQ(pipeline.getSkybox(), &sky);
+
+    pipeline.begin(Color::Black);
+    EXPECT_TRUE(pipeline.didSkyboxDraw()) << "the sky did not go in during begin()";
+    pipeline.end();
+
+    // Detaching it is immediate, and a frame without one is not a frame that failed.
+    pipeline.setSkybox(nullptr);
+    pipeline.begin(Color::Black);
+    EXPECT_FALSE(pipeline.didSkyboxDraw());
+    pipeline.end();
+}
+
+TEST(RenderPipelineTest, ASkyAloneDoesNotForceASceneTarget)
+{
+    // A game that wants a sky and no post-processing must not start paying for an off-screen
+    // target: the sky goes straight to the back buffer, exactly like the rest of that frame.
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+
+    CNA::Graphics::Skybox sky(gd, nullptr);
+    pipeline.setSkybox(&sky);
+
+    pipeline.begin(Color::Black);
+    EXPECT_FALSE(pipeline.isUsingSceneTarget());
+    pipeline.end();
+
     EXPECT_EQ(pipeline.getGpuMemoryEstimateBytes(), 0u);
 }
 

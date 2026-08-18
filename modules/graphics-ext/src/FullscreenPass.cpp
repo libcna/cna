@@ -43,6 +43,18 @@ namespace CNA::Graphics {
             throw std::invalid_argument("CNA::Graphics::FullscreenPass::draw: destination size must be positive");
 
         device_.SetRenderTarget(destination);
+        drawOverCurrentTarget(source, effect, width, height);
+    }
+
+    void FullscreenPass::drawOverCurrentTarget(Texture2D* source, Effect* effect, const int width,
+                                               const int height)
+    {
+        if (source == nullptr)
+            throw std::invalid_argument(
+                "CNA::Graphics::FullscreenPass::drawOverCurrentTarget: source must not be null");
+        if (width <= 0 || height <= 0)
+            throw std::invalid_argument(
+                "CNA::Graphics::FullscreenPass::drawOverCurrentTarget: the size must be positive");
 
         // Opaque, not AlphaBlend: a post-process pass replaces the destination rather than
         // compositing onto it, and blending a pass's own output against whatever the target held

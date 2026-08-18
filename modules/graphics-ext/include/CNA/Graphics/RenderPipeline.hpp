@@ -30,6 +30,7 @@ namespace CNA::Graphics {
     class FxaaPass;
     class PostProcessPass;
     class ShadowMap;
+    class Skybox;
     class SsaoPass;
     class TonemapPass;
 
@@ -162,6 +163,41 @@ namespace CNA::Graphics {
                             std::function<void()> drawCasters);
 
         /**
+         * @brief Supplies a skybox for `begin` to draw behind the scene.
+         *
+         * plan_modern.md MOD-1104. Drawn immediately after the scene target is bound and cleared,
+         * which is *before* the game's own geometry rather than after it. The ordering is the one
+         * decision here, and it follows from the mechanism: the sky is a fullscreen `SpriteBatch`
+         * draw and carries no depth configuration, so it cannot be made to lose a depth test
+         * against geometry already present. Drawing it first gives the same picture; what it gives
+         * up is skipping sky pixels the scene will cover.
+         *
+         * Null detaches it. A skybox on a renderer that cannot compile its shader draws nothing and
+         * says so once, so this is safe to set unconditionally.
+         *
+         * @param skybox The skybox, or null. Must outlive this pipeline.
+         */
+        void setSkybox(Skybox* skybox);
+
+        /** @brief Returns the skybox drawn behind the scene, or null. */
+        [[nodiscard]] Skybox* getSkybox() const;
+
+        /**
+         * @brief Sets the camera the skybox is drawn from.
+         *
+         * The pipeline has no camera of its own -- a game's view and projection live wherever the
+         * game keeps them -- so the sky needs to be told, once per frame, before `begin`.
+         *
+         * @param view       The camera's view matrix; its translation is ignored by the sky.
+         * @param projection The camera's projection matrix.
+         */
+        void setSkyboxCamera(const Microsoft::Xna::Framework::Matrix& view,
+                             const Microsoft::Xna::Framework::Matrix& projection);
+
+        /** @brief Returns whether the last `begin` actually drew the sky. */
+        [[nodiscard]] bool didSkyboxDraw() const;
+
+        /**
          * @brief Returns whether the last `begin` actually ran a shadow pass.
          *
          * False when shadows are switched off in the settings, when no map has been supplied, or
@@ -227,6 +263,8 @@ namespace CNA::Graphics {
         [[nodiscard]] std::size_t getGpuMemoryEstimateBytes() const;
 
     private:
+        /// Draws the skybox, if one is set. Called by begin(), never by the caller.
+        void DrawSkybox();
         /// Whether anything at all would happen between begin() and end() this frame.
         [[nodiscard]] bool wantsSceneTarget() const;
         /// The best scene-target format the settings ask for and the renderer can actually create.
@@ -241,6 +279,10 @@ namespace CNA::Graphics {
         std::unique_ptr<TonemapPass> tonemapPass_;
         std::unique_ptr<FxaaPass> fxaaPass_;
         std::unique_ptr<SsaoPass> ssaoPass_;
+        Skybox* skybox_ = nullptr;
+        Microsoft::Xna::Framework::Matrix skyboxView_{};
+        Microsoft::Xna::Framework::Matrix skyboxProjection_{};
+        bool skyboxDrawn_ = false;
         ShadowMap* shadowMap_ = nullptr;
         DirectionalLightEXT shadowLight_{};
         Microsoft::Xna::Framework::BoundingBox shadowBounds_{
