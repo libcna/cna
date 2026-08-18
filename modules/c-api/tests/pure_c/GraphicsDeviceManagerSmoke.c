@@ -31,6 +31,30 @@ static void on_preparing_device_settings(
     state->last_back_buffer_width = information->presentation_parameters.back_buffer_width;
 }
 
+/* CBIND-057: the mutable half of the same event. XNA's PreparingDeviceSettings exists to override
+   the settings before the device is created, and this handler does exactly that. */
+typedef struct MutatorState {
+    int calls;
+    int32_t observed_width;
+    int32_t requested_width;
+    int corrupt_next;
+} MutatorState;
+
+static void on_preparing_device_settings_mutable(
+    CNA_GraphicsDeviceInformation* const information,
+    void* const context)
+{
+    MutatorState* const state = (MutatorState*)context;
+    ++state->calls;
+    state->observed_width = information->presentation_parameters.back_buffer_width;
+    if (state->corrupt_next) {
+        /* A structure this handler has broken must be ignored rather than half-applied. */
+        information->struct_version = UINT32_C(0);
+        return;
+    }
+    information->presentation_parameters.back_buffer_width = state->requested_width;
+}
+
 /* An accepted request and a platform that declines are both correct answers: a headless video driver
    refuses a reconfiguration it has nothing to reconfigure. */
 static int accepted_or_refused_by_platform(const CNA_Result result)
@@ -231,11 +255,13 @@ static int validate_manager(const CNA_Handle game)
     CNA_GameEventRegistrationHandle resetting = CNA_INVALID_HANDLE;
     CNA_GameEventRegistrationHandle disposed = CNA_INVALID_HANDLE;
     CNA_GameEventRegistrationHandle settings = CNA_INVALID_HANDLE;
+    CNA_GameEventRegistrationHandle mutable_settings = CNA_INVALID_HANDLE;
     CNA_GameEventRegistrationHandle rejected = CNA_INVALID_HANDLE;
     CNA_Handle device = CNA_INVALID_HANDLE;
     EventState events = {0};
     EventState disposal = {0};
     SettingsState prepared = {0, 0};
+    MutatorState mutated = {0, 0, 640, 0};
     CNA_Bool flag = UINT8_C(9);
     uint64_t bytes = UINT64_C(9);
     char text[128];
@@ -327,7 +353,18 @@ static int validate_manager(const CNA_Handle game)
             manager, CNA_GRAPHICS_DEVICE_MANAGER_EVENT_DEVICE_RESET, 0, &events, &rejected) !=
             CNA_RESULT_INVALID_ARGUMENT ||
         cna_graphics_device_manager_subscribe_preparing_device_settings(
-            manager, 0, &prepared, &rejected) != CNA_RESULT_INVALID_ARGUMENT) {
+            manager, 0, &prepared, &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_manager_subscribe_preparing_device_settings_ext(
+            manager, 0, &mutated, &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
+        rejected != CNA_INVALID_HANDLE ||
+        cna_graphics_device_manager_subscribe_preparing_device_settings_ext(
+            manager, on_preparing_device_settings_mutable, &mutated, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    if (cna_graphics_device_manager_subscribe_preparing_device_settings_ext(
+            manager, on_preparing_device_settings_mutable, &mutated, &mutable_settings) !=
+        CNA_RESULT_SUCCESS) {
         return 0;
     }
     /* Applying the recorded preferences is where they reach the device and the window; a platform
@@ -337,10 +374,42 @@ static int validate_manager(const CNA_Handle game)
         !accepted_or_refused_by_platform(cna_graphics_device_manager_toggle_full_screen(manager))) {
         return 0;
     }
-    /* The settings event is an observation: the handler saw the configuration the device was
-       prepared with, and could not change it. */
+    /* The read-only handler saw the configuration the device was prepared with. */
     if (prepared.calls > 0 && prepared.last_back_buffer_width <= 0) {
         return 0;
+    }
+    /* The mutable handler ran on the same event, and what it wrote is what the next preparation
+       observes -- which is the whole point of the route and what the const one cannot do. Both
+       handlers being on one event is also the assertion that adding the mutable one did not
+       displace the published observation-only route. */
+    if (mutated.calls != prepared.calls || (mutated.calls > 0 && mutated.observed_width <= 0)) {
+        return 0;
+    }
+    if (mutated.calls > 0) {
+        const int32_t written = mutated.requested_width;
+        mutated.observed_width = 0;
+        if (!accepted_or_refused_by_platform(
+                cna_graphics_device_manager_apply_changes(manager)) ||
+            !accepted_or_refused_by_platform(
+                cna_graphics_device_manager_create_device(manager))) {
+            return 0;
+        }
+        if (mutated.observed_width != written) {
+            return 0;
+        }
+        /* A handler that corrupts the structure changes nothing rather than being obeyed. */
+        mutated.corrupt_next = 1;
+        mutated.observed_width = 0;
+        if (!accepted_or_refused_by_platform(
+                cna_graphics_device_manager_apply_changes(manager)) ||
+            !accepted_or_refused_by_platform(
+                cna_graphics_device_manager_create_device(manager))) {
+            return 0;
+        }
+        mutated.corrupt_next = 0;
+        if (mutated.observed_width != written) {
+            return 0;
+        }
     }
     if (cna_graphics_device_manager_begin_draw(manager, &flag) != CNA_RESULT_SUCCESS ||
         (flag != CNA_FALSE && flag != CNA_TRUE) ||
@@ -364,7 +433,8 @@ static int validate_manager(const CNA_Handle game)
         cna_game_unsubscribe(reset) != CNA_RESULT_SUCCESS ||
         cna_game_unsubscribe(resetting) != CNA_RESULT_SUCCESS ||
         cna_game_unsubscribe(disposed) != CNA_RESULT_SUCCESS ||
-        cna_game_unsubscribe(settings) != CNA_RESULT_SUCCESS) {
+        cna_game_unsubscribe(settings) != CNA_RESULT_SUCCESS ||
+        cna_game_unsubscribe(mutable_settings) != CNA_RESULT_SUCCESS) {
         return 0;
     }
     return cna_graphics_device_manager_destroy(manager) == CNA_RESULT_SUCCESS &&

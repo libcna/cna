@@ -19,4 +19,9 @@ namespace Microsoft::Xna::Framework
     {
         return *graphicsDeviceInformation_;
     }
+
+    GraphicsDeviceInformation& PreparingDeviceSettingsEventArgs::getGraphicsDeviceInformationEXT() const
+    {
+        return *graphicsDeviceInformation_;
+    }
 }
