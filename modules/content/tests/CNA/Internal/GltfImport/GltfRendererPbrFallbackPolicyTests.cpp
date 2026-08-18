@@ -895,8 +895,8 @@ namespace
          "vec3 F90 = mix(vec3(specularWeight), vec3(1.0), metallic)",
          "vec3 F = F0 + (F90 - F0) *", 2},
         {"webgpu",
-         "let f0 = mix(pf.dielectricFresnel.xyz, albedo, metallic)",
-         "let f90 = mix(vec3f(pf.dielectricFresnel.w), vec3f(1.0), metallic)",
+         "let f0 = mix(dielectricF0, albedo, metallic)",
+         "let f90 = mix(vec3f(specularStrength), vec3f(1.0), metallic)",
          "let f = f0 + (f90 - f0) *", 2},
         {"wicked",
          "const float3 F0 = lerp(cb.pbrDielectricFresnel.xyz, albedo, metallic)",
@@ -1693,18 +1693,20 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderConsumesNormalScaleAndOcclusio
         }
     }
 
-    // Rigid and skinned WebGPU pipelines share the same 14-vec4 PbrFactors ABI. The old 16-byte
-    // minimum accepted the first vector but caused Dawn to reject both pipelines as alpha coverage,
-    // colour transfer, Fresnel endpoints and ten texture-transform rows expanded it to 224 bytes.
+    // Rigid and skinned WebGPU pipelines share one PbrFactors ABI, and its declared minimum has to
+    // match the shader's own struct exactly -- wgpu rejects the pipeline by name when it does not
+    // ("Buffer structure size 304 ... greater than the given min_binding_size, which is 256", which
+    // is how GLTF-344's own first attempt at this was caught). It grew 56 -> 76 floats when
+    // KHR_materials_specular's unclamped F0, specular factor and two transform rows landed.
     const std::string webgpu = RendererSlotText(renderers, "webgpu");
     const std::string pbrFactorsSize = Normalize(
-        "uboEntries[2].buffer.minBindingSize = 56 * sizeof(float)");
+        "uboEntries[2].buffer.minBindingSize = 76 * sizeof(float)");
     std::size_t pbrFactorsSizeCount = 0;
     for (std::size_t at = webgpu.find(pbrFactorsSize); at != std::string::npos;
          at = webgpu.find(pbrFactorsSize, at + pbrFactorsSize.size()))
         ++pbrFactorsSizeCount;
     EXPECT_EQ(2u, pbrFactorsSizeCount)
-        << "both WebGPU PBR pipeline layouts must expose the complete 224-byte factors block";
+        << "both WebGPU PBR pipeline layouts must expose the complete 304-byte factors block";
 }
 
 TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderConsumesAllFiveTextureTransforms)
@@ -1811,16 +1813,17 @@ TEST(GltfRendererPbrFallbackPolicy, SpecularTextureInventoryClassifiesEveryPbrRe
     // Both directions are asserted. A renderer moved into `sampling` without the bindings fails,
     // and so does one that grows them while still listed as factor-only, which is the direction a
     // half-finished backend would otherwise take unnoticed.
-    constexpr std::array<const char*, 12> sampling{{
+    constexpr std::array<const char*, 13> sampling{{
         "bgfx", "diligent", "directx9", "directx11", "directx12", "easygl",
-        "llgl", "magnum", "opengl2", "opengl4", "sdl-gpu", "vulkan",
+        "llgl", "magnum", "opengl2", "opengl4", "sdl-gpu", "vulkan", "webgpu",
     }};
-    // Factor-only is not a capability decision -- it is unfinished work, and the reason is the
-    // same for all four: the binding contract is defined per map with its own UV selector, and none
-    // of these carries a second UV stream at all. The dual-UV foundation comes first. IGL is the
-    // newest of them (plan_igl.md), and its generated shader library samples exactly the four core
-    // PBR maps.
-    constexpr std::array<const char*, 4> factorOnly{{"igl", "metal", "webgpu", "wicked"}};
+    // Factor-only is not a capability decision -- it is unfinished work. `webgpu` left this set on
+    // 2026-08-18 (`GLTF-344`): its PBR uniform block grew KHR_materials_specular's own inputs -- the
+    // UNCLAMPED dielectric F0, the specular factor and two affine transform rows per map -- and its
+    // two WGSL shaders sample both maps at bindings 6 and 7. IGL is declaration-driven and its
+    // generated shader library samples exactly the four core PBR maps; `metal` cannot be compiled
+    // anywhere this repository runs; `wicked` needs WickedEngine shader work.
+    constexpr std::array<const char*, 3> factorOnly{{"igl", "metal", "wicked"}};
 
     std::set<std::string> expected;
     for (const char* name : sampling) { expected.insert(name); }

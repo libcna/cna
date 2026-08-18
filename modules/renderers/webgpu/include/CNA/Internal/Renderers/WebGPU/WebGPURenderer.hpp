@@ -2362,7 +2362,9 @@ namespace CNA::Internal::Renderers::WebGPU
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> uniforms{};
             std::array<float, 68> lightUniforms{};
-            std::array<float, 56> pbrFactors{};
+            /// plan_gltf.md GLTF-344: 76 floats (304 bytes) -- the base 56 plus specular F0/factor
+            /// and the two specular map transforms.
+            std::array<float, 76> pbrFactors{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2387,6 +2389,9 @@ namespace CNA::Internal::Renderers::WebGPU
             WebGPUSampledTextureEXT metallicRoughnessMap;
             WebGPUSampledTextureEXT emissiveMap;
             WebGPUSampledTextureEXT occlusionMap;
+            /// plan_gltf.md GLTF-344: KHR_materials_specular's strength and colour maps.
+            WebGPUSampledTextureEXT specularMap;
+            WebGPUSampledTextureEXT specularColorMap;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
@@ -2543,7 +2548,9 @@ namespace CNA::Internal::Renderers::WebGPU
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> uniforms{};
             std::array<float, 68> lightUniforms{};
-            std::array<float, 56> pbrFactors{};
+            /// plan_gltf.md GLTF-344: 76 floats (304 bytes) -- the base 56 plus specular F0/factor
+            /// and the two specular map transforms.
+            std::array<float, 76> pbrFactors{};
             std::array<float, 4 + 72 * 16> skinningParams{};
             bool depthTest = false;
             bool depthWrite = false;
@@ -2569,6 +2576,9 @@ namespace CNA::Internal::Renderers::WebGPU
             WebGPUSampledTextureEXT metallicRoughnessMap;
             WebGPUSampledTextureEXT emissiveMap;
             WebGPUSampledTextureEXT occlusionMap;
+            /// plan_gltf.md GLTF-344: KHR_materials_specular's strength and colour maps.
+            WebGPUSampledTextureEXT specularMap;
+            WebGPUSampledTextureEXT specularColorMap;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;

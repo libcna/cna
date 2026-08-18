@@ -821,7 +821,12 @@ namespace CNA::Internal::Renderers::WebGPU
         // pbr3d.wgsl's third (small) uniform buffer: PBR factors/map scales plus glTF MASK coverage,
         // the only per-draw PBR-specific scalars not already covered by FillExtUniforms()'s
         // diffuseColor/ambientColor or FillLitLightUniforms()'s emissiveColor/world/eyePos.
-        void FillPbrFactors(std::array<float, 56>& out, const GpuDrawParams& p)
+        // plan_gltf.md GLTF-344: widened from 56 to 76 floats (304 bytes) for KHR_materials_specular's own two
+        // inputs -- the UNCLAMPED dielectric F0 plus the specular factor, and two affine transform
+        // rows per specular map. The unclamped value is the point: `specularColorTexture` multiplies
+        // BEFORE the min(...,1), so a shader handed the pre-clamped F0 cannot reproduce the
+        // extension's own equation.
+        void FillPbrFactors(std::array<float, 76>& out, const GpuDrawParams& p)
         {
             out[0] = p.pbrMetallicFactor;
             out[1] = p.pbrRoughnessFactor;
@@ -834,7 +839,8 @@ namespace CNA::Internal::Renderers::WebGPU
             out[8] = p.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f;
             out[9] = p.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f;
             out[10] = p.pbrEncodeOutputToSrgb ? 1.0f : 0.0f;
-            out[11] = 0.0f;
+            // GLTF-344: w decodes the specular COLOUR sample from sRGB, the extension's own rule.
+            out[11] = p.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f;
             out[12] = p.pbrDielectricF0[0];
             out[13] = p.pbrDielectricF0[1];
             out[14] = p.pbrDielectricF0[2];
@@ -843,6 +849,15 @@ namespace CNA::Internal::Renderers::WebGPU
                 for (int component = 0; component < 4; ++component)
                     out[16 + row * 4 + component] =
                         p.pbrTextureTransformRows[row][component];
+            // GLTF-344: xyz = unclamped dielectric F0, w = specularFactor.
+            out[56] = p.pbrDielectricF0Unclamped[0];
+            out[57] = p.pbrDielectricF0Unclamped[1];
+            out[58] = p.pbrDielectricF0Unclamped[2];
+            out[59] = p.pbrSpecularFactor;
+            for (int row = 0; row < 4; ++row)
+                for (int component = 0; component < 4; ++component)
+                    out[60 + row * 4 + component] =
+                        p.pbrSpecularTextureTransformRows[row][component];
         }
 
         // New bone-palette uniform buffer for the skinned shaders (skinned3d.wgsl/skinned_pbr3d.wgsl):
@@ -8559,9 +8574,14 @@ struct LitLightParams {
 struct PbrFactors {
     metallicRoughness: vec4f,
     alphaTest: vec4f,
+    // plan_gltf.md GLTF-344: w decodes the specular COLOUR sample from sRGB.
     srgbFlags: vec4f,
     dielectricFresnel: vec4f,
     textureTransformRows: array<vec4f, 10>,
+    // KHR_materials_specular: xyz = UNCLAMPED dielectric F0, w = specularFactor. Unclamped because
+    // specularColorTexture multiplies before the min(...,1) below.
+    specularFresnelInputs: vec4f,
+    specularTextureTransformRows: array<vec4f, 4>,
 };
 @group(0) @binding(2) var<uniform> pf: PbrFactors;
 
@@ -8571,6 +8591,10 @@ struct PbrFactors {
 @group(1) @binding(3) var metallicRoughnessTex: texture_2d<f32>;
 @group(1) @binding(4) var emissiveTex: texture_2d<f32>;
 @group(1) @binding(5) var occlusionTex: texture_2d<f32>;
+// plan_gltf.md GLTF-344: KHR_materials_specular's own two inputs, at the same slots every other
+// sampling renderer uses -- strength in the scalar map's ALPHA, colour in the colour map's RGB.
+@group(1) @binding(6) var specularTex: texture_2d<f32>;
+@group(1) @binding(7) var specularColorTex: texture_2d<f32>;
 
 struct VertexInput {
     @location(0) position: vec3f,
@@ -8638,6 +8662,12 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     return (kd * diffuseColor / 3.14159265 + specular) * lightColor * ndotl;
 }
 
+fn pbrSpecularTransformUv(uv: vec2f, slot: u32) -> vec2f {
+    let value = vec3f(uv, 1.0);
+    return vec2f(dot(value, pf.specularTextureTransformRows[slot * 2u].xyz),
+                 dot(value, pf.specularTextureTransformRows[slot * 2u + 1u].xyz));
+}
+
 fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
     let value = vec3f(uv, 1.0);
     return vec2f(dot(value, pf.textureTransformRows[slot * 2u].xyz),
@@ -8677,8 +8707,21 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
     let metallic = clamp(mr.b * pf.metallicRoughness.x, 0.0, 1.0);
 
     let eye = normalize(lp.eyePos.xyz - input.worldPos);
-    let f0 = mix(pf.dielectricFresnel.xyz, albedo, metallic);
-    let f90 = mix(vec3f(pf.dielectricFresnel.w), vec3f(1.0), metallic);
+    // plan_gltf.md GLTF-344: KHR_materials_specular. strength comes from the scalar map's ALPHA and
+    // colour from the colour map's sRGB-decoded RGB, each through its own affine transform; the
+    // dielectric F0 is min(unclampedF0 * colourSample, 1) * strength, which is the extension's own
+    // ordering and the reason the unclamped value is uploaded. A material without either map samples
+    // the white identity, so the product collapses to the factor alone.
+    let specularStrength = pf.specularFresnelInputs.w
+        * textureSample(specularTex, texSampler, pbrSpecularTransformUv(input.uv, 0u)).a;
+    let specularColorSample = textureSample(specularColorTex, texSampler,
+                                            pbrSpecularTransformUv(input.uv, 1u)).rgb;
+    let specularColorLinear = select(specularColorSample, srgbToLinear(specularColorSample),
+                                     pf.srgbFlags.w > 0.5);
+    let dielectricF0 = min(pf.specularFresnelInputs.xyz * specularColorLinear, vec3f(1.0))
+        * specularStrength;
+    let f0 = mix(dielectricF0, albedo, metallic);
+    let f90 = mix(vec3f(specularStrength), vec3f(1.0), metallic);
 
     // Same disabled-light NaN guard as lit_textured3d.wgsl: a disabled DirectionalLight forwards
     // Direction=(0,0,0) (only DiffuseColor is zeroed), and normalize() on a true zero vector is
@@ -8746,18 +8789,20 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         uboEntries[2].visibility = WGPUShaderStage_Fragment;
         uboEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
         // Four material vec4s followed by ten affine texture-transform rows.
-        uboEntries[2].buffer.minBindingSize = 56 * sizeof(float);
+        uboEntries[2].buffer.minBindingSize = 76 * sizeof(float);
         WGPUBindGroupLayoutDescriptor uboLayoutDescriptor{};
         uboLayoutDescriptor.label = StringView("CNA WebGPU Pbr3D BindGroupLayout0");
         uboLayoutDescriptor.entryCount = uboEntries.size();
         uboLayoutDescriptor.entries = uboEntries.data();
         pbrBindGroupLayout0_ = wgpuDeviceCreateBindGroupLayout(device_, &uboLayoutDescriptor);
 
-        std::array<WGPUBindGroupLayoutEntry, 6> texEntries{};
+        // plan_gltf.md GLTF-344: eight entries -- the sampler, the five core PBR maps, and
+        // KHR_materials_specular's strength and colour maps at 6 and 7.
+        std::array<WGPUBindGroupLayoutEntry, 8> texEntries{};
         texEntries[0].binding = 0;
         texEntries[0].visibility = WGPUShaderStage_Fragment;
         texEntries[0].sampler.type = WGPUSamplerBindingType_Filtering;
-        for (std::uint32_t i = 1; i <= 5; ++i)
+        for (std::uint32_t i = 1; i <= 7; ++i)
         {
             texEntries[i].binding = i;
             texEntries[i].visibility = WGPUShaderStage_Fragment;
@@ -8983,6 +9028,15 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         command.occlusionMap = params.pbrOcclusionMap != nullptr
             ? ResolveSamplable(params.pbrOcclusionMap)
             : pbrDefaultWhiteTexture_->Sampled();
+        // plan_gltf.md GLTF-344: white is the identity for both -- alpha 1 leaves the specular
+        // factor alone, RGB 1 leaves the unclamped F0 alone -- so a material with neither map
+        // renders exactly as the factor-only path already did.
+        command.specularMap = params.pbrSpecularMap != nullptr
+            ? ResolveSamplable(params.pbrSpecularMap)
+            : pbrDefaultWhiteTexture_->Sampled();
+        command.specularColorMap = params.pbrSpecularColorMap != nullptr
+            ? ResolveSamplable(params.pbrSpecularColorMap)
+            : pbrDefaultWhiteTexture_->Sampled();
 
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
@@ -9070,7 +9124,9 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
                                                      command.addressV, command.maxAnisotropy,
                                                      "Pbr3D");
-        std::array<WGPUBindGroupEntry, 6> texEntries{};
+        // plan_gltf.md GLTF-344: entries 6 and 7 are KHR_materials_specular's own maps, which
+        // resolve to the white identity when the material declares neither.
+        std::array<WGPUBindGroupEntry, 8> texEntries{};
         texEntries[0].binding = 0;
         texEntries[0].sampler = sampler;
         texEntries[1].binding = 1;
@@ -9083,6 +9139,10 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         texEntries[4].textureView = command.emissiveMap.View();
         texEntries[5].binding = 5;
         texEntries[5].textureView = command.occlusionMap.View();
+        texEntries[6].binding = 6;
+        texEntries[6].textureView = command.specularMap.View();
+        texEntries[7].binding = 7;
+        texEntries[7].textureView = command.specularColorMap.View();
         WGPUBindGroupDescriptor texBindDescriptor{};
         texBindDescriptor.label = StringView("CNA WebGPU Pbr3D Texture BindGroup");
         texBindDescriptor.layout = pbrBindGroupLayout1_;
@@ -10104,9 +10164,14 @@ struct LitLightParams {
 struct PbrFactors {
     metallicRoughness: vec4f,
     alphaTest: vec4f,
+    // plan_gltf.md GLTF-344: w decodes the specular COLOUR sample from sRGB.
     srgbFlags: vec4f,
     dielectricFresnel: vec4f,
     textureTransformRows: array<vec4f, 10>,
+    // KHR_materials_specular: xyz = UNCLAMPED dielectric F0, w = specularFactor. Unclamped because
+    // specularColorTexture multiplies before the min(...,1) below.
+    specularFresnelInputs: vec4f,
+    specularTextureTransformRows: array<vec4f, 4>,
 };
 @group(0) @binding(2) var<uniform> pf: PbrFactors;
 
@@ -10122,6 +10187,10 @@ struct SkinningParams {
 @group(1) @binding(3) var metallicRoughnessTex: texture_2d<f32>;
 @group(1) @binding(4) var emissiveTex: texture_2d<f32>;
 @group(1) @binding(5) var occlusionTex: texture_2d<f32>;
+// plan_gltf.md GLTF-344: KHR_materials_specular's own two inputs, at the same slots every other
+// sampling renderer uses -- strength in the scalar map's ALPHA, colour in the colour map's RGB.
+@group(1) @binding(6) var specularTex: texture_2d<f32>;
+@group(1) @binding(7) var specularColorTex: texture_2d<f32>;
 
 struct VertexInput {
     @location(0) position: vec3f,
@@ -10228,6 +10297,12 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     return (kd * diffuseColor / 3.14159265 + specular) * lightColor * ndotl;
 }
 
+fn pbrSpecularTransformUv(uv: vec2f, slot: u32) -> vec2f {
+    let value = vec3f(uv, 1.0);
+    return vec2f(dot(value, pf.specularTextureTransformRows[slot * 2u].xyz),
+                 dot(value, pf.specularTextureTransformRows[slot * 2u + 1u].xyz));
+}
+
 fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
     let value = vec3f(uv, 1.0);
     return vec2f(dot(value, pf.textureTransformRows[slot * 2u].xyz),
@@ -10267,8 +10342,21 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
     let metallic = clamp(mr.b * pf.metallicRoughness.x, 0.0, 1.0);
 
     let eye = normalize(lp.eyePos.xyz - input.worldPos);
-    let f0 = mix(pf.dielectricFresnel.xyz, albedo, metallic);
-    let f90 = mix(vec3f(pf.dielectricFresnel.w), vec3f(1.0), metallic);
+    // plan_gltf.md GLTF-344: KHR_materials_specular. strength comes from the scalar map's ALPHA and
+    // colour from the colour map's sRGB-decoded RGB, each through its own affine transform; the
+    // dielectric F0 is min(unclampedF0 * colourSample, 1) * strength, which is the extension's own
+    // ordering and the reason the unclamped value is uploaded. A material without either map samples
+    // the white identity, so the product collapses to the factor alone.
+    let specularStrength = pf.specularFresnelInputs.w
+        * textureSample(specularTex, texSampler, pbrSpecularTransformUv(input.uv, 0u)).a;
+    let specularColorSample = textureSample(specularColorTex, texSampler,
+                                            pbrSpecularTransformUv(input.uv, 1u)).rgb;
+    let specularColorLinear = select(specularColorSample, srgbToLinear(specularColorSample),
+                                     pf.srgbFlags.w > 0.5);
+    let dielectricF0 = min(pf.specularFresnelInputs.xyz * specularColorLinear, vec3f(1.0))
+        * specularStrength;
+    let f0 = mix(dielectricF0, albedo, metallic);
+    let f90 = mix(vec3f(specularStrength), vec3f(1.0), metallic);
 
     let dir0sq = dot(u.light0DirTexture.xyz, u.light0DirTexture.xyz);
     let dir1sq = dot(lp.light1Dir.xyz, lp.light1Dir.xyz);
@@ -10333,7 +10421,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         uboEntries[2].visibility = WGPUShaderStage_Fragment;
         uboEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
         // Four material vec4s followed by ten affine texture-transform rows.
-        uboEntries[2].buffer.minBindingSize = 56 * sizeof(float);
+        uboEntries[2].buffer.minBindingSize = 76 * sizeof(float);
         uboEntries[3].binding = 3;
         uboEntries[3].visibility = WGPUShaderStage_Vertex;
         uboEntries[3].buffer.type = WGPUBufferBindingType_Uniform;
@@ -10530,6 +10618,15 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         command.occlusionMap = params.pbrOcclusionMap != nullptr
             ? ResolveSamplable(params.pbrOcclusionMap)
             : pbrDefaultWhiteTexture_->Sampled();
+        // plan_gltf.md GLTF-344: white is the identity for both -- alpha 1 leaves the specular
+        // factor alone, RGB 1 leaves the unclamped F0 alone -- so a material with neither map
+        // renders exactly as the factor-only path already did.
+        command.specularMap = params.pbrSpecularMap != nullptr
+            ? ResolveSamplable(params.pbrSpecularMap)
+            : pbrDefaultWhiteTexture_->Sampled();
+        command.specularColorMap = params.pbrSpecularColorMap != nullptr
+            ? ResolveSamplable(params.pbrSpecularColorMap)
+            : pbrDefaultWhiteTexture_->Sampled();
 
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
@@ -10628,7 +10725,9 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
                                                      command.addressV, command.maxAnisotropy,
                                                      "SkinnedPbr3D");
-        std::array<WGPUBindGroupEntry, 6> texEntries{};
+        // plan_gltf.md GLTF-344: entries 6 and 7 are KHR_materials_specular's own maps, which
+        // resolve to the white identity when the material declares neither.
+        std::array<WGPUBindGroupEntry, 8> texEntries{};
         texEntries[0].binding = 0;
         texEntries[0].sampler = sampler;
         texEntries[1].binding = 1;
@@ -10641,6 +10740,10 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         texEntries[4].textureView = command.emissiveMap.View();
         texEntries[5].binding = 5;
         texEntries[5].textureView = command.occlusionMap.View();
+        texEntries[6].binding = 6;
+        texEntries[6].textureView = command.specularMap.View();
+        texEntries[7].binding = 7;
+        texEntries[7].textureView = command.specularColorMap.View();
         WGPUBindGroupDescriptor texBindDescriptor{};
         texBindDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D Texture BindGroup");
         texBindDescriptor.layout = pbrBindGroupLayout1_;
