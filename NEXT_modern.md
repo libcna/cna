@@ -414,6 +414,42 @@ none of which are present either. Installing a full 32-bit sysroot to satisfy on
 proportionate; the row stays 🟨 with the blocker named rather than being marked done on a
 64-bit-only measurement.
 
+### The engine layer on Emscripten (`MOD-1717`), and why Android (`MOD-1718`) is not
+
+`cmake-build-web-cnaext/` is a real Emscripten build of the engine layer (emsdk 6.0.7,
+`-DCNA_CNAEXT=ON -DCNA_GRAPHICS_RENDERER=WEBGL2 -DCMAKE_BUILD_TYPE=Release`). `libcna_graphics_ext.a`
+compiles, an engine-layer example links, and it **runs** — `node cna_example_cnaext_settings.js`
+prints `=== All PASS ===`. That last step is why this row is worth more than a compile check: the
+layer's CPU-side behaviour is exercised on a 32-bit wasm ABI with libc++ instead of libstdc++, which
+is the closest thing this container has to the 32-bit half `MOD-1716` could not do.
+
+Getting there needed two fixes and turned up one defect that is not ours:
+
+- **`-lembind` was missing** (fixed, `modules/core/CMakeLists.txt`).
+  `GraphicsRendererSelectionEmscripten.cpp` reads `Module.cnaPreferredRenderer` through
+  `emscripten::val`, and Emscripten does not link `libembind` implicitly. Every Emscripten
+  executable in this repository failed at `wasm-ld` with undefined `_emval_*` symbols — not just
+  engine-layer ones. The dependency now travels with `cna_core` as an `INTERFACE` link option
+  rather than being repeated in each consumer.
+- **`EMSCRIPTEN` must be exported** in the environment, not just `emcmake`'s toolchain: vendored
+  Draco's `draco_emscripten.cmake` checks for that variable by name and fails the configure without
+  it. `export EMSCRIPTEN="$EMSDK/upstream/emscripten"` before `emcmake` is the whole fix.
+- **Vendored Draco 1.5.7 does not compile under libc++.** `src/draco/io/ply_reader.cc` calls
+  `std::all_of` without including `<algorithm>`; libstdc++ happens to provide it transitively and
+  libc++ does not. It is a pinned third-party submodule, so it is recorded rather than patched here,
+  and the web build uses the repository's existing `-DCNA_ENABLE_DRACO=OFF` mode — which exists
+  precisely as an intentional decoder-free configuration.
+
+**Android is refused, not deferred.** The NDK is distributed only by Google; the agent proxy answers
+`403` to `CONNECT dl.google.com:443` and records the denial in its own status endpoint, and the
+Ubuntu `google-android-ndk-*-installer` packages are 16 KB shims that fetch from that same host
+(their control scripts name `https://dl.google.com`, with `mirrors.neusoft.edu.cn` as the only
+alternative — also unreachable, as is `mirrors.cloud.tencent.com`). With no sysroot there is no
+bionic and no `libGLESv3`, so an `-DANDROID_ABI=…` configure could only fail at the first header.
+Nothing suggests the layer is Android-hostile: `MOD-1717` runs it against a GLES-shaped target and
+`MOD-1719` compiles it for a second non-Linux ABI. Claiming the row on that basis would be a paper
+claim, so it stays ⛔ with the blocker named.
+
 ### What a Windows compiler would have said (`MOD-1719`)
 
 `mingw-cnaext-spike/` cross-compiles the whole engine layer with `x86_64-w64-mingw32-g++` and, more
