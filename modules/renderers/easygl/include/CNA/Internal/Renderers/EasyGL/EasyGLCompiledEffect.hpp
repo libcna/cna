@@ -169,7 +169,7 @@ namespace CNA::Internal::Renderers::EasyGL
         std::array<Microsoft::Xna::Framework::Graphics::SamplerState,
                    Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
             boundVertexSamplers_{};
-        // FX-074: which of those slots an applied pass has actually assigned. A default-constructed
+        // FX-083: which of those slots an applied pass has actually assigned. A default-constructed
         // SamplerState is a legitimate value, so "assigned" cannot be inferred from the value.
         std::array<bool, Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
             samplerAssigned_{};

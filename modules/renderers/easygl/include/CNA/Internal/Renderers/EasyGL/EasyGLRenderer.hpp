@@ -649,10 +649,41 @@ namespace CNA::Internal::Renderers::EasyGL
         // lazily on first CreateCompiledEffect() call (see GetMojoShaderContextEXT() in
         // EasyGLCompiledEffect.cpp).
         MOJOSHADER_glContext* mojoShaderContext_ = nullptr;
+        /// plan_fx.md FX-108: the meta-gl context generation `mojoShaderContext_` (and every
+        /// program MojoShader linked inside it) belongs to. A recreated context bumps the counter,
+        /// and every one of those programs is then a dead GL name -- see
+        /// RequireCompiledEffectContextEXT().
+        std::uint64_t mojoShaderContextGeneration_ = 0;
         // plan_fx.md FX-082: see EnsureCompiledEffectVaoEXT(). One array object, shared by every
         // compiled-effect draw (ordinary, indexed, instanced and SpriteBatch alike).
         ::easygl::VertexArray compiledEffectVao_;
         bool compiledEffectVaoCreated_ = false;
+        /**
+         * @brief One slot's row-order-corrected copy of a render target being sampled. CNAEXT.
+         *
+         * plan_fx.md FX-099. See AcquireCompiledEffectFlippedSourceEXT() for why a copy is what a
+         * compiled Effect needs where a stock shader needs only a uniform.
+         */
+        struct CompiledEffectFlippedSourceEXT
+        {
+            /** @brief The corrected copy, sampled in place of the render target's own texture. */
+            ::easygl::Texture texture;
+            /** @brief Draw framebuffer with @ref texture attached, the blit's destination. */
+            ::easygl::Framebuffer framebuffer;
+            /** @brief Extent the copy was last allocated for. */
+            int width = 0;
+            /** @brief Extent the copy was last allocated for. */
+            int height = 0;
+            /** @brief Mip levels the copy was last allocated with. */
+            int levelCount = 1;
+            /** @brief Whether the GL objects above exist. */
+            bool created = false;
+        };
+        std::array<CompiledEffectFlippedSourceEXT, 16> compiledFlippedSources_;
+        /// Read framebuffer the source render target's colour texture is attached to per blit, so
+        /// the source's own framebuffers -- including a multisample one -- are never touched.
+        ::easygl::Framebuffer compiledFlipReadFbo_;
+        bool compiledFlipReadFboCreated_ = false;
 #endif
         EasyGLSurfaceState surfaceState_;
         ::easygl::Device device;
@@ -914,10 +945,10 @@ namespace CNA::Internal::Renderers::EasyGL
          * `sampler_state` block reaches the GPU.
          *
          * Still refused explicitly rather than silently mishandled: a compiled effect's vertex
-         * shader sampling a texture, and a 3D/cube (not 2D) sampler binding. Accepted but inert:
-         * `AddressW` (this renderer has not adopted `ApplySamplerAddressW`) and
-         * `MipMapLevelOfDetailBias` on the OpenGL ES profiles, which have no such GL state --
-         * see docs/sampler-state-support.md.
+         * shader sampling a texture, and a 3D/cube (not 2D) sampler binding. `AddressW` now reaches
+         * `GL_TEXTURE_WRAP_R` (plan_fx.md FX-092), though the compiled route's own 2D-only sampling
+         * never observes it; `MipMapLevelOfDetailBias` remains unrepresentable on the OpenGL ES
+         * profiles, which have no such GL state -- see docs/sampler-state-support.md.
          * @return true.
          */
         [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
@@ -967,7 +998,7 @@ namespace CNA::Internal::Renderers::EasyGL
          * attributes, pixel-stage sampler textures and sampler state, and pushes its uniforms --
          * everything a compiled-effect draw needs immediately before issuing the GL draw call.
          *
-         * plan_fx.md FX-062/FX-073: EasyGL draws immediately (no `Present()`-deferred queue), so
+         * plan_fx.md FX-062/FX-071: EasyGL draws immediately (no `Present()`-deferred queue), so
          * this is called directly from the `Draw*PrimitivesEx` compiled-effect branches rather
          * than captured for later replay the way SDL_GPU's draw route has to. Every shader input
          * is resolved against the whole bound stream set, so a shader consuming attributes from
@@ -1007,6 +1038,66 @@ namespace CNA::Internal::Renderers::EasyGL
          * @return The compiled-effect vertex array, created on first use.
          */
         CNAEXT [[nodiscard]] ::easygl::VertexArray& EnsureCompiledEffectVaoEXT();
+
+        /**
+         * @brief CNAEXT. Forgets every compiled-effect GL object across a context recreation.
+         *
+         * plan_fx.md FX-108. These objects are deliberately not `easygl::RecoverableResource`s --
+         * an empty array object and a scratch copy have no content worth restoring -- so the
+         * registry's own release/recreate pass does not reach them, and their creation flags would
+         * otherwise stay true while their names became dead. Called from the context-loss
+         * transaction; the lazy creators rebuild on the next compiled draw.
+         */
+        CNAEXT void ReleaseCompiledEffectGlObjectsForContextLossEXT();
+
+        /**
+         * @brief CNAEXT. Refuses a compiled-effect operation whose GL context no longer exists.
+         *
+         * plan_fx.md FX-108. This renderer supports context loss and recreation, and its own
+         * resources recover through easy-gl's registry. MojoShader's context does not: it owns the
+         * linked GL programs for every live compiled Effect, and recreating it would mean rebuilding
+         * every one of those effects from the bytecode the game no longer holds. Until that exists,
+         * a compiled draw after a recreation is refused BY NAME rather than issued against dead
+         * program and array-object names, which is what it used to do -- rasterizing nothing, with
+         * no diagnostic, on a renderer still advertising CompiledEffects.
+         *
+         * @param operation Public operation being refused, for the exception text.
+         * @throws System::NotSupportedException if the GL context has been recreated since
+         *         MojoShader's context was made.
+         */
+        CNAEXT void RequireCompiledEffectContextEXT(const char* operation) const;
+
+        /**
+         * @brief CNAEXT. Returns a row-order-corrected copy of @p source for a compiled sampler.
+         *
+         * plan_fx.md FX-099. This renderer never flips geometry for a framebuffer object, so a
+         * render target's colour texture stores its rows bottom-up relative to an uploaded
+         * `Texture2D`. Every shader this renderer authors corrects for that at sample time through
+         * the `uRtFlipV` uniform and the `cnaSampleUV` helper (REMED-GFX-147), and `GetData` mirrors
+         * the rows on readback. A compiled Effect's GLSL is generated by MojoShader from Direct3D 9
+         * bytecode and contains neither the helper nor the uniform, and there is no way to inject
+         * one into it -- so a compiled Effect sampling a render target would see the image upside
+         * down while every other draw of the same target sees it correctly.
+         *
+         * The correction therefore happens to the pixels rather than to the coordinates: the
+         * source's colour texture is blitted into this slot's own copy with the destination Y range
+         * reversed, and the copy is what gets bound. That works for any compiled Effect, any
+         * sampler slot and any chain of targets, and -- because it applies only where
+         * SampledRowOrderIsBottomUp() is true -- leaves an ordinary `Texture2D` source untouched,
+         * so nothing is flipped twice.
+         *
+         * The copy is per slot and reallocated only when the source's extent or level count
+         * changes, so a steady post-processing chain pays one blit per sampled target per draw.
+         *
+         * @param slot Sampler slot the copy is for; each slot owns its own copy so two render
+         *        targets sampled by one pass cannot overwrite each other.
+         * @param source The render target being sampled. Must not be the current draw target.
+         * @return The corrected copy to bind.
+         * @throws System::NotSupportedException if this profile cannot blit framebuffers, or if
+         *         @p source is the render target currently being drawn into.
+         */
+        CNAEXT [[nodiscard]] const ::easygl::Texture& AcquireCompiledEffectFlippedSourceEXT(
+            int slot, const EasyGLRenderTargetRenderer& source);
 #endif
         // AnisotropicFiltering/MultiSampleAntiAliasing re-query the same live GL state the
         // startup capability dump (EnsureGL()) already prints, since they're cheap, idempotent GL
@@ -1097,6 +1188,26 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param lodBias Level-of-detail bias.
          */
         void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
+        /**
+         * @brief Applies XNA's `SamplerState.AddressW` to a slot.
+         *
+         * plan_fx.md FX-092. `GL_TEXTURE_WRAP_R` is the third addressing axis, observable wherever
+         * this renderer samples a volume texture; before this the axis was accepted and dropped, so
+         * a game or a compiled Effect that asked for a W mode got GL's own default instead.
+         *
+         * Adopting it is also what keeps `ApplySamplerState`'s deterministic baseline honest: that
+         * call resets `GL_TEXTURE_WRAP_R` along with every other property it does not describe, and
+         * `GraphicsDevice::applySamplerStatesToRenderer` follows it with this call before every
+         * draw, so the real W mode is what stands.
+         *
+         * OpenGL ES 2.0 / WebGL 1 have neither sampler objects nor `GL_TEXTURE_WRAP_R` (they have
+         * no volume textures at all), so the axis stays unrepresentable there rather than
+         * approximated -- see docs/sampler-state-support.md.
+         *
+         * @param slot Sampler slot.
+         * @param addressW Raw `TextureAddressMode` ordinal for W.
+         */
+        void ApplySamplerAddressW(int slot, int addressW) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
         void SetScissorRect(int x, int y, int w, int h) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;

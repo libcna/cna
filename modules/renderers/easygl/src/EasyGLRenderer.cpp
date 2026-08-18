@@ -3615,6 +3615,16 @@ if (ProfileIsEs2ApiGeneration())
         default_white_texture_ready_ = false;
         default_flat_normal_texture_.reset_handle_no_gl();
         default_flat_normal_texture_ready_ = false;
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        // plan_fx.md FX-108: the compiled-effect route's own GL objects live on this renderer
+        // rather than in the recovery registry (they are not `RecoverableResource`s, because they
+        // hold nothing to recreate CONTENT from -- a fresh empty array object and a fresh scratch
+        // copy are as good as the originals). They still have to be forgotten here, or their
+        // pre-loss names would be bound into the new context: `compiledEffectVaoCreated_` stayed
+        // true across a recreation, so `EnsureCompiledEffectVaoEXT` handed back a dead name and
+        // every compiled draw bound array object 0.
+        ReleaseCompiledEffectGlObjectsForContextLossEXT();
+#endif
 
         // 2. Recreate the native context through the platform-owned transaction.
         platformContext_->Recreate();
@@ -4564,6 +4574,42 @@ else
         s.set_parameter(::easygl::SamplerParameter::WrapS, toWrap(addressU));
         s.set_parameter(::easygl::SamplerParameter::WrapT, toWrap(addressV));
 
+        // plan_fx.md FX-092: samplers_[slot] is ONE long-lived GL object, mutated in place and
+        // reused for every later application on that slot -- the same shape that made REMED-GFX-174
+        // necessary for anisotropy. Every property this call does not write therefore survives from
+        // whoever wrote it last, and ApplySamplerMipState (a compiled Effect's own MaxMipLevel and
+        // MipMapLevelOfDetailBias) writes three of them. A SpriteBatch flush calls only
+        // ApplySamplerState, so an effect that clamped the slot to mip 3 left every later stock
+        // sprite sampling from mip 3 as well.
+        //
+        // This block makes the sampler's complete state a function of THIS call's arguments and
+        // nothing else. GraphicsDevice::applySamplerStatesToRenderer runs before every draw and
+        // follows this call with ApplySamplerMipState and ApplySamplerAddressW, so a device-driven
+        // application overwrites the three defaults below with the real SamplerState values
+        // immediately; only a caller that applies filter/addressing alone -- SpriteBatch's own
+        // flush -- keeps them, which is exactly the XNA default it means.
+        //
+        // The W axis follows addressU because every XNA 4.0 SamplerState preset (PointClamp,
+        // LinearWrap, AnisotropicClamp, ...) sets all three axes to the same mode, and a
+        // SpriteBatch's sampler state is always one of those shapes.
+        s.set_parameter(::easygl::SamplerParameter::WrapR, toWrap(addressU));
+        // MaxMipLevel's default of 0 under ApplySamplerMipState's own mapping, and GL's default
+        // upper bound. Both written unconditionally so a previous MinLod cannot survive here.
+        s.set_parameter(::easygl::SamplerParameter::MinLod, 0.0f);
+        s.set_parameter(::easygl::SamplerParameter::MaxLod, 1000.0f);
+        if (ProfileIsDesktopCore())
+        {
+            // Spelled numerically for the same reason ApplySamplerMipState spells it that way:
+            // GL_TEXTURE_LOD_BIAS does not exist in OpenGL ES, and one translation unit serves
+            // both profiles.
+            constexpr unsigned int kGlTextureLodBias = 0x8501u;
+            s.set_parameter(static_cast<::easygl::SamplerParameter>(kGlTextureLodBias), 0.0f);
+        }
+        // XNA 4.0 has no shadow-comparison sampler at all, so nothing in CNA ever enables one --
+        // but the property is mutable on this shared object, and "nothing writes it today" is
+        // exactly the assumption the mip states were built on. GL_NONE, written every time.
+        s.set_parameter(::easygl::SamplerParameter::CompareMode, 0);
+
         s.bind(static_cast<unsigned int>(slot));
 
         if (SamplerTraceEnabled())
@@ -4619,6 +4665,192 @@ else
             constexpr unsigned int kGlTextureLodBias = 0x8501u;
             s.set_parameter(static_cast<::easygl::SamplerParameter>(kGlTextureLodBias), lodBias);
         }
+        s.bind(static_cast<unsigned int>(slot));
+}
+    }
+
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+    const ::easygl::Texture& EasyGLRenderer::AcquireCompiledEffectFlippedSourceEXT(
+        int slot, const EasyGLRenderTargetRenderer& source)
+    {
+        // plan_fx.md FX-099. See the declaration for why the correction is applied to the pixels
+        // rather than to the sampling coordinate.
+        if (ProfileIsEs2ApiGeneration())
+        {
+            // glBlitFramebuffer is OpenGL ES 3.0. Refused by name rather than served upside down,
+            // which is the whole point of this function existing.
+            throw System::NotSupportedException(
+                "CNA EasyGL: a compiled Effect cannot sample a RenderTarget2D on the OpenGL ES 2.0 "
+                "/ WebGL 1 profiles -- correcting the target's row order needs glBlitFramebuffer, "
+                "which those profiles do not have.");
+        }
+        if (slot < 0 || slot >= kMaxSamplerSlots)
+        {
+            throw System::NotSupportedException(
+                "CNA EasyGL: a compiled Effect's sampler slot is outside this renderer's range.");
+        }
+        // Reading a target while drawing into it is undefined in XNA too, and here it would also
+        // be an invalid framebuffer blit. Named, not silently produced.
+        bool sourceIsCurrentTarget = bound_->rt2D == static_cast<const IRenderTargetRenderer*>(&source);
+        for (int i = 0; i < bound_->mrtCount; ++i)
+        {
+            sourceIsCurrentTarget = sourceIsCurrentTarget ||
+                bound_->mrt[static_cast<std::size_t>(i)] == &source;
+        }
+        if (sourceIsCurrentTarget)
+        {
+            throw System::NotSupportedException(
+                "CNA EasyGL: a compiled Effect cannot sample the RenderTarget2D it is drawing "
+                "into.");
+        }
+
+        // Saved BEFORE anything below binds a framebuffer of its own. The lazy creation further
+        // down binds this slot's copy as the draw target to attach its texture, so reading the
+        // binding after that block would record the copy's framebuffer as the one to restore --
+        // and the compiled draw that follows would render into the copy instead of into the
+        // caller's render target, leaving that target showing nothing but its clear colour.
+        GLint previousDrawFramebuffer = 0;
+        GLint previousReadFramebuffer = 0;
+        metagl::glGetIntegerv(::metagl::GetParameter::DrawFramebufferBinding,
+                              &previousDrawFramebuffer);
+        metagl::glGetIntegerv(::metagl::GetParameter::ReadFramebufferBinding,
+                              &previousReadFramebuffer);
+
+        const int width = source.GetWidth();
+        const int height = source.GetHeight();
+        const int levelCount = std::max(1, source.levelCount_);
+        CompiledEffectFlippedSourceEXT& copy =
+            compiledFlippedSources_[static_cast<std::size_t>(slot)];
+        if (copy.created &&
+            (copy.width != width || copy.height != height || copy.levelCount != levelCount))
+        {
+            copy.framebuffer.destroy();
+            copy.texture.destroy();
+            copy.created = false;
+        }
+        if (!copy.created)
+        {
+            copy.texture.create();
+            copy.texture.bind(::easygl::TextureTarget::Texture2D);
+            int levelW = width, levelH = height;
+            for (int level = 0; level < levelCount; ++level)
+            {
+                copy.texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
+                                          RgbaTexImageInternalFormat(), levelW, levelH,
+                                          ::metagl::PixelFormat::Rgba,
+                                          ::metagl::PixelType::UnsignedByte, nullptr);
+                levelW = std::max(1, levelW / 2);
+                levelH = std::max(1, levelH / 2);
+            }
+            // Same completeness clamp REMED-GFX-174 applies to every other sampleable kind: GL
+            // evaluates mipmap completeness over [BASE_LEVEL, MAX_LEVEL] and defaults MAX_LEVEL to
+            // 1000, so without this a one-level copy samples black under any mip-using filter.
+            copy.texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                                       ::easygl::TextureParameterSetter::MaxLevel, levelCount - 1);
+            copy.framebuffer.create();
+            copy.framebuffer.bind(::easygl::FramebufferTarget::DrawFramebuffer);
+            copy.framebuffer.attach_texture_2d(::easygl::FramebufferTarget::DrawFramebuffer,
+                                               ::metagl::to_framebuffer_attachment(
+                                                   ::metagl::ColorAttachment::Color0),
+                                               ::easygl::TextureTarget::Texture2D,
+                                               copy.texture, 0);
+            copy.width = width;
+            copy.height = height;
+            copy.levelCount = levelCount;
+            copy.created = true;
+        }
+        if (!compiledFlipReadFboCreated_)
+        {
+            compiledFlipReadFbo_.create();
+            compiledFlipReadFboCreated_ = true;
+        }
+
+        // The source's OWN colour texture is attached to this renderer's read framebuffer rather
+        // than binding the target's framebuffers, so a multisample target -- whose fbo_ carries a
+        // renderbuffer, not the texture -- is read from its already-resolved single-sample texture
+        // and neither of its framebuffers is disturbed.
+        //
+        // glBlitFramebuffer is subject to the scissor test; a game's active scissor rectangle has
+        // nothing to do with this internal copy.
+        const bool scissorWasEnabled = metagl::glIsEnabled(::metagl::Capability::ScissorTest);
+        if (scissorWasEnabled) device.set_scissor_test_enabled(false);
+
+        compiledFlipReadFbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+        compiledFlipReadFbo_.attach_texture_2d(::easygl::FramebufferTarget::ReadFramebuffer,
+                                               ::metagl::to_framebuffer_attachment(
+                                                   ::metagl::ColorAttachment::Color0),
+                                               ::easygl::TextureTarget::Texture2D,
+                                               source.GetEasyGLColorTexture(), 0);
+        copy.framebuffer.bind(::easygl::FramebufferTarget::DrawFramebuffer);
+        // The destination Y range runs the other way, which is the whole correction.
+        ::easygl::Framebuffer::blit(0, 0, width, height,
+                                    0, height, width, 0,
+                                    ::metagl::ClearBufferBit::Color,
+                                    ::metagl::BlitFilter::Nearest);
+
+        if (scissorWasEnabled) device.set_scissor_test_enabled(true);
+        metagl::glBindFramebuffer(::metagl::FramebufferTarget::ReadFramebuffer,
+                                  ::metagl::FramebufferId{
+                                      static_cast<unsigned int>(previousReadFramebuffer)});
+        metagl::glBindFramebuffer(::metagl::FramebufferTarget::DrawFramebuffer,
+                                  ::metagl::FramebufferId{
+                                      static_cast<unsigned int>(previousDrawFramebuffer)});
+
+        if (levelCount > 1)
+        {
+            // The blit fills level 0 only; the rest of the chain is rebuilt from it, exactly as
+            // UnbindAsRenderTarget does for the target itself.
+            copy.texture.bind(::easygl::TextureTarget::Texture2D);
+            copy.texture.generate_mipmap(::easygl::TextureTarget::Texture2D);
+        }
+        return copy.texture;
+    }
+#endif  // CNA_EASYGL_COMPILED_EFFECTS
+
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+    void EasyGLRenderer::ReleaseCompiledEffectGlObjectsForContextLossEXT()
+    {
+        // plan_fx.md FX-108. Handles are dropped WITHOUT a GL call: the names belong to a context
+        // that is gone, and deleting them would either be a no-op or address someone else's object
+        // in the replacement context. The `*Created`/extent bookkeeping is reset with them so the
+        // lazy creators rebuild on next use instead of trusting a stale flag.
+        compiledEffectVao_.reset_handle_no_gl();
+        compiledEffectVaoCreated_ = false;
+        for (CompiledEffectFlippedSourceEXT& copy : compiledFlippedSources_)
+        {
+            copy.texture.reset_handle_no_gl();
+            copy.framebuffer.reset_handle_no_gl();
+            copy.width = 0;
+            copy.height = 0;
+            copy.levelCount = 1;
+            copy.created = false;
+        }
+        compiledFlipReadFbo_.reset_handle_no_gl();
+        compiledFlipReadFboCreated_ = false;
+    }
+#endif
+
+    void EasyGLRenderer::ApplySamplerAddressW(int slot, int addressW)
+    {
+        if (metagl::IsContextLost()) return;
+        if (slot < 0 || slot >= kMaxSamplerSlots) return;
+if (ProfileIsEs2ApiGeneration())
+{
+        // OpenGL ES 2.0 / WebGL 1 have neither sampler objects nor GL_TEXTURE_WRAP_R, and no
+        // volume textures for the axis to address. Documented as unrepresentable rather than
+        // approximated, exactly like ApplySamplerMipState's own ES 2 branch above.
+        (void) addressW;
+        return;
+}
+else
+{
+        ::easygl::Sampler& s = samplers_[slot];
+        if (!s.is_created()) s.create();
+        // Same TextureAddressMode -> GL wrap table ApplySamplerState uses for S and T.
+        int wrap = static_cast<int>(::easygl::TextureWrapMode::Repeat);
+        if (addressW == 1) wrap = static_cast<int>(::easygl::TextureWrapMode::ClampToEdge);
+        else if (addressW == 2) wrap = static_cast<int>(::easygl::TextureWrapMode::MirroredRepeat);
+        s.set_parameter(::easygl::SamplerParameter::WrapR, wrap);
         s.bind(static_cast<unsigned int>(slot));
 }
     }
