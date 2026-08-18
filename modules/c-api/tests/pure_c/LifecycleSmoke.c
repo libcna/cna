@@ -109,6 +109,37 @@ static CNA_Result on_load(
     state->supports_three_d = supports_three_d;
     state->renderer_name_bytes = renderer_name_bytes;
 
+    /* CBIND-052A: the bit set and the point query are two spellings of one answer, so they are
+       checked against each other for every capability rather than only for the 3D one. Walking
+       the closed identity range is also what keeps the two from drifting: a capability appended
+       to CNA::GraphicsCapability that never reached the C identity space -- which is how
+       COMPILED_EFFECTS arrived -- is either answered here or fails this block. */
+    {
+        CNA_GraphicsCapability capability = CNA_GRAPHICS_CAPABILITY_THREE_D;
+        CNA_Bool refused = CNA_FALSE;
+        for (capability = CNA_GRAPHICS_CAPABILITY_THREE_D;
+             capability <= CNA_GRAPHICS_CAPABILITY_MAXIMUM; ++capability) {
+            CNA_Bool supported = UINT8_C(9);
+            const CNA_GraphicsCapabilityFlags bit = UINT64_C(1) << capability;
+            if (cna_graphics_device_supports_capability(
+                    graphics_device, capability, &supported) != CNA_RESULT_SUCCESS ||
+                (supported != CNA_FALSE && supported != CNA_TRUE) ||
+                (((renderer_info.capability_flags & bit) != UINT64_C(0)) !=
+                 (supported == CNA_TRUE))) {
+                return CNA_RESULT_INVALID_STATE;
+            }
+        }
+        /* Nothing above the last identity is a capability, and no bit above it is ever set. */
+        if (cna_graphics_device_supports_capability(
+                graphics_device,
+                CNA_GRAPHICS_CAPABILITY_MAXIMUM + UINT32_C(1),
+                &refused) != CNA_RESULT_INVALID_ARGUMENT ||
+            (renderer_info.capability_flags >>
+             (CNA_GRAPHICS_CAPABILITY_MAXIMUM + UINT32_C(1))) != UINT64_C(0)) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+    }
+
     CNA_Texture2DCreateInfo texture_create_info = {
         sizeof(CNA_Texture2DCreateInfo),
         UINT32_C(1),

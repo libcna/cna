@@ -175,7 +175,7 @@
     },
     {
       "subject": "The static archive keeps 83 C++ statics visible",
-      "impact": "A static CNA exists and exports exactly the same 2,720 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly.",
+      "impact": "A static CNA exists and exports exactly the same 2,838 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly.",
       "status": "by design",
       "owner": "CONSUMING.md"
     },
@@ -198,10 +198,16 @@
       "owner": "ABI_VERSIONING.md"
     },
     {
-      "subject": "Four of the 46 renderers are built and run here",
-      "impact": "The other 42 share the same C surface and the same capability queries. What a given backend supports is answered by `cna_graphics_device_supports_capability`, never by its renderer identity.",
+      "subject": "Four of the 49 renderers are built and run here",
+      "impact": "The other 45 share the same C surface and the same capability queries. What a given backend supports is answered by `cna_graphics_device_supports_capability`, never by its renderer identity.",
       "status": "by design",
       "owner": "RENDERERS_AND_CAPABILITIES.md"
+    },
+    {
+      "subject": "No verification tree can create a compiled Effect Framework effect",
+      "impact": "`cna_effect_create_compiled`'s three refusals are renderer-independent and are tested, but none of the four trees this campaign builds -- HEADLESS, SDL_RENDERER and SOFTWARE twice -- advertises `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`, so the accepting path is never taken. That leaves `cna_effect_get_is_compiled_ext` proved only on its `CNA_FALSE` branch, and clone-preserves-compiled-state asserted as a relationship between source and clone rather than on a genuinely compiled effect. A tree on a renderer that implements compiled effects would close both.",
+      "status": "not tested here",
+      "owner": "EFFECTS.md"
     }
   ],
   "partial_kinds": {

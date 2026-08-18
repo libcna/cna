@@ -14,6 +14,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     const std::string& EffectPass::getNameProperty() const { return name_; }
 
+    std::uint32_t EffectPass::getIndexInternal() const { return passIndex_; }
+
     EffectAnnotationCollection& EffectPass::getAnnotationsProperty() { return annotations_; }
     const EffectAnnotationCollection& EffectPass::getAnnotationsProperty() const { return annotations_; }
 

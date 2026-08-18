@@ -71,6 +71,17 @@ unique-pointer collection elements. Default technique construction preserves the
 empty pass collection; named construction preserves the canonical automatically created `P0` pass.
 Technique identities are opaque non-pointer `uint64_t` tokens from the native implementation.
 
+**A runtime index is not an identity.** `cna_effect_technique_get_index_ext` and
+`cna_effect_pass_get_index_ext` report the position a compiled effect's own reflection assigned,
+which is what selects the pass to activate; the identity token is unique per constructed technique
+and says nothing about ordering. The two are separate routes because they answer different
+questions, and both are zero for anything built by hand.
+`cna_effect_technique_create_reflected_ext` and `cna_effect_pass_create_indexed_ext` build the
+shape reflection produces — a technique that states its index and whether it starts with the
+canonical `P0` pass or with an empty list for reflected passes, and a pass that states which
+technique owns it *and* where it sits inside it. They are additive siblings rather than extra
+parameters on the published creation routes, because a published route's signature is ABI.
+
 Pass and technique collections expose construction-plus-add, count, index and exact-name lookup.
 Returned aliases survive later collection growth and destruction of the collection-view handle.
 Pass/technique annotation views and technique pass views retain their owner and share mutation.
@@ -85,6 +96,23 @@ concrete adapter for CNA's abstract `Effect` base contract; `cna_effect_material
 `cna_shader_effect_create` and `cna_sprite_effect_create` construct the corresponding native
 types. Clone preserves the concrete runtime type. Dispose keeps the handle queryable and maps a
 later Apply to `CNA_RESULT_INVALID_STATE`; destroy releases the handle.
+
+### Compiled Effect Framework bytecode
+
+`cna_effect_create_compiled` judges its bytes before it consults a renderer, so three refusals hold
+identically everywhere: an empty buffer and bytes without a structurally valid XNA Direct3D 9
+Effect Framework header are `CNA_RESULT_INVALID_ARGUMENT`, and MonoGame's distinct MGFX container
+is `CNA_RESULT_NOT_SUPPORTED` — a recognized format this route does not accept, not a malformed
+one. Whether *valid* bytecode is then accepted is the renderer's answer, and
+`CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS` is how a caller asks in advance rather than by
+attempting it.
+
+`cna_effect_get_is_compiled_ext` reports whether an effect carries a compiled runtime. The
+canonical accessor hands back the runtime object, which is renderer-owned implementation a C caller
+can neither construct nor call into, so what crosses the ABI is the fact a caller can act on: a
+compiled effect's parameters, techniques and passes were reflected out of bytecode rather than
+built by hand, and `cna_effect_clone` clones the runtime and copies the parameter values with it.
+A clone therefore always reports the same answer as its source.
 
 Parameter, technique, current-technique and nested pass views alias the native effect storage.
 Destroying the parent effect handle does not invalidate a live descendant view: the descendant

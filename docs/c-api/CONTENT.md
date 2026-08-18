@@ -133,6 +133,15 @@ handle. `cna_content_type_reader_manager_clear_type_creators` empties the proces
 is genuinely destructive; `cna_content_register_known_unsupported_xnb_readers` restores the
 placeholder registrations.
 
+**The known-unsupported set is currently empty, and no C route puts a factory into the registry.**
+Its one entry was the general `EffectReader`, which the compiled Effect Framework work replaced
+with a reader that really decodes compiled effects — registered by an internal entry point that has
+no C form, because a factory is a callback returning a C++ reader and C cannot produce one (see the
+`AddTypeCreator` row in the coverage matrix). The published hook remains the registry's extension
+point and stays idempotent; today it registers nothing, so from C the registry starts empty and
+stays empty. A caller that needs a recognized-but-unsupported reader builds one directly with
+`cna_known_unsupported_content_type_reader_create`, which is unaffected.
+
 An owned `CNA_ContentTypeReaderHandle` exposes the target type name, the type version, both
 version-support answers, the in-place-deserialization capability and the post-table initialization
 step.

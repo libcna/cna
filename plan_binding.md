@@ -586,6 +586,9 @@ and that is recorded here rather than papered over.
 | CBIND-051D | Bind the model's cameras, skins, bounds and material variants | ✅ | The 28 rows in `Model.hpp`. **Two ownership questions, answered by making them impossible rather than by documenting them.** `ModelSkinEXT::Meshes` is a vector of raw `ModelMesh*`, so the C route names meshes by **index into the model's own mesh collection**: the model already owns those meshes, so an index cannot outlive what it points at, and an out-of-range one is refused instead of stored. `ModelSkinEXT::Data` borrows a `SkinningData*` the model does not own, so `ModelResource` now holds a strong reference beside each skin — without one, destroying the caller's handle would leave that pointer aimed at freed memory for the next reader to follow — and `cna_model_create_skin_skeleton_handle_ext` hands back a **freshly owned** handle rather than the one the caller passed in, which may have been destroyed since. The test proves exactly that: it destroys its skeleton handle, then reads the skin's bone count through a new one. Cameras follow `CBIND-051B`'s clear/append shape with the name read by count/copy; the merged bounding sphere reports its `std::nullopt` as a `has_value` flag rather than an empty sphere that would read as a real one at the origin; material variants are read by index and selected with the canonical `-1`-restores-defaults rule, where the C++ `std::out_of_range` becomes `CNA_RESULT_INVALID_ARGUMENT` through the barrier. `CreateInfinitePerspectiveFieldOfViewEXT` becomes a matrix factory. `ConfigureModelMaterialVariantsEXT` is recorded **not-applicable** with a new limitations theme of its own: `CNA::Internal` is excluded by path everywhere else in the inventory and this entry point reaches it only because it is declared in a public header. Twenty-one routes, two structs; the ABI change is purely additive. Inventory 6,279 implemented, 7 planned; 81/81 and 88/88 in all four trees. |
 
 | CBIND-051E | Bind the animation-player additions | ✅ | The last 7 rows. `SkinningData`'s declared rig root -- a scene-node index and a name, both unset on models from older or non-glTF paths -- becomes four routes on the handle it belongs to. `ModelAnimationsEXT` becomes an owned handle whose clips are **read by sorted index**: the canonical type keeps them in an `unordered_map`, and a C consumer must not be handed an order that is really a hash-bucket accident. `ApplyClipToBonesEXT` is the interesting one. It **throws** for a joint-palette clip, and that refusal is the entire reason `AnimationClipEXT` carries a target space: palette indices applied to `Model::Bones` would pose the wrong bones with no symptom but wrong motion. So the C route lets the throw through as `CNA_RESULT_INVALID_ARGUMENT` rather than catching it into a success, and the test proves both halves -- the same clip refused, then accepted once it states scene-node space. `ApplyBindPoseBoneTransformsEXT` returns its posed-effect count as an output parameter. Fifteen routes, one handle kind; the ABI change is purely additive. **The matrix is closed: 6,286 implemented, 12 approved partial, 0 planned, 386 not applicable, and `RELEASE_GATE.md` reads ready again.** 81/81 and 88/88 in all four trees. |
+| CBIND-052 | Reconcile the C ABI with the compiled-effect and IGL merges | ✅ | The third reopening, and the smallest so far: HEAD carries 128 commits the C API had not seen — the compiled Effect Framework campaign (`plan_fx.md`) and the IGL renderer — and the inventory grew by 9 symbols while 3 already-mapped ones changed shape, leaving **12 planned rows**. Split into `CBIND-052A` (the identity families) and `CBIND-052B` (the Effect object graph). |
+| CBIND-052A | Bind the renderer and capability identities, and gate the ABI against CNA's own enumerations | ✅ | Three planned rows — `GraphicsRendererType::Igl`, `::PixiJs` and `GraphicsCapability::CompiledEffects` — and **a fourth that no row reported, which is the finding.** `TINYGL` had reached `CNA::GraphicsRendererType` in an earlier merge with **no `CNA_GRAPHICS_RENDERER_TINYGL` constant existing at all**, and the matrix recorded it `implemented` with test evidence: `CBIND-050` seeded its approvals from the pre-merge tree, which was the right way to avoid blessing that merge's 121 unreviewed rows and which therefore also grandfathered the false claim the pre-merge tree already held. Seeding cannot distinguish the two, so the honest reading of `CBIND-050` is that it stopped the bleeding and did not audit the wound. **Why nothing caught it: `cna_c_api` was the one target in this module that did not compile with the strict warnings every one of its 59 test targets already had**, and GCC had been reporting `enumeration value 'TinyGL' not handled in switch` on a stream nobody read. The library now builds with `-Wall -Wextra -Werror`, with two deliberate exclusions rather than a blanket suppression: `-Wpedantic` fires only inside Sharp Runtime's `Decimal.hpp`, on a sibling project's `__int128` extension, and `-Wmissing-field-initializers` contradicts this ABI's own `{sizeof(T), version}` idiom. Turning it on cost three real fixes — a dead `rectanglePointer` in `CnaCApiTexture.cpp` whose live value is recomputed to point into the output structure, and `[[maybe_unused]]` on two genuinely configuration-dependent helpers (`IsTransferTypeCompatible` is SDL_RENDERER-only, `ExtensionUnavailable` is the `#ifndef CNA_CNAEXT` half). Both identity spaces now publish a `_MAXIMUM`, the convention 21 other identity families in this ABI already follow and the two most-extended ones lacked — which is *why* they drifted, since nothing could enumerate them. Three gates, each **shown to fail** on the exact defect by deleting `PixiJs` from one side: a `consteval` count of the renderers `CNA::getGraphicsRendererName` actually names, held against the C identity table's size; a second assertion tying `CNA_GRAPHICS_RENDERER_MAXIMUM` to that table; and an exhaustive no-`default` switch in each direction, so `-Werror=switch` now catches an appended renderer *or* capability. The tests walk the ranges instead of naming backends: every identity classifies and is answered by the selection surface, every capability's point query agrees with its flag bit, and both ranges are closed at each end. **The slice also repaired what the merge had already broken**, which is why it lands as one commit: `EffectSmoke.c` still required `cna_effect_create_compiled` to answer `NOT_SUPPORTED` when compiled effects are now a real format, so it asserts the three refusals decided *before* a renderer is consulted (empty and structurally invalid bytecode are bad arguments, MonoGame's MGFX container is a recognized format this constructor declines) and reads the new capability rather than a renderer name; and `ContentReaderSmoke.c` still required the `EffectReader` placeholder that the compiled-effect work replaced with a reader that really decodes, so the known-unsupported registry is now asserted **empty** — the negative that would catch an entry reappearing — with every reader-contract route driven through a placeholder the caller builds itself. Two coverage rules re-approved (+2 renderers, +1 capability); the implemented delta is **+3, not +4**, and that gap is exactly the TINYGL row that had been counted all along. The ABI change is purely additive: 6 constants, no renames, no relayouts. Inventory 6,286 implemented, 12 approved partial, **9 planned**, 386 not applicable; `RELEASE_GATE.md` correctly reads **not ready** until `CBIND-052B`. 81/81 in all four trees, sanitizer included. |
+| CBIND-052B | Bind the compiled-effect additions to the Effect object graph | ✅ | The 9 rows left, and **the one that mattered was a re-approval, not a new route.** `Effect::Clone()` and `OnApply()` stopped being pure virtual in the merge, which quietly invalidated the C adapter: `CApiEffect` overrode `Clone()` with "construct a fresh empty effect", correct while there was nothing to inherit and wrong the moment the base began cloning a compiled effect's runtime and copying its parameter values. A C caller cloning a compiled effect would have received an empty one, with no error anywhere. Both overrides are gone -- `OnApply()`'s base is the same no-op it was -- so what is left of the adapter is its two constructors. `GetCompiledRuntimePtr()` becomes `cna_effect_get_is_compiled_ext`: the runtime object is renderer-owned implementation a C caller can neither construct nor call into, so what crosses is the fact it can act on, and the clone contract is then asserted as a **relationship** between source and clone rather than as a constant. The three `EffectParameter` `const` overloads are re-approvals -- the routes that answer their non-const twins answer them, exactly as the `EffectPass` annotation pair was already approved -- because C has no second spelling of the same read. The two reflected constructors follow `CBIND-051C` a fourth time and become additive siblings, `cna_effect_technique_create_reflected_ext` and `cna_effect_pass_create_indexed_ext`, rather than growing a published signature; both new arguments read back, and the technique's default-pass flag is proved by pass count rather than by trusting it. **One owner decision, ruled on 2026-08-17:** `EffectPass`'s `passIndex` was private with no accessor and unreachable from C -- `Apply()` forwards it only through an owner an ownerless C-created pass never has -- so the row could only have been a partial. The owner chose instead to add the public `EffectPass::getIndexInternal()` that `EffectTechnique` already had, which is the asymmetry the FX work left behind; that is one additive public C++ symbol outside `modules/c-api/`, with its own canonical GTest coverage, and it makes the row fully bound with the partial count unchanged at 12. Five routes, one canonical accessor; the ABI change is purely additive (5 exports, nothing renamed or relaid out). **The matrix is closed: 6,296 implemented, 12 approved partial, 0 planned, 386 not applicable, and `RELEASE_GATE.md` reads ready again** -- the gate having fired in *both* directions across this pair of slices, refusing a recorded-met criterion that had regressed and then refusing a recorded-not-met one that had quietly become met. One honest gap recorded rather than papered over: **no tree this campaign builds advertises `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`**, so the accepting path of `cna_effect_create_compiled` is never taken and `cna_effect_get_is_compiled_ext` is proved only on its false branch. 81/81 in all four trees. |
 
 
 
@@ -645,9 +648,10 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-15, after `CBIND-037D1`):** 414 headers / 6,415 symbols —
-**4,844 implemented, 30 partial, 1,362 planned, 179 not applicable.**
+**Snapshot (2026-08-17, after `CBIND-052B`):** 420 headers / 6,694 symbols —
+**6,296 implemented, 12 approved partial, 0 planned, 386 not applicable.**
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
+The release gate reads **ready**.
 
 ### What is closed
 
@@ -663,8 +667,19 @@ Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --
 
 ### What remains
 
-**Nothing.** Every task in this plan is ✅ as of 2026-08-16. The table below is kept as the order
-the work was done in rather than as a queue:
+**Nothing, as of `CBIND-052B` on 2026-08-17** — with the caveat below, which matters more than the
+word "nothing". The branch caught up with `next` again, 128 commits of compiled Effect Framework
+work and the IGL renderer, and that reopened the coverage matrix for the third time at **12 planned
+rows**. `CBIND-052A` closed 3 and repaired the two tests the merge had invalidated; `CBIND-052B`
+closed the other 9. The matrix is closed and `RELEASE_GATE.md` reads **ready**.
+
+**Expect this to keep happening, and do not read a closed matrix as a finished one.** Three merges
+have now each reopened it, and the pattern is stable: this plan's queue empties, the branch merges,
+and the tracked surface grows. The standing work is not "close the matrix" but "reconcile after
+each merge" — start every context by running `python3 tools/c-api/generate_coverage_inventory.py
+--check`, because a stale inventory is the first symptom every time.
+
+The table below is otherwise kept as the order the work was done in rather than as a queue:
 
 | Order | Task | Status | Note |
 |---:|---|---|---|
@@ -677,7 +692,8 @@ the work was done in rather than as a queue:
 | — | `CBIND-042B` define the experimental release gate | ✅ | ten criteria, eight measured met, two blocked on owner decisions; verdict is NOT READY and correctly so |
 | — | `CBIND-045` ship the native libraries CNA builds | ✅ | owner ruled yes on 2026-08-16; the package needs no environment variable at all |
 | — | `CBIND-046` offer a static configuration | ✅ | owner ruled yes on 2026-08-16; the archive publishes the same 2,720 names the shared library does, or the build fails |
-| — | `CBIND-044` close the public API coverage matrix | ✅ | closed 2026-08-16 with the owner's approval of the twelve remaining limitations; **nothing in this plan is open** |
+| — | `CBIND-044` close the public API coverage matrix | ✅ | closed 2026-08-16 with the owner's approval of the twelve remaining limitations |
+| — | `CBIND-052B` bind the compiled-effect additions to the Effect object graph | ✅ | the 9 rows `CBIND-052A` left; closed 2026-08-17, and it found that the C adapter's `Clone()` override was silently dropping a compiled effect's runtime |
 
 `CBIND-043` is done — the matrix is a gate in both CTest and CI, so an unmapped public symbol now
 fails a build rather than merely showing up in a report.
@@ -1133,21 +1149,54 @@ every published gamer is. The snapshot is now 5,982 implemented, 32 partial, 83 
 applicable. CBIND-037G7 then completes the avatar surfaces and **closes the campaign**:
 the snapshot is 6,063 implemented, 32 partial, **0 planned** and 320 not applicable. Every
 public/protected declaration the inventory tracks is now either mapped, partially mapped with the
-subset named, or explicitly recorded as having no C form with the reason.
+subset named, or explicitly recorded as having no C form with the reason. CBIND-052A then reconciles
+the branch with the compiled-effect and IGL merges: it binds the `IGL` and `PIXIJS` renderer
+identities and the `CompiledEffects` capability, publishes a `_MAXIMUM` for both identity ranges so
+they can be walked rather than remembered, and turns on the strict warnings the adapter library --
+alone among this module's targets -- had never had. That last part is what found `TINYGL`: a
+renderer with no C constant at all, recorded `implemented` because CBIND-050's approvals were seeded
+from a tree that already believed it. The snapshot is 6,286 implemented, 12 approved partial, 9
+planned and 386 not applicable, and those 9 -- the Effect object graph the compiled-effect work
+reshaped -- are CBIND-052B's. CBIND-052B then closes them, and the row that mattered was a
+re-approval rather than a route: Clone() and OnApply() stopped being pure virtual, which made the C
+adapter's Clone() override silently drop a compiled effect's runtime and parameter values. The
+snapshot is 6,296 implemented, 12 approved partial, 0 planned and 386 not applicable, and the
+release gate reads ready.
 
-## Handoff for the next context / Claude Code (2026-08-16)
+## Handoff for the next context / Claude Code (2026-08-17)
 
 Read *Current status* above first: it carries the snapshot, what is closed, and the ordered list of
 what remains. This section carries only what a fresh context cannot infer from the plan.
 
-### Where things stand
+### Where things stand (2026-08-17, after `CBIND-052A`)
 
-- Branch: `feature/binding`. `CBIND-039` is the last task completed. The `CBIND-037` campaign is
-  closed — the inventory has **no planned row left**, 6,063 implemented, 32 partial, 0 planned, 320
-  not applicable — and Phase B7 hardening is under way: `CBIND-038` and `CBIND-039` are both ✅.
-- **Next task:** `CBIND-042B`, the experimental release gate itself. Every input it needs now
+- Branch: `feature/binding`, at the same commit as `next` and `origin/next`. `CBIND-052A` is the
+  last task completed and it lands green: **81/81 in all four trees**, sanitizer included, and
+  every build-free gate (`coverage`, `limitations`, `release_gate`, `compatibility`,
+  `abi_baseline --check` header half) passing.
+- **No task is open.** `CBIND-052B` closed the matrix again on 2026-08-17. The next real work is
+  whatever the *next* merge of `next` reopens — start by running
+  `python3 tools/c-api/generate_coverage_inventory.py --check`, and read *What remains* above for
+  why that is the standing first step rather than a formality. `next` had already advanced 4
+  commits past this branch when `CBIND-052B` landed (`05a9eab06`), none of them touching
+  `modules/c-api/`, `tools/c-api/` or `docs/c-api/`.
+- **The published export count was stale in three documents** — `ABI_VERSIONING.md`,
+  `CONSUMING.md` and `LIMITATIONS.md` all said **2,720** where `abi_baseline.json` measured
+  **2,838**. Corrected on 2026-08-17 in its own commit, deliberately separate from `CBIND-052A`/`B`
+  because it predates them. **Nothing prevents it happening again:** these are prose claims and no
+  gate reads them, while every count in the same sentence's neighbourhood (`COVERAGE.md`'s
+  snapshot, `LIMITATIONS.md`'s group counts, `RELEASE_GATE.md`'s evidence) is generated. A checker
+  that holds the three documents' export figure against `abi_baseline.json` is the obvious fix and
+  is not yet written.
+- **`abi_baseline.json` records no `CNA_*_FLAG_*` constant at all**, because the tool reads simple
+  integer constants and these are shift expressions; `CNA_GRAPHICS_CAPABILITY_FLAG_COMPILED_EFFECTS`
+  is pinned by the `AbiHeaderC.c`/`AbiHeaderCpp.cpp` assertion walls instead. Left as it stands:
+  it is a tooling gap, not a wrong claim.
+- Historical, kept because the reasoning still applies: **the experimental release gate**
+  (`CBIND-042B`) was built this way, and a later gate should be built the same way. Every input it
+  needs now
   exists and should be **pointed at rather than rebuilt**: `COMPATIBILITY.md` (23 toolchain cells),
-  `abi_baseline.json` (layouts and 2,720 exports), `hello_cna` with `CApi_InstalledConsumer` (a real
+  `abi_baseline.json` (layouts and exports), `hello_cna` with `CApi_InstalledConsumer` (a real
   C application built from outside the tree), `FUZZING.md`, `COVERAGE.md` and now
   `LIMITATIONS.md`. Build it the way this campaign builds every gate — a declaration, a checker,
   `--check` in ctest and CI — and make it fail **in both directions**: a criterion recorded as met
@@ -1193,7 +1242,7 @@ order:
 | `src/CnaCApi<Family>.cpp` | the adapter — 45 files today. Routes go in `extern "C"` scope; helpers in an anonymous namespace above them. |
 | `src/CnaCApiDetail.hpp` | shared substrate: the `ObjectKind` handle-kind enum (**next free number is 91**), the `HandleRegistry`, `CallWithExceptionBarrier` and its 18 exception arms, `CopyStringView`, `Fail`. A new handle kind or a new canonical exception conversion lands here. |
 | `src/CnaCApi<Family>Detail.hpp` | cross-file borrow helpers, when one family's adapter must reach another's resource (`CnaCApiGraphicsDetail.hpp` exposes `GetOwnedTexture2D`, `CnaCApiNetDetail.hpp` exposes `BorrowPacketReader`, …). |
-| `CMakeLists.txt` | the `cna_c_api` source list, and the per-test executable + `add_test` block (59 tests today). |
+| `CMakeLists.txt` | the `cna_c_api` source list, and the per-test executable + `add_test` block (81 tests today). Since `CBIND-052A` the **library itself** also carries `-Wall -Wextra -Werror`, which the test targets always had and it never did; an exhaustive `switch` over a CNA enumeration is therefore a build gate now, not a suggestion. |
 | `tests/pure_c/<Family>Smoke.c` | the strict-C17 behavior test. 55 files; prefer extending the family's existing one over adding a target — but a family with its own adapter file has earned its own test target, as haptics did. |
 | `tests/pure_c/AbiHeaderC.c` and `tests/cpp/AbiHeaderCpp.cpp` | freeze every new identity value and every new struct size/alignment/offset. Both must compile — the surface has to be valid C17 *and* C++23. |
 | `tests/cpp/BoundaryDetailTest.cpp` | only when a slice adds an exception-firewall arm; returns a distinct code per case. |
@@ -1290,18 +1339,83 @@ unrelated modules and examples. Then `ctest --test-dir modules/c-api`. Cap paral
 | `cmake-build-binding-software` | `SOFTWARE` | the only tree that can supply real 3D pixel evidence |
 | `cmake-build-binding-asan` | `SOFTWARE`, `CNA_CNAEXT=ON`, `CNA_SANITIZE=address,undefined` | verification only |
 
-All four run the same 59 C API tests green. The sanitizer tree runs with
+All four run the same 81 C API tests green. The sanitizer tree runs with
 `ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1` — stricter than the
 `detect_leaks=0` the CBIND-035B–E slices used; **do not weaken it back**. Every tree needs
 `-DCNA_BUILD_C_API=ON`, which defaults to OFF: a freshly configured tree silently has no
 `modules/c-api` build directory at all without it.
 
+**A slice that changes a canonical C++ header must also run the C++ suite**, which these trees do
+not build by default. `CBIND-052B` added one public accessor to `modules/graphics` and verified it
+with `cmake --build <tree> --target CnaTests -j3`, then
+`SDL_VIDEODRIVER=dummy <tree>/CnaTests --gtest_filter='EffectPassTest.*'` **run from the repository
+root**, because the suite's fixtures are resolved relative to the working directory. The binary and
+its object tree are ~1.1 GB, so they are deleted afterwards (`rm -f <tree>/CnaTests &&
+rm -rf <tree>/CMakeFiles/CnaTests.dir`) and the C API suite re-run to confirm nothing else depended
+on them. **Deleting the `.dir` takes make's generated `build.make` with it**, so the next attempt to
+build that target fails with `No rule to make target 'CMakeFiles/CnaTests.dir/build.make'` until
+`cmake <tree>` regenerates it -- run the reconfigure first rather than concluding the tree is
+broken. Run the suite on a **virtual display** (`Xvfb :95 -screen 0 1280x1024x24`, then
+`env -u SDL_VIDEODRIVER DISPLAY=:95 <tree>/CnaTests`) rather than under
+`SDL_VIDEODRIVER=dummy`: the dummy driver skips a further handful of SDL3 platform and graphics
+tests, and the repository already has a `CNA_TEST_DISPLAY` cache variable for the same purpose.
+Displays `:99` and `:97` are usually already taken by other sessions -- pick a free one instead of
+reusing theirs. Note the three `GltfRenderer*Policy` inventory audits that fail in a full run at this
+commit: they are pre-existing, they predate this campaign's slices, and `next`'s `09786205e` already
+fixes them on the other side of the merge.
+
 **Never branch a test on a renderer identity.** Probe the capability or the actual result, so a new
 backend needs no test edits. `CApi_TextureSmoke`, `CApi_TextureVolumeSmoke` and `CApi_LifecycleSmoke`
 were rewritten once for exactly this reason.
 
+### How to tell a closed matrix from a matrix that merely passes `--check`
+
+`--check` only proves `COVERAGE.md` matches what the generator produces from the rules. It cannot
+see a rule whose `approved_symbols` names something with no C route behind it — that is exactly how
+`TINYGL` read `implemented` with test evidence for two merges. After `CBIND-052B` closed the matrix
+on 2026-08-17 the closure was audited rather than assumed, in three ways worth repeating whenever
+someone needs to trust a "0 planned":
+
+1. **Count C identities against C++ enumerators, per family.** Group the implemented `enum-value`
+   rows by their enum, read the `CNA_XXX_*` glob out of each row's mapping text, and count the
+   matching `#define`s in `modules/c-api/include`. Exclude only `_MAXIMUM`, `_ALL` and `_COUNT` —
+   `_NONE`, `_UNKNOWN` and `_INVALID` are real enumerators and excluding them manufactures an
+   off-by-one in a dozen families. Result: no family publishes fewer C constants than CNA declares
+   enumerators.
+2. **Rely on the compiler for the outward direction.** Since `CBIND-052A` the library builds with
+   `-Werror=switch`, so any C++→C switch missing an enumerator fails the build. That is only worth
+   anything if no such switch carries a `default:` to swallow it — 29 defaulted switches in the
+   adapter return a `CNA_` constant, and every one of them switches on a **C** identity, where a
+   default is correct. Two `std::array<std::pair<CNA_…>>` tables exist; `RendererIdentities` carries
+   the `consteval` count gate, and the fallback-reason table is checked by (1).
+3. **Check that the routes the rules name exist.** Extract every `cna_[a-z0-9_]+` from the
+   `mapping` and `tests` text of every `implemented` rule and hold it against
+   `abi_baseline.json`'s export list. Ignore trailing-underscore family prefixes (`cna_vector3_`)
+   and `cna_c_api_*` test names. This found the campaign's two broken Doxygen cross-references —
+   `cna_gamepad_get_battery_level_ext` and `cna_graphics_device_get_info`, neither of which has
+   ever existed — and after those were repaired all 484 named routes resolve.
+
+None of the three is wired into a gate. They are cheap enough to re-run by hand, and (3) in
+particular is the one that would catch a rule citing a route that a later rename removed.
+
 ### Traps this campaign actually hit
 
+- **A green coverage matrix is not evidence that a mapping exists.** `CBIND-050` pinned every rule
+  to reviewed symbol IDs, seeded from the pre-merge tree so that merge's 121 unreviewed rows could
+  not be blessed — the right call, and it also froze whatever the pre-merge tree already believed.
+  `TINYGL` had been sitting there as `implemented` with test evidence and **no `CNA_*` constant
+  anywhere**. Seeding cannot tell a reviewed claim from an inherited one, so when a slice touches
+  an identity family, `grep` the C constant rather than trusting its row.
+- **The four verification trees can be stale in a way that reads as green.** Three of them were
+  built before the merge commit even existed and passed 81/81 on the *old* library; only the tree
+  actually rebuilt showed the two failures HEAD had introduced. Compare each tree's
+  `libcna_c_api.so` mtime against `git log -1 --format=%ci` before believing a suite, and never
+  conclude "pre-existing" from a green run in a tree you did not rebuild.
+- **Warning flags applied per target miss the target that matters.**
+  `cna_c_api_enable_strict_warnings` was called on all 59 test executables and never on
+  `cna_c_api` itself, so the shipped library compiled without `-Wall`. GCC had been printing
+  `enumeration value 'TinyGL' not handled in switch` the whole time. When a helper exists to
+  harden targets, check what it is *not* applied to.
 - **Coverage rules on free operators need a `signature_regex`.** `^CNA::Input::operator\|$` with no
   signature also swallowed `HapticFeatureEXT`'s five operators and claimed haptics coverage that
   does not exist. Caught only by comparing the implemented delta against the slice's row count —
