@@ -309,6 +309,69 @@ Ambient occlusion needs one thing the pipeline cannot do for a game: scene depth
 normals, which means drawing the geometry a second time with a different effect. Supply them with
 `setDepthNormalInputs()`; without them SSAO renders an unoccluded frame rather than failing.
 
+### The depth/normal prepass, and what a game has to do
+
+`plan_modern.md` `MOD-500`–`MOD-507`, `MOD-529`. Screen-space effects need to know the *shape* of
+the scene, not its colour. `DepthNormalPrepass` produces the two images that describe it — how far
+each pixel is, and which way it faces — and the app drives it, the same way it drives `ShadowMap`.
+
+```cpp
+CNA::Graphics::DepthNormalPrepass prepass(device, width, height);
+
+for (int pass = 0; pass < prepass.getPassCount(); ++pass)
+{
+    prepass.begin(pass, view, projection, nearPlane, farPlane);
+    DrawSceneGeometry(prepass.getPrepassEffect());        // skinned meshes:
+    DrawSkinnedGeometry(prepass.getSkinnedPrepassEffect());
+    prepass.end();
+}
+
+pipeline.setDepthNormalInputs(prepass.getDepthTexture(), prepass.getNormalTexture());
+```
+
+**Why a prepass and not the depth attachment** (`MOD-500`). Sampling the depth buffer the scene has
+already written would be free, and CNA cannot do it portably: several renderers never expose their
+depth attachment as a texture, the ones that do disagree about its precision and about whether it is
+readable while still bound, and the value in it is non-linear differently per API. Drawing the
+geometry a second time costs a pass and is identical everywhere — the trade this layer makes
+throughout.
+
+**What a game must do, and what happens if it does not.** SSAO reads what the pipeline was given. If
+`setDepthNormalInputs` was never called, or was given nulls, `SsaoPass` reports
+`isSupported() == false` and the chain copies its input through: **the frame renders, without
+ambient occlusion**. It does not throw, and it does not draw a black screen. That is deliberate and
+matches every other pass in the layer — but it also means a missing prepass looks like "SSAO is not
+doing much" rather than like an error, so an app that expects AO and does not see it should check
+here first.
+
+**The loop is not decoration.** With `MultipleRenderTargets` the prepass writes both images in one
+pass and `getPassCount()` is 1; without, it writes them in two passes over the same geometry and the
+count is 2. Writing the loop is what makes an app correct on both, and on renderers that have MRT it
+costs one iteration.
+
+**The encodings**, both stated because a consumer has to match them exactly:
+
+| Image | Encoding | Cleared to |
+|---|---|---|
+| Depth | Linear view depth, normalised by the far plane, in `HalfSingle` — or packed across the four channels of a `Color` target where float targets are missing (`MOD-507`) | white: "nothing here, infinitely far" |
+| Normals | View-space, `n * 0.5 + 0.5`, in `Color` | `(128, 128, 255)`: facing the camera |
+
+Both clear values are chosen so that an *unwritten* texel is harmless. Black depth would make every
+empty pixel the nearest possible occluder and darken the whole frame; a black normal decodes to
+`(-1,-1,-1)`, a direction no visible surface has, and SSAO reading it manufactures occlusion out of
+empty space.
+
+**Consumers must not write the decoder themselves** (`MOD-504`). `getDepthDecodeGlsl(packed)` returns
+the GLSL that reads this prepass: `cnaDecodeLinearDepth(vec4)` and
+`cnaViewPositionFromDepth(vec2, float, mat4)`. The encoding and its inverse have to agree, and two
+copies that happen to agree today are one edit away from an SSAO that darkens the wrong pixels.
+
+Two limits worth knowing. Packed depth reaches only *one texel short of* 1.0 — `fract(1.0)` is zero,
+so an unclamped far-plane depth would pack to all-zeroes and read back as the nearest possible
+surface, inverting the most common value in the buffer. And the normal is transformed by the upper
+3×3 of the world matrix rather than by its inverse transpose, so **non-uniform scale skews it**;
+correcting that needs an inverse per draw that nothing else in this layer pays for.
+
 ### Bloom: what the numbers mean, and what they do not
 
 `plan_modern.md` `MOD-417`, `MOD-405`, `MOD-409`.

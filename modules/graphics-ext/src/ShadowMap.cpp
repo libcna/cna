@@ -269,20 +269,37 @@ void main() {
     {
         if (passOpen_)
             throw std::logic_error("CNA::Graphics::ShadowMap::begin: a shadow pass is already open");
-        passOpen_ = true;
 
         const Matrix view       = computeLightView(light, sceneBounds);
         const Matrix projection = computeLightProjection(view, sceneBounds);
         lightViewProjection_    = view * projection;
 
-        device_.SetRenderTarget(target_.get());
-        // Cleared to white, meaning "nothing here, and it is infinitely far away". Clearing to
-        // black would mean every unwritten texel reads as the nearest possible occluder, and the
-        // whole scene would be in shadow wherever no caster was drawn.
-        device_.Clear(Color::White);
+        // The pass counts as open only once the target is bound and cleared -- the same correction
+        // CubeShadowMap needed (plan_modern.md MOD-1697). Marking it open first meant that a
+        // renderer refusing the bind left every later begin() reporting "already open", turning one
+        // unsupported pass into an object that could never be used again.
+        try
+        {
+            device_.SetRenderTarget(target_.get());
+            // Cleared to white, meaning "nothing here, and it is infinitely far away". Clearing to
+            // black would mean every unwritten texel reads as the nearest possible occluder, and
+            // the whole scene would be in shadow wherever no caster was drawn.
+            device_.Clear(Color::White);
 
-        if (supported_)
-            applyCaster();
+            if (supported_)
+            {
+                passOpen_ = true;   // applyCaster refuses unless a pass is open
+                applyCaster();
+            }
+        }
+        catch (...)
+        {
+            passOpen_ = false;
+            try { device_.SetRenderTarget(nullptr); } catch (...) { /* best-effort cleanup */ }
+            throw;
+        }
+
+        passOpen_ = true;
     }
 
     void ShadowMap::applyCaster()

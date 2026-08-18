@@ -44,6 +44,7 @@
 
 // ---- Post-process infrastructure -----------------------------------------------------------
 #include "CNA/Graphics/BlitPass.hpp"
+#include "CNA/Graphics/DepthNormalPrepass.hpp"
 #include "CNA/Graphics/EffectPass.hpp"
 #include "CNA/Graphics/BloomPass.hpp"
 #include "CNA/Graphics/FullscreenPass.hpp"
