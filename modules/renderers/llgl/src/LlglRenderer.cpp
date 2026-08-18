@@ -2,7 +2,6 @@
 #include "CNA/Internal/Renderers/Llgl/LlglRenderer.hpp"
 
 #include "CNA/Internal/Renderers/Common/NotYetImplemented.hpp"
-#include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
@@ -1578,6 +1577,10 @@ namespace CNA::Internal::Renderers::Llgl
                 addAttribute("normal", LLGL::Format::RGB32Float, 3, 12);
                 addAttribute("tangent", LLGL::Format::RGBA32Float, 6, 24);
                 addAttribute("texCoord", LLGL::Format::RG32Float, 2, 40);
+                addAttribute("texCoord1", LLGL::Format::RG32Float, 7, 48);
+                // plan_gltf.md GLTF-462/GLTF-465: the packed COLOR_0 glTF 3.9.2 makes a multiplier
+                // on base colour. Location 1 is this renderer's colour slot.
+                addAttribute("color", LLGL::Format::RGBA8UNorm, 1, 56);
                 break;
             case 68:
                 addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
@@ -1586,6 +1589,27 @@ namespace CNA::Internal::Renderers::Llgl
                 addAttribute("texCoord", LLGL::Format::RG32Float, 2, 40);
                 addAttribute("aBoneWeights", LLGL::Format::RGBA32Float, 4, 48);
                 addAttribute("aBoneIndices", LLGL::Format::RGBA8UInt, 5, 64);
+                break;
+            // GLTF-182/183: the skinned PBR record with TEXCOORD_1 appended at 68.
+            case 76:
+                addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
+                addAttribute("normal", LLGL::Format::RGB32Float, 3, 12);
+                addAttribute("tangent", LLGL::Format::RGBA32Float, 6, 24);
+                addAttribute("texCoord", LLGL::Format::RG32Float, 2, 40);
+                addAttribute("aBoneWeights", LLGL::Format::RGBA32Float, 4, 48);
+                addAttribute("aBoneIndices", LLGL::Format::RGBA8UInt, 5, 64);
+                addAttribute("texCoord1", LLGL::Format::RG32Float, 7, 68);
+                break;
+            // plan_gltf.md GLTF-463: stride 76's record with the packed COLOR_0 appended at 76.
+            case 80:
+                addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
+                addAttribute("normal", LLGL::Format::RGB32Float, 3, 12);
+                addAttribute("tangent", LLGL::Format::RGBA32Float, 6, 24);
+                addAttribute("texCoord", LLGL::Format::RG32Float, 2, 40);
+                addAttribute("aBoneWeights", LLGL::Format::RGBA32Float, 4, 48);
+                addAttribute("aBoneIndices", LLGL::Format::RGBA8UInt, 5, 64);
+                addAttribute("texCoord1", LLGL::Format::RG32Float, 7, 68);
+                addAttribute("color", LLGL::Format::RGBA8UNorm, 1, 76);
                 break;
             default:
                 break;
@@ -2780,13 +2804,11 @@ namespace CNA::Internal::Renderers::Llgl
                 "texture coordinates, normals, and a tangent, and this one is missing at least one");
         }
 
-        std::vector<LLGL::VertexAttribute> shaderAttributes;
-        for (const LLGL::VertexAttribute& attribute : attributes)
-        {
-            if (attribute.location == 1) // vertex colour: this shader never reads one
-                continue;
-            shaderAttributes.push_back(attribute);
-        }
+        // plan_gltf.md GLTF-465: the colour attribute used to be stripped here, because this shader
+        // "never reads one". It does now -- glTF 3.9.2 makes COLOR_0 a multiplier on base colour --
+        // and the dual-UV variant is exactly the one whose stride (60) always carries the slot, so
+        // the attribute list is passed through unchanged.
+        const std::vector<LLGL::VertexAttribute>& shaderAttributes = attributes;
 
         const LLGL::RenderingCapabilities& caps = renderer_->GetRenderingCaps();
 
@@ -2860,13 +2882,14 @@ namespace CNA::Internal::Renderers::Llgl
                 "missing at least one");
         }
 
-        std::vector<LLGL::VertexAttribute> shaderAttributes;
+        // plan_gltf.md GLTF-463/GLTF-465: unlike the rigid family, the skinned one has a dual-UV
+        // stride WITHOUT a colour (76) and one WITH (80), so the colour is a third variant rather
+        // than a property of dual-UV -- and the attribute list is passed through either way, since a
+        // shader input with no matching vertex attribute is invalid on the Vulkan module.
+        bool hasVertexColour = false;
         for (const LLGL::VertexAttribute& attribute : attributes)
-        {
-            if (attribute.location == 1) // vertex colour: this shader never reads one
-                continue;
-            shaderAttributes.push_back(attribute);
-        }
+            if (attribute.location == 1) hasVertexColour = true;
+        const std::vector<LLGL::VertexAttribute>& shaderAttributes = attributes;
 
         const LLGL::RenderingCapabilities& caps = renderer_->GetRenderingCaps();
 
@@ -2874,17 +2897,20 @@ namespace CNA::Internal::Renderers::Llgl
         vertexDesc.type = LLGL::ShaderType::Vertex;
         if (SupportsShadingLanguage(caps, LLGL::ShadingLanguage::GLSL))
         {
-            vertexDesc.source = hasTexCoord1 ? Shaders::kPbr3dSkinnedDualUvVertGlsl
-                                             : Shaders::kPbr3dSkinnedVertGlsl;
+            vertexDesc.source = hasVertexColour ? Shaders::kPbr3dSkinnedDualUvColorVertGlsl
+                              : hasTexCoord1    ? Shaders::kPbr3dSkinnedDualUvVertGlsl
+                                                : Shaders::kPbr3dSkinnedVertGlsl;
             vertexDesc.sourceType = LLGL::ShaderSourceType::CodeString;
         }
         else
         {
             vertexDesc.source = reinterpret_cast<const char*>(
-                hasTexCoord1 ? Shaders::kPbr3dSkinnedDualUvVertSpv
-                             : Shaders::kPbr3dSkinnedVertSpv);
-            vertexDesc.sourceSize = hasTexCoord1 ? sizeof(Shaders::kPbr3dSkinnedDualUvVertSpv)
-                                                 : sizeof(Shaders::kPbr3dSkinnedVertSpv);
+                hasVertexColour ? Shaders::kPbr3dSkinnedDualUvColorVertSpv
+              : hasTexCoord1    ? Shaders::kPbr3dSkinnedDualUvVertSpv
+                                : Shaders::kPbr3dSkinnedVertSpv);
+            vertexDesc.sourceSize = hasVertexColour ? sizeof(Shaders::kPbr3dSkinnedDualUvColorVertSpv)
+                                  : hasTexCoord1    ? sizeof(Shaders::kPbr3dSkinnedDualUvVertSpv)
+                                                    : sizeof(Shaders::kPbr3dSkinnedVertSpv);
             vertexDesc.sourceType = LLGL::ShaderSourceType::BinaryBuffer;
             vertexDesc.entryPoint = "main";
         }
@@ -3462,6 +3488,10 @@ namespace CNA::Internal::Renderers::Llgl
                     params.pbrTextureTransformRows[row][component];
         uniforms[132] = static_cast<float>(params.pbrTextureCoordinateSetMask & 0x7fu);
         uniforms[133] = params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f;
+        // plan_gltf.md GLTF-465: specularState.z is the effect's own VertexColorEnabledEXT -- the
+        // gate the PBR fragment stage multiplies COLOR_0 under. It shares this vec4 with the
+        // TEXCOORD_1 selector mask and the specular-colour decode flag, both already packed here.
+        uniforms[134] = params.vertexColorEnabled ? 1.0f : 0.0f;
         for (int row = 0; row < 4; ++row)
             for (int component = 0; component < 4; ++component)
                 uniforms[136 + row * 4 + component] =
@@ -3521,14 +3551,6 @@ namespace CNA::Internal::Renderers::Llgl
     {
         if (primitiveCount <= 0)
             return;
-
-        // plan_gltf.md GLTF-465: this renderer's PBR fragment shader reads no colour attribute, and
-        // its stride-60 vertex-format row would otherwise accept the draw and render it with the
-        // opaque-white identity substituted for the authored COLOR_0. Refused by name instead.
-        if (params != nullptr)
-        {
-            RequireVertexColourPbrSupportEXT(*params, vertexBuffer.GetStride(), "LLGL");
-        }
 
         // Real XNA MRT is meaningfully useful/testable only through a custom ShaderEffect with
         // multiple layout(location=N) out fragment outputs drawn via SpriteBatch -- see

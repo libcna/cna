@@ -11,12 +11,12 @@ session needs to start work without re-deriving the state.
 - **Working document:** `plan_gltf.md`, **471** numbered rows. **Five remain open: `GLTF-344` and
   `GLTF-465` (both `✅/⬜`), and `GLTF-459`, `GLTF-460`, `GLTF-464` (`⬜`).** `GLTF-463` closed on
   2026-08-17. `GLTF-465` is half closed: **no renderer draws a `COLOR_0` asset with different core
-  semantics any more** (eleven apply the product, six refuse the draw), and what remains is
+  semantics any more** (twelve apply the product, five refuse the draw), and what remains is
   implementing it in those eight. §27.2 carries a row-by-row ROBUST assessment; that section, not this
   file, is the record of what the milestone still needs.
 
 - **The milestone in force is `GLTF CORE 2.0 CORRECT` (§27.1.3, 2026-08-18), and it is stated with
-  its renderer coverage beside it: `PBR renderer coverage: 11/17 apply COLOR_0, 6 refuse such a draw by
+  its renderer coverage beside it: `PBR renderer coverage: 12/17 apply COLOR_0, 5 refuse such a draw by
   name`.** The name was written on 2026-08-17, rejected by the owner the next day, held for a day as
   `GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT`, and taken back only when the owner's own condition was
   met. **Read §27.1.3 before §27.1, and §27.1.2 before either.**
@@ -260,32 +260,34 @@ found by *running the thing that was said to be impossible* rather than by reaso
 
 Rewritten 2026-08-17 after the re-audit. Ordered by cost, cheapest first.
 
-1. **`GLTF-465`: carry `COLOR_0` into the remaining seven PBR renderers' fragment paths.** Ten are
-   done (EasyGL, SOFTWARE, IGL, OpenGL 2, OpenGL 4, Vulkan, DirectX 11, DirectX 12, Magnum, Diligent)
-   and the other seven refuse such a draw, so nothing renders wrongly meanwhile — this is coverage
-   work now, not correctness work. **`llgl` is next, and it needs a decision rather than an
-   implementation**: its `.glsl` sources are easy, but the committed SPIR-V was produced by a glslang
-   this environment cannot reproduce, so regenerating rewrites **every** blob in a renderer with no
-   pixel coverage here. Either find that glslang, or take the all-blob refresh deliberately and say so
-   in the commit. Then `directx9`, which needs the pinned native `d3dcompiler_47.dll` Wine prefix
-   (`~/.wine-cna-d3d9-spike`, SHA-256 gated). `metal`, `sdl-gpu`, `webgpu` and `wicked` need a
-   stride-60/80 layout first, which is a bigger job than the product itself.
+1. **`GLTF-465`: carry `COLOR_0` into the remaining five PBR renderers.** Twelve are done (EasyGL,
+   SOFTWARE, IGL, OpenGL 2, OpenGL 4, Vulkan, DirectX 11, DirectX 12, Magnum, Diligent, Bgfx, LLGL)
+   and the other five refuse such a draw, so nothing renders wrongly meanwhile — coverage work, not
+   correctness work. What is left is genuinely harder than what is done: `directx9` needs the pinned
+   native `d3dcompiler_47.dll` Wine prefix (`~/.wine-cna-d3d9-spike`, SHA-256 gated) before its
+   `vs_3_0`/`ps_3_0` bytecode can be regenerated, and `metal`, `sdl-gpu`, `webgpu` and `wicked` have
+   **no stride-60/80 vertex layout at all**, so each needs a layout, a pipeline variant and a shader
+   change rather than just the product. `metal` additionally cannot be compiled anywhere this
+   repository runs.
 
-   **`bgfx` is done and its recipe is worth reusing**: `cmake -S . -B cmake-build-multi
-   -DCNA_BGFX_BUILD_SHADERC=ON -DBGFX_BUILD_TOOLS=ON` then `cmake --build cmake-build-multi --target
-   shaderc` builds the tool (~15 min, mostly glslang/SPIRV-Tools), and
-   `modules/renderers/bgfx/src/shaders/compile_shaders.py <shaderc> ~/deps/bgfx-cmake/bgfx/src`
-   regenerates the header. That rebuilt `shaderc` reproduces every committed blob byte-for-byte, so
-   the diff was exactly the 12 blobs of the three PBR shaders — which is what a shader-toolchain
-   change should look like.
+   Recipes that worked, in the order they were cheapest:
+   - **Magnum / Diligent** — shaders are generated or template-expanded at runtime, so no offline
+     tool at all. Diligent's per-variant expansion is the pattern to copy: the attribute exists only
+     where the layout supplies it, so there is no unbound-attribute hazard to gate around.
+   - **Bgfx** — `cmake -S . -B cmake-build-multi -DCNA_BGFX_BUILD_SHADERC=ON -DBGFX_BUILD_TOOLS=ON`
+     then `--target shaderc` (~15 min), then
+     `modules/renderers/bgfx/src/shaders/compile_shaders.py <shaderc> ~/deps/bgfx-cmake/bgfx/src`.
+     The rebuilt tool reproduces every committed blob, so the diff was only the 12 PBR ones.
+   - **LLGL** — `compile_shaders.py --glslang /tmp/cna-glslang-tools/usr/bin/glslangValidator`
+     (extracted from the `glslang-tools` package by an earlier session; not on PATH). It reproduces
+     every non-PBR blob byte-for-byte, so the committed header was a **mix**: `plan_llgl.md` records
+     that some shaders were compiled with a scratch libshaderc script when glslang was unavailable,
+     and those are exactly the PBR ones. Only the shaders being changed moved to the documented tool.
 
-   Whichever one you take: implement **both halves** of §3.9.2's product — RGB *and* alpha — and
-   remove that renderer's `RequireVertexColourPbrSupportEXT` call in the same commit, then move its
-   rows in the four inventories. The tests check the halves separately, so a partial implementation
-   fails on the one it missed. Two patterns are already there to copy: Diligent expands a per-variant
-   HLSL template, so the attribute exists only where the layout supplies it (no unbound-attribute
-   hazard at all); Magnum shares one program across a family's two strides and therefore also gates
-   the *uniform* on the stride.
+   Whichever one you take: implement **both halves** of §3.9.2's product — RGB *and* alpha — remove
+   that renderer's `RequireVertexColourPbrSupportEXT` call in the same commit, and move its rows in
+   the four inventories. The tests check the halves separately, so a partial implementation fails on
+   the one it missed.
 
 2. **`GLTF-464`: promote the three inline spec-rule probes to corpus fixtures.** `GLTF-461`'s two and
    `GLTF-468`/`GLTF-470`'s three are conformance statements living as C++ string literals only because
