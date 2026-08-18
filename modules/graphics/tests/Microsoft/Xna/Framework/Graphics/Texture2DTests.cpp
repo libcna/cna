@@ -427,7 +427,10 @@ TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, SingleThrows)
 {
-    if (CNA_RENDERER_IS(Skia))
+    // plan_igl.md IGL-71: IGL promotes Single (and Rg32) after verifying the WHOLE public path --
+    // the typed SetData/GetData overloads, sampling in a real draw and render-target use, on both
+    // of its backends (Igl_PublicSurfaceFormat). Storage alone was deliberately not enough.
+    if (CNA_RENDERER_IS(Skia, Igl))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single));
     }
@@ -572,7 +575,13 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // plan_runtimerenderer.md RTR-P9-4: the Skia-promoted format list, evaluated at runtime so
         // this assertion describes the ACTIVE renderer rather than the build default.
         const bool skia = CNA_RENDERER_IS(Skia);
+        // plan_igl.md IGL-71: IGL's promoted set is deliberately two formats wide, not a mirror of
+        // everything it can store. A format is here only once the whole public path is verified end
+        // to end on both its backends, and only if its texel is a multiple of four bytes -- the
+        // framework's own transfer rule, which ByteEXT, UShortEXT and HalfSingle would break.
+        const bool igl = CNA_RENDERER_IS(Igl);
         const bool supported = format == SurfaceFormat::Color
+            || (igl && (format == SurfaceFormat::Rg32 || format == SurfaceFormat::Single))
             || (skia && (false
             || format == SurfaceFormat::Bgr565
             || format == SurfaceFormat::Bgra5551

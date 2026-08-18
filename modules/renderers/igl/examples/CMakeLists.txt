@@ -229,4 +229,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
         COMMAND cna_test_igl_custom_effect_backend
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
+
+    # IGL-65 follow-up: the conformance pass a SurfaceFormat must survive before this renderer
+    # promotes it to the public XNA texture API -- upload through the typed overload, sampling in a
+    # real draw, readback, and render-target use. Storage alone is what the earlier audit rightly
+    # refused to promote on.
+    cna_igl_test(cna_test_igl_public_surfaceformat igl_public_surfaceformat_test.cpp)
+    cna_register_renderer_test(NAME Igl_PublicSurfaceFormat
+        COMMAND cna_test_igl_public_surfaceformat
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_renderer_test(NAME Igl_PublicSurfaceFormat_Vulkan
+        COMMAND cna_test_igl_public_surfaceformat
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
 endif()

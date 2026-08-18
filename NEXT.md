@@ -135,10 +135,15 @@
 >   described.
 > * **IGL-61/62/63** — occlusion queries, sampler LOD bias and cube-target MSAA are not
 >   implementable at IGL `v1.1.1`; re-verified against the pinned headers rather than restated.
-> * **Non-`Color` surface formats stay out of the public API.** The renderer knows which formats it
->   can genuinely store and refuses the rest by name, but it deliberately answers `Defer` for the
->   supported ones rather than promoting them: promotion is a public-API change that needs
->   per-format verification of upload, sampling *and* readback, and only storage is verified today.
+> * **Non-`Color` surface formats — `Rg32` and `Single` are now public; the rest are not.** The
+>   earlier audit refused to promote anything, for the right reason: it had verified storage, while
+>   promotion promises the whole path. `Igl_PublicSurfaceFormat` supplies the missing two thirds —
+>   upload through the format's own typed overload, sampling in a real draw checked against the
+>   channel semantics the format implies, readback, and render-target use — on both backends, and
+>   only those two formats carry it. `ByteEXT`, `UShortEXT` and `HalfSingle` are storable but stay
+>   deferred on principle: their texels are not a multiple of four bytes, which is the framework's
+>   own transfer rule, so promoting them would pass this gate and fail the next layer. Widening
+>   further is a matter of extending that test, not of relaxing the gate.
 
 ## The 2026-08-17 merge of `next`, and what it exposed
 

@@ -102,6 +102,26 @@ namespace CNA::Internal::Renderers::Igl
     [[nodiscard]] int FormatRowByteCount(int surfaceFormat, int width) noexcept;
 
     /**
+     * @brief Whether this renderer promotes @p surfaceFormat to the PUBLIC XNA texture API.
+     *
+     * A strictly narrower question than @ref IsSupportedSurfaceFormat, which asks only whether IGL
+     * can store the format. Promotion is a public-API change: it makes `Texture2D` accept the
+     * format, and with it every framework path that follows -- the typed `SetData`/`GetData`
+     * overloads, the four-byte colour-transfer rule, mip generation, render-target use. So a format
+     * is promoted only when the WHOLE of that path is verified end to end (upload, sampling in a
+     * real draw, and readback) on BOTH backends, which is what `Igl_PublicSurfaceFormat` does.
+     *
+     * Storage alone is not enough, and neither is a texel this renderer happens to handle: the
+     * framework's own transfer rule is "a texel of a multiple of four bytes", so a 1- or 2-byte
+     * format would be admitted by this gate and then mishandled by the layer above it. Those stay
+     * deferred to the framework's `Color`-only rule rather than being half-promoted.
+     *
+     * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.
+     * @return True if the public API should accept this format on this renderer.
+     */
+    [[nodiscard]] bool IsPubliclyPromotedSurfaceFormat(int surfaceFormat) noexcept;
+
+    /**
      * @brief Reverses the row order of a tightly packed region in place.
      *
      * IGL's Vulkan `copyBytesColorAttachment` passes `flipImageVertical = true` to

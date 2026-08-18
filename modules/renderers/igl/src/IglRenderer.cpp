@@ -1393,17 +1393,29 @@ namespace CNA::Internal::Renderers::Igl
 
     RendererFormatVerdict IglRenderer::ClassifySurfaceFormatEXT(const int surfaceFormat) const
     {
-        // Narrowing only (see the declaration's own comment). Without this, a format IGL cannot
-        // represent reached ToIglSurfaceFormat and used to be silently substituted with RGBA8 --
-        // a texture of a different texel size and channel order than the caller asked for.
-        return IsSupportedSurfaceFormat(surfaceFormat) ? RendererFormatVerdict::Defer
-                                                       : RendererFormatVerdict::Unsupported;
+        // Three-way, and each answer means something different. Unsupported: IGL cannot represent
+        // this format at all, so refuse by name rather than let it reach ToIglSurfaceFormat and be
+        // silently substituted with RGBA8 -- a texture of a different texel size and channel order
+        // than the caller asked for. Supported: the whole public path is verified end to end, so
+        // widen the framework's Color-only rule. Defer: storable, but not yet carrying that
+        // evidence, so leave the framework's own rule in charge.
+        if (!IsSupportedSurfaceFormat(surfaceFormat))
+            return RendererFormatVerdict::Unsupported;
+        return IsPubliclyPromotedSurfaceFormat(surfaceFormat) ? RendererFormatVerdict::Supported
+                                                              : RendererFormatVerdict::Defer;
     }
 
     RendererFormatVerdict IglRenderer::ClassifyRenderTargetFormatEXT(const int surfaceFormat) const
     {
-        return IsSupportedSurfaceFormat(surfaceFormat) ? RendererFormatVerdict::Defer
-                                                       : RendererFormatVerdict::Unsupported;
+        // Renderability is a strictly narrower question than storage, so this cannot simply mirror
+        // the texture gate -- but the promoted set is verified as render targets too (a target of
+        // each promoted format is rendered into and read back by Igl_PublicSurfaceFormat), so the
+        // two answers coincide today. Kept as its own function so that the day a format is
+        // promoted for sampling but not for rendering, saying so costs one line here.
+        if (!IsSupportedSurfaceFormat(surfaceFormat))
+            return RendererFormatVerdict::Unsupported;
+        return IsPubliclyPromotedSurfaceFormat(surfaceFormat) ? RendererFormatVerdict::Supported
+                                                              : RendererFormatVerdict::Defer;
     }
 
     int IglRenderer::GetMaxTextureDimension() const

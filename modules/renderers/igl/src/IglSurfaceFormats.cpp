@@ -265,4 +265,34 @@ namespace CNA::Internal::Renderers::Igl
             std::memcpy(bottom, scratch.data(), static_cast<std::size_t>(rowBytes));
         }
     }
+
+    bool IsPubliclyPromotedSurfaceFormat(const int surfaceFormat) noexcept
+    {
+        // Deliberately a short list, and deliberately made of real XNA 4.0 SurfaceFormat members
+        // rather than this renderer's CNAEXT additions.
+        //
+        // Three conditions had to hold together for a format to be here, and each one rules
+        // something out that "IGL can store it" would have let through:
+        //
+        //   * IGL stores it natively -- Rg32 as RG_UNorm16, Single as R_F32. No substitution.
+        //   * Its texel is a multiple of four bytes, which is the framework's own transfer rule
+        //     (Texture::ValidateGetDataFormat(format, 4)). ByteEXT and HalfSingle are storable and
+        //     are NOT here, because promoting them would admit them at this gate and then hand them
+        //     to a layer that assumes four-byte texels.
+        //   * The public path is verified end to end on BOTH backends -- SetData through the typed
+        //     overload, sampling in a real draw, and GetData back -- by Igl_PublicSurfaceFormat.
+        //     Storage alone was what the previous audit deliberately refused to promote on, and it
+        //     was right to: storage is one third of what the public API then promises.
+        //
+        // Everything else this renderer can store stays Defer, i.e. subject to the framework's
+        // Color-only rule, until it has the same three-part evidence.
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+        case SurfaceFormat::Rg32:
+        case SurfaceFormat::Single:
+            return true;
+        default:
+            return false;
+        }
+    }
 }
