@@ -518,6 +518,7 @@ namespace CNA::Internal::Renderers::EasyGL
         void SetUniformFloat(const char* name, float value) override;
         void BindStorageBuffer(int binding, IStorageBufferRenderer* buffer) override;
         void BindImageTexture(int unit, ITextureRenderer* texture, int accessMode) override;
+        void BindTexture(int unit, ITextureRenderer* texture) override;
         [[nodiscard]] bool IsValid() const override { return valid_; }
         [[nodiscard]] std::string GetCompileError() const override { return compileError_; }
 

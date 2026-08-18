@@ -63,6 +63,17 @@ namespace CNA::Graphics {
         renderer_->BindStorageBuffer(binding, buffer.getRendererEXT());
     }
 
+    void ComputeShader::bindTexture(const int unit, const std::string& samplerName,
+                                    Texture2D& texture)
+    {
+        if (unit < 0)
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindTexture: the texture unit must not be negative");
+        renderer_->Bind();
+        renderer_->BindTexture(unit, &texture.GetRenderer());
+        renderer_->SetUniformInt(samplerName.c_str(), unit);
+    }
+
     bool ComputeShader::isImageBindingSupported() const
     {
         return device_.GetRenderer().SupportsComputeImageBindingEXT();

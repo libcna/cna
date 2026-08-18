@@ -85,6 +85,20 @@ namespace CNA::Graphics {
         void bindStorageBuffer(int binding, StorageBuffer& buffer);
 
         /**
+         * @brief Binds a texture the shader will sample, and sets its sampler uniform.
+         *
+         * plan_modern.md `MOD-1552`. Sampling, unlike an image binding, needs nothing special of
+         * the texture, so this is the route that works on every context with compute at all.
+         *
+         * @param unit        The texture unit to bind to; must not be negative.
+         * @param samplerName The `sampler2D` uniform's name, which is set to @p unit.
+         * @param texture     The texture.
+         * @throws std::invalid_argument If @p unit is negative.
+         */
+        void bindTexture(int unit, const std::string& samplerName,
+                         Microsoft::Xna::Framework::Graphics::Texture2D& texture);
+
+        /**
          * @brief Returns whether this device can bind a `Texture2D` as a compute image at all.
          *
          * plan_modern.md `MOD-1514`. Distinct from having compute: GL ES 3.1 requires an immutable

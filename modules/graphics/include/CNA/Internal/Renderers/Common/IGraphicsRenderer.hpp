@@ -292,6 +292,19 @@ namespace CNA::Internal::Renderers
         virtual void BindImageTexture(int /*unit*/, ITextureRenderer* /*texture*/,
                                       int /*accessMode*/) {}
 
+        /**
+         * @brief Binds a texture to a sampler unit the program can sample.
+         *
+         * plan_modern.md `MOD-1552`. Distinct from @ref BindImageTexture in what it needs of the
+         * texture: sampling has no immutability requirement, so this works where an image binding
+         * does not. The caller still sets the sampler uniform itself, with @ref SetUniformInt, for
+         * the same reason `IEffectRenderer` does -- the unit is data, not a name this layer knows.
+         *
+         * @param unit    The texture unit to bind to.
+         * @param texture The texture, or null to unbind.
+         */
+        virtual void BindTexture(int /*unit*/, ITextureRenderer* /*texture*/) {}
+
         /** @brief Returns whether a program is currently linked and usable. */
         [[nodiscard]] virtual bool IsValid() const = 0;
 

@@ -1917,6 +1917,13 @@ if (!ProfileIsEs2ApiGeneration())
                           static_cast<unsigned int>(binding));
     }
 
+    void EasyGLComputeShaderRenderer::BindTexture(const int unit, ITextureRenderer* texture)
+    {
+        if (texture == nullptr) return;
+        texture->BindGL(unit);
+        ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+    }
+
     bool EasyGLComputeShaderRenderer::CompileProgram(const std::string& computeSrc)
     {
         compileError_.clear();

@@ -53,6 +53,7 @@
 #include "CNA/Graphics/Skybox.hpp"
 
 // ---- Compute -----------------------------------------------------------------------------
+#include "CNA/Graphics/AutoExposureEXT.hpp"
 #include "CNA/Graphics/ComputeShader.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
 
