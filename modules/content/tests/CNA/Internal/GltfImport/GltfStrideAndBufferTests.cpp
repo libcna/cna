@@ -408,9 +408,15 @@ TEST(RendererStrideConformance, EveryGltfStrideReachesTheNativeDrawBoundary)
             failure = error.what();
         }
         if (failure.empty()) { continue; }
-        EXPECT_NE(std::string::npos, failure.find("GLTF-473"))
+        // plan_gltf.md GLTF-477 adds the second legitimate refusal: a renderer with no
+        // metallic-roughness shading path at all, which is a different state from a fixed-function
+        // renderer misreading a layout. Both tokens come from a shared guard nobody can reproduce
+        // by accident, which is the property that made the narrow check worth having.
+        const bool namedRefusal = failure.find("GLTF-473") != std::string::npos ||
+                                  failure.find("GLTF-477") != std::string::npos;
+        EXPECT_TRUE(namedRefusal)
             << "this renderer refused a canonical glTF stride for a reason other than a named "
-               "layout incompatibility: " << failure;
+               "layout incompatibility or a named absent shading model: " << failure;
     }
 }
 
@@ -464,18 +470,25 @@ TEST(RendererStrideConformance, AColourCarryingPbrPrimitiveEitherDrawsOrRefusesB
         if (failure.empty()) { continue; }
         if (failure.find("COLOR_0") != std::string::npos) { continue; }
 
-        // One other refusal is allowed, and only one. A fixed-function renderer with no PBR path at
-        // all refuses this draw by naming the exact layout incompatibility -- which semantic, at
+        // Two other refusals are allowed, and only two. A fixed-function renderer with no PBR path
+        // at all refuses this draw by naming the exact layout incompatibility -- which semantic, at
         // which offset, where the record really keeps it, and which effect sent the draw there. That
         // is a more specific answer than "COLOR_0 is unsupported", not a vaguer one.
+        //
+        // `GLTF-477` is the second, and it is a STRONGER answer rather than a weaker one: the
+        // renderer has no metallic-roughness shading model whatsoever, so the draw fails for the
+        // material rather than for one term of it, and saying "this COLOR_0 is unsupported" would
+        // imply the rest of the material was fine. `OPENGL1` is the renderer that reaches here --
+        // it used to emit every record wider than 32 bytes as flat white geometry and report
+        // success.
         //
         // LLGL's two "needs Texture bound" messages used to be pinned here as well: it treated
         // PbrEffect's base-colour map as mandatory, so it could not draw a `baseColorFactor`-only
         // material -- glTF's own default (§3.9.2), and what both fixtures here author. `GLTF-474`
         // removed that rule rather than the exception, so the exception is gone too. A pinned
         // allowance that can no longer fire is a place for a regression to hide.
-        constexpr std::array<const char*, 1> namedPreconditions{{
-            "GLTF-473",
+        constexpr std::array<const char*, 2> namedPreconditions{{
+            "GLTF-473", "GLTF-477",
         }};
         const bool named = std::any_of(
             namedPreconditions.begin(), namedPreconditions.end(),

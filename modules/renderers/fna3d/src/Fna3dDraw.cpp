@@ -2,6 +2,7 @@
 #include "CNA/Internal/Renderers/Fna3d/Fna3dEnumMapping.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dVertexLayouts.hpp"
+#include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
 
 #include <algorithm>
 #include <array>
@@ -75,6 +76,11 @@ namespace CNA::Internal::Renderers::Fna3d
                                          PrimitiveType primitive, int primitiveCount,
                                          const GpuDrawParams& params)
     {
+        // plan_gltf.md GLTF-477: before PrepareDrawEXT, which binds buffers and applies a stock
+        // effect. SelectStockEffect has no PBR case, so a PbrEffect draw used to fall through to
+        // FNA's own BasicEffect and a SkinnedPbrEffect draw to its SkinnedEffect -- an authored
+        // glTF metallic-roughness material rendered as a different material, silently.
+        RequirePbrShadingSupportEXT(params, "FNA3D");
         PrepareDrawEXT(vb, world, view, projection, params, /*baseVertex=*/0);
         FNA3D_DrawPrimitives(device_, ToFna3dPrimitiveType(primitive), params.vertexStart,
                              primitiveCount);
@@ -86,6 +92,9 @@ namespace CNA::Internal::Renderers::Fna3d
                                                 const Matrix& projection, PrimitiveType primitive,
                                                 int primitiveCount, const GpuDrawParams& params)
     {
+        // plan_gltf.md GLTF-477: see DrawPrimitivesEx, and before the buffer checks for the same
+        // reason -- nothing about this draw is going to be submitted.
+        RequirePbrShadingSupportEXT(params, "FNA3D");
         const auto* indexBuffer = dynamic_cast<const Fna3dIndexBufferRenderer*>(&ib);
         if (indexBuffer == nullptr || indexBuffer->GetFna3dDeviceStateEXT() != deviceState_)
         {
@@ -106,6 +115,9 @@ namespace CNA::Internal::Renderers::Fna3d
                                                   PrimitiveType primitive, int primitiveCount,
                                                   int instanceCount, const GpuDrawParams& params)
     {
+        // plan_gltf.md GLTF-477: an instanced PBR draw is refused for the shading model rather than
+        // for the instancing, so the diagnostic names the real reason.
+        RequirePbrShadingSupportEXT(params, "FNA3D");
         if (params.compiledEffectRuntime == nullptr)
         {
             throw std::runtime_error(

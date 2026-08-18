@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/OpenGL1/OpenGL1Renderer.hpp"
+#include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
 #if defined(_WIN32)
 #include <windows.h>
 #endif
@@ -396,6 +397,34 @@ static void ApplyFogFromVector(const GpuDrawParams*params){
  }
  float fc[4]={params->fogColor[0],params->fogColor[1],params->fogColor[2],1};glFogfv(GL_FOG_COLOR,fc);
 }
+// plan_gltf.md GLTF-477: DrawInternal's per-vertex `emit` has cases for strides 16, 20, 24 and 32
+// and a final `else glColor4f(1,1,1,1)` for everything else -- so a stride-48/52/56/60/68/76/80
+// record (every PBR and skinned layout CNA's glTF importer emits) was drawn as untextured, unlit,
+// FLAT WHITE geometry and reported as a successful draw. That is the third state the renderer
+// partition forbids: not a wrong colour from a misread attribute the way OPENGLES1's was
+// (GLTF-473), but no material at all, silently.
+//
+// This renderer is immediate-mode fixed function -- no shaders of any kind -- so rendering these
+// records is not something it can grow; refusing by name is the honest half of the partition, and
+// it is what SOKOL, TINYGL, GLIDE, OPENGLES1 and PORTABLEGL already do. Called from all four draw
+// entry points BEFORE SetupMatrices, so no GL state is touched and nothing is submitted.
+static void OpenGL1RequireEmittableStrideEXT(const IVertexBufferRenderer& vb,
+                                             const GpuDrawParams* params)
+{
+    if (params != nullptr) { RequirePbrShadingSupportEXT(*params, "OPENGL1"); }
+    const std::size_t stride =
+        dynamic_cast<const OpenGL1VertexBufferRenderer&>(vb).Stride();
+    if (stride == 16 || stride == 20 || stride == 24 || stride == 32) { return; }
+    throw std::runtime_error(
+        "OPENGL1 renderer: a " + std::to_string(stride) +
+        "-byte vertex record has no immediate-mode emission case here. This renderer emits "
+        "position, colour, normal and one texture coordinate for the stride-16, 20, 24 and 32 "
+        "layouts; every wider canonical record carries a tangent, a second UV set, bone weights or "
+        "a packed COLOR_0 that OpenGL 1.x fixed function cannot express. The draw is refused rather "
+        "than emitted as flat white geometry, which is what it used to become "
+        "(plan_gltf.md GLTF-477). Use a renderer with a programmable pipeline for this content.");
+}
+
 void OpenGL1Renderer::DrawInternal(const OpenGL1VertexBufferRenderer&vb,const OpenGL1IndexBufferRenderer*ib,PrimitiveType prim,int pc,const GpuDrawParams*params){const auto&s=vb.Data();const size_t st=vb.Stride();if(st<12||s.empty())return;bool tex=params&&params->texture0&&(st==20||st==24||st==32);bool normal=(st==32);
 bool dual=tex&&params->dualTexture&&params->texture1&&glActiveTexture_&&glMultiTexCoord2f_;
 // plan_opengl1.md phase 5: EnvironmentMapEffect's fixed-function reflection-mapping subset.
@@ -498,7 +527,7 @@ glMaterialfv(GL_FRONT_AND_BACK,GL_EMISSION,emis);
  auto emitVertexColor=[&](const uint8_t*b){const uint32_t c=*(const uint32_t*)(b+12);const float r=(c&255)/255.0f,g=((c>>8)&255)/255.0f,bl=((c>>16)&255)/255.0f,a=((c>>24)&255)/255.0f;if(params)glColor4f(r*params->diffuseColor[0],g*params->diffuseColor[1],bl*params->diffuseColor[2],a*params->diffuseColor[3]);else glColor4f(r,g,bl,a);};
  auto emit=[&](uint32_t i){if(i>=(uint32_t)vb.GetVertexCount())return;const uint8_t*b=s.data()+i*st;const float*f=(const float*)b;if(st==16){emitVertexColor(b);}else if(st==24){emitVertexColor(b);const float*t=(const float*)(b+16);emitTexCoord(t[0],t[1]);}else if(st==20){const float*t=(const float*)(b+12);if(params)glColor4fv(params->diffuseColor);else glColor4f(1,1,1,1);emitTexCoord(t[0],t[1]);}else if(st==32){const float*n=(const float*)(b+12);const float*t=(const float*)(b+24);glNormal3f(n[0],n[1],n[2]);emitTexCoord(t[0],t[1]);if(params)glColor4fv(params->diffuseColor);}else glColor4f(1,1,1,1);glVertex3f(f[0],f[1],f[2]);};
  int count=VertCount(prim,pc);glBegin(Prim(prim));if(ib){count=std::min(count,ib->GetIndexCount());for(int k=0;k<count;k++){uint32_t i=ib->IsThirtyTwoBit()?((const uint32_t*)ib->Data().data())[k]:((const uint16_t*)ib->Data().data())[k];emit(i);}}else{count=std::min(count,vb.GetVertexCount());for(int i=0;i<count;i++)emit((uint32_t)i);}glEnd();glDisable(GL_ALPHA_TEST);glDisable(GL_LIGHTING);}
-void OpenGL1Renderer::DrawColoredPrimitives(const IVertexBufferRenderer&v,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c){RequireFaithfulDeclarationEXT(v,"colored-nonindexed");SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferRenderer&>(v),nullptr,pr,c,nullptr);}void OpenGL1Renderer::DrawIndexedColoredPrimitives(const IVertexBufferRenderer&v,const IIndexBufferRenderer&i,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c){RequireFaithfulDeclarationEXT(v,"colored-indexed");SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferRenderer&>(v),&dynamic_cast<const OpenGL1IndexBufferRenderer&>(i),pr,c,nullptr);}void OpenGL1Renderer::DrawPrimitivesEx(const IVertexBufferRenderer&v,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c,const GpuDrawParams&gp){RequireFaithfulDeclarationEXT(v,"ordinary-nonindexed");SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferRenderer&>(v),nullptr,pr,c,&gp);}void OpenGL1Renderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer&v,const IIndexBufferRenderer&i,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c,const GpuDrawParams&gp){RequireFaithfulDeclarationEXT(v,"ordinary-indexed");SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferRenderer&>(v),&dynamic_cast<const OpenGL1IndexBufferRenderer&>(i),pr,c,&gp);}bool OpenGL1Renderer::SupportsCapability(CNA::GraphicsCapability capability)const{
+void OpenGL1Renderer::DrawColoredPrimitives(const IVertexBufferRenderer&v,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c){RequireFaithfulDeclarationEXT(v,"colored-nonindexed");OpenGL1RequireEmittableStrideEXT(v,nullptr);SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferRenderer&>(v),nullptr,pr,c,nullptr);}void OpenGL1Renderer::DrawIndexedColoredPrimitives(const IVertexBufferRenderer&v,const IIndexBufferRenderer&i,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c){RequireFaithfulDeclarationEXT(v,"colored-indexed");OpenGL1RequireEmittableStrideEXT(v,nullptr);SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferRenderer&>(v),&dynamic_cast<const OpenGL1IndexBufferRenderer&>(i),pr,c,nullptr);}void OpenGL1Renderer::DrawPrimitivesEx(const IVertexBufferRenderer&v,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c,const GpuDrawParams&gp){RequireFaithfulDeclarationEXT(v,"ordinary-nonindexed");OpenGL1RequireEmittableStrideEXT(v,&gp);SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferRenderer&>(v),nullptr,pr,c,&gp);}void OpenGL1Renderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer&v,const IIndexBufferRenderer&i,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c,const GpuDrawParams&gp){RequireFaithfulDeclarationEXT(v,"ordinary-indexed");OpenGL1RequireEmittableStrideEXT(v,&gp);SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferRenderer&>(v),&dynamic_cast<const OpenGL1IndexBufferRenderer&>(i),pr,c,&gp);}bool OpenGL1Renderer::SupportsCapability(CNA::GraphicsCapability capability)const{
  // Exhaustive over the CURRENT GraphicsCapability enum with no default case, so a future member
  // surfaces as a -Wswitch warning rather than an inherited wrong answer (the hazard every prior
  // GL-family lane of this campaign hit: a fork-era switch answering for members it never knew).

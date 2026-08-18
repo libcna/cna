@@ -8,7 +8,7 @@ session needs to start work without re-deriving the state.
 
 - **Branch:** `feature/gltf`, with local commits. The owner explicitly requested a push when the
   current autonomous run reaches its weekly-limit cutoff; no pull request has been requested.
-- **Working document:** `plan_gltf.md`, **476** numbered rows. **Three remain open: `GLTF-344` and
+- **Working document:** `plan_gltf.md`, **477** numbered rows. **Three remain open: `GLTF-344` and
   `GLTF-465` (both `✅/⬜`), and `GLTF-459` (`⬜`).** The campaign retrospective
   (`GLTF-460`) is written: `docs/gltf-campaign-retrospective.md`. Read it before starting the next
   subsystem campaign — its central finding is that this campaign's own L0–L7 ladder reads data and
@@ -25,6 +25,24 @@ session needs to start work without re-deriving the state.
   "factor-only". It now consumes all twenty, verified on a live IGL OpenGL device in the new
   `cmake-build-igl` tree (40/40 IGL witnesses, 720/720 glTF/PBR tests), which also moved `GLTF-344`
   to 14 of 16.
+- **`GLTF-477` widened the audit past the seventeen and found two more third-state renderers.**
+  `FNA3D` shaded every `PbrEffect` draw with FNA's own BasicEffect (its `SelectStockEffect` has no
+  PBR case and it reads 0 of the 20 PBR draw parameters); `OPENGL1` drew every record wider than 32
+  bytes as **flat white** geometry and reported success. Both refuse by name now through one shared
+  guard. `OPENGL1` is verified live (3/3 stride tests, 600/603 glTF tests) — `FNA3D` is
+  source-verified only, because `FNA3D_CreateDevice` fails on this host for every driver. Repairing
+  `OPENGL1` also meant repairing `OpenGL1RendererDescriptor.cpp`, the **third** renderer family
+  found unbuildable from the same merge damage after `LLGL` and `BGFX`.
+- **`BGFX`'s recorded blocker was false** — the fourth of five re-checked blockers to be stale. It
+  needed one missing development symlink (`libwayland-egl.so.1` is installed, `libwayland-dev` is
+  not); with the linker pointed at the installed runtime library it builds and runs, 705/709 glTF
+  and PBR tests. The live draw tier is now **fourteen** renderers.
+- **Build trees for this checkout belong on `/media/robertvokac/claude/tmp/cna/`** (owner's
+  instruction, 2026-08-18): a real directory there plus an in-repo symlink, since the repo disk was
+  at 78% and that one has 92 GB free. `cmake-build-igl` and `cmake-build-bgfx` were moved that way;
+  `cmake-build-gltf-fna3d` and `cmake-build-opengl1` were created there. Note the naming: that
+  directory is shared with other checkouts, so `cmake-build-fna3d` already belongs to `cnatmp` --
+  use a `gltf-` prefix when a plain name is taken.
 - **The last renderer that is theoretically reachable here is `WICKED`, and it is blocked twice** —
   both blockers measured on 2026-08-18 and written into `GLTF-465`. It has no stride 60, 76 or 80, so
   it cannot draw dual-UV content at all and `COLOR_0` sits behind that whole family; and configuring

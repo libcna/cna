@@ -4,6 +4,10 @@
 # run on a clean checkout at all (GLTF-003/GLTF-011). Keep this anchored and directory-only.
 /build*/
 cmake-build-*/
+# The same names as SYMLINKS: build trees now live on the external disk
+# (/media/robertvokac/claude/tmp/cna) with an in-repo symlink, and a trailing-slash
+# pattern matches only real directories.
+cmake-build-*
 .idea/*
 cmake-build-debug/*
 cmake-build-web/*
