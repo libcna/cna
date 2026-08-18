@@ -124,8 +124,18 @@ CNA_C_API CNA_Result cna_content_manager_load_texture2d(
  * This maps the canonical `ResourceContentManager`, which reads assets embedded in the
  * application rather than from loose files. It is created with a null service provider for the
  * same reason as `cna_content_manager_create`, and the resulting handle uses every other
- * `cna_content_manager_*` operation unchanged. The canonical embedded-resource stream is a
- * declared placeholder in CNA, so an embedded asset load fails rather than returning data.
+ * `cna_content_manager_*` operation unchanged.
+ *
+ * **Every load through it fails today, and that is inherited rather than introduced here.** The
+ * canonical embedded-resource stream is a declared placeholder in CNA: there is no .NET assembly
+ * for it to read resources out of, and nothing has yet decided what a native application's
+ * embedded-resource store should be. A load therefore returns `CNA_RESULT_IO` naming the
+ * placeholder, rather than returning empty data that a caller would mistake for an empty asset.
+ *
+ * The route is published anyway so the canonical type has a name in C and so this paragraph has
+ * somewhere to live -- a consumer reaching for it deserves to learn that here rather than from a
+ * failing load. A consumer that needs embedded assets today should implement that store itself,
+ * above this ABI, where its host platform already has one.
  */
 CNA_C_API CNA_Result cna_content_manager_create_resource(
     CNA_Handle graphics_device,

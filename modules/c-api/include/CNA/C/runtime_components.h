@@ -627,10 +627,24 @@ CNA_C_API CNA_Result cna_game_services_contains_ext(
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity, or a
  *         documented handle/thread failure.
  *
- * Removing a service the runtime registered is permitted because the canonical operation permits it,
- * and it cannot be undone from C: nothing here can register a service. The game keeps working off
- * the pointers it resolved while initializing, so what a removal changes is what a **later** lookup
- * finds. Removing a service that is not registered is an ordinary success.
+ * Removing a service the runtime registered is permitted because the canonical operation permits it.
+ * The game keeps working off the pointers it resolved while initializing, so what a removal changes
+ * is what a **later** lookup finds. Removing a service that is not registered is an ordinary
+ * success.
+ *
+ * **A removal cannot be undone from here, and there is deliberately no registration route.** That
+ * is a decision, not a gap. `GameServiceContainer.AddService` stores an object under a *type*, and
+ * both halves of that are outside C's reach: a C caller cannot name a C++ type to key the entry by,
+ * and cannot author an object implementing the C++ interface a native consumer would then call
+ * through. A route that accepted an opaque token instead would satisfy neither side -- native code
+ * asking for `IGraphicsDeviceService` needs a vtable, not a `void*`, so the token could only ever
+ * be handed back to the same C caller that supplied it.
+ *
+ * Which is the thing to do instead: a caller's own services belong in the `void* context` pointer
+ * every callback in this ABI already carries, where they cost nothing and need no lookup. A
+ * consumer that keeps its own service container beside this one is not working around a missing
+ * feature; it is holding the only kind of service C can express, in the only place it can be
+ * reached from.
  */
 CNA_C_API CNA_Result cna_game_services_remove_ext(CNA_Handle game, CNA_GameServiceType service);
 

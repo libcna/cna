@@ -604,6 +604,20 @@ typedef struct CNA_TextureSlotInfo {
      *
      * A slot filled by canonical CNA code — a SpriteBatch flush, for example — reports
      * @ref bound as `CNA_TRUE` with an invalid handle, because no C resource owns that texture.
+     *
+     * **There is deliberately no route from a native object back to a handle**, here or anywhere
+     * else in this ABI, and that is worth stating because it is the reason a getter like this one
+     * cannot always answer with a handle. A handle is a record this ABI *created* for an object a C
+     * caller asked it to make; it is not an identity the object carries. Reversing the direction
+     * would mean either a process-wide native-pointer-to-handle map, which would keep every object
+     * a C caller ever saw alive forever and answer with a stale handle after any reuse of the
+     * address, or a slot on every canonical graphics type for a C concept that has no business
+     * being there. Neither is worth what it buys.
+     *
+     * The practical consequence, for a consumer whose own `Textures[i]` getter must return the
+     * object it set: cache what you bind and answer from the cache, and use @ref bound to tell
+     * "something else owns this slot now" from "the slot is empty". That is the case the cache
+     * cannot cover, and reporting it is what this field is for.
      */
     CNA_Handle texture;
 } CNA_TextureSlotInfo;
