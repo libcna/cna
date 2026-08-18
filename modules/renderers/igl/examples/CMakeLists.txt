@@ -201,4 +201,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
     cna_register_renderer_test(NAME Igl_SurfaceFormat_Vulkan COMMAND cna_test_igl_surfaceformat
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
+
+    # IGL-60/IGL-67: the row order AND the row origin of every readback, with no draw calls at all.
+    # A rendering-based test cannot see this class of bug, because a readback flip and a projection
+    # flip cancel each other -- which is how it survived every pixel test this renderer already had.
+    cna_igl_test(cna_test_igl_readback_orientation igl_readback_orientation_test.cpp)
+    cna_register_renderer_test(NAME Igl_ReadbackOrientation
+        COMMAND cna_test_igl_readback_orientation
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    # Both backends: IGL's OpenGL and Vulkan paths measure a readback rectangle's y from OPPOSITE
+    # edges, so a fix that satisfied one by breaking the other must fail here.
+    cna_register_renderer_test(NAME Igl_ReadbackOrientation_Vulkan
+        COMMAND cna_test_igl_readback_orientation
+        TIMEOUT 90 LABELS "Igl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
 endif()
