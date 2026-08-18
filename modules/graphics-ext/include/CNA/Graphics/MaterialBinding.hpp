@@ -13,6 +13,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Writes every field of a material onto a `PbrEffect`.
      *
@@ -88,6 +92,8 @@ namespace CNA::Graphics {
      */
     void applyMaterialState(const PbrMaterial& material,
                             Microsoft::Xna::Framework::Graphics::GraphicsDevice& device);
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

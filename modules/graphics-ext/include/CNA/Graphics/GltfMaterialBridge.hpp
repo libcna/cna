@@ -19,6 +19,10 @@ namespace Microsoft::Xna::Framework::Graphics { class Texture2D; }
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief The textures an imported material's slots resolve to, in `PbrTextureSlot` order.
      *
@@ -34,7 +38,7 @@ namespace CNA::Graphics {
     };
 
     /**
-     * @brief What @ref materialFromGltfEXT needs of an imported glTF material.
+     * @brief What `materialFromGltfEXT` needs of an imported glTF material.
      *
      * plan_modern.md `MOD-1310`. The bridge is expressed against this concept rather than against
      * `CNA::Internal::GltfImport::MaterialOut` by name, and that is the whole point: the engine
@@ -125,6 +129,8 @@ namespace CNA::Graphics {
         }
         return material;
     }
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

@@ -19,6 +19,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Turns environment images into the forms the renderer can sample.
      *
@@ -199,6 +203,8 @@ namespace CNA::Graphics {
     private:
         Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

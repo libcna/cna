@@ -19,6 +19,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Draws one mesh part many times in a single draw call.
      *
@@ -123,7 +127,7 @@ namespace CNA::Graphics {
          * @brief Draws every instance.
          *
          * One `DrawInstancedPrimitives` call where the renderer supports instancing. Where it does
-         * not, the behaviour depends on @ref setFallbackEnabled: either nothing is drawn and the
+         * not, the behaviour depends on `setFallbackEnabled()`: either nothing is drawn and the
          * caller can see why, or the instances are drawn one at a time.
          *
          * @param effect The effect to draw with; its `Apply` is called once per draw call.
@@ -189,6 +193,8 @@ namespace CNA::Graphics {
 
         void uploadTints();
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

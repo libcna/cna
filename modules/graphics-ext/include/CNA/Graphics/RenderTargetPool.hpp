@@ -16,6 +16,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Keeps intermediate render targets alive across frames, keyed by their shape.
      *
@@ -28,7 +32,7 @@ namespace CNA::Graphics {
      * Targets are owned by the pool and outlive any single `acquire()`; they are released only by
      * `reset()` or by destroying the pool. This is deliberately not a free-list with recycling
      * inside a frame: two passes asking for the same shape in one frame are usually ping-ponging
-     * and must get *different* targets, which is what @ref PingPongTargets is for.
+     * and must get *different* targets, which is what the `slot` parameter of `acquire()` is for.
      */
     class RenderTargetPool
     {
@@ -93,6 +97,8 @@ namespace CNA::Graphics {
         Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
         std::vector<std::unique_ptr<Entry>> entries_;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

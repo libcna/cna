@@ -16,6 +16,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Maps a scene-referred HDR image into displayable range, then encodes it for the display.
      *
@@ -106,6 +110,8 @@ namespace CNA::Graphics {
         float           exposure_ = 1.0f;
         float           gamma_    = 2.2f;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

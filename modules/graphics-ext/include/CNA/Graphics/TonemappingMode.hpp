@@ -5,6 +5,10 @@
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /** @brief Tonemapping operator applied to the HDR framebuffer before display. */
     enum class TonemappingMode
     {
@@ -25,6 +29,8 @@ namespace CNA::Graphics {
          */
         Uncharted2
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

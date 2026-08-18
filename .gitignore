@@ -87,3 +87,7 @@ tools/fna-reference/obj/
 # directory ctest was invoked from -- including the repo root when a build dir is passed with -C
 # or the invocation misses. Runtime artifact, not source.
 Testing/
+
+# plan_modern.md MOD-7: generated Doxygen output for the CNA::Graphics engine layer
+# (`doxygen docs/Doxyfile.cnaext`, or the CNAEXT_DoxygenGroup ctest). Regenerated, never source.
+build/doxygen-cnaext/

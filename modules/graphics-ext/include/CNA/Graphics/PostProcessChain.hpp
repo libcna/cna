@@ -15,6 +15,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     class PostProcessPass;
 
     /**
@@ -97,6 +101,8 @@ namespace CNA::Graphics {
         std::vector<std::unique_ptr<PostProcessPass>> ownedPasses_;
         std::unique_ptr<PostProcessPass> copyPass_;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

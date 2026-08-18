@@ -10,6 +10,10 @@
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Full-screen colour-depth-reduction post-process effect.
      *
@@ -82,6 +86,8 @@ namespace CNA::Graphics {
         Microsoft::Xna::Framework::Graphics::Texture2D palette16Texture_;
         bool paletteTexturesBuilt_ = false;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

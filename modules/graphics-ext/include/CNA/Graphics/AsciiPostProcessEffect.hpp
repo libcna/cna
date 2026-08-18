@@ -12,6 +12,10 @@ namespace Microsoft::Xna::Framework::Graphics { class GraphicsDevice; }
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Renderer-neutral ASCII/glyph-grid image post-process effect.
      *
@@ -128,6 +132,8 @@ namespace CNA::Graphics {
         int lastGridColumns_ = 0;
         int lastGridRows_ = 0;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

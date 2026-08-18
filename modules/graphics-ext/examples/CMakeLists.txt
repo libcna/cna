@@ -176,6 +176,15 @@ if(CNA_BUILD_TESTS)
         set_tests_properties(CNAEXT_MatrixCompleteness PROPERTIES
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "CnaExt")
     endif()
+
+    # plan_modern.md MOD-7: the layer builds one Doxygen module page and has no undocumented public
+    # member. SKIPs (77) where doxygen is not installed, since the check is about these headers and
+    # not about the container.
+    add_test(NAME CNAEXT_DoxygenGroup
+             COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/check_cnaext_doxygen.sh"
+                     "${CMAKE_SOURCE_DIR}")
+    set_tests_properties(CNAEXT_DoxygenGroup PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "CnaExt" SKIP_RETURN_CODE 77)
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

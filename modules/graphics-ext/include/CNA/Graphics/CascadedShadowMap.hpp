@@ -22,6 +22,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief A directional shadow map split into several depth ranges, so that a large scene keeps
      *        usable shadow resolution near the camera.
@@ -299,6 +303,8 @@ namespace CNA::Graphics {
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D> atlas_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> casterEffect_;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

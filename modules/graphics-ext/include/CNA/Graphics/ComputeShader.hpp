@@ -17,6 +17,10 @@ namespace CNA::Internal::Renderers { class IComputeShaderRenderer; }
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     class StorageBuffer;
 
     /**
@@ -162,6 +166,8 @@ namespace CNA::Graphics {
         std::unique_ptr<CNA::Internal::Renderers::IComputeShaderRenderer> renderer_;
         std::string compileError_;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

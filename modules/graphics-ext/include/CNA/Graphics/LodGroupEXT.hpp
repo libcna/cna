@@ -10,6 +10,10 @@ namespace Microsoft::Xna::Framework::Graphics { class ModelMeshPart; }
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /** @brief How a `LodGroupEXT` decides which level a distance selects. */
     enum class LodSelectionMode
     {
@@ -66,8 +70,8 @@ namespace CNA::Graphics {
          * and insertion runs once. Adding a level with a distance that already exists keeps both,
          * in insertion order; the first one wins, which is the same rule a stable sort gives.
          *
-         * "Finest first" is ascending distance in @ref LodSelectionMode::Distance and *descending*
-         * threshold in @ref LodSelectionMode::ScreenSpaceError, because a pixel-size threshold
+         * "Finest first" is ascending distance in `LodSelectionMode::Distance` and *descending*
+         * threshold in `LodSelectionMode::ScreenSpaceError`, because a pixel-size threshold
          * shrinks as detail falls where a distance grows. Changing the mode re-sorts.
          *
          * @param maxDistance The distance past which this level gives way; must be positive.
@@ -185,6 +189,8 @@ namespace CNA::Graphics {
         [[nodiscard]] int selectByScreenSpaceError(float distance) const;
         [[nodiscard]] int applyHysteresis(int candidate, float distance) const;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

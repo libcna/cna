@@ -20,6 +20,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief A point light's shadow, as six faces of a cube map.
      *
@@ -188,6 +192,8 @@ namespace CNA::Graphics {
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTargetCube> cube_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> casterEffect_;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

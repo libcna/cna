@@ -19,6 +19,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Darkens creases and contact points using scene depth and normals.
      *
@@ -122,6 +126,8 @@ namespace CNA::Graphics {
         float intensity_   = 1.0f;
         int   sampleCount_ = 16;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

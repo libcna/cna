@@ -19,6 +19,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief A spot light's shadow: one perspective map covering the cone.
      *
@@ -137,6 +141,8 @@ namespace CNA::Graphics {
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D> target_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> casterEffect_;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

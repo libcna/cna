@@ -11,6 +11,10 @@
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief The identity pass: copies its source to its destination unchanged.
      *
@@ -58,6 +62,8 @@ namespace CNA::Graphics {
     private:
         std::unique_ptr<FullscreenPass> fullscreen_;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

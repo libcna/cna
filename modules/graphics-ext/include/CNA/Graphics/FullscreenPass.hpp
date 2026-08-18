@@ -15,6 +15,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Draws one screen-covering rectangle with a given effect: the mechanism every
      *        post-process pass is built on.
@@ -84,6 +88,8 @@ namespace CNA::Graphics {
         Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::SpriteBatch> spriteBatch_;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

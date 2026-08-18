@@ -23,6 +23,10 @@
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Returns the engine-layer revision the linked library was built with.
      *
@@ -36,6 +40,8 @@ namespace CNA::Graphics {
      * @return The revision in the form `"CNA engine layer 1"`.
      */
     [[nodiscard]] std::string getEngineLayerVersionString();
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

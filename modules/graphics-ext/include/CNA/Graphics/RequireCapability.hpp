@@ -13,6 +13,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics::detail {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Returns a human-readable name for a capability, for use in messages.
      *
@@ -40,6 +44,8 @@ namespace CNA::Graphics::detail {
      */
     void RequireCapability(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
                            CNA::GraphicsCapability capability, const std::string& subsystem);
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics::detail
 

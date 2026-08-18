@@ -20,6 +20,17 @@
 
 #ifdef CNA_CNAEXT
 
+/**
+ * @defgroup cnaext_engine CNA Engine Layer
+ * @brief The opt-in `CNA::Graphics` layer above the XNA 4.0 API.
+ *
+ * Everything here is compiled only when the `CNA_CNAEXT` CMake option is on, which it is not by
+ * default. The layer covers the HDR pipeline and its post-process chain, shadows, sky and
+ * image-based lighting, materials, instancing with LOD and culling, and compute; `CNAEXT.md`
+ * describes the design and `plan_modern.md` tracks the work.
+ * @{
+ */
+
 // ---- Foundation ------------------------------------------------------------------------------
 #include "CNA/Graphics/EngineException.hpp"
 #include "CNA/Graphics/EngineLayerVersion.hpp"
@@ -80,5 +91,7 @@
 #include "CNA/Graphics/DepthEffect.hpp"
 #include "CNA/Graphics/DepthEffectMode.hpp"
 #include "CNA/Graphics/DitherMode.hpp"
+
+/** @} */ // end of cnaext_engine
 
 #endif // CNA_CNAEXT

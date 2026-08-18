@@ -12,6 +12,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     class RenderPipelineSettings;
 
     /**
@@ -60,6 +64,8 @@ namespace CNA::Graphics {
         /** @brief Camera far plane distance; zero means "not supplied". */
         float farPlane = 0.0f;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

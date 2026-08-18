@@ -13,6 +13,10 @@ namespace CNA::Internal::Renderers { class IStorageBufferRenderer; }
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief A GPU buffer a compute shader reads and writes.
      *
@@ -144,6 +148,8 @@ namespace CNA::Graphics {
         StorageBuffer buffer_;
         std::size_t elementCount_ = 0;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

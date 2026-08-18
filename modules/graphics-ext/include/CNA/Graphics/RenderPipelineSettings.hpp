@@ -8,6 +8,10 @@
 #include "CNA/Graphics/ShadowQuality.hpp"
 
 namespace CNA::Graphics {
+
+/** @addtogroup cnaext_engine
+ *  @{
+ */
     /**
      * @brief Stores configuration for the CNAEXT extended render pipeline.
      *
@@ -151,6 +155,8 @@ namespace CNA::Graphics {
         ShadowQuality   shadowQuality_   = ShadowQuality::Disabled;
         bool            shadowsEnabled_  = false;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

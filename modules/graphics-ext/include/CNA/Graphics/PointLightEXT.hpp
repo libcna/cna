@@ -7,6 +7,10 @@
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief A point light as the engine layer needs to describe one.
      *
@@ -39,6 +43,8 @@ namespace CNA::Graphics {
         /** @brief Whether a shadow map should be generated for this light. */
         bool CastsShadows = false;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

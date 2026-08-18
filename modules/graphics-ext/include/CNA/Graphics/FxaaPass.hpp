@@ -15,6 +15,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Smooths aliased edges after tonemapping, without multisampling.
      *
@@ -75,6 +79,8 @@ namespace CNA::Graphics {
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> effect_;
         float edgeThreshold_ = 0.125f;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

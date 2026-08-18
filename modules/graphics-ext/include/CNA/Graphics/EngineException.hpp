@@ -9,6 +9,10 @@
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief The exception the engine layer throws when a renderer cannot do what was asked.
      *
@@ -64,6 +68,8 @@ namespace CNA::Graphics {
         std::string requirement_;
         std::string rendererName_;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

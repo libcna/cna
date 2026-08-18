@@ -13,6 +13,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Base class for a fullscreen post-process pass.
      *
@@ -64,6 +68,8 @@ namespace CNA::Graphics {
         /** @brief Constructs the base of a pass. */
         PostProcessPass() = default;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

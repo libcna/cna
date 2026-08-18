@@ -23,6 +23,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Renders the scene from a directional light's point of view, so that shading can ask
      *        whether a point is lit.
@@ -250,6 +254,8 @@ namespace CNA::Graphics {
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> skinnedCasterEffect_;
         Microsoft::Xna::Framework::Matrix lightViewProjection_{};
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

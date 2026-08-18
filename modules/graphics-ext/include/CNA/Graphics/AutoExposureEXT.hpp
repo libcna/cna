@@ -13,6 +13,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     class ComputeShader;
     class RenderPipelineSettings;
     template<typename T> class StorageBufferT;
@@ -143,6 +147,8 @@ namespace CNA::Graphics {
         float minimumExposure_ = 0.01f;
         float maximumExposure_ = 64.0f;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

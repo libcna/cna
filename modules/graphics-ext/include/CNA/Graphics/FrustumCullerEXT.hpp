@@ -13,6 +13,10 @@
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Filters a list of bounds down to the ones a camera can see.
      *
@@ -110,6 +114,8 @@ namespace CNA::Graphics {
     private:
         Microsoft::Xna::Framework::BoundingFrustum frustum_;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

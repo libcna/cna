@@ -18,6 +18,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     class FullscreenPass;
 
     /**
@@ -177,6 +181,8 @@ namespace CNA::Graphics {
         bool  supported_ = false;
         mutable bool warned_ = false;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

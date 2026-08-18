@@ -25,6 +25,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     class BlitPass;
     class BloomPass;
     class FxaaPass;
@@ -302,6 +306,8 @@ namespace CNA::Graphics {
         Microsoft::Xna::Framework::Graphics::SurfaceFormat sceneFormat_ =
             Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

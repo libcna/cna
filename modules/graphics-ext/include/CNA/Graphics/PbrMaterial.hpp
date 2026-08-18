@@ -16,6 +16,10 @@ namespace Microsoft::Xna::Framework::Graphics { class Texture2D; }
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Which of a PBR material's texture slots a per-slot setting applies to.
      *
@@ -332,6 +336,8 @@ namespace CNA::Graphics {
         bool specularColorTextureSrgb_ = true;
         bool outputEncodedToSrgb_      = true;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

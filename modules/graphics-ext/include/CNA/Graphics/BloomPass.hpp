@@ -16,6 +16,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Adds the light bleed a bright source produces in a real lens.
      *
@@ -112,6 +116,8 @@ namespace CNA::Graphics {
         float intensity_  = 1.0f;
         int   iterations_ = 4;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

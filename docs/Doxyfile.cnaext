@@ -1,0 +1,56 @@
+# Doxygen configuration for the CNA::Graphics engine layer alone.
+#
+# plan_modern.md MOD-7. Separate from the repository's root Doxyfile on purpose: that file is stock
+# `doxygen -g` output with an empty INPUT and PROJECT_NAME still "My Project" (recorded in
+# audit/Doxyfile.audit.md as needing attention), and repairing it is a repository-wide job with its
+# own consequences for every other module. This one scans a single directory, so it can be run and
+# checked here and now:
+#
+#     doxygen docs/Doxyfile.cnaext
+#
+# Output lands in build/doxygen-cnaext/ (gitignored). WARN_AS_ERROR is on for undocumented members,
+# which is what makes this configuration a check rather than a rendering: CLAUDE.md requires a
+# Doxygen block on every public member, and here that requirement is enforced instead of asserted.
+
+PROJECT_NAME           = "CNA Engine Layer"
+PROJECT_BRIEF          = "CNA::Graphics -- the opt-in layer above the XNA 4.0 API"
+OUTPUT_DIRECTORY       = build/doxygen-cnaext
+
+INPUT                  = modules/graphics-ext/include/CNA/Graphics
+FILE_PATTERNS          = *.hpp
+RECURSIVE              = YES
+
+# The layer is compiled out unless CNA_CNAEXT is defined, so the preprocessor has to be told it is
+# defined or every header reads as empty.
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+PREDEFINED             = CNA_CNAEXT=1 \
+                         CNAEXT=
+
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+
+# The point of the row: undocumented public members are an error, not a note.
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+# Deliberately NO. CLAUDE.md allows a one-line `/** @brief ... */` on a simple getter, setter or
+# constant, and this repository uses that allowance everywhere; WARN_NO_PARAMDOC=YES would report
+# several hundred of those as errors, which would make the check about a rule the project does not
+# have. WARN_IF_UNDOCUMENTED above is the rule it does have -- a public member with no block at all.
+WARN_NO_PARAMDOC       = NO
+WARN_AS_ERROR          = FAIL_ON_WARNINGS
+
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+
+# graphviz is not a build dependency of this repository, and the group page does not need diagrams.
+HAVE_DOT               = NO
+QUIET                  = YES
+
+JAVADOC_AUTOBRIEF      = NO
+BUILTIN_STL_SUPPORT    = YES
+SORT_MEMBER_DOCS       = NO
