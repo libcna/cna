@@ -31,6 +31,34 @@ using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::SkinnedEffect;
 using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
 
+/// Whether this renderer gives a `RenderTarget2D` a renderer-side texture at all.
+///
+/// Stub accepts the object and refuses the bind, so its render targets never reach `GpuDrawParams`
+/// as a sampler. That is the renderer's contract, not a broken seam -- but the test below is about
+/// the seam, so it needs the renderers that have no target to say so rather than fail.
+[[nodiscard]] bool HasUsableRenderTargets(GraphicsDevice& device)
+{
+    try
+    {
+        RenderTarget2D probe(device, 1, 1);
+        device.SetRenderTarget(&probe);
+        device.SetRenderTarget(nullptr);
+        return true;
+    }
+    catch (...)
+    {
+        try
+        {
+            device.SetRenderTarget(nullptr);
+        }
+        catch (...)
+        {
+            // Best-effort cleanup; the probe's answer is already decided.
+        }
+        return false;
+    }
+}
+
 /// Exercises the interface through a base-class reference, which is how the engine layer will use
 /// it -- a shadow subsystem should not need to know which effect it is talking to.
 template <typename EffectType>
@@ -109,6 +137,9 @@ TEST(ShadowReceiverTest, TheDefaultsAreInertInGpuDrawParams)
 TEST(ShadowReceiverTest, EnabledShadowStateReachesGpuDrawParams)
 {
     GraphicsDevice gd;
+    if (!HasUsableRenderTargets(gd))
+        GTEST_SKIP() << "this renderer has no usable render targets, so no shadow map can reach "
+                        "the draw parameters";
     BasicEffect effect(gd);
     RenderTarget2D shadowMap(gd, 8, 8);
 

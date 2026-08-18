@@ -1057,6 +1057,19 @@ namespace Microsoft::Xna::Framework::Graphics
          * @return The limit, or 0 where compute is unsupported or the axis is out of range.
          */
         /**
+         * @brief Returns whether a `ShaderEffect`'s source text really determines the pixels.
+         *
+         * plan_modern.md `MOD-1699`. `GraphicsCapability::CustomEffects` says a renderer accepts a
+         * custom effect; this says the shader you wrote is what runs. They differ on real
+         * renderers: SOFTWARE and HEADLESS accept any source and render with their own fixed path,
+         * and Vulkan takes SPIR-V bytecode rather than GLSL text. A pass that assumes the first
+         * answer covers the second copies its input through and reports success.
+         *
+         * @return True when the supplied shader source is executed.
+         */
+        CNAEXT [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const;
+
+        /**
          * @brief Returns whether this renderer's lit shaders really sample the shadow state.
          *
          * plan_modern.md `MOD-1699`. An effect accepts `IShadowReceiverEXT`'s state on every

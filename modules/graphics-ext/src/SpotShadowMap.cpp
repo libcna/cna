@@ -104,7 +104,12 @@ void main() {
                                                     DepthFormat::Depth24);
 
         const bool canRaster  = device.SupportsCapability(CNA::GraphicsCapability::ThreeD);
-        const bool canCompile = device.SupportsCapability(CNA::GraphicsCapability::CustomEffects);
+        // Two questions, not one (plan_modern.md `MOD-1699`): `CustomEffects` only means the
+        // renderer *accepts* an effect. SOFTWARE and HEADLESS accept any shader source and go
+        // on rendering with their own fixed path, so a caster that believed them would report
+        // a working shadow map while writing depth nothing had shaded.
+        const bool canCompile = device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
+                             && device.ExecutesShaderEffectSourceEXT();
         if (canRaster && canCompile)
             casterEffect_ = std::make_unique<ShaderEffect>(device, kCasterVertexSource,
                                                            kCasterFragmentSource);

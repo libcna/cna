@@ -120,7 +120,12 @@ void main() {
                                                     RenderTargetUsage::PreserveContents);
 
         const bool canRaster  = device.SupportsCapability(CNA::GraphicsCapability::ThreeD);
-        const bool canCompile = device.SupportsCapability(CNA::GraphicsCapability::CustomEffects);
+        // Two questions, not one (plan_modern.md `MOD-1699`): `CustomEffects` only means the
+        // renderer *accepts* an effect. SOFTWARE and HEADLESS accept any shader source and go
+        // on rendering with their own fixed path, so a caster that believed them would report
+        // a working shadow map while writing depth nothing had shaded.
+        const bool canCompile = device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
+                             && device.ExecutesShaderEffectSourceEXT();
         if (canRaster && canCompile)
             casterEffect_ = std::make_unique<ShaderEffect>(device, kCasterVertexSource,
                                                            kCasterFragmentSource);
@@ -192,23 +197,44 @@ void main() {
         if (faceIndex < 0 || faceIndex >= kFaceCount)
             throw std::out_of_range("CNA::Graphics::CubeShadowMap::begin: no such face");
 
-        passOpen_ = true;
-        device_.SetRenderTarget(cube_.get(), static_cast<CubeMapFace>(faceIndex));
-        // White is "nothing here, at the far end of the range" -- the same convention the 2D map
-        // uses, and the reason an undrawn face leaves the world lit rather than in shadow.
-        device_.Clear(Color::White);
-
-        if (supported_)
+        // The pass counts as open only once the face is actually bound and cleared. A renderer that
+        // refuses cube render targets throws out of the calls below, and marking the pass open
+        // first would leave every later begin() reporting "already open" -- one unsupported face
+        // turning into an object that can never be used again.
+        try
         {
-            casterEffect_->Apply();
-            casterEffect_->SetUniformMat4("uFaceViewProjection",
-                                          &faceViewProjection_[faceIndex].M11);
-            const Matrix identity = Matrix::getIdentityProperty();
-            casterEffect_->SetUniformMat4("uWorld", &identity.M11);
-            casterEffect_->SetUniformVec3("uLightPosition", lightPosition_.X, lightPosition_.Y,
-                                          lightPosition_.Z);
-            casterEffect_->SetUniformFloat("uLightRange", lightRange_);
+            device_.SetRenderTarget(cube_.get(), static_cast<CubeMapFace>(faceIndex));
+            // White is "nothing here, at the far end of the range" -- the same convention the 2D
+            // map uses, and the reason an undrawn face leaves the world lit rather than in shadow.
+            device_.Clear(Color::White);
+
+            if (supported_)
+            {
+                casterEffect_->Apply();
+                casterEffect_->SetUniformMat4("uFaceViewProjection",
+                                              &faceViewProjection_[faceIndex].M11);
+                const Matrix identity = Matrix::getIdentityProperty();
+                casterEffect_->SetUniformMat4("uWorld", &identity.M11);
+                casterEffect_->SetUniformVec3("uLightPosition", lightPosition_.X, lightPosition_.Y,
+                                              lightPosition_.Z);
+                casterEffect_->SetUniformFloat("uLightRange", lightRange_);
+            }
         }
+        catch (...)
+        {
+            try
+            {
+                device_.SetRenderTarget(static_cast<RenderTargetCube*>(nullptr),
+                                        CubeMapFace::PositiveX);
+            }
+            catch (...)
+            {
+                // Unbinding is best-effort cleanup; the original failure is the one worth reporting.
+            }
+            throw;
+        }
+
+        passOpen_ = true;
     }
 
     void CubeShadowMap::end()

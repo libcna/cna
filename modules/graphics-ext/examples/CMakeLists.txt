@@ -163,6 +163,19 @@ if(CNA_BUILD_TESTS)
              COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/check_cnaext_guards.sh" "${CMAKE_SOURCE_DIR}")
     set_tests_properties(CNAEXT_GuardDiscipline PROPERTIES
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "CnaExt")
+
+    # plan_modern.md MOD-1698: and the matrix must name every renderer identity, derived from
+    # CNA::GraphicsRendererType rather than hardcoded -- a renderer missing from a matrix reads as
+    # "fine", which is exactly what an unexamined renderer is not.
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME CNAEXT_MatrixCompleteness
+                 COMMAND ${Python3_EXECUTABLE}
+                         "${CMAKE_SOURCE_DIR}/scripts/check_cnaext_matrix.py"
+                         "${CMAKE_SOURCE_DIR}")
+        set_tests_properties(CNAEXT_MatrixCompleteness PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "CnaExt")
+    endif()
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

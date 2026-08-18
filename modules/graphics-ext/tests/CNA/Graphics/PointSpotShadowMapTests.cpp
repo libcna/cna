@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Graphics/CubeShadowMap.hpp"
+#include "EngineTestSupport.hpp"
 #include "CNA/Graphics/PointLightEXT.hpp"
 #include "CNA/Graphics/ShadowMap.hpp"
 #include "CNA/Graphics/ShadowQuality.hpp"
@@ -174,6 +175,7 @@ TEST(CubeShadowMapTest, TheCubeIsAllocatedAndTheLightRoundTrips)
 TEST(CubeShadowMapTest, EveryMisuseIsRejected)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_CUBE_RENDER_TARGETS(gd);
     CubeShadowMap cube(gd, ShadowQuality::Low);
     PointLightEXT light;
 
@@ -199,6 +201,7 @@ TEST(CubeShadowMapTest, EveryMisuseIsRejected)
 TEST(CubeShadowMapTest, EveryFaceCanBeOpenedAndClosed)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_CUBE_RENDER_TARGETS(gd);
     CubeShadowMap cube(gd, ShadowQuality::Low);
     PointLightEXT light;
     light.Range = 15.0f;
@@ -283,6 +286,7 @@ TEST(SpotShadowMapTest, TheMapIsAllocatedAtTheFullQualitySize)
 TEST(SpotShadowMapTest, BeginComputesTheMatrixAndEndRestoresTheBackBuffer)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     SpotShadowMap spot(gd, ShadowQuality::Low);
 
     SpotLightEXT light;
@@ -307,6 +311,7 @@ TEST(SpotShadowMapTest, BeginComputesTheMatrixAndEndRestoresTheBackBuffer)
 TEST(SpotShadowMapTest, EveryMisuseIsRejected)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     SpotShadowMap spot(gd, ShadowQuality::Low);
     SpotLightEXT light;
 
@@ -332,11 +337,12 @@ TEST(SpotShadowMapTest, EveryMisuseIsRejected)
 TEST(SpotShadowMapTest, AnUnsupportedRendererIsReportedRatherThanFailing)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     SpotShadowMap spot(gd, ShadowQuality::Low);
     CubeShadowMap cube(gd, ShadowQuality::Low);
 
     const bool canRaster  = gd.SupportsCapability(CNA::GraphicsCapability::ThreeD);
-    const bool canCompile = gd.SupportsCapability(CNA::GraphicsCapability::CustomEffects);
+    const bool canCompile = CnaTest::EngineLayer::RunsShaderSource(gd);
     const bool expected = canRaster && canCompile;
 
     EXPECT_EQ(spot.isSupported(), expected ? spot.getCasterEffect() != nullptr : false);

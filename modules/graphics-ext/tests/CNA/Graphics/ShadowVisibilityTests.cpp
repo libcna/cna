@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "EngineTestSupport.hpp"
+
 #include "CNA/Graphics/DirectionalLightEXT.hpp"
 #include "CNA/Graphics/ShadowMap.hpp"
 #include "CNA/Graphics/ShadowQuality.hpp"
@@ -232,8 +234,7 @@ protected:
         // CustomEffects, not CompiledEffects: the caster is GLSL source compiled at run time by
         // ShaderEffect, which is a different facility from the Effect Framework bytecode
         // CompiledEffects names.
-        if (!device.SupportsCapability(GraphicsCapability::CustomEffects))
-            GTEST_SKIP() << "this renderer cannot compile the shadow caster's shader";
+        CNA_SKIP_WITHOUT_SHADER_EXECUTION(device);
         // MOD-1699: compiling the caster's shader is not the same promise as SAMPLING the shadow.
         // The Vulkan renderer answers true to the first (its ShaderEffect exists) and false to the
         // second (its lit shaders ignore the state), so without this the cascade case did not skip

@@ -12,6 +12,8 @@
 
 #include <gtest/gtest.h>
 
+#include "EngineTestSupport.hpp"
+
 #include "CNA/Graphics/CascadedShadowMap.hpp"
 #include "CNA/Graphics/DirectionalLightEXT.hpp"
 #include "CNA/Graphics/ShadowMap.hpp"
@@ -372,6 +374,7 @@ TEST(CascadedShadowMapTest, EachCascadeMapsIntoItsOwnSliceOfTheAtlas)
 TEST(CascadedShadowMapTest, EveryMisuseIsRejected)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CascadedShadowMap cascades(gd, ShadowQuality::Low, 2);
 
     EXPECT_THROW(cascades.begin(0), std::logic_error);      // before update()
@@ -428,6 +431,7 @@ TEST(CascadedShadowMapTest, TheSplitLambdaRoundTripsAndIsClamped)
 TEST(CascadedShadowMapTest, AnUnsupportedRendererIsReportedRatherThanFailing)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CascadedShadowMap cascades(gd, ShadowQuality::Low, 2);
 
     if (!cascades.isSupported())

@@ -1138,6 +1138,9 @@ namespace CNA::Internal::Renderers::EasyGL
         /// plan_modern.md MOD-1699: this renderer's four lit programs really do sample the shadow
         /// state, and its two PBR programs really do shade from an image-based light -- Phases 8-12
         /// implemented both here first.
+        /// This renderer compiles the GLSL it is given and runs it; that is the whole EasyGL
+        /// ShaderEffect path.
+        [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
         [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return true; }
         [[nodiscard]] bool SupportsImageBasedLightingEXT() const override { return true; }
         [[nodiscard]] bool SupportsComputeShadersEXT() const override;

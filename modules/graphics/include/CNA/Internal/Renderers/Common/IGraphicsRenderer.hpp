@@ -2021,6 +2021,16 @@ namespace CNA::Internal::Renderers
         /// bitmask, which each renderer translates into its own native bits.
         virtual void MemoryBarrierEXT(int /*barrierBits*/) {}
 
+        /// plan_modern.md MOD-1699: whether the source text handed to `CreateEffectRenderer`
+        /// actually determines the pixels. Three renderers answer this differently from
+        /// `GraphicsCapability::CustomEffects`, and each way is legitimate: SOFTWARE and HEADLESS
+        /// *accept* any shader source and render with their own fixed path instead (a documented
+        /// decision, not a bug), and Vulkan compiles SPIR-V bytecode rather than the GLSL text the
+        /// engine layer writes. A post-process pass that believes its shader ran on those
+        /// renderers produces a copy of its input and reports success, which is the one outcome
+        /// worse than refusing. False by default, for the same reason every other promise here is.
+        [[nodiscard]] virtual bool ExecutesShaderEffectSourceEXT() const { return false; }
+
         /// plan_modern.md MOD-1699: whether this renderer's lit shaders actually SAMPLE the
         /// shadow state an effect carries (`IShadowReceiverEXT`: single map, cascades, punctual).
         /// The state itself is accepted and ignored everywhere -- that convention is what keeps a

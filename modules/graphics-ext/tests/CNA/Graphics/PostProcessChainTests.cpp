@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Graphics/BlitPass.hpp"
+#include "EngineTestSupport.hpp"
 #include "CNA/Graphics/PostProcessChain.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
@@ -224,6 +225,7 @@ TEST(PostProcessChainTest, IntermediateTargetsAreReusedAcrossFrames)
 TEST(PostProcessChainTest, AnEmptyChainStillProducesTheImage)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     PostProcessChain chain(gd);
 
     RenderTarget2D source(gd, kSize, kSize);
@@ -293,6 +295,7 @@ TEST(PostProcessChainTest, OwnedAndBorrowedPassesRunTogether)
 TEST(BlitPassTest, ACopyReproducesItsSourceExactly)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     RenderTarget2D source(gd, kSize, kSize);
     RenderTarget2D destination(gd, kSize, kSize);
 
@@ -323,6 +326,7 @@ TEST(BlitPassTest, AChainOfCopiesIsStillTheIdentity)
     // a pass reading its own destination, the wrong final target, a flipped coordinate -- shows up
     // here as pixels that differ from the input.
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     RenderTarget2D source(gd, kSize, kSize);
     RenderTarget2D destination(gd, kSize, kSize);
 

@@ -10,6 +10,8 @@
 
 #include <gtest/gtest.h>
 
+#include "EngineTestSupport.hpp"
+
 #include "CNA/Graphics/LodGroupEXT.hpp"
 #include "CNA/Graphics/RenderPipeline.hpp"
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
@@ -43,6 +45,7 @@ namespace {
 TEST(EngineLayerRobustnessTest, AbsurdSizesAreEitherRenderedOrRefusedByRule)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.getSettings().setHDREnabled(true);
     pipeline.getSettings().setBloomEnabled(true);
@@ -67,6 +70,7 @@ TEST(EngineLayerRobustnessTest, ResizingEveryFrameDoesNotAccumulate)
     // A window being dragged produces a new size every frame. The pipeline must drop the targets it
     // is no longer using rather than keep one per size it has ever seen.
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.getSettings().setHDREnabled(true);
     pipeline.getSettings().setBloomEnabled(true);
@@ -93,6 +97,7 @@ TEST(EngineLayerRobustnessTest, EverySettingCanBeFlippedBetweenFrames)
     // The settings menu case: nothing here has an order it must be changed in, and no combination
     // may throw. The pipeline reads the settings fresh each frame precisely so this is true.
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(128, 128);
 
@@ -126,6 +131,7 @@ TEST(EngineLayerRobustnessTest, EverySettingCanBeFlippedBetweenFrames)
 TEST(EngineLayerRobustnessTest, AFrameCanBeOpenedAndClosedRepeatedlyWithoutDrift)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.getSettings().setHDREnabled(true);
     pipeline.getSettings().setBloomEnabled(true);

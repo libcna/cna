@@ -123,6 +123,70 @@ shadow casters hand it GLSL source. Before those two queries existed, the shadow
 did not fail — it crashed, because the caster's effect failed to compile and the draw proceeded with
 no effect applied. Ask all three.
 
+### Every renderer identity
+
+`plan_modern.md` `MOD-1698`. The table above compares subsystems across the three renderers this
+plan committed to; this one leaves nobody out. A renderer missing from a matrix reads as "fine",
+which is exactly what an unexamined renderer is not — so `scripts/check_cnaext_matrix.py` derives
+the list from `CNA::GraphicsRendererType` itself and fails if an identity has no row or no status.
+It runs as the ctest `CNAEXT_MatrixCompleteness`.
+
+Legend: ✅ verified in this repository · 🟨 partial, or verified only by sharing an implementation ·
+⬜ not implemented, or not verified here · ⛔ deliberately unsupported by what the identity *is*
+(2D-only or fixed-function hardware, where a shadow map or a compute dispatch has no meaning).
+
+| Renderer | Engine layer | Notes |
+|---|---|---|
+| `OpenGLES3` | ✅ reference | Every subsystem lands here first and is verified here (Mesa llvmpipe, ES 3.2). |
+| `OpenGL33` | 🟨 shares EasyGL | Same implementation as `OpenGLES3`; not separately exercised in this environment. |
+| `OpenGLES2` | 🟨 shares EasyGL | GLSL ES 1.00: the shaders are transformed, so no `textureLod` (rough IBL reflections read the base mip), no dynamic uniform-array indexing, statically countable loops only. |
+| `WebGL1` | 🟨 shares EasyGL | As `OpenGLES2`, plus: no compute in any WebGL version. |
+| `WebGL2` | 🟨 shares EasyGL | No compute; otherwise the ES 3.00 path. |
+| `Vulkan` | 🟨 measured | Verified against a real device (Mesa lavapipe 1.4): instancing works; float targets, the post-process passes, shadow sampling, IBL shading and compute do not. Its `ShaderEffect` takes SPIR-V, not this layer's GLSL. |
+| `Headless` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Three limits it does not advertise — no render-target readback, no cube-face storage, and a cube-face bind that records the face without making it current. The engine layer constructs and passes through; tests probe the three rather than assume them. |
+| `Software` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Render targets, readback and cube storage all work; what does **not** is custom shader source — it is accepted and then ignored, which is why every shader-based subsystem asks `ExecutesShaderEffectSourceEXT()` as well as `CustomEffects`. |
+| `Stub` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Stricter than `Headless` — it refuses to bind a `RenderTarget2D` at all, so a pipeline stops before it renders. Everything above that point constructs and reports false. |
+| `SdlRenderer` | ⛔ 2D-only by identity | No `ThreeD`; `RenderPipeline` passes through and every 3D subsystem reports false. |
+| `SdlGpu` | ⬜ not implemented |  |
+| `Bgfx` | ⬜ not implemented | Needs `shaderc` regeneration for any new shader. |
+| `WebGPU` | ⬜ not implemented | Depends on `WEBGPU-76` (custom WGSL through `ShaderEffect`). |
+| `Magnum` | ⬜ not implemented |  |
+| `DirectX11` | ⬜ not implemented | In the committed renderer scope; needs Wine+DXVK to verify here. |
+| `DirectX12` | ⬜ not implemented |  |
+| `DirectX10` | ⬜ not implemented |  |
+| `DirectX9` | ⬜ not implemented | SM3 limits apply to any pass ported there. |
+| `DirectX8` | ⛔ fixed-function by identity |  |
+| `DirectX7` | ⛔ fixed-function by identity |  |
+| `DirectX6` | ⛔ fixed-function by identity |  |
+| `DirectX5` | ⛔ fixed-function by identity |  |
+| `DirectX3` | ⛔ fixed-function by identity |  |
+| `DirectX2` | ⛔ fixed-function by identity |  |
+| `DirectX1` | ⛔ 2D-only by identity | DirectDraw v1; no 3D at all. |
+| `Direct2D` | ⛔ 2D-only by identity |  |
+| `Canvas` | ⛔ 2D-only by identity |  |
+| `HtmlDom` | ⛔ 2D-only by identity |  |
+| `SvgDom` | ⛔ 2D-only by identity |  |
+| `PixiJs` | ⛔ 2D-only by identity | Emscripten-only, and not yet built on any real toolchain (`plan_pixijs.md`). |
+| `Skia` | ⛔ 2D-only by identity | CPU raster; advertises no 3D/depth/MSAA/MRT. |
+| `Blend2D` | ⛔ 2D-only by identity |  |
+| `OpenVg` | ⛔ 2D-only by identity |  |
+| `Gdi` | ⛔ 2D-only by identity |  |
+| `Glide` | ⛔ fixed-function by identity |  |
+| `FreeDirect` | ⬜ not verified |  |
+| `TinyGL` | ⛔ fixed-function by identity | No shaders, render targets, stencil or scissor; 1-bit colour-key transparency. |
+| `PortableGL` | ⬜ not verified | Shader-era CPU GL; `MOD-1617` decides whether float targets are worth it there. |
+| `OpenGL4` | ⬜ not implemented | Its own renderer, not EasyGL. |
+| `OpenGL2` | ⬜ not implemented | Float targets only via `ARB_texture_float`. |
+| `OpenGL1` | ⛔ fixed-function by identity |  |
+| `OpenGLES1` | ⛔ fixed-function by identity |  |
+| `Sokol` | ⬜ not implemented |  |
+| `Diligent` | ⬜ not implemented | Its native API is chosen at runtime; would need verifying on at least two. |
+| `Llgl` | ⬜ not implemented |  |
+| `Igl` | ⬜ not implemented | Backend fixed by `CNA_IGL_BACKEND` before the renderer exists. |
+| `Metal` | ⬜ not implemented | Apple platforms only. |
+| `Fna3d` | ⬜ not implemented | Already overrides `CreateRenderTarget2DEXT`; float formats unverified. |
+| `Wicked` | ⬜ not implemented |  |
+
 ### Using it
 
 ```cpp
@@ -346,8 +410,14 @@ auto brdfLut     = processor.generateBrdfLut(128, 128);                       //
   and can be destroyed the moment loading finishes.
 - **CPU, not render-to-cube.** A GPU implementation would need float render targets, cube render
   targets and custom effects all present at once — a combination no renderer in the committed scope
-  offers. Doing it on the CPU makes the precompute work identically on every renderer, including
-  Headless, and removes the capability gate entirely. The price is the time below.
+  offers. Doing it on the CPU removes the capability gate from the *arithmetic*, which is the part
+  that would otherwise have needed one. The price is the time below.
+- **It still needs somewhere to put the result, and that is not free.** The convolutions are pure
+  CPU maths, but every generator returns a `TextureCube` or `Texture2D` and has to write into it.
+  Headless and Stub accept `TextureCube::SetData` and store nothing, so the precompute cannot run
+  there and the generators throw (`MOD-1696`). An earlier revision of this document claimed the
+  precompute "works identically on every renderer, including Headless"; measuring it showed that is
+  false, and the engine-layer tests now probe for cube storage rather than assume it.
 - **Quality is `sampleCount`, and the cost is quadratic** for irradiance (it is a sweep over two
   angles) and linear for the other two. The defaults are chosen for quality, not speed.
 - **Roughness ↔ mip is one function.** `mipForRoughness` and `roughnessForMip` are public statics

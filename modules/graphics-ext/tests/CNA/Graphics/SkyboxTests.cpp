@@ -13,6 +13,7 @@
 
 #include "CNA/Graphics/Skybox.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "EngineTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -116,8 +117,7 @@ protected:
 
     void SetUp() override
     {
-        if (!device.SupportsCapability(GraphicsCapability::CustomEffects))
-            GTEST_SKIP() << "this renderer cannot compile the sky shader";
+        CNA_SKIP_WITHOUT_SHADER_EXECUTION(device);
     }
 };
 
@@ -195,6 +195,7 @@ TEST(SkyboxMathTest, YawRotatesTheSampledDirectionAboutY)
 
 TEST_F(SkyboxTest, TheEnvironmentIsBorrowedByDefault)
 {
+    CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(device);
     auto cube = MakeSixColorCube(device);
     Skybox sky(device, cube.get());
     EXPECT_EQ(sky.getEnvironment(), cube.get());
@@ -207,6 +208,7 @@ TEST_F(SkyboxTest, TheEnvironmentIsBorrowedByDefault)
 
 TEST_F(SkyboxTest, AnOwnedEnvironmentIsHeldAndReplaceable)
 {
+    CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(device);
     Skybox sky(device, nullptr);
     sky.setOwnedEnvironment(MakeSixColorCube(device));
     ASSERT_NE(sky.getEnvironment(), nullptr);
@@ -268,6 +270,11 @@ protected:
             return;
         if (!device.SupportsCapability(GraphicsCapability::ThreeD))
             GTEST_SKIP() << "this renderer does not raster 3D triangles";
+        // Every test in this fixture renders the sky into a target and reads the result back, from
+        // an environment cube it has to fill first -- so both are entry requirements, not per-test
+        // details.
+        CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(device);
+        CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(device);
     }
 };
 

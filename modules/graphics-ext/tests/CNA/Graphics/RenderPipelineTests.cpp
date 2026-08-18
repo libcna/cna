@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Graphics/BlitPass.hpp"
+#include "EngineTestSupport.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
 #include "CNA/Graphics/DirectionalLightEXT.hpp"
@@ -89,6 +90,7 @@ TEST(RenderPipelineTest, AnInertPipelineNeverAllocatesASceneTarget)
 TEST(RenderPipelineTest, EnablingAnythingSwitchesToTheSceneTarget)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
     pipeline.getSettings().setTonemappingMode(TonemappingMode::Aces);
@@ -105,6 +107,7 @@ TEST(RenderPipelineTest, EnablingAnythingSwitchesToTheSceneTarget)
 TEST(RenderPipelineTest, HdrPicksTheBestSceneFormatTheRendererActuallyHas)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
     pipeline.getSettings().setHDREnabled(true);
@@ -124,6 +127,7 @@ TEST(RenderPipelineTest, HdrPicksTheBestSceneFormatTheRendererActuallyHas)
 TEST(RenderPipelineTest, TheSceneTargetIsNotVisibleOutsideAFrame)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
     pipeline.getSettings().setHDREnabled(true);
@@ -138,6 +142,7 @@ TEST(RenderPipelineTest, TheSceneTargetIsNotVisibleOutsideAFrame)
 TEST(RenderPipelineTest, UserPassesRunAfterTheBuiltInOnes)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
     pipeline.getSettings().setTonemappingMode(TonemappingMode::Reinhard);
@@ -157,6 +162,7 @@ TEST(RenderPipelineTest, AUserPassAloneIsEnoughToRunAFrameThroughTheChain)
 {
     // A game that wants only its own effect should not have to enable HDR to get one.
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
 
@@ -191,6 +197,7 @@ TEST(RenderPipelineTest, ClearingUserPassesReturnsThePipelineToInert)
 TEST(RenderPipelineTest, SettingsChangesTakeEffectOnTheNextFrame)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
 
@@ -234,6 +241,7 @@ TEST(RenderPipelineTest, RepeatedResizesStayBounded)
 {
     // A resized game must not keep paying for every size it has ever been.
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.getSettings().setHDREnabled(true);
 
@@ -251,6 +259,7 @@ TEST(RenderPipelineTest, RepeatedResizesStayBounded)
 TEST(RenderPipelineTest, ManyFramesDoNotAccumulateTargets)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
     pipeline.getSettings().setHDREnabled(true);
@@ -293,6 +302,7 @@ TEST(RenderPipelineTest, SsaoRunsOnlyWhenItsInputsAreSupplied)
     // geometry a second time with a different effect, which only the game can do. Enabling SSAO
     // without them is a misconfiguration that must still render a frame.
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
     pipeline.getSettings().setSSAOEnabled(true);
@@ -310,6 +320,7 @@ TEST(RenderPipelineTest, TheFixedPassOrderIsSsaoThenBloomThenTonemapThenFxaa)
     // its brightness, bloom's threshold reads scene-referred values, tonemapping is the boundary
     // to display-referred colour, and FXAA finds edges in displayed pixels.
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
 
@@ -339,6 +350,7 @@ TEST(RenderPipelineTest, TheShadowPassRunsBeforeTheSceneTargetIsBound)
     // running after the scene target was bound would unbind it and send the frame to the screen --
     // a mistake whose symptom is post-processing silently doing nothing.
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
     pipeline.getSettings().setHDREnabled(true);
@@ -408,6 +420,7 @@ TEST(RenderPipelineTest, AShadowPassAloneDoesNotForceASceneTarget)
     // Shadows and post-processing are independent: a game that wants shadows and no HDR must not
     // start paying for an off-screen target it has no use for.
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);
     pipeline.getSettings().setShadowsEnabled(true);
@@ -434,8 +447,8 @@ TEST(RenderPipelineTest, TheSkyIsDrawnInsideBeginAndReportsItself)
     // MOD-1104. The ordering matters and is the reason didSkyboxDraw() exists: an app cannot see
     // from outside whether the sky went in before its geometry or not at all.
     GraphicsDevice gd;
-    if (!gd.SupportsCapability(CNA::GraphicsCapability::CustomEffects))
-        GTEST_SKIP() << "this renderer cannot compile the sky shader";
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
 
     RenderPipeline pipeline(gd);
     pipeline.resize(kWidth, kHeight);

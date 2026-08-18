@@ -2158,6 +2158,11 @@ namespace Microsoft::Xna::Framework::Graphics
         return GetRenderer().SupportsCapability(capability);
     }
 
+    bool GraphicsDevice::ExecutesShaderEffectSourceEXT() const
+    {
+        return GetRenderer().ExecutesShaderEffectSourceEXT();
+    }
+
     bool GraphicsDevice::SupportsShadowSamplingEXT() const
     {
         return GetRenderer().SupportsShadowSamplingEXT();

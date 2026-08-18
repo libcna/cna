@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Graphics/EnvironmentProcessor.hpp"
+#include "EngineTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -111,6 +112,7 @@ TEST(EnvironmentProcessorTest, AMarkedPanoramaLandsOnTheExpectedFaces)
     // rather than a subtly wrong image. Red rises with longitude, green with latitude.
     GraphicsDevice gd;
     EnvironmentProcessor processor(gd);
+    CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
 
     constexpr int kWidth  = 64;
     constexpr int kHeight = 32;
@@ -159,6 +161,7 @@ TEST(EnvironmentProcessorTest, AConstantPanoramaGivesAConstantCube)
     // every texel of every face must be that colour. A sampling bug shows up as an edge or a seam.
     GraphicsDevice gd;
     EnvironmentProcessor processor(gd);
+    CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
 
     Texture2D panorama(gd, 16, 8);
     const std::vector<Color> texels(16 * 8, Color(70, 130, 180, 255));
@@ -296,6 +299,7 @@ TEST(EnvironmentProcessorTest, AConstantEnvironmentHasTheSameConstantIrradiance)
     // Any weighting error shows up here as a uniform shift, which no picture would reveal.
     GraphicsDevice gd;
     EnvironmentProcessor processor(gd);
+    CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
     auto environment = MakeConstantCube(gd, 8, Color(120, 60, 200, 255));
 
     auto irradiance = processor.generateIrradiance(environment.get(), 4, 12);
@@ -322,6 +326,7 @@ TEST(EnvironmentProcessorTest, MoreIrradianceSamplesConvergeTowardTheAnalyticRes
     // one bright face -- is where a coarse sweep is visibly off and a finer one is not.
     GraphicsDevice gd;
     EnvironmentProcessor processor(gd);
+    CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
 
     auto environment = MakeConstantCube(gd, 8, Color(0, 0, 0, 255));
     const std::vector<Color> bright(64, Color(255, 255, 255, 255));
@@ -353,6 +358,7 @@ TEST(EnvironmentProcessorTest, PrefilteringKeepsMipZeroSharpAndFlattensTheLast)
     // it. Between them is the ramp the shader indexes by roughness.
     GraphicsDevice gd;
     EnvironmentProcessor processor(gd);
+    CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
 
     auto environment = MakeConstantCube(gd, 8, Color(0, 0, 0, 255));
     const std::vector<Color> bright(64, Color(255, 255, 255, 255));
@@ -430,6 +436,7 @@ TEST(EnvironmentProcessorTest, TheGeneratorsValidateTheirInputs)
 {
     GraphicsDevice gd;
     EnvironmentProcessor processor(gd);
+    CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
     auto environment = MakeConstantCube(gd, 4, Color::White);
 
     EXPECT_THROW((void)processor.generateIrradiance(nullptr, 4, 4), std::invalid_argument);
@@ -451,6 +458,7 @@ TEST(EnvironmentProcessorTest, GenerationCostIsLoadTimeWork)
     // reproduce rather than take on trust.
     GraphicsDevice gd;
     EnvironmentProcessor processor(gd);
+    CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
     auto environment = MakeConstantCube(gd, 64, Color(140, 160, 200, 255));
 
     const auto timeOf = [](auto&& work) {

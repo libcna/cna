@@ -123,9 +123,12 @@ and EasyGL's two PBR programs light with them. Four decisions worth remembering:
 
 - **The precompute is CPU-side.** A render-to-cube version needs float render targets, cube render
   targets and custom effects present *at once*, which no renderer in the committed scope offers
-  together. On the CPU it works everywhere including Headless, needs no capability gate, and is
-  seamless by construction (the sampler picks the face from the direction). It costs 6.2 s in a
-  Debug build for a full set — load-time work, stated plainly in the docs rather than hidden.
+  together. On the CPU the *arithmetic* needs no capability gate and is seamless by construction
+  (the sampler picks the face from the direction). It costs 6.2 s in a Debug build for a full set —
+  load-time work, stated plainly in the docs rather than hidden. **Corrected in Phase 16.6:** this
+  entry used to say it "works everywhere including Headless". It does not. The results still have to
+  be written into a `TextureCube`, and Headless and Stub accept that call and store nothing, so the
+  generators throw there. Measuring beat assuming.
 - **`ImageBasedLightEXT` is in the XNA namespace**, not `CNA::Graphics` — an always-compiled effect
   surface cannot include a `CNA_CNAEXT`-only header. This overrides §OQ-4's recorded answer; see
   `MOD-1222` for why the third option beat both listed ones.
@@ -288,6 +291,11 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-18 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`** again, after Phases 11-15 (`MOD-1709`) | same | 7556 ran · 7492 pass · 64 skip · **0 fail** |
 | 2026-08-18 | `cmake-build-cnaext`, with the Phase 17/18 verification and documentation work | same | 7829 ran · 7765 pass · 64 skip · **0 fail** |
 | 2026-08-18 | **`cmake-build-vulkan`** — the same branch on a real Vulkan device (Mesa lavapipe 1.4) | Xvfb :99 | 7824 ran · 7652 pass · 164 skip · **8 fail**, none of them the engine layer |
+| 2026-08-18 | **`cmake-build-multi`** (`CNA_GRAPHICS_RENDERERS="HEADLESS;SOFTWARE;STUB"`), default HEADLESS — Phase 16.6 | same | 7814 ran · 7419 pass · 395 skip · **0 fail** |
+| 2026-08-18 | same binary, `CNA_GRAPHICS_RENDERER=SOFTWARE` | same | 7814 ran · 7499 pass · 302 skip · **13 fail**, none in the engine layer |
+| 2026-08-18 | same binary, `CNA_GRAPHICS_RENDERER=STUB` | same | 7814 ran · 7213 pass · 572 skip · **29 fail**, none in the engine layer |
+| 2026-08-18 | `cmake-build-cnaext` (EasyGL) re-verified after the Phase 16.6 probes and the shader-execution sweep | Xvfb :99 | 7829 ran · 7765 pass · 64 skip · **0 fail** |
+| 2026-08-18 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`** re-verified after the same | Xvfb :99 | 7556 ran · 7494 pass · 62 skip · **0 fail** |
 
 The `CNA_CNAEXT=OFF` row is the one that answers "can this break what already works". It configures,
 builds and passes with the whole engine layer compiled out. Its lower test count is expected and not
@@ -357,6 +365,45 @@ DISPLAY=:99 SDL_VIDEODRIVER=x11 SDL_AUDIODRIVER=dummy ./cmake-build-cnaext/CnaTe
 `MediaLibraryTestFixture.ObjectGraphIsInternallyConsistent` segfaulted in an earlier run started
 from the build directory (with no media fixtures resolvable); from the repo root it passes. Worth
 remembering if a future run aborts mid-suite.
+
+---
+
+### Phase 16.6: what measuring the three no-op renderers actually found
+
+`MOD-1692`/`MOD-1696`/`MOD-1697` were rows saying "same" — an assumption that the engine layer would
+construct and pass through on Headless, Software and Stub. Running it produced 21 failures on
+Headless alone, and the causes were not capability gaps. They were **limits with no capability to
+ask about** and, in one case, an outright wrong promise:
+
+| Renderer | What it will not do | How it fails without a probe |
+|---|---|---|
+| Headless | read a render target back to the CPU | every test that inspects a pass's output throws |
+| Headless, Stub | store `TextureCube` face data | the IBL precompute throws where the docs said it worked |
+| Headless | make a cube face the current target — the bind is recorded and ignored | the face-sized viewport that follows is rejected as out of the *back buffer's* bounds |
+| Stub | bind a `RenderTarget2D` at all | `RenderPipeline` stops before it renders |
+| Software, Headless | run a custom effect's shader source, while reporting `CustomEffects` | the sky renders the placeholder texture's white and calls itself supported |
+
+Four of the five are now probed by `modules/graphics-ext/tests/CNA/Graphics/EngineTestSupport.hpp`,
+which asks by *doing* rather than by reading a flag, so a probe cannot drift from the truth. The
+fifth is a real API gap and became `ExecutesShaderEffectSourceEXT()`, now consulted by `Skybox` and
+all four shadow casters as well as `PostProcessPass`.
+
+Two details are worth keeping:
+
+- **The cube-face probe uses a face larger than the back buffer on purpose.** A 16-pixel cube is
+  accepted by a bind that does nothing, because the viewport that follows still fits inside the back
+  buffer — the probe would pass and the renderer would draw the shadow map onto the screen. Sizing
+  the probe above the back buffer is what makes a fake bind observable.
+- **`CubeShadowMap::begin` marked the pass open before binding.** So the first unsupported face threw
+  and every later one reported "a face pass is already open" — one refused face turning the object
+  into a brick. It now opens the pass only after the bind and clear succeed, and unbinds on the way
+  out.
+
+The failures that remain under SOFTWARE (13) and STUB (29) are outside the engine layer and are
+recorded rather than fixed: most assert facts about the **build's default** renderer, which cannot
+hold when a non-default one is forced through `CNA_GRAPHICS_RENDERER`; the rest are XNA-layer
+`TextureCube` and content tests that need real cube storage. Neither set is a regression, and both
+predate this phase.
 
 ---
 

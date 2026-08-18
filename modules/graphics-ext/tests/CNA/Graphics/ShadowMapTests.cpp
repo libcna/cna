@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "EngineTestSupport.hpp"
 #include "CNA/Graphics/DirectionalLightEXT.hpp"
 #include "CNA/Graphics/ShadowMap.hpp"
 #include "CNA/Graphics/ShadowQuality.hpp"
@@ -201,6 +202,7 @@ TEST(ShadowMapTest, TheMapIsCreatedAtTheQualitySizeWithACasterEffect)
 TEST(ShadowMapTest, BeginComputesTheLightMatrixAndEndRestoresTheBackBuffer)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     ShadowMap shadowMap(gd, ShadowQuality::Low);
 
     DirectionalLightEXT sun;
@@ -221,6 +223,7 @@ TEST(ShadowMapTest, BeginComputesTheLightMatrixAndEndRestoresTheBackBuffer)
 TEST(ShadowMapTest, BothMisusesAreRejected)
 {
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     ShadowMap shadowMap(gd, ShadowQuality::Low);
     DirectionalLightEXT sun;
 
@@ -237,10 +240,11 @@ TEST(ShadowMapTest, AnUnsupportedRendererIsReportedRatherThanFailing)
     // pass work on every renderer. What changes is whether anything is drawn -- and on a renderer
     // that cannot, `isSupported()` says so and there is no caster effect to hand out.
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     ShadowMap shadowMap(gd, ShadowQuality::Low);
 
     const bool canRaster  = gd.SupportsCapability(CNA::GraphicsCapability::ThreeD);
-    const bool canCompile = gd.SupportsCapability(CNA::GraphicsCapability::CustomEffects);
+    const bool canCompile = CnaTest::EngineLayer::RunsShaderSource(gd);
     if (!canRaster || !canCompile)
     {
         EXPECT_FALSE(shadowMap.isSupported());
@@ -285,6 +289,7 @@ TEST(ShadowMapTest, AnEmptyShadowPassLeavesTheMapMeaningNothingIsOccluded)
     // the nearest possible occluder and put the whole scene in shadow wherever no caster was drawn
     // -- a full-screen artefact from a one-line mistake.
     GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     ShadowMap shadowMap(gd, ShadowQuality::Low);
     DirectionalLightEXT sun;
 

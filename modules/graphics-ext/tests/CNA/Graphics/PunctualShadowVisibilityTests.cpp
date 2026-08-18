@@ -11,6 +11,8 @@
 
 #include <gtest/gtest.h>
 
+#include "EngineTestSupport.hpp"
+
 #include "CNA/Graphics/CubeShadowMap.hpp"
 #include "CNA/Graphics/PointLightEXT.hpp"
 #include "CNA/Graphics/ShadowQuality.hpp"
@@ -153,8 +155,7 @@ protected:
     {
         if (!device.SupportsCapability(GraphicsCapability::ThreeD))
             GTEST_SKIP() << "this renderer does not raster 3D triangles";
-        if (!device.SupportsCapability(GraphicsCapability::CustomEffects))
-            GTEST_SKIP() << "this renderer cannot compile the punctual caster's shader";
+        CNA_SKIP_WITHOUT_SHADER_EXECUTION(device);
         // MOD-1699: compiling the caster's shader is not the same promise as SAMPLING the shadow.
         // The Vulkan renderer answers true to the first (its ShaderEffect exists) and false to the
         // second (its lit shaders ignore the state), so without this the cascade case did not skip

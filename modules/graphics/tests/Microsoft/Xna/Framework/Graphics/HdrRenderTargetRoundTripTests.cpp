@@ -45,6 +45,30 @@ constexpr float kRed   = 4.0f;
 constexpr float kGreen = 2.0f;
 constexpr float kBlue  = 1.0f;
 
+/// Whether this renderer can read a render target's pixels back at all.
+///
+/// The float tests above are gated by `SupportsSurfaceFormatAsRenderTargetEXT`, which happens to
+/// exclude the renderers that cannot read back either. The 8-bit control below is not, so it needs
+/// the question asked directly: a renderer with ordinary colour targets and no readback path --
+/// Headless is one -- would otherwise fail the control while supporting everything it claims to.
+[[nodiscard]] bool CanReadRenderTargetsBack(GraphicsDevice& device)
+{
+    try
+    {
+        RenderTarget2D probe(device, 1, 1, false, SurfaceFormat::Color, DepthFormat::None);
+        device.SetRenderTarget(&probe);
+        device.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        device.SetRenderTarget(nullptr);
+        Color pixel = Color::White;
+        probe.GetData(&pixel, 1);
+        return true;
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
 TEST(HdrRenderTargetRoundTripTest, AFloatTargetKeepsValuesAboveOne)
 {
     GraphicsDevice gd;
@@ -75,6 +99,8 @@ TEST(HdrRenderTargetRoundTripTest, AColourTargetClampsTheSameRender)
     // "this driver never clamped anything anyway"; this shows the two formats genuinely differ,
     // and documents what an 8-bit target does with the same draw.
     GraphicsDevice gd;
+    if (!CanReadRenderTargetsBack(gd))
+        GTEST_SKIP() << "this renderer cannot read a render target back to the CPU";
 
     RenderTarget2D target(gd, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None);
 
