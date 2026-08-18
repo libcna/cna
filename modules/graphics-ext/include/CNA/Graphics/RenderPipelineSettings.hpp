@@ -4,6 +4,7 @@
 #ifdef CNA_CNAEXT
 
 #include "CNA/Graphics/TonemappingMode.hpp"
+#include "CNA/CNAHelper.hpp"
 #include "CNA/Graphics/RenderQuality.hpp"
 #include "CNA/Graphics/ShadowQuality.hpp"
 
@@ -121,6 +122,21 @@ namespace CNA::Graphics {
         [[nodiscard]] RenderQuality getRenderQuality() const;
         /** @brief Sets the overall render quality preset. */
         void setRenderQuality(RenderQuality quality);
+
+        /**
+         * @brief Writes the current quality preset's derived values into this settings bag.
+         *
+         * plan_modern.md `MOD-409`. `setRenderQuality` stores a preference and changes nothing
+         * else; this is the explicit step that turns it into numbers. The two are separate on
+         * purpose — a game that has tuned `bloomIterations` by hand should not have that value
+         * rewritten because something set the quality, and a settings menu that *wants* the preset
+         * applied says so in one call.
+         *
+         * Today it derives bloom's pyramid level count (`BloomPass::iterationsForQuality`). Passes
+         * whose quality dial has not been decided yet are deliberately left alone rather than given
+         * a guessed mapping; tonemapping has none at all and never will (`MOD-320`).
+         */
+        CNAEXT void applyRenderQualityPresetEXT();
 
         /** @brief Returns the shadow quality preset. */
         [[nodiscard]] ShadowQuality getShadowQuality() const;

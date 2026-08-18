@@ -2,6 +2,10 @@
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
 
 #ifdef CNA_CNAEXT
+#include "CNA/Graphics/BloomPass.hpp"
+#endif
+
+#ifdef CNA_CNAEXT
 
 namespace CNA::Graphics {
     RenderPipelineSettings::RenderPipelineSettings() = default;
@@ -47,6 +51,11 @@ namespace CNA::Graphics {
 
     RenderQuality   RenderPipelineSettings::getRenderQuality()    const { return renderQuality_; }
     void            RenderPipelineSettings::setRenderQuality(RenderQuality q) { renderQuality_ = q; }
+
+    void RenderPipelineSettings::applyRenderQualityPresetEXT()
+    {
+        bloomIterations_ = BloomPass::iterationsForQuality(renderQuality_);
+    }
 
     ShadowQuality   RenderPipelineSettings::getShadowQuality()    const { return shadowQuality_; }
     void            RenderPipelineSettings::setShadowQuality(ShadowQuality q) { shadowQuality_ = q; }

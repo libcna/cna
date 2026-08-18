@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/BloomPass.hpp"
 #include "CNA/Graphics/ShaderDiagnostics.hpp"
+#include "CNA/GraphicsCapability.hpp"
 
 #ifdef CNA_CNAEXT
 
@@ -28,6 +29,15 @@ namespace CNA::Graphics {
         constexpr int kMaxIterations = 8;
         /// Below this, a chain step contributes nothing but a draw call.
         constexpr int kMinChainExtent = 2;
+
+        /// Pool slots. The pool keys a target on its shape *and* its slot, and this chain holds
+        /// several targets of the same shape alive at once -- a level, the horizontal scratch that
+        /// produced it, and the sum written back into it -- so the slots must not collide. Bases
+        /// rather than fixed numbers because there is one level and one sum per iteration.
+        constexpr int kExtractSlot       = 0;
+        constexpr int kBlurSlot          = 1;
+        constexpr int kLevelSlotBase     = 100;
+        constexpr int kUpsampleSlotBase  = 200;
 
         constexpr const char* kVertexSource = R"(#version 300 es
 precision highp float;
@@ -89,6 +99,39 @@ void main() {
 }
 )";
 
+        // Upsample-and-add: the larger level arrives in texture1 and the smaller, blurred one in
+        // slot 1, and the result is their sum. Reading the smaller level at the larger level's
+        // resolution *is* the upsample -- the sampler's bilinear filter does it, which is why
+        // MOD-407's fallback below matters where that filter is unavailable.
+        constexpr const char* kUpsampleSource = R"(#version 300 es
+precision highp float;
+in vec2 TexCoord;
+out vec4 FragColor;
+uniform sampler2D texture1;
+uniform sampler2D uSmallerSampler;
+uniform vec2 uSmallerTexel;
+uniform int uManualFilter;
+void main() {
+    vec3 larger = texture(texture1, TexCoord).rgb;
+    vec3 smaller;
+    if (uManualFilter == 0) {
+        smaller = texture(uSmallerSampler, TexCoord).rgb;
+    } else {
+        // MOD-407: four taps averaged by hand, for renderers whose float textures cannot be
+        // linearly filtered. It is a box filter rather than the hardware's bilinear one, so the
+        // result is slightly blockier -- documented, and better than the alternative of a nearest
+        // sample, which makes the upsample visibly stair-step.
+        vec2 h = uSmallerTexel * 0.5;
+        smaller  = texture(uSmallerSampler, TexCoord + vec2(-h.x, -h.y)).rgb;
+        smaller += texture(uSmallerSampler, TexCoord + vec2( h.x, -h.y)).rgb;
+        smaller += texture(uSmallerSampler, TexCoord + vec2(-h.x,  h.y)).rgb;
+        smaller += texture(uSmallerSampler, TexCoord + vec2( h.x,  h.y)).rgb;
+        smaller *= 0.25;
+    }
+    FragColor = vec4(larger + smaller, 1.0);
+}
+)";
+
         // Additive composite. The scene arrives in texture1 (SpriteBatch's own slot) and the
         // blurred bloom in slot 1, so an intensity of zero reproduces the scene exactly -- which
         // is what makes "bloom disabled" and "bloom at zero" the same image.
@@ -113,7 +156,13 @@ void main() {
     {
         extractEffect_ = std::make_unique<ShaderEffect>(device, kVertexSource, kExtractSource);
         blurEffect_    = std::make_unique<ShaderEffect>(device, kVertexSource, kBlurSource);
-        combineEffect_ = std::make_unique<ShaderEffect>(device, kVertexSource, kCombineSource);
+        upsampleEffect_ = std::make_unique<ShaderEffect>(device, kVertexSource, kUpsampleSource);
+        combineEffect_  = std::make_unique<ShaderEffect>(device, kVertexSource, kCombineSource);
+
+        // MOD-407: whether the hardware can filter the float textures this chain is built from.
+        // Asked once, at construction: it is a property of the renderer, not of the frame.
+        manualFilter_ = !device.SupportsCapability(
+            CNA::GraphicsCapability::HalfFloatTextureLinearFiltering);
 
         // plan_modern.md MOD-219, reported here rather than in apply(): the failure happens once,
         // at construction, and a pass that discovered it per frame would either spam the log or
@@ -123,6 +172,8 @@ void main() {
         detail::ReportShaderCompileFailure(device, "BloomPass (extract)", extractEffect_.get(),
                                            logged);
         detail::ReportShaderCompileFailure(device, "BloomPass (blur)", blurEffect_.get(), logged);
+        detail::ReportShaderCompileFailure(device, "BloomPass (upsample)", upsampleEffect_.get(),
+                                           logged);
         detail::ReportShaderCompileFailure(device, "BloomPass (combine)", combineEffect_.get(),
                                            logged);
     }
@@ -181,51 +232,103 @@ void main() {
         // clamping here would remove exactly the highlights bloom exists to spread.
         const auto format = context.source->getFormatProperty();
 
+        // ---- Down: extract, then a blurred half-resolution pyramid --------------------------
+        //
+        // Each level is half the previous one and holds the blur of everything above it. Keeping
+        // every level rather than only the smallest is what MOD-405's upward walk needs: a single
+        // composite of the smallest level alone gives a wide but flat glow, because the detail the
+        // larger levels still carry was thrown away on the way down.
+        struct Level { RenderTarget2D* target; int width; int height; };
+        std::vector<Level> levels;
+        levels.reserve(static_cast<std::size_t>(iterations) + 1);
+
         int chainWidth  = std::max(kMinChainExtent, context.width / 2);
         int chainHeight = std::max(kMinChainExtent, context.height / 2);
 
-        // Stage 1: extract, at half resolution -- the downsample is free filtering.
         RenderTarget2D* extracted =
-            pool_.acquire(chainWidth, chainHeight, format, DepthFormat::None, 0);
+            pool_.acquire(chainWidth, chainHeight, format, DepthFormat::None, kExtractSlot);
         extractEffect_->Apply();
         extractEffect_->SetUniformFloat("uThreshold", threshold);
         fullscreen_->draw(context.source, extracted, extractEffect_.get(), chainWidth, chainHeight,
                           linearClamp);
+        levels.push_back({extracted, chainWidth, chainHeight});
 
-        // Stage 2: alternate horizontal and vertical blurs, halving the resolution each iteration.
-        RenderTarget2D* current = extracted;
         for (int iteration = 0; iteration < iterations; ++iteration)
         {
-            const int nextWidth  = std::max(kMinChainExtent, chainWidth / (iteration == 0 ? 1 : 2));
-            const int nextHeight = std::max(kMinChainExtent, chainHeight / (iteration == 0 ? 1 : 2));
+            const int nextWidth  = std::max(kMinChainExtent, chainWidth / 2);
+            const int nextHeight = std::max(kMinChainExtent, chainHeight / 2);
+            if (nextWidth == chainWidth && nextHeight == chainHeight)
+                break;   // nothing left to halve
 
+            const int slot = kLevelSlotBase + iteration;
             RenderTarget2D* horizontal =
-                pool_.acquire(nextWidth, nextHeight, format, DepthFormat::None, 1);
+                pool_.acquire(nextWidth, nextHeight, format, DepthFormat::None, kBlurSlot);
             blurEffect_->Apply();
             blurEffect_->SetUniformVec2("uTexelDirection", 1.0f / static_cast<float>(nextWidth), 0.0f);
-            fullscreen_->draw(current, horizontal, blurEffect_.get(), nextWidth, nextHeight, linearClamp);
+            fullscreen_->draw(levels.back().target, horizontal, blurEffect_.get(), nextWidth,
+                              nextHeight, linearClamp);
 
             RenderTarget2D* vertical =
-                pool_.acquire(nextWidth, nextHeight, format, DepthFormat::None, 2);
+                pool_.acquire(nextWidth, nextHeight, format, DepthFormat::None, slot);
             blurEffect_->Apply();
             blurEffect_->SetUniformVec2("uTexelDirection", 0.0f, 1.0f / static_cast<float>(nextHeight));
-            fullscreen_->draw(horizontal, vertical, blurEffect_.get(), nextWidth, nextHeight, linearClamp);
+            fullscreen_->draw(horizontal, vertical, blurEffect_.get(), nextWidth, nextHeight,
+                              linearClamp);
 
-            current     = vertical;
+            levels.push_back({vertical, nextWidth, nextHeight});
             chainWidth  = nextWidth;
             chainHeight = nextHeight;
-
-            if (chainWidth <= kMinChainExtent && chainHeight <= kMinChainExtent)
-                break;   // nothing left to halve
         }
 
-        // Stage 3: composite the blurred highlights back onto the untouched scene.
+        // ---- Up: add each level into the one above it (MOD-405) -------------------------------
+        //
+        // Progressive, not a single composite of the smallest level. Walking back up means the
+        // finished glow carries every scale at once -- a tight core from the large levels and a
+        // wide halo from the small ones -- which is the difference between bloom that looks like a
+        // lens and bloom that looks like a blur.
+        RenderTarget2D* accumulated = levels.back().target;
+        if (upsampleEffect_ && upsampleEffect_->IsEffectValid())
+        {
+            for (std::size_t index = levels.size() - 1; index > 0; --index)
+            {
+                const Level& larger  = levels[index - 1];
+                const Level& smaller = levels[index];
+
+                RenderTarget2D* summed =
+                    pool_.acquire(larger.width, larger.height, format, DepthFormat::None,
+                                  kUpsampleSlotBase + static_cast<int>(index));
+                upsampleEffect_->Apply();
+                upsampleEffect_->SetUniformInt("uSmallerSampler", 1);
+                upsampleEffect_->SetTexture(1, *accumulated);
+                upsampleEffect_->SetUniformVec2("uSmallerTexel",
+                                                1.0f / static_cast<float>(smaller.width),
+                                                1.0f / static_cast<float>(smaller.height));
+                upsampleEffect_->SetUniformInt("uManualFilter", manualFilter_ ? 1 : 0);
+                fullscreen_->draw(larger.target, summed, upsampleEffect_.get(), larger.width,
+                                  larger.height, linearClamp);
+                accumulated = summed;
+            }
+        }
+
+        // ---- Composite the finished glow back onto the untouched scene ------------------------
         combineEffect_->Apply();
         combineEffect_->SetUniformInt("uBloomSampler", 1);
-        combineEffect_->SetTexture(1, *current);
+        combineEffect_->SetTexture(1, *accumulated);
         combineEffect_->SetUniformFloat("uIntensity", intensity);
         fullscreen_->draw(context.source, context.destination, combineEffect_.get(),
                           context.width, context.height, linearClamp);
+    }
+
+    int BloomPass::iterationsForQuality(const RenderQuality quality)
+    {
+        switch (quality)
+        {
+        case RenderQuality::Low:    return 2;
+        case RenderQuality::High:   return 5;
+        case RenderQuality::Ultra:  return 7;
+        case RenderQuality::Medium:
+        default:                    return 3;
+        }
     }
 
     const std::string& BloomPass::getName() const

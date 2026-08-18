@@ -5,6 +5,7 @@
 
 #include "CNA/Graphics/FullscreenPass.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
+#include "CNA/Graphics/RenderQuality.hpp"
 #include "CNA/Graphics/RenderTargetPool.hpp"
 
 #include <memory>
@@ -56,6 +57,41 @@ namespace CNA::Graphics {
          * @param context The images, size and settings for this invocation.
          */
         void apply(const PostProcessContext& context) override;
+
+        /**
+         * @brief Returns the pyramid level count a quality preset asks for.
+         *
+         * plan_modern.md `MOD-409`. The mapping is a **function, not a side effect**: setting
+         * `RenderQuality` does not silently rewrite a game's `bloomIterations`. An app that wants
+         * the preset applied calls `RenderPipelineSettings::applyRenderQualityPresetEXT()`, and an
+         * app that has tuned bloom by hand keeps its own number.
+         *
+         * | Quality | Levels | Halo width | Cost at 1280×720 |
+         * |---|---|---|---|
+         * | `Low`    | 2 | narrow | 11.9 ms |
+         * | `Medium` | 3 | the default; wide enough to read as a lens | 12.7 ms |
+         * | `High`   | 5 | wide | 14.8 ms |
+         * | `Ultra`  | 7 | as wide as the chain reaches before the 2-pixel floor | 15.5 ms |
+         *
+         * **Read that cost column before reaching for this as a performance dial.** Measured
+         * (`MOD-416`), Low to Ultra is a 30% difference, not a threefold one: the first level is
+         * half-resolution and dominates, and every level after it is a quarter of the one before, so
+         * the pyramid's tail is nearly free. The preset therefore buys *width* rather than saving
+         * time, and a frame that cannot afford bloom cannot afford it at `Low` either — the answer
+         * there is `setBloomEnabled(false)`, which costs nothing at all (`MOD-209`).
+         *
+         * On a small frame the higher presets converge, because the chain stops when a level would
+         * fall below two pixels: at 128×128, `High` and `Ultra` produce the identical image.
+         *
+         * **Tap count does not vary with quality**, and that is deliberate rather than unfinished:
+         * the blur is a 9-tap separable Gaussian, and dropping taps changes the *shape* of the blur
+         * — it starts to look like a box — while saving little, for the same reason the level count
+         * saves little. See `docs/cnaext-perf.md` for the measurements.
+         *
+         * @param quality The preset to translate.
+         * @return The level count, always within the range `apply()` accepts.
+         */
+        [[nodiscard]] static int iterationsForQuality(RenderQuality quality);
 
         /** @brief Returns `"Bloom"`. */
         [[nodiscard]] const std::string& getName() const override;
@@ -109,7 +145,12 @@ namespace CNA::Graphics {
         std::unique_ptr<FullscreenPass> fullscreen_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> extractEffect_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> blurEffect_;
+        std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> upsampleEffect_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> combineEffect_;
+
+        /// plan_modern.md MOD-407: true where the renderer cannot linearly filter the float
+        /// textures this chain is built from, so the upsample averages four taps by hand instead.
+        bool manualFilter_ = false;
         RenderTargetPool pool_;
 
         float threshold_  = 1.0f;

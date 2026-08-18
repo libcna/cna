@@ -66,6 +66,33 @@ Reproduce: `./cmake-build-cnaext/cna_test_cnaext_postprocess_chain --benchmark`.
 | FXAA | 12.99 | ×2.09 |
 | Bloom | 28.61 | ×4.60 |
 
+### Bloom, per quality preset
+
+`plan_modern.md` `MOD-416`. Reproduce: `./cmake-build-cnaext/cna_test_cnaext_bloom --benchmark`.
+
+| Preset | Levels | 1280×720 | 1920×1080 |
+|---|---|---|---|
+| `Low` | 2 | 11.92 ms | 24.23 ms |
+| `Medium` | 3 | 12.70 ms | 26.95 ms |
+| `High` | 5 | 14.82 ms | 26.47 ms |
+| `Ultra` | 7 | 15.50 ms | 28.89 ms |
+
+**The finding is that the level count is a weak dial for cost**, and it is the opposite of what the
+preset table was drafted assuming. Low to Ultra — two levels against seven — is a 30% difference at
+720p, not the threefold one a "quality" setting suggests. The reason is structural: the first level
+is half-resolution and dominates, and every level after it is a quarter of the one before, so the
+pyramid's tail costs almost nothing. (The 1080p column is noisier — `High` measures below `Medium`
+there — which is what a 10-frame sample on a software rasteriser looks like; the 720p column has the
+signal.)
+
+So the preset buys **halo width**, not frame time. A frame that cannot afford bloom cannot afford it
+at `Low` either, and the answer there is `setBloomEnabled(false)`, which costs exactly nothing
+because a disabled pass is removed from the chain rather than run with its effect off (`MOD-209`).
+
+Two more things a reader should know before comparing these numbers with the per-pass table above:
+the 28.61 ms recorded there is bloom at its **default** four iterations, and these runs put a real
+HDR (`HdrBlendable`) target under the pass, which the per-pass table did not.
+
 Tonemap again at two resolutions (`cnaext_tonemap_test --benchmark`, `MOD-319`), because it is the
 one pass a game cannot switch off and so the one whose scaling matters most:
 

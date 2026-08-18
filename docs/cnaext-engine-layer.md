@@ -309,6 +309,43 @@ Ambient occlusion needs one thing the pipeline cannot do for a game: scene depth
 normals, which means drawing the geometry a second time with a different effect. Supply them with
 `setDepthNormalInputs()`; without them SSAO renders an unoccluded frame rather than failing.
 
+### Bloom: what the numbers mean, and what they do not
+
+`plan_modern.md` `MOD-417`, `MOD-405`, `MOD-409`.
+
+**Bloom here is not physically normalised, and `intensity` is an artistic dial.** A physically based
+bloom would conserve energy: light spread into the halo would be light removed from the source, and
+the total would be unchanged. CNA's does not do that. It extracts the pixels above a threshold,
+blurs them, and **adds** the result back on top of an untouched scene — so raising `intensity` adds
+light to the frame rather than redistributing it. That is what almost every game engine does and
+what artists expect from the control; it is written down here because "intensity 1.0" looks like it
+ought to mean something physical and does not.
+
+The consequence worth planning around: **`intensity` is not portable as a number.** The same value
+produces the same look across renderers *for the same scene*, because the maths is the same
+everywhere — but it is not comparable with another engine's bloom slider, and it interacts with
+exposure. Tune it against a tonemapped frame, not against the raw scene target.
+
+**The threshold is a soft knee, not a cliff.** A hard cut-off makes bloom pop in and out as a
+highlight crosses it, which is far more visible in motion than the missing energy just below it. The
+knee is half the threshold, and the contribution is squared across it. A threshold above everything
+in the scene removes the glow completely — that is what separates bloom from a blur applied to
+everything, and `cnaext_bloom_test` checks it.
+
+**The pyramid is walked back up** (`MOD-405`). Each level is half the previous one and holds the
+blur of everything above it; the upward walk adds each level into the one above before the final
+composite. A single composite of the smallest level — the simpler thing, and what an early draft
+did — gives a wide but *flat* glow, because the tighter core the larger levels still carry was
+thrown away on the way down. The measurable difference is reach: with the upward walk, more levels
+put light further from the source, which is asserted rather than described (`BloomPyramidTest`).
+
+**Where float textures cannot be linearly filtered** (`MOD-407`), the upsample averages four taps by
+hand instead of relying on the sampler. That is a box filter rather than the hardware's bilinear one,
+so the result is slightly blockier — the alternative, a nearest sample, makes the upsample visibly
+stair-step. The pass asks `GraphicsCapability::HalfFloatTextureLinearFiltering` once at construction
+and takes the fallback silently; there is no setting for it, because there is no reason to prefer the
+worse path where the better one exists.
+
 ### Tonemapping: what goes in, what comes out, and what CNA does not do
 
 `plan_modern.md` `MOD-316`, `MOD-320`.
