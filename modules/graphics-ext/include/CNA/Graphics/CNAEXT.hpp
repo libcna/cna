@@ -41,8 +41,12 @@
 
 // ---- Shadows ---------------------------------------------------------------------------------
 #include "CNA/Graphics/CascadedShadowMap.hpp"
+#include "CNA/Graphics/CubeShadowMap.hpp"
 #include "CNA/Graphics/DirectionalLightEXT.hpp"
+#include "CNA/Graphics/PointLightEXT.hpp"
 #include "CNA/Graphics/ShadowMap.hpp"
+#include "CNA/Graphics/SpotLightEXT.hpp"
+#include "CNA/Graphics/SpotShadowMap.hpp"
 
 // ---- Materials -----------------------------------------------------------------------------
 #include "CNA/Graphics/PbrMaterial.hpp"

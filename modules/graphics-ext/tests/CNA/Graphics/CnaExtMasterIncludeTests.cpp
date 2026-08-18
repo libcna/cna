@@ -63,6 +63,10 @@ TEST(CnaExtMasterIncludeTest, EffectTypesAreVisible)
     // Shadows, both shapes -- the master include is the one place a consumer should have to name.
     EXPECT_GT(sizeof(CNA::Graphics::ShadowMap), 0u);
     EXPECT_GT(sizeof(CNA::Graphics::CascadedShadowMap), 0u);
+    EXPECT_GT(sizeof(CNA::Graphics::CubeShadowMap), 0u);
+    EXPECT_GT(sizeof(CNA::Graphics::SpotShadowMap), 0u);
+    EXPECT_GT(sizeof(CNA::Graphics::PointLightEXT), 0u);
+    EXPECT_GT(sizeof(CNA::Graphics::SpotLightEXT), 0u);
 }
 
 } // namespace
