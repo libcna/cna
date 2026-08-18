@@ -212,6 +212,18 @@ if(CNA_BUILD_TESTS)
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "CnaExt")
     endif()
 
+    # plan_modern.md MOD-1902: the accessor conventions the API review settled -- every
+    # value-returning get/is/has is [[nodiscard]], and is const when it takes no argument. A
+    # one-time read of the headers decays with the next header, so the sweep runs as a test.
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME CNAEXT_AccessorConventions
+                 COMMAND ${Python3_EXECUTABLE}
+                         "${CMAKE_SOURCE_DIR}/scripts/check_cnaext_nodiscard.py"
+                         "${CMAKE_SOURCE_DIR}")
+        set_tests_properties(CNAEXT_AccessorConventions PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "CnaExt")
+    endif()
+
     # plan_modern.md MOD-7: the layer builds one Doxygen module page and has no undocumented public
     # member. SKIPs (77) where doxygen is not installed, since the check is about these headers and
     # not about the container.

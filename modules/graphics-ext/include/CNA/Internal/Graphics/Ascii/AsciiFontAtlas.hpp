@@ -32,7 +32,7 @@ namespace CNA::Internal::Graphics::Ascii
      *
      * @return width = kAsciiGlyphWidth * kAsciiAtlasGlyphCount, height = kAsciiGlyphHeight.
      */
-    CNA::Internal::Graphics::ImageData BuildAsciiFontAtlasImageData();
+    [[nodiscard]] CNA::Internal::Graphics::ImageData BuildAsciiFontAtlasImageData();
 
     /**
      * @brief Builds a small, hand-authored monospace glyph atlas covering exactly the characters
@@ -48,7 +48,7 @@ namespace CNA::Internal::Graphics::Ascii
      * @param device The GraphicsDevice to build the atlas texture on.
      * @return A SpriteFont over the generated atlas, one glyph per kAsciiGlyphRamp character.
      */
-    Microsoft::Xna::Framework::Graphics::SpriteFont BuildAsciiFontAtlas(
+    [[nodiscard]] Microsoft::Xna::Framework::Graphics::SpriteFont BuildAsciiFontAtlas(
         Microsoft::Xna::Framework::Graphics::GraphicsDevice& device);
 
     /**
@@ -61,7 +61,7 @@ namespace CNA::Internal::Graphics::Ascii
      * @param rampIndex Index into kAsciiGlyphRamp, [0, kAsciiGlyphRampLength).
      * @return The glyph's 8 row bytes, top row first.
      */
-    std::array<std::uint8_t, kAsciiGlyphHeight> GetAsciiGlyphBitmap(int rampIndex);
+    [[nodiscard]] std::array<std::uint8_t, kAsciiGlyphHeight> GetAsciiGlyphBitmap(int rampIndex);
 }
 
 #endif // CNA_CNAEXT
