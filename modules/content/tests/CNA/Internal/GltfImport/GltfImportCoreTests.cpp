@@ -21,6 +21,7 @@
 
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
+#include "GltfFixtureCorpus.hpp"
 
 using namespace CNA::Internal::GltfImport;
 
@@ -1256,49 +1257,20 @@ TEST(GltfImportCoreTest, ADegenerateFaceNeverForcesADuplicate)
     }
 }
 
-namespace
-{
-    // plan_gltf.md GLTF-461. A tilted triangle authoring TANGENT and TEXCOORD_0 but NO NORMAL.
-    //
-    // §3.7.2.1 does not stop at "MUST calculate flat normals": it continues "and the provided
-    // tangents (if present) MUST be ignored". The authored tangent here is (0,1,0,+1), which is not
-    // perpendicular to the computed flat normal (0,-1/sqrt2,1/sqrt2) at all -- so a reader that
-    // keeps it hands the shader a skewed tangent frame, and one that follows the specification
-    // regenerates (1,0,0,+1) from the UVs. The two answers share no component, which is what makes
-    // the assertion discriminating rather than a plausible-looking near-miss.
-    const char* kTangentWithoutNormalGltf = R"GLTF({
-  "asset": { "version": "2.0" },
-  "scene": 0,
-  "scenes": [ { "nodes": [0] } ],
-  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
-  "meshes": [ { "name": "TangentNoNormal", "primitives": [ {
-      "attributes": { "POSITION": 0, "TANGENT": 1, "TEXCOORD_0": 2 },
-      "indices": 3,
-      "mode": 4
-  } ] } ],
-  "buffers": [ { "byteLength": 116,
-    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAIA/AAAAAAAAgD8AAAAAAACAPwAAAAAAAIA/AAAAAAAAgD8AAAAAAACAPwAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAABAAIAAAA=" } ],
-  "bufferViews": [
-    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
-    { "buffer": 0, "byteOffset": 36,  "byteLength": 48 },
-    { "buffer": 0, "byteOffset": 84,  "byteLength": 24 },
-    { "buffer": 0, "byteOffset": 108, "byteLength": 6 }
-  ],
-  "accessors": [
-    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
-      "min": [0,0,0], "max": [1,1,1] },
-    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC4" },
-    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" },
-    { "bufferView": 3, "componentType": 5123, "count": 3, "type": "SCALAR" }
-  ]
-})GLTF";
-}
 
 TEST(GltfImportCoreTest, AnAuthoredTangentIsIgnoredWhenTheFileAuthorsNoNormal)
 {
-    ScratchDir dir;
-    const std::filesystem::path gltfPath = dir.path() / "tangent-no-normal.gltf";
-    WriteFile(gltfPath, kTangentWithoutNormalGltf);
+    // plan_gltf.md GLTF-464: this was an inline document until the corpus could grow. It is a
+    // conformance statement about the format -- §3.7.2.1's "the provided tangents (if present) MUST
+    // be ignored" -- so `docs/gltf-conformance.md` §3.8 puts it in `tools/gltf_fixtures/`, where the
+    // L3 expectation is derived independently and the four L7 policies render it.
+    //
+    // The fixture's authored tangent is (0,1,0,+1) and the tangent §3.7.2.1 requires a reader to
+    // regenerate is (1,0,0,+1): no shared component, so honouring the authored one is a different
+    // vector rather than a near miss.
+    const std::filesystem::path gltfPath =
+        CnaTest::GltfOracle::CorpusDirectory() / "tangent-without-normal.gltf";
+    ASSERT_TRUE(std::filesystem::is_regular_file(gltfPath)) << gltfPath;
 
     cgltf_options options{};
     cgltf_data* data = nullptr;

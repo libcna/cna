@@ -5,19 +5,19 @@
     "GLTF-390",
     "GLTF-391"
   ],
-  "capturedOn": "2026-08-17",
+  "capturedOn": "2026-08-18",
   "corpusManifest": "tests/assets/gltf/manifest.json",
-  "corpusManifestSha256": "9451aae6888ca54e99180b23e28a0410e0310fed690c7397ecaf35bbf370c2da",
-  "distinctAssetCount": 146,
-  "capturedAssetCount": 138,
+  "corpusManifestSha256": "ab18b1513c8048e9a09c4aa45b9cd79ef3593ea15bddd8fbd9cfd3874e278a04",
+  "distinctAssetCount": 148,
+  "capturedAssetCount": 140,
   "rejectedAssetCount": 8,
   "renderer": "OPENGLES3/EasyGL",
   "rendererEnvironment": [
     "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1"
   ],
   "translationLayerEnvironment": [],
-  "cnaCommit": "a0db093ed9560e82625091d0dfcbf3b949934808",
-  "viewerCommit": "d17d9777c407b199a9ae9eadd253dccc0220c684",
+  "cnaCommit": "b6c180fd2160c1e2a8634f0b0a47ae3de867b2eb",
+  "viewerCommit": null,
   "viewerExecutableSha256": "d476b05c96553051bce354be700fd1029be27c9db8bd8a6413547be4c7b44e6b",
   "viewerRunnerSha256": null,
   "capture": {
@@ -1259,6 +1259,60 @@
         161,
         407,
         328
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "tangent-without-normal",
+      "source": "tangent-without-normal.gltf",
+      "sourceSha256": "f12f19ec4fc0c7dc11b769d3a9953a8e0dcaa5e9cf65e5460a9bfd2ef76c4513",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/tangent-without-normal.png",
+      "goldenPngSha256": "b82aecf5faac8de6f42a93918d33ef23fb2cce05c89ddeecf5c62e90d38b8793",
+      "twoProcessPngSha256": "b82aecf5faac8de6f42a93918d33ef23fb2cce05c89ddeecf5c62e90d38b8793",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 8225,
+      "nonClearBoundingBox": [
+        88,
+        127,
+        407,
+        334
+      ],
+      "emptyForegroundAllowed": false,
+      "comparison": {
+        "maximumRgbDelta": 0,
+        "maximumAlphaDelta": 0
+      }
+    },
+    {
+      "id": "morph-normalless-quad",
+      "source": "morph-normalless-quad.gltf",
+      "sourceSha256": "7721a17cdee5c44e42b4f69fa3009db99f49fe586f8ec623c6311fa9553a5178",
+      "disposition": "capture",
+      "viewerArguments": [],
+      "golden": "tests/gltf-l7/easygl/morph-normalless-quad.png",
+      "goldenPngSha256": "cc00f60d9ea9af3c20b8b77de515a4a722922cf9aa7d927741df56abb778eb00",
+      "twoProcessPngSha256": "cc00f60d9ea9af3c20b8b77de515a4a722922cf9aa7d927741df56abb778eb00",
+      "twoProcessPngByteIdentical": true,
+      "resolution": [
+        512,
+        512
+      ],
+      "nonClearPixelCount": 8738,
+      "nonClearBoundingBox": [
+        203,
+        122,
+        347,
+        314
       ],
       "emptyForegroundAllowed": false,
       "comparison": {

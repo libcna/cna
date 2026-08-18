@@ -83,6 +83,9 @@ TARGET_ASSET_IDS_BY_GROUP: dict[str, tuple[str, ...]] = {
         "tangent-absent-generated",
         "normal-nonuniform-scale",
         "tangent-mirrored",
+        # GLTF-464: promoted from inline test documents -- both are §3.7.2 conformance statements.
+        "tangent-without-normal",
+        "morph-normalless-quad",
     ),
     "transforms": (
         "xf-identity",

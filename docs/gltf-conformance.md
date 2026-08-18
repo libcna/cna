@@ -386,7 +386,7 @@ pass for its fixture. Implemented so far:
 | **L4** | world-space vertex positions after node composition | implemented — `EvaluateWorldPositionsEXT` | `GLTF-006` |
 | **L5** | byte-exact generated vertex/index buffers | implemented — `CompareVertexBytesEXT` / `CompareIndexBytesEXT` | `GLTF-007` |
 | **L6** | effect parameters actually bound for a draw | implemented — `CaptureDrawParamsEXT` | `GLTF-008` |
-| **L7** | rendered pixels vs a golden PNG | 146 explicit EasyGL dispositions: 138 PNGs + 8 safe rejections | `GLTF-009` |
+| **L7** | rendered pixels vs a golden PNG | 148 explicit EasyGL dispositions: 140 PNGs + 8 safe rejections | `GLTF-009` |
 
 The helpers are **test scope only** — they live under `modules/content/tests/CNA/Internal/GltfImport/`
 in namespace `CnaTest::GltfOracle`, are compiled only into `CnaTests`, and are not part of the CNA
@@ -611,7 +611,7 @@ tests.
 The production OPENGLES3 viewer registers `CnaGltfConformanceL7` under the same
 `gltf-conformance` label. It runs after the numerical CNA build in CI because the viewer is a
 separate repository and executable, but it is still a named final rung rather than an unlabelled
-screenshot side job. It gives all 146 canonical assets an explicit outcome; see §5.3.
+screenshot side job. It gives all 148 canonical assets an explicit outcome; see §5.3.
 
 #### Reading a failure: the layer, the fixture, the field, the delta (`GLTF-402`)
 
@@ -791,7 +791,7 @@ produced them.
 
 ### 4.3 Coverage today
 
-**138 of the 146** fixtures carry a golden, covering strides 48, 24, 68 and 80, all seven primitive topologies
+**140 of the 148** fixtures carry a golden, covering strides 48, 24, 68 and 80, all seven primitive topologies
 with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
 width-selection rule. Eight do not carry one. Seven are fixtures the importer must **refuse**
 (`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`);
@@ -879,7 +879,7 @@ every value non-default so an omitted field cannot accidentally agree through de
 the L6 half of `GLTF-244`.
 
 The L7 half is now equally directory-driven on two independent shader implementations. EasyGL's
-and Vulkan's complete 146-asset two-process oracles include all 14 material fixtures. The focused Vulkan runner
+and Vulkan's complete 148-asset two-process oracles include all 14 material fixtures. The focused Vulkan runner
 `scripts/gltf-l7-vulkan-materials.py` discovers the same 14 `mat-*` inputs, launches the production
 viewer twice per asset on an explicitly selected lavapipe ICD, rejects a clear capture and requires
 exact RGBA equality both between processes and against `tests/gltf-l7/vulkan-materials/`. All 14
@@ -925,7 +925,7 @@ Two entries in the table are honest boundaries rather than coverage:
 
 `GLTF-009`'s acceptance is *deterministic PNGs across two runs on `OPENGLES3`*. The committed
 `scripts/gltf-l7-corpus.py` now launches the production viewer in **two independent processes for
-every one of the 146 canonical assets**. The result is 138 byte-identical 512×512 PNG pairs and
+every one of the 148 canonical assets**. The result is 140 byte-identical 512×512 PNG pairs and
 eight byte-identical, non-zero safe rejections whose stable diagnostic and lower-layer owning task
 are both recorded. The corresponding 138 goldens live in `tests/gltf-l7/easygl/`; policy and the
 two camera/culling rig exceptions live in `tests/gltf-l7/easygl-policy.json`; the complete input,
@@ -1044,7 +1044,7 @@ the render pass or exposing generated mip levels. The shared winding oracle is 1
 EasyGL and Vulkan and green on SOFTWARE; HEADLESS also passes its explicit non-rasterising
 boundary. It covers both windings under all three cull modes, ordinary/MSAA targets, every draw
 entry point, stock textured effects, mirrored transforms and SpriteBatch. The later whole-corpus
-L7 campaign is complete at 138 deterministic captures plus eight deterministic safe rejections;
+L7 campaign is complete at 140 deterministic captures plus eight deterministic safe rejections;
 its two additional renderer-boundary findings and exact evidence are in §5.5.
 
 `GLTF-396` records the adjacent clip/depth boundary in `docs/gltf-conventions.md`. CNA projection
@@ -1380,6 +1380,8 @@ written for this document: two descriptions of the same fixture are two things t
 | `tangent-absent-generated` | normals | L1, L2, L3, L4, L5 | absent TANGENT; angle-weighted tangent generation; Gram-Schmidt; unit generated tangent; generated handedness +1 |
 | `normal-nonuniform-scale` | normals | L1, L2, L3, L4, L5 | rotated non-uniform scale; inverse-transpose normal matrix; slanted authored normal; normal renormalisation after transform |
 | `tangent-mirrored` | normals | L1, L2, L3, L4, L5 | negative-determinant placement; shared tangent vertex buffer; per-draw handedness sign; mirrored tangent direction; normal map with non-zero tangent-space Y |
+| `tangent-without-normal` | normals | L1, L2, L3, L4 | absent NORMAL; authored TANGENT ignored; regenerated tangent basis |
+| `morph-normalless-quad` | normals | L1, L2, L3, L4, L5 | absent NORMAL; morph target; per-corner flat-normal split; delta on a shared vertex |
 | `xf-identity` | transforms | L1, L2, L3, L4 | node without transform; single scene root |
 | `xf-translation` | transforms | L1, L2, L3, L4 | node translation |
 | `xf-scale-uniform` | transforms | L1, L2, L3, L4 | uniform node scale; normal matrix agrees with the world 3x3 |

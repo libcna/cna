@@ -12,13 +12,13 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 146,
+  "distinctAssetCount": 148,
   "owningGroupCounts": {
     "container": 8,
     "accessors": 13,
     "component-types": 8,
     "topology": 8,
-    "normals": 6,
+    "normals": 8,
     "transforms": 17,
     "materials": 14,
     "textures": 10,
@@ -30,13 +30,13 @@
     "draco": 4,
     "robustness": 8
   },
-  "targetDistinctAssetCount": 146,
+  "targetDistinctAssetCount": 148,
   "targetOwningGroupCounts": {
     "container": 8,
     "accessors": 13,
     "component-types": 8,
     "topology": 8,
-    "normals": 6,
+    "normals": 8,
     "transforms": 17,
     "materials": 14,
     "textures": 10,
@@ -1036,6 +1036,42 @@
         "per-draw handedness sign",
         "mirrored tangent direction",
         "normal map with non-zero tangent-space Y"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "tangent-without-normal",
+      "owningGroup": "normals",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "absent NORMAL",
+        "authored TANGENT ignored",
+        "regenerated tangent basis"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "morph-normalless-quad",
+      "owningGroup": "normals",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "absent NORMAL",
+        "morph target",
+        "per-corner flat-normal split",
+        "delta on a shared vertex"
       ],
       "auditFixture": null
     },
@@ -4698,6 +4734,31 @@
       "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
     },
     {
+      "path": "morph-normalless-quad.expected.json",
+      "bytes": 12234,
+      "sha256": "8312ad94f47ab093958a04da0edfb7904252d6d34cd729f33d9ef186e622638b"
+    },
+    {
+      "path": "morph-normalless-quad.glb",
+      "bytes": 900,
+      "sha256": "021e57ed7ec5d733ab8be520aa337ddc66aba021be62545bceea282e1de642e1"
+    },
+    {
+      "path": "morph-normalless-quad.gltf",
+      "bytes": 1710,
+      "sha256": "7721a17cdee5c44e42b4f69fa3009db99f49fe586f8ec623c6311fa9553a5178"
+    },
+    {
+      "path": "morph-normalless-quad.ib.bin",
+      "bytes": 12,
+      "sha256": "f0c9cd064596df166df0d8cd8bb9487875640690aee47b98d77724d40b305ef7"
+    },
+    {
+      "path": "morph-normalless-quad.vb.bin",
+      "bytes": 288,
+      "sha256": "e6d70bbaaf21ee5810b7c3efce09ed9cdab293634964e625d0a63683a146b7bc"
+    },
+    {
       "path": "morph-overdriven-weight.expected.json",
       "bytes": 8668,
       "sha256": "69082a9e57ec527b38f5a202e7015ff314880cb3d4034f2f40e594e376b0c3e7"
@@ -5771,6 +5832,31 @@
       "path": "tangent-mirrored.vb.bin",
       "bytes": 144,
       "sha256": "e052d1b4ff9faa49bc4e80297972f4bb74f56d4830757d48dde318d996b89440"
+    },
+    {
+      "path": "tangent-without-normal.expected.json",
+      "bytes": 8665,
+      "sha256": "0270cf68a49c6b90390db539f23fd02857b810fd71b6a85e2e49a51e9a6dabb8"
+    },
+    {
+      "path": "tangent-without-normal.glb",
+      "bytes": 956,
+      "sha256": "71cea007a94245da71a1f5eb7d85a650248144b298133a353b541eabf3a89a13"
+    },
+    {
+      "path": "tangent-without-normal.gltf",
+      "bytes": 1696,
+      "sha256": "f12f19ec4fc0c7dc11b769d3a9953a8e0dcaa5e9cf65e5460a9bfd2ef76c4513"
+    },
+    {
+      "path": "tangent-without-normal.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "tangent-without-normal.vb.bin",
+      "bytes": 144,
+      "sha256": "e505a1b725e41a82f589b708dd9cee1b84f4f1694be8920495917f8977f53e6b"
     },
     {
       "path": "tex-dual-texture-stride.expected.json",

@@ -543,8 +543,8 @@ TEST(GltfFixtureCorpus, VulkanCorpusL7ReportIsCompleteExactAndReproducible)
         std::string(reportBytes.begin(), reportBytes.end())));
     ASSERT_EQ(JsonType::Object, report.type);
     EXPECT_EQ("VULKAN", StringOr(report, "renderer", ""));
-    EXPECT_EQ(146.0, NumberOr(report, "distinctAssetCount", -1.0));
-    EXPECT_EQ(138.0, NumberOr(report, "capturedAssetCount", -1.0));
+    EXPECT_EQ(148.0, NumberOr(report, "distinctAssetCount", -1.0));
+    EXPECT_EQ(140.0, NumberOr(report, "capturedAssetCount", -1.0));
     EXPECT_EQ(8.0, NumberOr(report, "rejectedAssetCount", -1.0));
     EXPECT_EQ(2.0, NumberOr(Member(report, "capture"), "processesPerAsset", -1.0));
     EXPECT_EQ(0.0, NumberOr(Member(report, "goldenComparison"), "rgbTolerance", -1.0));
@@ -561,7 +561,7 @@ TEST(GltfFixtureCorpus, VulkanCorpusL7ReportIsCompleteExactAndReproducible)
     EXPECT_TRUE(activeDivergences.arrayValue.empty());
 
     const std::vector<std::string> fixtureIds = CorpusFixtureIds();
-    ASSERT_EQ(146u, fixtureIds.size());
+    ASSERT_EQ(148u, fixtureIds.size());
     const std::set<std::string> expectedIds(fixtureIds.begin(), fixtureIds.end());
     const JsonValue& assets = Member(report, "assets");
     ASSERT_EQ(JsonType::Array, assets.type);
@@ -612,7 +612,7 @@ TEST(GltfFixtureCorpus, VulkanCorpusL7ReportIsCompleteExactAndReproducible)
         }
     }
     EXPECT_EQ(expectedIds, seen);
-    EXPECT_EQ(138u, capturedIds.size());
+    EXPECT_EQ(140u, capturedIds.size());
     EXPECT_EQ(8u, rejected);
 
     std::set<std::string> goldenIds;
@@ -668,8 +668,8 @@ TEST(GltfFixtureCorpus, DirectX11CorpusL7ReportIsCompleteExactAndReproducible)
         std::string(reportBytes.begin(), reportBytes.end())));
     ASSERT_EQ(JsonType::Object, report.type);
     EXPECT_EQ("DIRECTX11/DXVK", StringOr(report, "renderer", ""));
-    EXPECT_EQ(146.0, NumberOr(report, "distinctAssetCount", -1.0));
-    EXPECT_EQ(138.0, NumberOr(report, "capturedAssetCount", -1.0));
+    EXPECT_EQ(148.0, NumberOr(report, "distinctAssetCount", -1.0));
+    EXPECT_EQ(140.0, NumberOr(report, "capturedAssetCount", -1.0));
     EXPECT_EQ(8.0, NumberOr(report, "rejectedAssetCount", -1.0));
     EXPECT_EQ(2.0, NumberOr(Member(report, "capture"), "processesPerAsset", -1.0));
     EXPECT_EQ(0.0, NumberOr(Member(report, "goldenComparison"), "rgbTolerance", -1.0));
@@ -712,7 +712,7 @@ TEST(GltfFixtureCorpus, DirectX11CorpusL7ReportIsCompleteExactAndReproducible)
     EXPECT_EQ(StringOr(report, "viewerRunnerSha256", ""),
               HexDigest(sha.ComputeHash(ReadAllBytes(repository / "scripts" / "run-wine-dxvk.sh"))));
     const std::vector<std::string> fixtureIds = CorpusFixtureIds();
-    ASSERT_EQ(146u, fixtureIds.size());
+    ASSERT_EQ(148u, fixtureIds.size());
     const std::set<std::string> expectedIds(fixtureIds.begin(), fixtureIds.end());
     const JsonValue& assets = Member(report, "assets");
     ASSERT_EQ(JsonType::Array, assets.type);
@@ -762,7 +762,7 @@ TEST(GltfFixtureCorpus, DirectX11CorpusL7ReportIsCompleteExactAndReproducible)
         }
     }
     EXPECT_EQ(expectedIds, seen);
-    EXPECT_EQ(138u, capturedIds.size());
+    EXPECT_EQ(140u, capturedIds.size());
     EXPECT_EQ(8u, rejected);
 
     std::set<std::string> goldenIds;
@@ -816,8 +816,8 @@ TEST(GltfFixtureCorpus, SoftwareCorpusL7ReportIsCompleteExactAndReproducible)
         std::string(reportBytes.begin(), reportBytes.end())));
     ASSERT_EQ(JsonType::Object, report.type);
     EXPECT_EQ("SOFTWARE", StringOr(report, "renderer", ""));
-    EXPECT_EQ(146.0, NumberOr(report, "distinctAssetCount", -1.0));
-    EXPECT_EQ(138.0, NumberOr(report, "capturedAssetCount", -1.0));
+    EXPECT_EQ(148.0, NumberOr(report, "distinctAssetCount", -1.0));
+    EXPECT_EQ(140.0, NumberOr(report, "capturedAssetCount", -1.0));
     EXPECT_EQ(8.0, NumberOr(report, "rejectedAssetCount", -1.0));
     EXPECT_EQ(2.0, NumberOr(Member(report, "capture"), "processesPerAsset", -1.0));
     EXPECT_EQ(0.0, NumberOr(Member(report, "goldenComparison"), "rgbTolerance", -1.0));
@@ -838,7 +838,7 @@ TEST(GltfFixtureCorpus, SoftwareCorpusL7ReportIsCompleteExactAndReproducible)
     EXPECT_EQ(StringOr(report, "corpusManifestSha256", ""),
               HexDigest(sha.ComputeHash(ReadAllBytes(CorpusDirectory() / "manifest.json"))));
     const std::vector<std::string> fixtureIds = CorpusFixtureIds();
-    ASSERT_EQ(146u, fixtureIds.size());
+    ASSERT_EQ(148u, fixtureIds.size());
     const std::set<std::string> expectedIds(fixtureIds.begin(), fixtureIds.end());
     const JsonValue& assets = Member(report, "assets");
     ASSERT_EQ(JsonType::Array, assets.type);
@@ -888,7 +888,7 @@ TEST(GltfFixtureCorpus, SoftwareCorpusL7ReportIsCompleteExactAndReproducible)
         }
     }
     EXPECT_EQ(expectedIds, seen);
-    EXPECT_EQ(138u, capturedIds.size());
+    EXPECT_EQ(140u, capturedIds.size());
     EXPECT_EQ(8u, rejected);
 
     std::set<std::string> goldenIds;
@@ -2086,13 +2086,14 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
     // than the counter taught to see through concatenation, because the ratchet's job is to make
     // the next addition a deliberate act, and it still does that from here.
     //
-    // 263 -> 265 for GLTF-461's two spec-rule probes: a normal-less quad whose morph target lifts
-    // the vertex both its triangles share (§3.7.2.2's "MUST calculate flat normals for each morph
-    // target"), and a triangle authoring TANGENT but no NORMAL (§3.7.2.1's "the provided tangents
-    // MUST be ignored"). Both ARE conformance statements and both belong in tools/gltf_fixtures/ by
-    // §3.8's rule -- they are inline only because the corpus asset count is pinned at 146 by four
-    // committed L7 provenance reports that enumerate every asset, and one of the four
-    // (`directx11`) cannot be re-captured in this environment. Promoting them is GLTF-464.
+    // 263 -> 265 for GLTF-461's two spec-rule probes, then 277 -> 275 when GLTF-464 REMOVED them
+    // again on 2026-08-18. Both were conformance statements about the format, so §3.8's rule put
+    // them in tools/gltf_fixtures/ as `tangent-without-normal` and `morph-normalless-quad`; they had
+    // been inline only because the corpus asset count is pinned by four committed L7 provenance
+    // reports that enumerate every asset, and the recorded blocker -- that `directx11` could not be
+    // re-captured here -- had already been disproved by GLTF-471. The corpus is 148 now and all four
+    // policies were re-captured. This is the only entry in this list that subtracts, and it is what
+    // the ratchet is for: the ceiling records decisions in both directions.
     //
     // 265 -> 267 for GLTF-468's two storage-form probes, and both are the same story: §3.7.2.1's
     // attribute table allows `COLOR_n` as VEC3 or VEC4 and `TEXCOORD_n` as float, unsigned byte
@@ -2114,7 +2115,7 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
     //
     // Note for whoever edits this comment: the scan counts the opening delimiter anywhere in a
     // .cpp, comments included, so spelling it here would raise the very number it explains.
-    constexpr int kCeiling = 277;
+    constexpr int kCeiling = 275;
 
     int found = 0;
     std::map<std::string, int> perFile;

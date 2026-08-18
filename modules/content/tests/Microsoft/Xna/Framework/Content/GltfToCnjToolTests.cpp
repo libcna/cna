@@ -2680,42 +2680,6 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsSkinnedPbrMaterialThroughTheOfflineC
 // "morphTargets"/"morphWeights"/"morphWeightTrack" JSON fields, and ModelTypeReader's own .cnj
 // JSON path must reconstruct the same MorphTargetDataEXT the runtime glTF path already builds
 // directly (formerly a documented scope cut -- CNB-64/Phase 13B -- that only emitted a warning).
-// plan_gltf.md GLTF-461. A quad as two triangles with NO NORMAL, and a morph target that lifts the
-// ONE vertex both triangles share out of their common plane.
-//
-// Every part of the fixture is load-bearing. No NORMAL means §3.7.2.1 requires flat normals, and
-// §3.7.2.2 then requires them per morph target -- so the importer splits every corner (4 source
-// vertices become 6) and the runtime recomputes from the morphed positions. The shared vertex is
-// what makes the split necessary rather than cosmetic: once lifted, the two faces genuinely
-// disagree, and at 4 vertices there is no value that is both their normals. And because the delta
-// is on a SHARED vertex, both of its copies must receive it -- a gather that dropped one would tear
-// the surface along the diagonal.
-const char* kMorphedNormallessQuadGltf = R"GLTF({
-  "asset": { "version": "2.0" },
-  "scene": 0,
-  "scenes": [ { "nodes": [0] } ],
-  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
-  "meshes": [ { "name": "NormallessMorphQuad", "weights": [1.0], "primitives": [ {
-      "attributes": { "POSITION": 0 },
-      "indices": 2,
-      "mode": 4,
-      "targets": [ { "POSITION": 1 } ]
-  } ] } ],
-  "buffers": [ { "byteLength": 108,
-    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAABAAIAAAACAAMA" } ],
-  "bufferViews": [
-    { "buffer": 0, "byteOffset": 0,  "byteLength": 48 },
-    { "buffer": 0, "byteOffset": 48, "byteLength": 48 },
-    { "buffer": 0, "byteOffset": 96, "byteLength": 12 }
-  ],
-  "accessors": [
-    { "bufferView": 0, "componentType": 5126, "count": 4, "type": "VEC3",
-      "min": [0,0,0], "max": [1,1,0] },
-    { "bufferView": 1, "componentType": 5126, "count": 4, "type": "VEC3",
-      "min": [0,0,0], "max": [0,0,1] },
-    { "bufferView": 2, "componentType": 5123, "count": 6, "type": "SCALAR" }
-  ]
-})GLTF";
 
 TEST(GltfToCnjToolTest, SerializesAndReloadsMorphTargetsThroughTheOfflineCnjPath)
 {
@@ -2802,11 +2766,15 @@ TEST(GltfToCnjToolTest, MorphedFlatNormalsAreRecomputedIdenticallyOnBothLoadPath
     // The assertion is derived from the blended POSITIONS rather than stated, so it cannot be
     // satisfied by writing back a hardcoded expectation: each of the two morphed faces must carry
     // exactly its own geometric normal, and the two must differ.
-    ScratchDir gltfDir;
+    // plan_gltf.md GLTF-464: this was an inline document until the corpus could grow. It is a
+    // conformance statement about the format -- §3.7.2.2's "MUST calculate flat normals for each
+    // morph target" -- so it lives in `tools/gltf_fixtures/` now, where `flatnormals.py` derives the
+    // per-corner split independently and all four L7 policies render it.
     ScratchDir contentRoot;
 
-    const std::filesystem::path gltfPath = gltfDir.path() / "normallessmorph.gltf";
-    WriteFile(gltfPath, kMorphedNormallessQuadGltf);
+    const std::filesystem::path gltfPath =
+        CnaTest::GltfOracle::CorpusDirectory() / "morph-normalless-quad.gltf";
+    ASSERT_TRUE(std::filesystem::is_regular_file(gltfPath)) << gltfPath;
 
     ASSERT_EQ(0, RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(),
                                   "normallessmorph"));
@@ -2824,9 +2792,11 @@ TEST(GltfToCnjToolTest, MorphedFlatNormalsAreRecomputedIdenticallyOnBothLoadPath
     ContentManager offlineCm(nullptr, contentRoot.path().string());
     offlineCm.setGraphicsDevice(gd);
     Model offline = offlineCm.Load<Model>("normallessmorph");
-    ContentManager directCm(nullptr, gltfDir.path().string());
+    // The direct glTF path loads the same asset straight from the corpus, so both loaders read one
+    // file rather than two copies that could drift.
+    ContentManager directCm(nullptr, gltfPath.parent_path().string());
     directCm.setGraphicsDevice(gd);
-    Model direct = directCm.Load<Model>("normallessmorph");
+    Model direct = directCm.Load<Model>("morph-normalless-quad");
 
     MorphTargetDataEXT* offlineMorph = morphOf(offline);
     MorphTargetDataEXT* directMorph = morphOf(direct);

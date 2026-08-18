@@ -8,8 +8,8 @@ session needs to start work without re-deriving the state.
 
 - **Branch:** `feature/gltf`, with local commits. The owner explicitly requested a push when the
   current autonomous run reaches its weekly-limit cutoff; no pull request has been requested.
-- **Working document:** `plan_gltf.md`, **475** numbered rows. **Six remain open: `GLTF-344` and
-  `GLTF-465` (both `✅/⬜`), and `GLTF-459`, `GLTF-460`, `GLTF-464`, `GLTF-475` (`⬜`).**
+- **Working document:** `plan_gltf.md`, **475** numbered rows. **Five remain open: `GLTF-344` and
+  `GLTF-465` (both `✅/⬜`), and `GLTF-459`, `GLTF-460`, `GLTF-475` (`⬜`).**
   `GLTF-463` closed on 2026-08-17; `GLTF-472` (the adversarial audit) closed on 2026-08-18 and opened
   three rows; `GLTF-473` closed the same day and opened `GLTF-475`. **No renderer in the tree is in
   the forbidden third state any more** — nothing accepts a valid core glTF primitive and renders it
@@ -145,8 +145,8 @@ Expected as of this writing:
 | full suite, from the ROOT | **7 514 tests: 7 286 passed, 228 skipped, 0 failed** |
 | `*Gltf*` | **597 tests: 594 passed, 3 skipped, 0 failed** — the skips are the opt-in licensed ChronographWatch asset and the two opt-in large-reference-asset budgets |
 | `*Gltf*` and the ladder on the **OPENGLES3** tree | **598 tests: 595 passed, 3 skipped** (one more case runs there than on HEADLESS) and **10/10** conformance, both under `xvfb-run -a` — §27.1 row 19's cross-renderer claim re-checked with stride 80 and the 146th asset in place |
-| generator `--check` / `--determinism` | **146 assets, 734 files — byte-identical**, and two independent generator runs agree byte-for-byte |
-| EasyGL L7 corpus (Xvfb, production viewer) | **146 dispositions: 138 deterministic PNGs, 8 deterministic safe rejections**, zero RGB/alpha tolerance |
+| generator `--check` / `--determinism` | **148 assets, 744 files — byte-identical**, and two independent generator runs agree byte-for-byte |
+| EasyGL L7 corpus (Xvfb, production viewer) | **148 dispositions: 140 deterministic PNGs, 8 deterministic safe rejections**, zero RGB/alpha tolerance |
 | Vulkan L7 corpus (Xvfb, lavapipe) | **146 dispositions: 138 PNGs, 8 safe rejections** — export `VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json` or the report omits the ICD pin and its integrity test fails |
 | SOFTWARE L7 corpus (Xvfb) | **146 dispositions: 138 PNGs, 8 safe rejections** — runnable again only since `GLTF-467` |
 | DirectX11 L7 corpus (Wine + DXVK under Xvfb) | **146 dispositions: 138 PNGs, 8 safe rejections** — export `CNA_D3D11_VIRTUAL_DESKTOP=CNA,1280x1024` and use `xvfb-run -a -s "-screen 0 1280x1024x24"`, or every asset fails with `AcquireSubsystem(Video) failed: No displays available`. Budget ~25 minutes: two Wine processes per asset |

@@ -34,8 +34,10 @@ Oracle repository: `openeggbert/cna-gltf-viewer` (`develop`), writable and exerc
 > a row closes, so the correction is mechanical: extract every `| GLTF-nnn | … | <state> |` cell and
 > tally it. Anyone editing a state must re-tally.
 >
-> Of 475 rows: **469 are closed (`✔` 275, `✅` 194)** and **6 remain open** — 2 `✅/⬜`
-> (`GLTF-344`, `GLTF-465`) and 4 `⬜` (`GLTF-459`, `GLTF-460`, `GLTF-464`, `GLTF-475`).
+> Of 475 rows: **470 are closed (`✔` 275, `✅` 195)** and **5 remain open** — 2 `✅/⬜`
+> (`GLTF-344`, `GLTF-465`) and 3 `⬜` (`GLTF-459`, `GLTF-460`, `GLTF-475`).
+> `GLTF-464` closed on 2026-08-18: the corpus is **148 assets / 744 files** and all four L7 policies
+> were re-captured, each at 148 dispositions with no existing golden changed.
 > `GLTF-474` closed on 2026-08-18: `SDL_GPU`, `DILIGENT` and `LLGL` now draw **every** canonical glTF
 > stride, so eight renderers reach the draw boundary on all eight fixtures.
 > `GLTF-473` closed on 2026-08-18: `OPENGLES1` no longer reads a PBR or skinned record through the
@@ -1668,7 +1670,7 @@ and fails the release gate if any is found.
   `GLTF-399` asserts in CI that the emitted distinct-asset count equals the number stated here. If
   the corpus grows, the number in this document is updated from the manifest — never the reverse.
 
-### 24.2 Target corpus — 146 distinct synthetic assets
+### 24.2 Target corpus — 148 distinct synthetic assets
 
 Counts are **owning-group** counts per §24.1. Each generated asset additionally ships a `.glb`
 twin (`GLTF-400`), which is the same asset in another container, not another asset. The exact final
@@ -1691,7 +1693,7 @@ animation-focused assets without double-counting either use.
 | bufferView / accessor | 13 | 13 | — |
 | Component types | 8 | 8 | — |
 | Topology | 8 | 8 | — |
-| Normals / tangents | 6 | 6 | — |
+| Normals / tangents | 8 | 8 | `GLTF-464` promoted `tangent-without-normal` and `morph-normalless-quad` from inline test documents |
 | Transforms | 17 | 17 | — |
 | Materials / PBR | 14 | 14 | — |
 | UV / textures / samplers | 10 | 10 | — |
@@ -1702,7 +1704,7 @@ animation-focused assets without double-counting either use.
 | Scenes | 3 | 3 | — |
 | Draco parity | 4 | 4 | — |
 | Robustness / malformed | 8 | 8 | — |
-| **Total** | **145** | **145** | **—** |
+| **Total** | **147** | **147** | **—** |
 
 > **Materials group, four times adjusted (`GLTF-241`, `GLTF-224`/`GLTF-225`, `GLTF-341`,
 > `GLTF-218`).** `mat-vertex-color-pbr`
@@ -1979,12 +1981,13 @@ have run its rigid PBR program over a skinned stride-76/80 record; `MAGNUM`'s PB
 refused stride 60 outright; and two renderer families (`LLGL`, `BGFX`) do not compile at all on this
 branch because a merge left their descriptors syntactically broken.
 
-**Evidence, recaptured whole rather than argued from the old run.** The corpus is 146 assets / 734
+**Evidence, recaptured whole rather than argued from the old run.** The corpus is 148 assets / 744
 files, byte-identical across two independent generator runs. All **four** L7 policies were re-captured
 end to end — EasyGL/OPENGLES3, Vulkan on lavapipe, SOFTWARE, and DirectX11 under Wine + DXVK — each
-giving **146 explicit dispositions: 138 deterministic PNG pairs at RGB/alpha tolerance 0 plus 8
+giving **148 explicit dispositions: 140 deterministic PNG pairs at RGB/alpha tolerance 0 plus 8
 deterministic safe rejections**, two independent viewer processes per asset, exactly one renderer
-identity per campaign. The vertex-colour product is asserted from those pixels rather than from shader
+identity per campaign. (146/138 until `GLTF-464` promoted two inline probes on 2026-08-18; that
+recapture changed no existing golden, only added the two new assets to each policy.) The vertex-colour product is asserted from those pixels rather than from shader
 source: `GltfFixtureCorpus.EveryL7GoldenCarriesTheVertexColourAlphaProductRatherThanTheWhiteIdentity`
 uses base-colour **alpha** — the one term with no view dependence — with a `COLOR_0`-free control in
 the same golden set to calibrate the rig, plus a rigid-path witness (a green channel of exactly 0 that
@@ -2937,7 +2940,7 @@ passes numerically at L4 **and** `GLTF-260` proves no double application.*
 | GLTF-418 | Corpus determinism | ✔ | GLTF-399 | **Accept:** two generator runs produce byte-identical output. **`scripts/regenerate-gltf-goldens.sh --determinism` emits twice in separate processes with different `PYTHONHASHSEED` values and currently proves all 729 files byte-identical.** Comparing two emissions inside one process would miss hash-order instability. The same check runs in `gltf-sanitizers-ci.yml` beside `--check`. |
 | GLTF-419 | Corpus size budget | ✔ | GLTF-399 | **Accept:** total synthetic corpus under a stated size; every fixture < 8 KB. **Enforced by `EveryAssetFitsTheSizeBudgetOrStatesWhyItCannot`: 8 KiB per asset and 2 MiB for the complete generated directory.** Today the directory is **1 976 912 bytes**; the largest input remains `skin-73-joints.gltf` at **12 653 bytes**. That deliberate exception is justified in the manifest: 73 joints and inverse-bind matrices place it exactly beyond XNA's 72-entry palette. Every other `.gltf`/`.glb` stays below 8 KiB, and the test rejects an exemption that is no longer needed. |
 | GLTF-420 | Make `gltf-conformance` a required CI gate | ✔ | GLTF-398 | **Accept:** the label runs per commit and blocks on failure. **The four-arm renderer workflow is now the gate.** Both code and documentation commits trigger it: the old `paths-ignore` exception is gone. Concurrency is keyed by `github.sha` with cancellation disabled, so a later branch push cannot erase an earlier commit's result. Each stable `glTF conformance (<renderer>)` check runs `ctest -L gltf-conformance --output-on-failure`; Actions' default failure propagation is retained with no `continue-on-error` or `|| true`. The source-level ladder test asserts all of these properties, so weakening the workflow fails L0 locally and in the very gate being protected. Repository branch-protection policy may select these stable check names, but correctness does not depend on an undocumented allow-failure wrapper in YAML. |
-| GLTF-464 | Promote `GLTF-461`'s two spec-rule probes to corpus assets | ⬜ | GLTF-461 | `GLTF-461` had to state two §3.7.2 rules as **inline** documents — a normal-less quad whose morph target lifts the vertex both its triangles share, and a triangle authoring `TANGENT` but no `NORMAL` — and by `docs/gltf-conformance.md` §3.8's own rule both belong in `tools/gltf_fixtures/` instead, because each is a conformance statement rather than a loader-machinery probe. They are inline only because **the corpus asset count is pinned by four committed L7 provenance reports that enumerate every asset** (146 since `GLTF-463`), and adding one makes each report's own completeness assertion fail until every renderer is re-captured. That is no longer an environment blocker: `GLTF-463` added an asset and all four policies — including `directx11` under Wine + DXVK with `CNA_D3D11_VIRTUAL_DESKTOP` — were re-captured on 2026-08-17, so this row now costs a fixture pair plus one four-policy recapture (about 40 minutes, most of it DirectX11). `GltfFixtureCorpus.InlineGltfDocumentsDoNotGrowWithoutADecision`'s ceiling was raised 263 → 265 with that reason recorded. **Accept:** both promoted to generated fixtures with L3/L5 expectations derived through `tools/gltf_fixtures/flatnormals.py`, the inline documents deleted, the ceiling lowered again, and all four L7 reports re-captured so their asset enumeration is complete. |
+| GLTF-464 | Promote `GLTF-461`'s two spec-rule probes to corpus assets | ✅ | GLTF-461 | `GLTF-461` had to state two §3.7.2 rules as **inline** documents, and by `docs/gltf-conformance.md` §3.8's own rule both belong in `tools/gltf_fixtures/` instead: each is a conformance statement about the format rather than a loader-machinery probe. They were inline only because the corpus asset count is pinned by four committed L7 provenance reports that enumerate every asset, so adding one makes each report's completeness assertion fail until every renderer is re-captured. **Both are promoted.** `tangent-without-normal` is a tilted triangle authoring `TANGENT` and `TEXCOORD_0` but no `NORMAL`: §3.7.2.1 requires the flat normal to be computed **and** the authored tangent ignored, and the authored `(0,1,0,+1)` shares no component with the regenerated `(1,0,0,+1)`, so the two behaviours cannot be read as one rounding apart. `morph-normalless-quad` is a quad as two triangles with no `NORMAL` and a morph target that lifts **only the vertex both triangles share**: §3.7.2.2's per-target clause forces the per-corner split (4 source vertices become 6), the normals become a function of the weights rather than of the file, and both copies of the shared vertex must receive the delta or the surface tears along the diagonal. A delta on all four corners would translate the quad and leave both face normals alone — which is exactly the case a reader that never recomputes passes, and why this fixture moves one vertex. Its L3 split and morphed pose are derived through `tools/gltf_fixtures/flatnormals.py`, so the golden is a second opinion rather than a restatement of what CNA produced, and it also carries the standard `l4.morph` block so the corpus-wide `morph-*` family sweep covers it like every other member. The two inline documents are deleted and both tests now load the corpus asset — the `.cnj` one through **both** loaders from the same file, so they cannot drift. `InlineGltfDocumentsDoNotGrowWithoutADecision`'s ceiling drops 277 → 275. **The recapture's own result is worth recording:** all four policies were re-run end to end (EasyGL/OPENGLES3, Vulkan on lavapipe, SOFTWARE, and DirectX11 through Wine + DXVK under `CNA_D3D11_VIRTUAL_DESKTOP=CNA,1280x1024`) and each produced **148 explicit dispositions: 140 deterministic PNG pairs plus 8 deterministic safe rejections** — with **not one existing golden changed**, only the two new assets added per policy. That is the evidence that nothing in `GLTF-465`/`GLTF-473`/`GLTF-474`'s renderer work moved a pixel on any of the four. **Accept:** met — both promoted with derived L3/L5 expectations, the inline documents deleted, the ceiling lowered, and all four L7 reports re-captured so their asset enumeration is complete at 148. |
 
 ---
 
