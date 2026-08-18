@@ -66,6 +66,34 @@ Reproduce: `./cmake-build-cnaext/cna_test_cnaext_postprocess_chain --benchmark`.
 | FXAA | 12.99 | ×2.09 |
 | Bloom | 28.61 | ×4.60 |
 
+### SSAO, per quality preset
+
+`plan_modern.md` `MOD-528`. Reproduce: `./cmake-build-cnaext/cna_test_cnaext_ssao --benchmark`.
+
+| Preset | Samples | SSAO at 1280×720 | SSAO at 1920×1080 |
+|---|---|---|---|
+| `Low` | 8 | 28.71 ms | 63.71 ms |
+| `Medium` | 16 | 45.62 ms | 86.96 ms |
+| `High` | 32 | 58.85 ms | 135.83 ms |
+| `Ultra` | 64 | 97.39 ms | 222.07 ms |
+
+**SSAO is by a wide margin the most expensive pass in this layer** — `Medium` costs more than bloom
+at `Ultra`, and roughly six times the tonemapper. That is inherent rather than a tuning failure: the
+shader loops over the kernel *per texel*, so every sample is a dependent texture read across the
+whole frame.
+
+Unlike bloom's level count, **the sample count is a real dial**: 8 → 64 samples is 3.4× the time.
+Sub-linear, because there is a fixed per-texel cost around the loop, but close enough that a quality
+preset genuinely buys frame time here. Two settings before reaching for a lower preset: the
+half-resolution option (`MOD-523`, off by default) quarters the texels the loop runs over, and a
+smaller radius does not help at all — the cost is the sample count, not the distance.
+
+The prepass itself measures **~0.01 ms**, and that number is a *floor* rather than a cost: the
+benchmark draws no geometry into it, so what is timed is the bind and the clear. In a real scene the
+prepass is a second pass over the whole geometry and scales with it. It is recorded because it
+settles which half to look at — if a prepass is expensive, it is the geometry, and the answer is
+fewer draws rather than a cheaper prepass.
+
 ### Bloom, per quality preset
 
 `plan_modern.md` `MOD-416`. Reproduce: `./cmake-build-cnaext/cna_test_cnaext_bloom --benchmark`.

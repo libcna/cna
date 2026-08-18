@@ -1863,7 +1863,6 @@ if (!ProfileIsEs2ApiGeneration())
     void EasyGLEffectRenderer::SetUniformVec3Array(const char* name, const float* values, int count)
     {
         const int loc = ArrayUniformLocation(name);
-        std::fprintf(stderr, "[PROBE] vec3array %s loc=%d count=%d first=%f\n", name, loc, count, count>0?values[0]:0.0f);
         if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count) * 3), 3);
     }
 

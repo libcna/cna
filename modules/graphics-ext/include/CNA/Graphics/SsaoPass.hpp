@@ -5,6 +5,7 @@
 
 #include "CNA/Graphics/FullscreenPass.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
+#include "CNA/Graphics/RenderQuality.hpp"
 #include "CNA/Graphics/RenderTargetPool.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
@@ -112,6 +113,49 @@ namespace CNA::Graphics {
          */
         [[nodiscard]] const std::vector<Microsoft::Xna::Framework::Vector3>& getKernel() const;
 
+        /**
+         * @brief Returns the hemisphere sample count a quality preset asks for.
+         *
+         * plan_modern.md `MOD-522`. A function rather than a side effect, for the reason
+         * `MOD-409` records: `setRenderQuality` rewrites nothing, and
+         * `RenderPipelineSettings::applyRenderQualityPresetEXT()` is the explicit step.
+         *
+         * | Quality | Samples |
+         * |---|---|
+         * | `Low`    | 8 |
+         * | `Medium` | 16 |
+         * | `High`   | 32 |
+         * | `Ultra`  | 64 |
+         *
+         * Unlike bloom's level count, this **is** a real performance dial: the occlusion shader
+         * loops over the kernel per texel, so the cost is very nearly linear in the sample count.
+         * See `docs/cnaext-perf.md`.
+         *
+         * @param quality The preset to translate.
+         * @return The sample count, within the range `apply()` accepts.
+         */
+        [[nodiscard]] static int sampleCountForQuality(RenderQuality quality);
+
+        /**
+         * @brief Whether the occlusion buffer is computed at half resolution.
+         *
+         * @return True when the half-resolution path is in use.
+         */
+        [[nodiscard]] bool isHalfResolution() const;
+
+        /**
+         * @brief Computes occlusion at half resolution and upsamples it.
+         *
+         * plan_modern.md `MOD-523`. **Off by default.** AO is a low-frequency signal — a blurred
+         * estimate of a neighbourhood — so halving the resolution costs much less quality than it
+         * looks like it should, and the compose pass's bilinear read is the upsample. It is not
+         * free, though: thin contact shadows lose definition, which is exactly where AO earns its
+         * keep, so this is offered rather than assumed.
+         *
+         * @param value True to compute at half resolution.
+         */
+        void setHalfResolution(bool value);
+
     private:
         void generateKernel();
 
@@ -125,6 +169,7 @@ namespace CNA::Graphics {
         float radius_      = 0.5f;
         float intensity_   = 1.0f;
         int   sampleCount_ = 16;
+        bool  halfResolution_ = false;
     };
 
 /** @} */ // end of cnaext_engine

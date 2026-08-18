@@ -3,6 +3,7 @@
 
 #ifdef CNA_CNAEXT
 #include "CNA/Graphics/BloomPass.hpp"
+#include "CNA/Graphics/SsaoPass.hpp"
 #endif
 
 #ifdef CNA_CNAEXT
@@ -54,7 +55,8 @@ namespace CNA::Graphics {
 
     void RenderPipelineSettings::applyRenderQualityPresetEXT()
     {
-        bloomIterations_ = BloomPass::iterationsForQuality(renderQuality_);
+        bloomIterations_  = BloomPass::iterationsForQuality(renderQuality_);
+        ssaoSampleCount_  = SsaoPass::sampleCountForQuality(renderQuality_);
     }
 
     ShadowQuality   RenderPipelineSettings::getShadowQuality()    const { return shadowQuality_; }

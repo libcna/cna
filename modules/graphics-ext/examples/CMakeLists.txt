@@ -151,6 +151,11 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_register_renderer_test(NAME CNAEXT_BloomInTenLines COMMAND cna_test_cnaext_bloom
         TIMEOUT 90 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_modern.md MOD-526/MOD-527/MOD-528: SSAO end to end, from the prepass to the frame.
+    cna_graphics_ext_test(cna_test_cnaext_ssao cnaext_ssao_test.cpp)
+    cna_register_renderer_test(NAME CNAEXT_Ssao COMMAND cna_test_cnaext_ssao
+        TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_modern.md MOD-315/MOD-318/MOD-319: the five tonemapping operators, measured as curves.
     cna_graphics_ext_test(cna_test_cnaext_tonemap cnaext_tonemap_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_Tonemap COMMAND cna_test_cnaext_tonemap

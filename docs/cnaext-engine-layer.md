@@ -372,6 +372,43 @@ surface, inverting the most common value in the buffer. And the normal is transf
 3×3 of the world matrix rather than by its inverse transpose, so **non-uniform scale skews it**;
 correcting that needs an inverse per draw that nothing else in this layer pays for.
 
+### SSAO: what it approximates, and where AO is applied
+
+`plan_modern.md` `MOD-520`, `MOD-521`, `MOD-522`, `MOD-523`.
+
+**AO is multiplied into the frame, not into the ambient term.** A physically-motivated ambient
+occlusion darkens only *ambient* light — the sky, the environment map — and leaves direct light
+alone, because a lamp shining into a crevice still lights it. CNA's SSAO runs as a post-process on
+the composed frame, so it darkens everything, including directly-lit pixels. That is the standard
+screen-space approximation and it is stated here because the difference shows up exactly where AO is
+most visible: a bright key light raking across a contact region gets darkened when it should not be.
+Keep `ssaoIntensity` modest in directly-lit scenes.
+
+**Why AO is not fed into `PbrEffect`'s occlusion slot** (`MOD-521`, refused). That slot exists and
+would be the physically right place — the PBR shader multiplies it into the ambient term only. It
+cannot take this buffer: the slot is sampled at the mesh's **UV coordinates**, because it is a
+per-material texture in texture space, while screen-space AO is indexed by screen position. Binding
+one to the other would sample the AO buffer with the model's UVs, which is wrong in a way no tuning
+recovers. Doing it properly needs three things this layer does not have: a `gl_FragCoord`-based
+sampler added to the PBR shader **in every PBR-capable renderer**, the AO buffer ready *before* the
+forward pass rather than after it (so, a second prepass or a deferred pipeline), and a way to say
+"this occlusion is screen-space" that the glTF material model has no field for. Recorded as refused
+rather than deferred, because the screen-space multiply is a deliberate approximation with a
+documented cost, not a placeholder for this.
+
+**Quality presets** (`MOD-522`) map to hemisphere sample counts: `Low` 8, `Medium` 16, `High` 32,
+`Ultra` 64. This one is a real performance dial — 8 to 64 samples is 3.4× the time, because the
+shader loops over the kernel per texel — which makes it unlike bloom's level count, where the preset
+buys width rather than time. Applied by `RenderPipelineSettings::applyRenderQualityPresetEXT()`, the
+same explicit call bloom uses.
+
+**Half-resolution AO** (`MOD-523`) is available and **off by default**. AO is a low-frequency signal,
+so computing it at half resolution and letting the compose pass's bilinear read upsample it costs
+much less quality than the pixel count suggests — but thin contact shadows lose definition, which is
+exactly where AO earns its keep. Both paths are asserted to produce occlusion rather than only the
+default one, since a half-resolution path that silently produced nothing would look like AO merely
+being weak.
+
 ### Bloom: what the numbers mean, and what they do not
 
 `plan_modern.md` `MOD-417`, `MOD-405`, `MOD-409`.

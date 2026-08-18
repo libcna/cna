@@ -251,7 +251,15 @@ void main() {
             return;
         }
 
-        RenderTarget2D* occlusion = pool_.acquire(context.width, context.height,
+        // MOD-523: the occlusion buffer, optionally at half resolution. AO is a low-frequency
+        // signal -- it is a blurred estimate of a neighbourhood -- so halving the resolution costs
+        // much less than it looks like it should, and the compose pass's bilinear read is the
+        // upsample. It is off by default because "less than it looks like" is not "nothing": thin
+        // contact shadows lose definition, which is exactly where AO earns its keep.
+        const int occlusionWidth  = halfResolution_ ? std::max(1, context.width / 2) : context.width;
+        const int occlusionHeight = halfResolution_ ? std::max(1, context.height / 2)
+                                                    : context.height;
+        RenderTarget2D* occlusion = pool_.acquire(occlusionWidth, occlusionHeight,
                                                   SurfaceFormat::Color, DepthFormat::None, 0);
 
         occlusionEffect_->Apply();
@@ -260,10 +268,13 @@ void main() {
         occlusionEffect_->SetUniformInt("uNoiseSampler", 2);
         occlusionEffect_->SetTexture(2, *noiseTexture_);
         occlusionEffect_->SetUniformVec3Array("uKernel", &kernel_[0].X, kMaxSamples);
+        // Tiled against the *occlusion* buffer, not the frame: at half resolution a frame-sized
+        // scale would repeat the 4x4 rotation twice as often and turn its pattern into visible
+        // cross-hatching.
         occlusionEffect_->SetUniformVec2(
             "uNoiseScale",
-            static_cast<float>(context.width) / static_cast<float>(kNoiseExtent),
-            static_cast<float>(context.height) / static_cast<float>(kNoiseExtent));
+            static_cast<float>(occlusionWidth) / static_cast<float>(kNoiseExtent),
+            static_cast<float>(occlusionHeight) / static_cast<float>(kNoiseExtent));
         occlusionEffect_->SetUniformFloat("uRadius", radius);
         occlusionEffect_->SetUniformFloat("uBias", 0.005f);
         // The depth-side companion to the screen-space radius: how far, in the depth texture's own
@@ -273,19 +284,38 @@ void main() {
         occlusionEffect_->SetUniformInt("uSampleCount", samples);
 
         fullscreen_->draw(context.sourceDepth, occlusion, occlusionEffect_.get(),
-                          context.width, context.height);
+                          occlusionWidth, occlusionHeight);
 
         composeEffect_->Apply();
         composeEffect_->SetUniformInt("uOcclusionSampler", 1);
         composeEffect_->SetTexture(1, *occlusion);
+        // The blur folded into the compose pass steps by the occlusion buffer's texels, which at
+        // half resolution are twice as wide -- so the blur covers the same *screen* distance either
+        // way rather than halving with the buffer.
         composeEffect_->SetUniformVec2("uTexelSize",
-                                       1.0f / static_cast<float>(context.width),
-                                       1.0f / static_cast<float>(context.height));
+                                       1.0f / static_cast<float>(occlusionWidth),
+                                       1.0f / static_cast<float>(occlusionHeight));
         composeEffect_->SetUniformFloat("uIntensity", intensity);
 
         fullscreen_->draw(context.source, context.destination, composeEffect_.get(),
                           context.width, context.height);
     }
+
+    int SsaoPass::sampleCountForQuality(const RenderQuality quality)
+    {
+        switch (quality)
+        {
+        case RenderQuality::Low:    return 8;
+        case RenderQuality::High:   return 32;
+        case RenderQuality::Ultra:  return 64;
+        case RenderQuality::Medium:
+        default:                    return 16;
+        }
+    }
+
+    bool SsaoPass::isHalfResolution() const { return halfResolution_; }
+
+    void SsaoPass::setHalfResolution(const bool value) { halfResolution_ = value; }
 
     const std::string& SsaoPass::getName() const
     {
