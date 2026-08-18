@@ -29,12 +29,24 @@ namespace CNA::Internal::Renderers::SdlGpu
         constexpr std::size_t kMaximumReflectedItems = 64u * 1024u;
 
         /// Resolves a public texture to the SDL_GPU resource behind it, or null if it is not one.
-        const SdlGpuTextureRenderer* AsSdlGpuTexture(Texture* texture)
+        /// plan_fx.md FX-099: a `RenderTarget2D` is a `Texture2D` whose renderer is an
+        /// SdlGpuRenderTargetRenderer, not an SdlGpuTextureRenderer. Recognising only the latter
+        /// refused every rendered source outright, so the most ordinary use a compiled Effect has
+        /// -- post-processing a scene the game just drew -- could not be expressed at all, even
+        /// though BuildCompiledEffectBindingEXT already resolves both through
+        /// ResolveSampledTextureEXT at draw time. This renderer's targets store their rows the same
+        /// way up as an uploaded texture, so unlike EasyGL nothing has to be corrected here.
+        const ITextureRenderer* AsSdlGpuTexture(Texture* texture)
         {
             if (texture == nullptr) return nullptr;
             using namespace Microsoft::Xna::Framework::Graphics;
+            const auto sampleable = [](ITextureRenderer& renderer) -> const ITextureRenderer* {
+                if (auto* uploaded = dynamic_cast<const SdlGpuTextureRenderer*>(&renderer))
+                    return uploaded;
+                return dynamic_cast<const SdlGpuRenderTargetRenderer*>(&renderer);
+            };
             if (auto* texture2D = dynamic_cast<Texture2D*>(texture))
-                return dynamic_cast<const SdlGpuTextureRenderer*>(&texture2D->GetRenderer());
+                return sampleable(texture2D->GetRenderer());
             if (auto* texture3D = dynamic_cast<Texture3D*>(texture))
                 return dynamic_cast<const SdlGpuTextureRenderer*>(&texture3D->GetRenderer());
             if (auto* textureCube = dynamic_cast<TextureCube*>(texture))

@@ -19,12 +19,23 @@
  * and `GetBoundSamplerEXT` below -- what a draw route captures at queue time, since this renderer
  * defers actual GPU submission to `Present()`.
  *
- * The capability this backs (`GraphicsCapability::CompiledEffects`) still stays **false**: a
- * compiled effect's vertex shader sampling a texture, a 3D/cube (rather than 2D) sampler binding,
- * and more than one vertex stream remain unsupported, and the FX-060 shared conformance suite and
- * a golden-pixel test have not run yet -- plan_fx.md requires both before the capability may
- * report true. Each unsupported case fails a draw explicitly (see `QueueCompiledEffectDraw`/
- * `QueueSprite`) rather than silently drawing with a stock shader.
+ * The capability this backs (`GraphicsCapability::CompiledEffects`) reports **true**. This comment
+ * used to say it stayed false pending the FX-060 shared conformance suite and a golden-pixel test;
+ * both have run since FX-071, and the capability flipped with them. `SdlGpuCompiledEffectTests.cpp`
+ * runs the shared suite and every drawing section of it.
+ *
+ * What is still refused, explicitly and by name rather than drawn with a stock shader (plan_fx.md
+ * section 10.5 classifies each):
+ *
+ * - a compiled effect's vertex shader sampling a texture -- renderer-wide, since no CNA renderer
+ *   implements vertex-stage sampling through the public surface at all (FX-109);
+ * - a 3D or cube texture bound to a compiled sampler -- compiled-Effect-specific, since this
+ *   renderer samples both in its ordinary draw families (FX-110);
+ * - more than one vertex stream -- renderer-wide, and `GraphicsDevice` refuses it before this
+ *   layer is reached because `MultiStreamVertexInput` is false here.
+ *
+ * A `RenderTarget2D` IS accepted as a compiled sampler's source since FX-099; this renderer's
+ * targets store rows the same way up as an uploaded texture, so nothing has to be corrected.
  */
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
