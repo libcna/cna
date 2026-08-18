@@ -99,6 +99,89 @@ which must instead match XNA 4.0 exactly.
   **Above the floor**, nothing in this layer may *require* a higher profile without a capability to
   ask about first; that is what keeps ES 3.00 a floor rather than a fiction.
 
+## Float render targets: formats, and what each one means
+
+`plan_modern.md` `MOD-109`–`MOD-111`, `MOD-140`. The HDR pipeline rests entirely on one question —
+will this renderer give me a render target that keeps values above 1.0 — so the answer is written
+down per format rather than per renderer, and the mapping is stated once here instead of being
+inferred from each renderer's source.
+
+### Ask before you allocate
+
+Two queries, and they are not interchangeable:
+
+```cpp
+device.SupportsCapability(CNA::GraphicsCapability::FloatRenderTargets);      // 32-bit float
+device.SupportsCapability(CNA::GraphicsCapability::HalfFloatRenderTargets);  // 16-bit float
+device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfVector4);   // this exact format
+```
+
+The two capabilities are **derived**: they are not a renderer's own capability switch (many of those
+end `default: return true`, which would have every renderer claim float targets it has never heard
+of) but the per-format query asked about a representative format — `Vector4` for the full-float
+capability, `HdrBlendable` for the half-float one. So the capability and the format query can never
+disagree, and neither can disagree with `RenderTarget2D`'s constructor: all three go through the same
+`ClassifyRenderTargetFormatEXT` verdict.
+
+**A refused format is refused, not substituted.** A renderer that cannot do `Vector4` throws from the
+constructor rather than handing back an 8-bit `Color` target. A caller given a silently downgraded
+target has no way to discover it — the values simply clamp, somewhere, later. That is the failure the
+whole phase exists to remove, so there is no downgrade policy to choose between.
+
+### The format table
+
+The internal formats below are EasyGL's, which is the reference implementation; the D3D and Vulkan
+columns name the format an implementation is expected to choose when it lands, and are **not** claims
+that it has.
+
+| `SurfaceFormat` | Channels × bits | EasyGL internal format | Bytes/texel | Vulkan equivalent | D3D equivalent |
+|---|---|---|---|---|---|
+| `Color` | 4 × 8 unorm | `RGBA8` | 4 | `R8G8B8A8_UNORM` | `R8G8B8A8_UNORM` |
+| `HalfSingle` | 1 × 16 float | `R16F` | 2 | `R16_SFLOAT` | `R16_FLOAT` |
+| `HalfVector2` | 2 × 16 float | `RG16F` | 4 | `R16G16_SFLOAT` | `R16G16_FLOAT` |
+| `HalfVector4` | 4 × 16 float | `RGBA16F` | 8 | `R16G16B16A16_SFLOAT` | `R16G16B16A16_FLOAT` |
+| `HdrBlendable` | 4 × 16 float | `RGBA16F` | 8 | `R16G16B16A16_SFLOAT` | `R16G16B16A16_FLOAT` |
+| `Single` | 1 × 32 float | `R32F` | 4 | `R32_SFLOAT` | `R32_FLOAT` |
+| `Vector2` | 2 × 32 float | `RG32F` | 8 | `R32G32_SFLOAT` | `R32G32_FLOAT` |
+| `Vector4` | 4 × 32 float | `RGBA32F` | 16 | `R32G32B32A32_SFLOAT` | `R32G32B32A32_FLOAT` |
+
+Every other `SurfaceFormat` — the compressed formats, `Bgra5551`, `Rgba1010102`, `Rg32`, `Rgba64`
+and the rest — is **not** a render-target format in CNA, on any renderer, and is refused.
+
+### `HdrBlendable` is `HalfVector4`
+
+`MOD-110`. XNA's `HdrBlendable` was "the float format you can alpha-blend into", which on Windows
+meant `RGBA16F`. CNA makes that equivalence explicit rather than inventing a third meaning for it:
+the two map to the same storage, answer the same capability query, and behave identically. Prefer
+`HdrBlendable` in code that means "an HDR target for the frame" — it says the intent — and
+`HalfVector4` where the exact layout is what matters.
+
+### Blending on float targets
+
+`MOD-111`. Alpha blending into `HalfVector4`/`HdrBlendable` is what the format is *for* and works
+wherever the format does. Blending into `Single` and `Vector2` is **renderer- and driver-dependent**:
+GL requires `EXT_float_blend` for 32-bit float blending, and a single-channel target has no alpha to
+blend with in the first place.
+
+CNA does not enforce this at run time, matching XNA's own laxity: a blend state that a driver cannot
+honour is silently ignored by the driver rather than reported. So the rule is a rule for callers, not
+a check — the engine layer's own passes blend only into `HdrBlendable`/`HalfVector4` targets, and a
+pass that needs a `Single` accumulation buffer writes it with blending off.
+
+### Per-renderer status
+
+Only two renderers answer this question with their own verdict today; every other renderer defers,
+and the framework's own rule then applies — `Color`, and nothing else. That is the literal truth for a
+renderer that has implemented no other render-target format, which is why the default is honest
+rather than merely conservative.
+
+| Renderer | Float render targets | Note |
+|---|---|---|
+| `OpenGLES3`, `OpenGL33`, `OpenGLES2`, `OpenGL4`, `WebGL1`, `WebGL2` (EasyGL) | ✅ all seven float formats | Verified against Mesa llvmpipe (ES 3.2) by `HdrRenderTargetRoundTripTests`. What a *driver* supports is still asked at run time, so an ES 2 profile that lacks float FBOs reports false rather than failing later. |
+| `Skia` | ✅ all seven float formats | The surprise of this table, and worth stating rather than assuming from "CPU raster": Skia's own `ClassifyRenderTargetFormatEXT` reports every float format supported (`SKIA-142`). Its raster surface has no hardware format restriction, so the list is deliberately held to what real XNA/FNA hardware reports renderable rather than to whatever Skia would accept. |
+| `Vulkan` | ⬜ defers → `Color` only | Measured, not assumed (`MOD-1610`): its `HdrRenderTargetRoundTrip` cases skip on a real lavapipe device. |
+| Every other renderer | ⬜ defers → `Color` only | No `ClassifyRenderTargetFormatEXT` override, so the framework rule applies. The 2D-only and fixed-function identities are ⛔ by their own nature — see the per-identity matrix below. |
+
 ## Per-renderer support matrix
 
 The engine layer's subsystems are rolled out per renderer, exactly as the PBR effects were. This
