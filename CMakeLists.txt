@@ -168,6 +168,10 @@ include(cmake/RendererSelection.cmake)
 # linked into this build. Must run after RendererSelection.cmake has resolved the identity.
 include(cmake/RendererRegistry.cmake)
 cna_generate_renderer_registry(CNA_RENDERER_REGISTRY_SOURCE ${_cna_renderer_identities})
+
+# The descriptor compilation gate reads the same registry map, so it must follow that include.
+# It defines its target from modules/renderers/CMakeLists.txt, once the selected families are known.
+include(cmake/RendererDescriptorGate.cmake)
 # Platform implementation selection (plan_platform.md PLAT-11). A separate axis from
 # CNA_GRAPHICS_RENDERER: the renderer decides how pixels are produced, the platform decides
 # where the window, events and input come from.
