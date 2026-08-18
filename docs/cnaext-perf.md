@@ -52,6 +52,35 @@ the honest reason to prefer `HdrBlendable` over `Vector4` for a scene target —
 post-process chain holds several targets at once — not frame time. That is the justification behind
 `RenderQuality` choosing `HdrBlendable`, and it is a measurement rather than an assumption.
 
+## Post-process passes
+
+`plan_modern.md` `MOD-230`. What each pass costs over a full frame, and — more usefully — what each
+costs *over a plain copy*, since a copy is the floor any pass has to clear.
+
+Reproduce: `./cmake-build-cnaext/cna_test_cnaext_postprocess_chain --benchmark`.
+
+| Pass | ms/frame at 1280×720 | Over a copy |
+|---|---|---|
+| Blit (the floor: one fullscreen textured draw) | 6.22 | — |
+| Tonemap | 6.90 | ×1.11 |
+| FXAA | 12.99 | ×2.09 |
+| Bloom | 28.61 | ×4.60 |
+
+The shape is the useful part and it survives hardware, even though the absolute numbers do not:
+
+- **Tonemap is nearly free.** It is one dependent texture read and some arithmetic per texel — the
+  same work a copy does, plus a curve. There is no performance reason to switch it off.
+- **FXAA costs about a second copy.** It reads a neighbourhood rather than a texel, so it pays for
+  the extra taps and nothing else.
+- **Bloom is the expensive one, by a factor of four or five**, and it is expensive for a structural
+  reason rather than a tuning one: it is not one pass but a pyramid — threshold extract, then
+  downsample and upsample per mip, then composite. `bloomIterations` is therefore the setting a
+  quality preset should reach for first; the other three passes together cost less than bloom alone.
+
+These are software-rasteriser numbers and fill-rate-dominated, so hardware compresses all four
+substantially — but the *ordering* (bloom ≫ FXAA > tonemap ≈ copy) is a property of how many texels
+each pass touches, which no GPU changes.
+
 ## Shadows
 
 | What | Measurement | Source |
