@@ -309,6 +309,46 @@ Ambient occlusion needs one thing the pipeline cannot do for a game: scene depth
 normals, which means drawing the geometry a second time with a different effect. Supply them with
 `setDepthNormalInputs()`; without them SSAO renders an unoccluded frame rather than failing.
 
+### Tonemapping: what goes in, what comes out, and what CNA does not do
+
+`plan_modern.md` `MOD-316`, `MOD-320`.
+
+**The contract.** `TonemapPass` takes **linear, scene-referred** colour — values where 1.0 is "as
+bright as white paper" and 8.0 is a genuinely eight-times-brighter highlight — and produces
+**display-encoded** colour, gamma applied, ready for an 8-bit back buffer. It is the boundary
+between the two, and everything else in the chain is on one side of it: passes that reason about
+scene values (SSAO, bloom's threshold) run before, passes that reason about displayed pixels (FXAA)
+run after. `RenderPipeline` enforces that order and does not let you change it.
+
+**What CNA does not do: colour management.** There is no colour space beyond "linear in, gamma out".
+No sRGB primaries versus Display-P3, no white-point adaptation, no ICC profile, no HDR10 or
+scRGB output. A game that needs any of those needs a pass of its own. This is stated because the
+absence is easy to mistake for a default: a tonemapper is *where* colour management would live in a
+renderer that had it, and CNA's does not have it.
+
+**The five operators**, measured on a real gradient by `cnaext_tonemap_test` rather than described:
+
+| Mode | What it does | At a scene value of 8.0 (exposure 4) |
+|---|---|---|
+| `None` | Nothing but gamma. | clips to 255 |
+| `Reinhard` | `x / (1 + x)`; the gentlest, and the one that desaturates highlights most. | 230 |
+| `Filmic` | The Hable curve with a toe and shoulder. | 243 |
+| `Aces` | The ACES filmic approximation; brightest of the four in the highlights. | 252 |
+| `Uncharted2` | The Hable/Uncharted 2 curve, normalised by a white point. | 219 |
+
+All five are monotonic — brighter in is never darker out — which the example asserts across the
+whole ramp rather than at a sampled point, because a non-monotonic curve produces banding and
+inverted highlights that one sample cannot reveal.
+
+**`RenderQuality` does not affect tonemapping, deliberately** (`MOD-320`). Every other subsystem has
+a quality dial: shadow resolution, bloom iterations, SSAO sample count. Tonemapping has none, and it
+is worth saying why rather than leaving a gap in the preset table. The operator is a curve applied
+once per texel — there is no sample count to reduce and no resolution to lower, since the pass must
+touch every pixel of the frame it is display-encoding. Its measured cost is close to a plain copy
+(`docs/cnaext-perf.md`), so there would be little to win. And the operator is an **artistic**
+choice, not a performance one: silently changing the curve because a player selected "Low" would
+change how the game looks, which is not what a quality preset is for.
+
 ### Writing your own pass
 
 `plan_modern.md` `MOD-233`. There are two routes, and the shorter one is right more often than it

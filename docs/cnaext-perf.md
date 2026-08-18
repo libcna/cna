@@ -66,6 +66,18 @@ Reproduce: `./cmake-build-cnaext/cna_test_cnaext_postprocess_chain --benchmark`.
 | FXAA | 12.99 | ×2.09 |
 | Bloom | 28.61 | ×4.60 |
 
+Tonemap again at two resolutions (`cnaext_tonemap_test --benchmark`, `MOD-319`), because it is the
+one pass a game cannot switch off and so the one whose scaling matters most:
+
+| Resolution | Tonemap, ms/frame |
+|---|---|
+| 1280×720 | 7.78 |
+| 1920×1080 | 16.82 |
+
+1920×1080 is 2.25× the pixels of 1280×720 and costs 2.16× the time — it scales with pixel count and
+with nothing else, which is what one dependent texture read and a curve per texel should do. There is
+no resolution at which tonemapping becomes the problem.
+
 The shape is the useful part and it survives hardware, even though the absolute numbers do not:
 
 - **Tonemap is nearly free.** It is one dependent texture read and some arithmetic per texel — the

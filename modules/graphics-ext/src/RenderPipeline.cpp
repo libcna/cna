@@ -179,6 +179,14 @@ namespace CNA::Graphics {
             return;
         }
 
+        // The scene target stops being a target here and becomes a texture: every pass below samples
+        // it. Unbinding first is not tidiness -- sampling a bound render target is undefined in GL --
+        // and since MOD-203 it is also what leaves the *frame* bound at the end. `ScopedRenderTarget`
+        // restores whatever a pass found bound, so a chain entered with the scene target still bound
+        // would faithfully put it back after the last pass wrote the back buffer, and the next
+        // Present would refuse: "Cannot present while render targets are bound".
+        device_.SetRenderTarget(nullptr);
+
         // Fixed order, and the order is the point. Tonemapping maps scene-referred colour into
         // display range, so everything that reasons about scene values runs before it and
         // everything that reasons about displayed pixels runs after. User passes come last, where
