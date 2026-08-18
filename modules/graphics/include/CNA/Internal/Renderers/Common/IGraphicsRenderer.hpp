@@ -1181,6 +1181,27 @@ namespace CNA::Internal::Renderers
         /// §3.9.2 declares them linear unconditionally; a flag would imply a choice that does not
         /// exist.
         bool pbrEncodeOutputToSrgb = true;
+        /// plan_modern.md MOD-1224: image-based lighting, the three split-sum products at once.
+        /// `iblEnabled` false -- which is every draw that has never heard of IBL -- leaves the
+        /// flat `ambientColor` term exactly as it was, and that is deliberate: the two are the
+        /// same term computed two ways, so a renderer applies one or the other, never their sum
+        /// (MOD-1226). Renderers with no IBL shader variant accept and ignore all six fields, the
+        /// same convention the PBR and shadow groups above use.
+        bool iblEnabled = false;
+        /// Diffuse irradiance, indexed by the surface normal.
+        const ITextureCubeRenderer* iblIrradiance = nullptr;
+        /// GGX-prefiltered specular, indexed by the reflection vector; roughness selects the mip.
+        const ITextureCubeRenderer* iblPrefilteredSpecular = nullptr;
+        /// The (N.V across, roughness down) scale/bias table. Row 0 is roughness 0.
+        const ITextureRenderer* iblBrdfLut = nullptr;
+        /// How many mips the prefiltered cube was generated with. The shader's mip for a given
+        /// roughness is `roughness * (count - 1)`, which is CNA::Graphics::EnvironmentProcessor::
+        /// mipForRoughness -- the same formula on both sides, by construction rather than by
+        /// agreement.
+        int   iblPrefilteredMipCount = 1;
+        /// Multiplies the whole environment contribution. The products are 8-bit, so an
+        /// environment brighter than 1.0 carries its brightness here instead of in its texels.
+        float iblIntensity = 1.0f;
     };
 
     /**

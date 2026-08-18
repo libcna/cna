@@ -356,6 +356,49 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 "    return uPunctualDiffuse*ndotl*attenuation*cnaPunctualShadow(worldPos,toLight,distanceToLight);\n" \
 "}\n"
 
+// plan_modern.md MOD-1225: the split-sum ambient term, replacing the flat uAmbientColor when an
+// environment is bound. Three inputs that were generated together (CNA::Graphics::
+// EnvironmentProcessor): the irradiance cube read by the normal, the prefiltered specular cube
+// whose mip IS the roughness, and the BRDF table that says how much of the reflection survives at
+// this angle and roughness.
+//
+// A function rather than another CNA_GL_*_DECL macro, because one line of it depends on the
+// profile: selecting a mip explicitly needs textureLod, which GLSL ES 1.00 fragment shaders do not
+// have. Those profiles read the cube's base level instead, so a rough surface reflects a sharp
+// environment -- wrong, visibly so on a rough metal, and the honest alternative to silently
+// compiling nothing at all. Every other profile gets the real roughness ramp.
+//
+// The Fresnel term uses max(1-roughness, F0) rather than plain F0: at grazing angles a rough
+// surface must not reflect as hard as a mirror, and the plain Schlick form makes it do exactly
+// that. Diffuse and specular are then weighted so they do not both claim the same energy, and
+// metals get no diffuse at all.
+inline std::string CnaGlIblDecl(const bool explicitLodAvailable)
+{
+    const char* const prefilteredSample = explicitLodAvailable
+        ? "textureLod(uIblSpecular,R,lod)"
+        : "texture(uIblSpecular,R)";
+    return std::string(
+"uniform samplerCube uIblIrradiance;\n"
+"uniform samplerCube uIblSpecular;\n"
+"uniform sampler2D uIblBrdfLut;\n"
+"uniform float uIblEnabled;\n"
+"uniform float uIblMipCount;\n"
+"uniform float uIblIntensity;\n"
+"vec3 cnaIblAmbient(vec3 N,vec3 V,vec3 albedo,vec3 F0,float roughness,float metallic,float occlusion){\n"
+"    if(uIblEnabled<0.5) return vec3(0.0);\n"
+"    float NdotV=clamp(dot(N,V),1e-4,1.0);\n"
+"    vec3 kS=F0+(max(vec3(1.0-roughness),F0)-F0)*pow(1.0-NdotV,5.0);\n"
+"    vec3 kD=(1.0-kS)*(1.0-metallic);\n"
+"    vec3 diffuse=texture(uIblIrradiance,N).rgb*albedo*kD;\n"
+"    vec3 R=reflect(-V,N);\n"
+"    float lod=roughness*max(uIblMipCount-1.0,0.0);\n"
+"    vec3 prefiltered=") + prefilteredSample + std::string(".rgb;\n"
+"    vec2 ab=texture(uIblBrdfLut,vec2(NdotV,roughness)).rg;\n"
+"    vec3 specular=prefiltered*(kS*ab.x+ab.y);\n"
+"    return (diffuse+specular)*uIblIntensity*occlusion;\n"
+"}\n");
+}
+
 namespace CNA::Internal::Renderers::EasyGL
 {
     using namespace Microsoft::Xna::Framework;
@@ -6850,6 +6893,7 @@ CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
 CNA_GL_SHADOW_DECL
 CNA_GL_PUNCTUAL_DECL
++ CnaGlIblDecl(!ProfileUsesGlslEs100()) +
 + (dualUv ? "vec2 cnaPbrUV(float setIndex){return setIndex<0.5?vUV:vUV1;}\n" : "") +
 "vec2 cnaPbrTransformUV(vec2 uv,int slot){\n"
 "    vec3 value=vec3(uv,1.0);\n"
@@ -6900,7 +6944,13 @@ CNA_GL_PUNCTUAL_DECL
 // holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
 // darken everything to black.
 "    occlusion=1.0+uOcclusionStrength*(occlusion-1.0);\n"
-"    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
+// MOD-1226/MOD-1227: the two ambient terms are exclusive, and the map's occlusion multiplies
+// whichever one is in force -- never the direct light, which is one light whose visibility the
+// shadow map already answers. uAmbientColor arrives zeroed when an environment is bound (see
+// PbrEffect::FillGpuDrawParams), so this is a sum of two terms only one of which is ever
+// non-zero, rather than a branch that would cost every fragment.
+"    vec3 ambient=uAmbientColor*albedo*occlusion\n"
+"               +cnaIblAmbient(finalNormal,V,albedo,F0,roughness,metallic,occlusion);\n"
 "    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(cnaPbrTransformUV(" + emissiveUv + ",3),uRtFlipV.w)).rgb;\n"
 // Same split as the base colour. The factor is additionally allowed above 1 by
 // KHR_materials_emissive_strength, which is a second reason never to transfer it.
@@ -6922,6 +6972,7 @@ CNA_GL_PUNCTUAL_DECL
                        dualUv ? "pbr_dual_uv" : "pbr");
         ResolveRenderTargetOrientationUniforms(program);
         ResolveShadowUniforms(program);
+        ResolveIblUniforms(program);
         auto& p = program;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
@@ -7118,6 +7169,7 @@ CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
 CNA_GL_SHADOW_DECL
 CNA_GL_PUNCTUAL_DECL
++ CnaGlIblDecl(!ProfileUsesGlslEs100()) +
 + (dualUv ? "vec2 cnaPbrUV(float setIndex){return setIndex<0.5?vUV:vUV1;}\n" : "") +
 "vec2 cnaPbrTransformUV(vec2 uv,int slot){\n"
 "    vec3 value=vec3(uv,1.0);\n"
@@ -7168,7 +7220,13 @@ CNA_GL_PUNCTUAL_DECL
 // holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
 // darken everything to black.
 "    occlusion=1.0+uOcclusionStrength*(occlusion-1.0);\n"
-"    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
+// MOD-1226/MOD-1227: the two ambient terms are exclusive, and the map's occlusion multiplies
+// whichever one is in force -- never the direct light, which is one light whose visibility the
+// shadow map already answers. uAmbientColor arrives zeroed when an environment is bound (see
+// PbrEffect::FillGpuDrawParams), so this is a sum of two terms only one of which is ever
+// non-zero, rather than a branch that would cost every fragment.
+"    vec3 ambient=uAmbientColor*albedo*occlusion\n"
+"               +cnaIblAmbient(finalNormal,V,albedo,F0,roughness,metallic,occlusion);\n"
 "    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(cnaPbrTransformUV(" + emissiveUv + ",3),uRtFlipV.w)).rgb;\n"
 // Same split as the base colour. The factor is additionally allowed above 1 by
 // KHR_materials_emissive_strength, which is a second reason never to transfer it.
@@ -7190,6 +7248,7 @@ CNA_GL_PUNCTUAL_DECL
                        dualUv ? "pbr_skinned_dual_uv" : "pbr_skinned");
         ResolveRenderTargetOrientationUniforms(program);
         ResolveShadowUniforms(program);
+        ResolveIblUniforms(program);
         auto& p = program;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
@@ -7490,6 +7549,16 @@ CNA_GL_PUNCTUAL_DECL
         p.loc_punctual_map    = p.prog.uniform_location("uPunctualMap");
         p.loc_punctual_vp     = p.prog.uniform_location("uPunctualViewProj");
         p.loc_punctual_texel  = p.prog.uniform_location("uPunctualTexel");
+    }
+
+    void EasyGLRenderer::ResolveIblUniforms(Prog3D& p)
+    {
+        p.loc_ibl_enabled    = p.prog.uniform_location("uIblEnabled");
+        p.loc_ibl_irradiance = p.prog.uniform_location("uIblIrradiance");
+        p.loc_ibl_specular   = p.prog.uniform_location("uIblSpecular");
+        p.loc_ibl_brdf       = p.prog.uniform_location("uIblBrdfLut");
+        p.loc_ibl_mipcount   = p.prog.uniform_location("uIblMipCount");
+        p.loc_ibl_intensity  = p.prog.uniform_location("uIblIntensity");
     }
 
     void EasyGLRenderer::BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
@@ -8011,6 +8080,49 @@ if (ProfileIsEs2ApiGeneration())
                                                        ::easygl::TextureTarget::Texture2D);
                 }
             }
+        }
+
+        // plan_modern.md MOD-1225: image-based lighting, units 10-12. Bound only when the
+        // program has the uniforms at all, and each unit falls back to a texture whose sampled
+        // value is the "no environment" constant -- but with uIblEnabled at 0 the shader never
+        // reads them, so the fallbacks exist to keep the units complete rather than to be seen.
+        if (p.loc_ibl_enabled >= 0)
+        {
+            const bool haveIbl = params.iblEnabled && params.iblIrradiance != nullptr
+                              && params.iblPrefilteredSpecular != nullptr
+                              && params.iblBrdfLut != nullptr;
+            p.prog.set_uniform(p.loc_ibl_enabled, haveIbl ? 1.0f : 0.0f);
+            if (p.loc_ibl_mipcount >= 0)
+                p.prog.set_uniform(p.loc_ibl_mipcount,
+                                   static_cast<float>(params.iblPrefilteredMipCount > 0
+                                                          ? params.iblPrefilteredMipCount : 1));
+            if (p.loc_ibl_intensity >= 0)
+                p.prog.set_uniform(p.loc_ibl_intensity, params.iblIntensity);
+            if (p.loc_ibl_irradiance >= 0)
+            {
+                p.prog.set_uniform(p.loc_ibl_irradiance, 10);
+                if (haveIbl) params.iblIrradiance->BindGL(10);
+            }
+            if (p.loc_ibl_specular >= 0)
+            {
+                p.prog.set_uniform(p.loc_ibl_specular, 11);
+                if (haveIbl) params.iblPrefilteredSpecular->BindGL(11);
+            }
+            if (p.loc_ibl_brdf >= 0)
+            {
+                p.prog.set_uniform(p.loc_ibl_brdf, 12);
+                if (haveIbl)
+                {
+                    params.iblBrdfLut->BindGL(12);
+                }
+                else
+                {
+                    EnsureDefaultWhiteTexture();
+                    default_white_texture_.active_bind(::easygl::TextureUnit::Texture12,
+                                                       ::easygl::TextureTarget::Texture2D);
+                }
+            }
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
 
         // Alpha test (always uploaded; default {0,0,1,1} = Always pass)

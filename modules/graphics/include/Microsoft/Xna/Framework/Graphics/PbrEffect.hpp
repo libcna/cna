@@ -12,6 +12,7 @@
 #include "Microsoft/Xna/Framework/Graphics/IEffectFog.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectLights.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IShadowReceiverEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ImageBasedLightEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureTransformEXT.hpp"
@@ -501,6 +502,22 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Returns the punctual light in use; `Kind == None` means there is none. */
         CNAEXT [[nodiscard]] const PunctualLightEXT& getPunctualLightEXT() const override;
 
+        /**
+         * @brief Supplies an environment to light with, replacing the flat ambient term.
+         *
+         * plan_modern.md `MOD-1221`. The two ambient terms are exclusive rather than additive:
+         * `AmbientLightColor` is a constant standing in for light from the environment, and this
+         * is that light actually measured, so applying both would count it twice. A bundle that
+         * is not @ref ImageBasedLightEXT::IsValidEXT leaves the flat term in charge, which is what
+         * makes this safe to set unconditionally.
+         *
+         * @param light The environment; a default-constructed value detaches it.
+         */
+        CNAEXT void setImageBasedLightEXT(const ImageBasedLightEXT& light);
+
+        /** @brief Returns the environment in use; an invalid bundle means the flat ambient term. */
+        CNAEXT [[nodiscard]] const ImageBasedLightEXT& getImageBasedLightEXT() const;
+
     private:
 
         // CNAEXT shadow reception (MOD-820). Inert by default.
@@ -511,6 +528,7 @@ namespace Microsoft::Xna::Framework::Graphics
         int   shadowFilterRadiusEXT_ = 1;   // 3x3, the default ShadowQuality::Medium asks for
         ShadowCascadeStateEXT shadowCascadesEXT_{};
         PunctualLightEXT punctualLightEXT_{};
+        ImageBasedLightEXT imageBasedLightEXT_{};
         explicit PbrEffect(const PbrEffect& cloneSource);
 
         void CacheEffectParameters();

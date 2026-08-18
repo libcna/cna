@@ -109,6 +109,7 @@ namespace Microsoft::Xna::Framework::Graphics
         ownedOcclusionMap_          = src.ownedOcclusionMap_;
         ownedSpecularMapEXT_         = src.ownedSpecularMapEXT_;
         ownedSpecularColorMapEXT_    = src.ownedSpecularColorMapEXT_;
+        imageBasedLightEXT_          = src.imageBasedLightEXT_;
     }
 
     Effect* SkinnedPbrEffect::Clone()
@@ -578,6 +579,25 @@ namespace Microsoft::Xna::Framework::Graphics
         p.ambientColor[1] = ambientLightColor_.Y;
         p.ambientColor[2] = ambientLightColor_.Z;
 
+        // MOD-1224/MOD-1226: an environment replaces the flat ambient term rather than adding to
+        // it -- both stand for the same light, so summing them counts it twice. Zeroing the flat
+        // colour here rather than leaving the choice to each renderer is what makes that true
+        // everywhere, including on a renderer that accepts the IBL fields and ignores them: it
+        // gets an unlit ambient rather than a double-lit one, which is the safer of the two
+        // wrong pictures and the one a reader can recognise.
+        if (imageBasedLightEXT_.IsValidEXT())
+        {
+            p.iblEnabled = true;
+            p.iblIrradiance = &imageBasedLightEXT_.Irradiance->GetRenderer();
+            p.iblPrefilteredSpecular = &imageBasedLightEXT_.PrefilteredSpecular->GetRenderer();
+            p.iblBrdfLut = &imageBasedLightEXT_.BrdfLut->GetRenderer();
+            p.iblPrefilteredMipCount = imageBasedLightEXT_.PrefilteredMipCount;
+            p.iblIntensity = imageBasedLightEXT_.Intensity;
+            p.ambientColor[0] = 0.0f;
+            p.ambientColor[1] = 0.0f;
+            p.ambientColor[2] = 0.0f;
+        }
+
         p.emissiveColor[0] = emissiveFactor_.X;
         p.emissiveColor[1] = emissiveFactor_.Y;
         p.emissiveColor[2] = emissiveFactor_.Z;
@@ -766,5 +786,15 @@ namespace Microsoft::Xna::Framework::Graphics
     const PunctualLightEXT& SkinnedPbrEffect::getPunctualLightEXT() const
     {
         return punctualLightEXT_;
+    }
+
+    void SkinnedPbrEffect::setImageBasedLightEXT(const ImageBasedLightEXT& light)
+    {
+        imageBasedLightEXT_ = light;
+    }
+
+    const ImageBasedLightEXT& SkinnedPbrEffect::getImageBasedLightEXT() const
+    {
+        return imageBasedLightEXT_;
     }
 }

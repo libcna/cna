@@ -754,6 +754,15 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_punctual_map    = -1;  ///< sampler2D, unit 9
             int loc_punctual_vp     = -1;
             int loc_punctual_texel  = -1;  ///< vec2 1/size of the spot map
+            /// plan_modern.md MOD-1225: image-based lighting. uIblEnabled 0 means the flat
+            /// uAmbientColor term is in charge and every other field here is untouched -- which
+            /// is why a draw that has never heard of IBL renders exactly as it did.
+            int loc_ibl_enabled    = -1;  ///< float 0/1
+            int loc_ibl_irradiance = -1;  ///< samplerCube, unit 10
+            int loc_ibl_specular   = -1;  ///< samplerCube, unit 11 (mips are the roughness ramp)
+            int loc_ibl_brdf       = -1;  ///< sampler2D, unit 12 (N.V across, roughness down)
+            int loc_ibl_mipcount   = -1;  ///< float, mips the prefiltered cube was generated with
+            int loc_ibl_intensity  = -1;  ///< float, multiplies the whole environment term
             int loc_envmap        = -1;  ///< samplerCube (EnvironmentMapEffect only)
             int loc_envmap_amount = -1;  ///< float blend [0,1]
             int loc_envmap_spec   = -1;  ///< vec3 specular tint
@@ -915,6 +924,9 @@ namespace CNA::Internal::Renderers::EasyGL
         /// linked lit program. Every other program leaves them at -1, and BindDrawParams skips
         /// them exactly as it skips the other optional locations.
         static void ResolveShadowUniforms(Prog3D& p);
+        /// plan_modern.md MOD-1225: resolves the image-based-lighting uniforms, which exist only
+        /// on the two PBR programs; every other program leaves them at -1.
+        static void ResolveIblUniforms(Prog3D& p);
 
     public:
         /**
