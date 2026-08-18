@@ -129,10 +129,12 @@
 >   same `#version`. An application targeting both must supply two sources.
 >   `igl_custom_effect_backend_test.cpp` is the worked example; a violation is now reported with
 >   glslang's own diagnostic instead of "glslang_shader_parse() failed" (IGL-70).
-> * **IGL-53** — no feature-matrix row yet, deliberately, on the same bar LLGL and WebGPU are held
->   to. Closer than it was: the two blockers this row named (IGL-60 and the custom-effect abort) are
->   both gone, and what remains is one named capability gap rather than a backend that cannot be
->   described.
+> * **IGL-53 — DONE.** `docs/graphics-renderer-feature-matrix.md` now carries an `IGL` column across
+>   all five per-renderer tables, 21 rows, each backed by a named test. The row was held open on a
+>   real condition and the condition was met, not waived: its two blockers (IGL-60's unexplained
+>   Vulkan `SpriteBatch` failure and the custom-effect abort) are both closed. An IGL cell describes
+>   both backends unless it says otherwise — the honest difficulty of one column for a renderer that
+>   is itself an abstraction over two APIs.
 > * **IGL-61/62/63** — occlusion queries, sampler LOD bias and cube-target MSAA are not
 >   implementable at IGL `v1.1.1`; re-verified against the pinned headers rather than restated.
 > * **Non-`Color` surface formats — `Rg32` and `Single` are now public; the rest are not.** The
