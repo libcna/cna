@@ -550,6 +550,7 @@ struct VSInput
     float4 Tangent : ATTRIB2;
     float2 UV      : ATTRIB3;
     /* CNA_PBR_UV1_RIGID_ATTRIBUTE */
+    /* CNA_PBR_COLOR_RIGID_ATTRIBUTE */
 };
 
 struct PSInput
@@ -559,6 +560,7 @@ struct PSInput
     float4 Tangent  : TANGENT;
     float2 UV       : TEX_COORD;
     /* CNA_PBR_UV1_INTERPOLANT */
+    /* CNA_PBR_COLOR_INTERPOLANT */
     float  FogKeep  : FOG_KEEP;
     float3 WorldPos : WORLD_POS;
 };
@@ -589,6 +591,7 @@ void main(in VSInput vsIn, out PSInput psIn)
 
     psIn.UV       = vsIn.UV;
     /* CNA_PBR_UV1_ASSIGNMENT */
+    /* CNA_PBR_COLOR_ASSIGNMENT */
     psIn.WorldPos = mul(float4(vsIn.Pos, 1.0), g_World).xyz;
     psIn.FogKeep  = ComputeFogKeep(vsIn.Pos);
 }
@@ -637,6 +640,7 @@ struct PSInput
     float4 Tangent  : TANGENT;
     float2 UV       : TEX_COORD;
     /* CNA_PBR_UV1_INTERPOLANT */
+    /* CNA_PBR_COLOR_INTERPOLANT */
     float  FogKeep  : FOG_KEEP;
     float3 WorldPos : WORLD_POS;
 };
@@ -695,6 +699,7 @@ void main(in PSInput psIn, out PSOutput psOut)
                             g_PbrMapScales.z);
     float3 albedo = baseColor * g_DiffuseColor.rgb;
     float alpha = baseColorTex.a * g_DiffuseColor.a;
+    /* CNA_PBR_COLOR_PRODUCT */
 
     float3 N = normalize(psIn.Normal);
     float3 T = normalize(psIn.Tangent.xyz - N * dot(N, psIn.Tangent.xyz));
@@ -759,6 +764,7 @@ struct VSInput
     float4 BlendWeights : ATTRIB4;
     uint4  BlendIndices : ATTRIB5;
     /* CNA_PBR_UV1_SKINNED_ATTRIBUTE */
+    /* CNA_PBR_COLOR_SKINNED_ATTRIBUTE */
 };
 
 struct PSInput
@@ -768,6 +774,7 @@ struct PSInput
     float4 Tangent  : TANGENT;
     float2 UV       : TEX_COORD;
     /* CNA_PBR_UV1_INTERPOLANT */
+    /* CNA_PBR_COLOR_INTERPOLANT */
     float  FogKeep  : FOG_KEEP;
     float3 WorldPos : WORLD_POS;
 };
@@ -791,6 +798,7 @@ void main(in VSInput vsIn, out PSInput psIn)
 
     psIn.UV       = vsIn.UV;
     /* CNA_PBR_UV1_ASSIGNMENT */
+    /* CNA_PBR_COLOR_ASSIGNMENT */
     psIn.WorldPos = mul(skinnedPos, g_World).xyz;
     psIn.FogKeep  = ComputeFogKeep(skinnedPos.xyz);
 }

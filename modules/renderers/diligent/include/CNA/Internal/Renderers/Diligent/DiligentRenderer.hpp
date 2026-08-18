@@ -1374,6 +1374,7 @@ namespace CNA::Internal::Renderers::Diligent
             PbrDualUv3D,            ///< stride 60: Pbr3D plus importer-appended TEXCOORD_1
             SkinnedPbr3D,           ///< stride 68: Pbr3D combined with Skinned3D's bone palette
             SkinnedPbrDualUv3D,     ///< stride 76: skinned PBR plus TEXCOORD_1
+            SkinnedPbrColor3D,      ///< stride 80: skinned PBR plus TEXCOORD_1 and a packed COLOR_0
         };
 
         /** @brief Everything that distinguishes one Diligent pipeline state object from another. */

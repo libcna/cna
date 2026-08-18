@@ -2,8 +2,6 @@
 #include "CNA/Internal/Renderers/Diligent/DiligentRenderer.hpp"
 #include "CNA/Internal/Renderers/Diligent/DiligentShaderSources.hpp"
 
-#include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
-
 #include "CNA/Logger.hpp"
 
 #include <algorithm>
@@ -2896,6 +2894,7 @@ namespace CNA::Internal::Renderers::Diligent
         bool usesBones = false;
         bool usesPbr = false;
         bool usesDualPbrUv = false;
+        bool usesVertexColour = false;
 
         switch (key.variant)
         {
@@ -3078,10 +3077,16 @@ namespace CNA::Internal::Renderers::Diligent
                     Dg::LayoutElement{2, 0, 4, Dg::VT_FLOAT32, Dg::False, 24, 60}, // Tangent
                     Dg::LayoutElement{3, 0, 2, Dg::VT_FLOAT32, Dg::False, 40, 60}, // UV0
                     Dg::LayoutElement{4, 0, 2, Dg::VT_FLOAT32, Dg::False, 48, 60}, // UV1
+                    // plan_gltf.md GLTF-462/GLTF-465: the four bytes after UV1 are a packed COLOR_0,
+                    // normalized, and glTF 3.9.2 makes it a multiplier on base colour. Every
+                    // stride-60 record carries the slot -- the authored colour, or opaque white --
+                    // so the attribute is unconditional and g_Flags.y decides whether it multiplies.
+                    Dg::LayoutElement{5, 0, 4, Dg::VT_UINT8, Dg::True, 56, 60},   // COLOR_0
                 };
                 usesTexture = true;
                 usesPbr = true;
                 usesDualPbrUv = true;
+                usesVertexColour = true;
                 break;
             case ShaderVariant::SkinnedPbr3D:
                 vertexSource = kSkinnedPbrVertexHlsl;
@@ -3117,6 +3122,27 @@ namespace CNA::Internal::Renderers::Diligent
                 usesBones = true;
                 usesDualPbrUv = true;
                 break;
+            case ShaderVariant::SkinnedPbrColor3D:
+                // plan_gltf.md GLTF-463: stride 80 is the stride-76 record with a packed COLOR_0
+                // appended at 76 -- the skinned counterpart of stride 60's own colour slot.
+                vertexSource = kSkinnedPbrVertexHlsl;
+                pixelSource = kPbrPixelHlsl;
+                layout = {
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False, 0, 80},  // Position
+                    Dg::LayoutElement{1, 0, 3, Dg::VT_FLOAT32, Dg::False, 12, 80}, // Normal
+                    Dg::LayoutElement{2, 0, 4, Dg::VT_FLOAT32, Dg::False, 24, 80}, // Tangent
+                    Dg::LayoutElement{3, 0, 2, Dg::VT_FLOAT32, Dg::False, 40, 80}, // UV0
+                    Dg::LayoutElement{4, 0, 4, Dg::VT_FLOAT32, Dg::False, 48, 80}, // BlendWeights
+                    Dg::LayoutElement{5, 0, 4, Dg::VT_UINT8, Dg::False, 64, 80},   // BlendIndices
+                    Dg::LayoutElement{6, 0, 2, Dg::VT_FLOAT32, Dg::False, 68, 80}, // UV1
+                    Dg::LayoutElement{7, 0, 4, Dg::VT_UINT8, Dg::True, 76, 80},    // COLOR_0
+                };
+                usesTexture = true;
+                usesPbr = true;
+                usesBones = true;
+                usesDualPbrUv = true;
+                usesVertexColour = true;
+                break;
         }
 
         std::string vertexHlsl = std::string(kConstantsHlsl) +
@@ -3136,6 +3162,24 @@ namespace CNA::Internal::Renderers::Diligent
                      at = source.find(marker, at + replacementLength))
                     source.replace(at, markerLength, replacement);
             };
+            // plan_gltf.md GLTF-465: the colour follows the same expand-the-template rule as UV1 --
+            // one clean HLSL program per variant containing exactly the attributes its native input
+            // layout supplies, because Diligent's HLSL-to-GLSL converter reads inactive #if branches.
+            const char* colorRigidAttribute = usesVertexColour ? "float4 Color : ATTRIB5;" : "";
+            const char* colorSkinnedAttribute = usesVertexColour ? "float4 Color : ATTRIB7;" : "";
+            const char* colorInterpolant = usesVertexColour ? "float4 Color : COLOR0;" : "";
+            const char* colorAssignment = usesVertexColour ? "psIn.Color = vsIn.Color;" : "";
+            // COLOR_0 is linear and multiplies the WHOLE base-colour product, alpha included --
+            // the alpha half is where a BLEND-mode vertex-coloured primitive's transparency is.
+            // g_Flags.y is the effect's own VertexColorEnabledEXT, so a caller can opt back into the
+            // opaque-white identity deliberately.
+            const char* colorProduct = usesVertexColour
+                ? "if (g_Flags.y > 0.5)\n"
+                  "    {\n"
+                  "        albedo *= psIn.Color.rgb;\n"
+                  "        alpha  *= psIn.Color.a;\n"
+                  "    }"
+                : "";
             const char* rigidAttribute = usesDualPbrUv ? "float2 UV1 : ATTRIB4;" : "";
             const char* skinnedAttribute = usesDualPbrUv ? "float2 UV1 : ATTRIB6;" : "";
             const char* interpolant = usesDualPbrUv ? "float2 UV1 : TEX_COORD1;" : "";
@@ -3151,8 +3195,14 @@ namespace CNA::Internal::Renderers::Diligent
                 ReplaceAll(*source, "/* CNA_PBR_UV1_INTERPOLANT */", interpolant);
                 ReplaceAll(*source, "/* CNA_PBR_UV1_ASSIGNMENT */", assignment);
                 ReplaceAll(*source, "/* CNA_PBR_UV_SELECTOR */", selector);
-                if (source->find("/* CNA_PBR_UV") != std::string::npos)
-                    throw std::runtime_error("CNA Diligent: unexpanded PBR UV shader marker");
+                ReplaceAll(*source, "/* CNA_PBR_COLOR_RIGID_ATTRIBUTE */", colorRigidAttribute);
+                ReplaceAll(*source, "/* CNA_PBR_COLOR_SKINNED_ATTRIBUTE */", colorSkinnedAttribute);
+                ReplaceAll(*source, "/* CNA_PBR_COLOR_INTERPOLANT */", colorInterpolant);
+                ReplaceAll(*source, "/* CNA_PBR_COLOR_ASSIGNMENT */", colorAssignment);
+                ReplaceAll(*source, "/* CNA_PBR_COLOR_PRODUCT */", colorProduct);
+                if (source->find("/* CNA_PBR_UV") != std::string::npos ||
+                    source->find("/* CNA_PBR_COLOR") != std::string::npos)
+                    throw std::runtime_error("CNA Diligent: unexpanded PBR shader marker");
             }
         }
 
@@ -3735,15 +3785,6 @@ namespace CNA::Internal::Renderers::Diligent
         if (vertexBuffer == nullptr || vertexBuffer->GetBuffer() == nullptr)
             throw std::runtime_error("CNA Diligent: draw with a foreign or empty vertex buffer");
 
-        // plan_gltf.md GLTF-465: this renderer's PBR pixel shader does not multiply COLOR_0 into
-        // base colour, and its stride-60 input layout would otherwise accept the draw and render the
-        // surface with the opaque-white identity -- a wrong picture reported as a success. Refuse it
-        // instead, with the reason and the application's own opt-out named.
-        if (params != nullptr)
-        {
-            RequireVertexColourPbrSupportEXT(*params, vertexBuffer->GetStride(), "DILIGENT");
-        }
-
         if (params != nullptr)
             RejectUnsupportedStreamCombination(*params, kRendererName);
         RequireFaithfulDeclarationEXT(vb, ib != nullptr ? "ordinary-indexed" : "ordinary");
@@ -3794,6 +3835,8 @@ namespace CNA::Internal::Renderers::Diligent
             case 60: variant = ShaderVariant::PbrDualUv3D; break;
             case 68: variant = ShaderVariant::SkinnedPbr3D; break;
             case 76: variant = ShaderVariant::SkinnedPbrDualUv3D; break;
+            // plan_gltf.md GLTF-463: the skinned record with a packed COLOR_0 at 76.
+            case 80: variant = ShaderVariant::SkinnedPbrColor3D; break;
             default:
                 throw std::runtime_error("CNA Diligent: unsupported vertex stride " +
                                          std::to_string(stride));
@@ -3888,12 +3931,14 @@ namespace CNA::Internal::Renderers::Diligent
         if ((variant == ShaderVariant::Skinned3D ||
              variant == ShaderVariant::SkinnedVertexLit3D ||
              variant == ShaderVariant::SkinnedPbr3D ||
-             variant == ShaderVariant::SkinnedPbrDualUv3D) &&
+             variant == ShaderVariant::SkinnedPbrDualUv3D ||
+             variant == ShaderVariant::SkinnedPbrColor3D) &&
             params != nullptr)
             UploadBoneTransforms(*params);
         if ((variant == ShaderVariant::Pbr3D || variant == ShaderVariant::PbrDualUv3D ||
              variant == ShaderVariant::SkinnedPbr3D ||
-             variant == ShaderVariant::SkinnedPbrDualUv3D) &&
+             variant == ShaderVariant::SkinnedPbrDualUv3D ||
+             variant == ShaderVariant::SkinnedPbrColor3D) &&
             params != nullptr)
             UploadPbrConstants(*params);
 

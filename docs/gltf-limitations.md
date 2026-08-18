@@ -173,7 +173,7 @@ side of it; `docs/gltf-renderer-pbr-fallbacks.md` records the renderer matrix an
 importer carries it in full (stride 60 for a rigid primitive, stride 80 for a skinned one since
 `GLTF-463`), `PbrEffect::VertexColorEnabledEXT` and `SkinnedPbrEffect::VertexColorEnabledEXT` carry the
 switch, and §3.9.2's product — `baseColorFactor` × `baseColorTexture` × `COLOR_0`, alpha included — is
-evaluated by **nine of the seventeen** PBR renderers. The other eight do **not** substitute the
+evaluated by **ten of the seventeen** PBR renderers. The other seven do **not** substitute the
 identity and draw the surface anyway: they **refuse the draw** through the shared
 `RequireVertexColourPbrSupportEXT`, naming the renderer, the specification section and the way out.
 Accepting a valid asset and rendering it with different core semantics would be a wrong picture
