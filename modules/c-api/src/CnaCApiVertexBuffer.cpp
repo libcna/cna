@@ -845,6 +845,119 @@ CNA_Result cna_vertex_buffer_set_data_raw(
     });
 }
 
+namespace {
+
+/// Validates the count/stride/byte-count triple every raw window route repeats.
+[[nodiscard]] CNA_Result ValidateRawWindow(
+    const uint64_t vertexCount,
+    const uint32_t vertexStride,
+    const uint64_t accessibleBytes,
+    const void* const buffer,
+    uint64_t* const outRequiredBytes)
+{
+    if (vertexStride == 0U ||
+        vertexStride > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
+        vertexCount > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+        return InvalidArgument("The raw VertexBuffer count or stride is invalid.");
+    }
+    if (vertexCount > std::numeric_limits<uint64_t>::max() / vertexStride) {
+        return Fail(
+            CNA_RESULT_OVERFLOW,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The raw VertexBuffer byte count overflows UInt64.");
+    }
+    *outRequiredBytes = vertexCount * vertexStride;
+    if (accessibleBytes < *outRequiredBytes ||
+        (buffer == nullptr && (accessibleBytes != 0U || vertexCount != 0U))) {
+        return InvalidArgument("The raw VertexBuffer window buffer is too small or null.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ValidateBufferOffset(const uint64_t offsetInBytes)
+{
+    if (offsetInBytes > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+        return InvalidArgument("The VertexBuffer destination offset is outside the native range.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_vertex_buffer_set_data_raw_at(
+    const CNA_VertexBufferHandle vertexBufferHandle,
+    const uint64_t bufferOffsetInBytes,
+    const void* const data,
+    const uint64_t dataByteCount,
+    const uint64_t vertexCount,
+    const uint32_t vertexStride)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<VertexBufferResource> buffer;
+        if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateUsable(*buffer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateBufferOffset(bufferOffsetInBytes);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        uint64_t requiredBytes = 0U;
+        if (const CNA_Result result = ValidateRawWindow(
+                vertexCount, vertexStride, dataByteCount, data, &requiredBytes);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        buffer->value->SetDataRawAtEXT(
+            static_cast<int>(bufferOffsetInBytes),
+            data,
+            static_cast<int>(vertexCount),
+            static_cast<int>(vertexStride));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_vertex_buffer_get_data_raw(
+    const CNA_VertexBufferHandle vertexBufferHandle,
+    const uint64_t bufferOffsetInBytes,
+    void* const destination,
+    const uint64_t destinationByteCount,
+    const uint64_t vertexCount,
+    const uint32_t vertexStride)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<VertexBufferResource> buffer;
+        if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateUsable(*buffer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateBufferOffset(bufferOffsetInBytes);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        uint64_t requiredBytes = 0U;
+        if (const CNA_Result result = ValidateRawWindow(
+                vertexCount, vertexStride, destinationByteCount, destination, &requiredBytes);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        buffer->value->GetDataRawEXT(
+            static_cast<int>(bufferOffsetInBytes),
+            destination,
+            static_cast<int>(vertexCount),
+            static_cast<int>(vertexStride));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_vertex_buffer_subscribe_content_lost(
     const CNA_VertexBufferHandle vertexBufferHandle,
     const CNA_VertexBufferContentLostCallback callback,

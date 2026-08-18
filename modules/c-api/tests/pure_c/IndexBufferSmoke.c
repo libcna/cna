@@ -154,6 +154,56 @@ static int validate_transfer(
                 CNA_RESULT_SUCCESS) {
             return 0;
         }
+        /* CBIND-059: a windowed upload indexes the BUFFER, not the caller's array, so the index
+           it does not name keeps whatever it held -- which is exactly what every other transfer
+           route here destroys. */
+        {
+            const uint16_t window[1] = {UINT16_C(77)};
+            uint16_t after[2] = {0U, 0U};
+            transfer.element_count = 1U;
+            transfer.start_index = 0U;
+            transfer.options = CNA_SET_DATA_NONE;
+            if (cna_index_buffer_set_data_at(buffer, 2U, &transfer, window, 1U) !=
+                    CNA_RESULT_SUCCESS) {
+                return 0;
+            }
+            transfer.element_count = 2U;
+            if (cna_index_buffer_get_data(buffer, &transfer, after, 2U, &required) !=
+                    CNA_RESULT_SUCCESS ||
+                after[0] != source[0] || after[1] != window[0]) {
+                return 0;
+            }
+            /* A window past the end, an unaligned offset, and a streaming hint that contradicts
+               "keep the rest" are each refused. */
+            transfer.element_count = 1U;
+            if (cna_index_buffer_set_data_at(buffer, 4U, &transfer, window, 1U) ==
+                    CNA_RESULT_SUCCESS ||
+                cna_index_buffer_set_data_at(buffer, 1U, &transfer, window, 1U) ==
+                    CNA_RESULT_SUCCESS) {
+                return 0;
+            }
+            transfer.options = CNA_SET_DATA_DISCARD;
+            if (cna_index_buffer_set_data_at(buffer, 0U, &transfer, window, 1U) !=
+                    CNA_RESULT_NOT_SUPPORTED) {
+                return 0;
+            }
+            transfer.options = CNA_SET_DATA_NONE;
+            /* And the buffer is left as the window made it, for whatever runs after this. */
+            transfer.element_count = 2U;
+            if (cna_index_buffer_get_data(buffer, &transfer, after, 2U, &required) !=
+                    CNA_RESULT_SUCCESS ||
+                after[0] != source[0] || after[1] != window[0]) {
+                return 0;
+            }
+            transfer.element_count = 2U;
+            transfer.start_index = 0U;
+            transfer.options = options;
+            if (cna_index_buffer_set_data(buffer, &transfer, source, 3U) !=
+                    CNA_RESULT_SUCCESS) {
+                return 0;
+            }
+            transfer.options = CNA_SET_DATA_NONE;
+        }
     } else {
         const uint32_t source[3] = {UINT32_C(111), UINT32_C(222), UINT32_C(333)};
         uint32_t destination[3] = {UINT32_C(1001), UINT32_C(1002), UINT32_C(1003)};

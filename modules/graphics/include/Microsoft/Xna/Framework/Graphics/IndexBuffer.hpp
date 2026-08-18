@@ -170,6 +170,34 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT [[nodiscard]] bool HasRenderer() const { return renderer_ != nullptr; }
 
+        /**
+         * @brief Uploads indices into a window of this buffer, leaving the rest alone.
+         *
+         * XNA's `SetData(int offsetInBytes, T[] data, int startIndex, int elementCount)` overload.
+         * The `startIndex` the other overloads take indexes the **caller's array**; this offset
+         * indexes **this buffer**, which is what lets one slice of a large dynamic index buffer be
+         * rewritten per frame instead of the whole thing.
+         *
+         * **Documented deviation, about cost rather than about result.** The renderer contract
+         * underneath replaces a buffer's whole contents, so the window is applied to the CPU shadow
+         * and the whole shadow is re-uploaded. The indices end up exactly where XNA puts them; what
+         * a caller does not get is a smaller transfer. Anything outside the window keeps whatever
+         * it held, and indices never written by any upload read as zero.
+         *
+         * @param offsetInBytes Byte offset into **this buffer**, a multiple of the element size.
+         * @param data          Source indices, of this buffer's own element width.
+         * @param startIndex    First element of @p data to read.
+         * @param elementCount  Number of indices to write; zero uploads nothing.
+         * @throws System::ArgumentException if the width does not match or the offset is unaligned.
+         * @throws System::ArgumentOutOfRangeException if the window leaves this buffer's capacity.
+         */
+        CNAEXT void SetDataAtEXT(int offsetInBytes, const std::uint16_t* data,
+                                 int startIndex, int elementCount);
+
+        /** @copydoc SetDataAtEXT(int, const std::uint16_t*, int, int) */
+        CNAEXT void SetDataAtEXT(int offsetInBytes, const std::uint32_t* data,
+                                 int startIndex, int elementCount);
+
     protected:
         /**
          * @brief Uploads 16-bit indices with a streaming hint.
@@ -213,6 +241,12 @@ namespace Microsoft::Xna::Framework::Graphics
         void Dispose(bool disposing) override;
 
     private:
+        void SetDataAtInternal(int offsetInBytes,
+                               const void* data,
+                               int startIndex,
+                               int elementCount,
+                               IndexElementSize dataElementSize);
+
         void SetDataInternal(const void* data,
                              int startIndex,
                              int elementCount,

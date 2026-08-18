@@ -9,6 +9,7 @@
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -773,6 +774,103 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         UploadValidatedData(
             data, count, uploadStride, SetDataOptions::None, false);
+    }
+
+    void VertexBuffer::SetDataRawAtEXT(const int offsetInBytes, const void* const data,
+                                       const int count, const int stride)
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("VertexBuffer");
+        if (stride <= 0)
+            throw System::ArgumentException(
+                "The vertex stride must be positive.", "stride");
+        if (count < 0)
+            throw System::ArgumentOutOfRangeException(
+                "count", std::to_string(count), "This parameter must not be negative.");
+        if (offsetInBytes < 0)
+            throw System::ArgumentOutOfRangeException(
+                "offsetInBytes", std::to_string(offsetInBytes),
+                "This parameter must not be negative.");
+        const auto uploadStride = static_cast<std::size_t>(stride);
+        if (static_cast<std::size_t>(offsetInBytes) % uploadStride != 0)
+            throw System::ArgumentException(
+                "The destination offset must fall on a vertex boundary.", "offsetInBytes");
+        // The declaration, when there is one, is as binding here as it is for a whole-buffer
+        // upload: a window written at a different stride would interleave with what is already
+        // there rather than replace part of it.
+        if (vertexDeclaration_.getVertexStrideProperty() > 0 &&
+            static_cast<std::size_t>(vertexDeclaration_.getVertexStrideProperty()) != uploadStride)
+        {
+            throw System::ArgumentException(
+                "The vertex stride does not match this VertexBuffer's VertexDeclaration.",
+                "stride");
+        }
+        if (count == 0)
+            return;
+        if (data == nullptr)
+            throw System::ArgumentNullException("data");
+
+        const std::size_t capacity =
+            CheckedByteCount(vertexCount_, uploadStride, "vertexCount");
+        const std::size_t windowBytes = CheckedByteCount(count, uploadStride, "count");
+        if (windowBytes > capacity - static_cast<std::size_t>(offsetInBytes))
+        {
+            throw System::ArgumentOutOfRangeException(
+                "count", std::to_string(count),
+                "The windowed upload exceeds the VertexBuffer's logical capacity.");
+        }
+
+        // The shadow is the only place a window can be composed, because the renderer contract
+        // replaces whole-buffer contents. Growing it to the buffer's full capacity is what makes
+        // never-written bytes read as zero rather than as whatever a shorter previous upload left.
+        if (cpuShadow_.size() < capacity)
+            cpuShadow_.resize(capacity, 0U);
+
+        const auto* bytes = static_cast<const std::uint8_t*>(data);
+        std::copy(bytes, bytes + windowBytes,
+                  cpuShadow_.begin() + static_cast<std::ptrdiff_t>(offsetInBytes));
+
+        renderer_->SetVertexDeclaration(vertexDeclaration_);
+        renderer_->SetData(
+            cpuShadow_.data(), static_cast<int>(capacity / uploadStride), uploadStride);
+    }
+
+    void VertexBuffer::GetDataRawEXT(const int offsetInBytes, void* const destination,
+                                     const int count, const int stride) const
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("VertexBuffer");
+        if (bufferUsage_ == BufferUsage::WriteOnly)
+            throw System::NotSupportedException(
+                "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
+        if (stride <= 0)
+            throw System::ArgumentException(
+                "The vertex stride must be positive.", "stride");
+        if (count < 0)
+            throw System::ArgumentOutOfRangeException(
+                "count", std::to_string(count), "This parameter must not be negative.");
+        if (offsetInBytes < 0)
+            throw System::ArgumentOutOfRangeException(
+                "offsetInBytes", std::to_string(offsetInBytes),
+                "This parameter must not be negative.");
+        if (count == 0)
+            return;
+        if (destination == nullptr)
+            throw System::ArgumentNullException("destination");
+
+        const std::size_t windowBytes =
+            CheckedByteCount(count, static_cast<std::size_t>(stride), "count");
+        if (static_cast<std::size_t>(offsetInBytes) > cpuShadow_.size() ||
+            windowBytes > cpuShadow_.size() - static_cast<std::size_t>(offsetInBytes))
+        {
+            throw System::ArgumentOutOfRangeException(
+                "count", std::to_string(count),
+                "The requested window is outside the data this VertexBuffer holds.");
+        }
+        std::copy(cpuShadow_.begin() + static_cast<std::ptrdiff_t>(offsetInBytes),
+                  cpuShadow_.begin() + static_cast<std::ptrdiff_t>(offsetInBytes) +
+                      static_cast<std::ptrdiff_t>(windowBytes),
+                  static_cast<std::uint8_t*>(destination));
     }
 
     void VertexBuffer::SetDataWithOptions(const VertexPositionColor* data, int startIndex,

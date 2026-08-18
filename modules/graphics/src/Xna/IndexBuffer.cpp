@@ -8,6 +8,7 @@
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <limits>
 
@@ -147,6 +148,77 @@ namespace Microsoft::Xna::Framework::Graphics
     void IndexBuffer::GetData(std::uint32_t* data, int startIndex, int elementCount)
     {
         GetDataInternal(data, startIndex, elementCount, IndexElementSize::ThirtyTwoBits);
+    }
+
+    void IndexBuffer::SetDataAtEXT(const int offsetInBytes, const std::uint16_t* const data,
+                                   const int startIndex, const int elementCount)
+    {
+        SetDataAtInternal(
+            offsetInBytes, data, startIndex, elementCount, IndexElementSize::SixteenBits);
+    }
+
+    void IndexBuffer::SetDataAtEXT(const int offsetInBytes, const std::uint32_t* const data,
+                                   const int startIndex, const int elementCount)
+    {
+        SetDataAtInternal(
+            offsetInBytes, data, startIndex, elementCount, IndexElementSize::ThirtyTwoBits);
+    }
+
+    void IndexBuffer::SetDataAtInternal(const int offsetInBytes,
+                                        const void* const data,
+                                        const int startIndex,
+                                        const int elementCount,
+                                        const IndexElementSize dataElementSize)
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("IndexBuffer");
+        if (dataElementSize != indexElementSize_)
+            throw System::ArgumentException(
+                "The source index width does not match the IndexBuffer element size.", "data");
+        if (offsetInBytes < 0)
+            throw System::ArgumentOutOfRangeException(
+                "offsetInBytes", std::to_string(offsetInBytes),
+                "This parameter must not be negative.");
+
+        const std::size_t elementSize =
+            dataElementSize == IndexElementSize::ThirtyTwoBits
+                ? sizeof(std::uint32_t)
+                : sizeof(std::uint16_t);
+        if (static_cast<std::size_t>(offsetInBytes) % elementSize != 0)
+            throw System::ArgumentException(
+                "The destination offset must fall on an index boundary.", "offsetInBytes");
+
+        const std::size_t sourceByteOffset = CheckedByteOffset(startIndex, elementSize);
+        const std::size_t windowBytes =
+            CheckedByteCount(elementCount, elementSize, "elementCount");
+        if (elementCount == 0)
+            return;
+        if (data == nullptr)
+            throw System::ArgumentNullException("data");
+
+        const std::size_t capacity =
+            CheckedByteCount(indexCount_, elementSize, "indexCount");
+        if (windowBytes > capacity - static_cast<std::size_t>(offsetInBytes))
+            throw System::ArgumentOutOfRangeException(
+                "elementCount", std::to_string(elementCount),
+                "The windowed upload exceeds the IndexBuffer's logical capacity.");
+
+        // The shadow is where a window can be composed at all: the renderer contract replaces
+        // whole-buffer contents. Growing it to the buffer's full capacity is what makes indices
+        // never written by any upload read as zero rather than as whatever a shorter earlier
+        // upload happened to leave behind.
+        if (cpuShadow_.size() < capacity)
+            cpuShadow_.resize(capacity, 0U);
+
+        const auto* source = static_cast<const std::uint8_t*>(data) + sourceByteOffset;
+        std::copy(source, source + windowBytes,
+                  cpuShadow_.begin() + static_cast<std::ptrdiff_t>(offsetInBytes));
+
+        const int uploadCount = static_cast<int>(capacity / elementSize);
+        if (dataElementSize == IndexElementSize::ThirtyTwoBits)
+            renderer_->SetData32(cpuShadow_.data(), uploadCount);
+        else
+            renderer_->SetData16(cpuShadow_.data(), uploadCount);
     }
 
     void IndexBuffer::SetDataInternal(const void* data,

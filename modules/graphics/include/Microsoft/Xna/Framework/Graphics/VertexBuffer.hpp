@@ -366,6 +366,55 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void SetDataRaw(const void* data, int count, int stride);
 
         /**
+         * @brief Uploads raw vertex bytes into a window of this buffer, leaving the rest alone.
+         *
+         * XNA's `SetData(int offsetInBytes, T[] data, int startIndex, int elementCount, int
+         * vertexStride)` overload, in the raw form SetDataRaw() already speaks. It is what a
+         * particle system or a streaming terrain needs: rewrite one slice of a large dynamic
+         * buffer per frame instead of the whole thing.
+         *
+         * **Documented deviation, and it is about cost rather than about result.** The renderer
+         * contract this buffer sits on replaces a buffer's whole contents -- `SetData(data, count,
+         * stride)` has no destination offset, in any of the renderer families -- so the window is
+         * applied to the CPU shadow and the whole shadow is then uploaded. The bytes end up
+         * exactly where XNA puts them; what a caller does not get is a smaller transfer. Anything
+         * outside the window keeps whatever it held, which is the property the overload exists for
+         * and the one a full re-upload would otherwise destroy.
+         *
+         * Bytes never written by any upload read as zero, exactly as a freshly created buffer's do.
+         *
+         * @param offsetInBytes Byte offset into **this buffer**, a multiple of @p stride.
+         * @param data   Pointer to the raw vertex data; at least `count * stride` readable bytes.
+         *               May be null only when @p count is zero, which uploads nothing.
+         * @param count  Number of vertices to write.
+         * @param stride Size of one vertex in bytes; must match the declaration's own when this
+         *               buffer carries one.
+         * @throws System::ArgumentOutOfRangeException if the window leaves this buffer's capacity.
+         * @throws System::ArgumentException if @p stride or @p offsetInBytes is unusable.
+         */
+        CNAEXT void SetDataRawAtEXT(int offsetInBytes, const void* data, int count, int stride);
+
+        /**
+         * @brief Reads raw vertex bytes back from a window of this buffer.
+         *
+         * The counterpart of SetDataRaw()/SetDataRawAtEXT(), and the reason it exists: the typed
+         * GetData() overloads each name one of the built-in vertex layouts, so a buffer written
+         * with a custom layout through SetDataRaw() could be filled and never read -- an asymmetry
+         * with no reason behind it, since the CPU shadow holds the bytes either way.
+         *
+         * @param offsetInBytes Byte offset into **this buffer**.
+         * @param destination   Buffer receiving `count * stride` bytes. May be null only when
+         *                      @p count is zero.
+         * @param count         Number of vertices to read.
+         * @param stride        Size of one vertex in bytes.
+         * @throws System::NotSupportedException if this buffer was created write-only, matching
+         *         the typed overloads.
+         * @throws System::ArgumentOutOfRangeException if the window leaves what has been written.
+         * @throws System::ArgumentException if @p stride is unusable.
+         */
+        CNAEXT void GetDataRawEXT(int offsetInBytes, void* destination, int count, int stride) const;
+
+        /**
          * @brief Internal accessor used by the renderer draw paths.
          */
         CNAEXT [[nodiscard]] CNA::Internal::Renderers::IVertexBufferRenderer& GetRenderer() const { return *renderer_; }

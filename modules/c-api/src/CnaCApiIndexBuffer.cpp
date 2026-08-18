@@ -415,6 +415,88 @@ CNA_Result cna_index_buffer_copy_type_name(
     });
 }
 
+namespace {
+
+/// Applies one windowed upload, in the element width the transfer selected.
+template<typename TIndex>
+[[nodiscard]] CNA_Result SetTypedAt(
+    const IndexBufferResource& resource,
+    const uint64_t bufferOffsetInBytes,
+    const TransferView& transfer,
+    const void* const source)
+{
+    if (transfer.count == 0U) {
+        return CNA_RESULT_SUCCESS;
+    }
+    if (transfer.start >
+        static_cast<uint64_t>(std::numeric_limits<std::size_t>::max() / sizeof(TIndex))) {
+        return Fail(
+            CNA_RESULT_OVERFLOW,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The index source byte offset is too large.");
+    }
+    const auto* const bytes = static_cast<const uint8_t*>(source) +
+        static_cast<std::size_t>(transfer.start) * sizeof(TIndex);
+    std::vector<TIndex> native(static_cast<std::size_t>(transfer.count));
+    std::memcpy(native.data(), bytes, native.size() * sizeof(TIndex));
+    resource.value->SetDataAtEXT(
+        static_cast<int>(bufferOffsetInBytes),
+        native.data(),
+        0,
+        static_cast<int>(transfer.count));
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_index_buffer_set_data_at(
+    const CNA_IndexBufferHandle indexBufferHandle,
+    const uint64_t bufferOffsetInBytes,
+    const CNA_IndexBufferTransfer* const transfer,
+    const void* const data,
+    const uint64_t capacity)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<IndexBufferResource> buffer;
+        if (const CNA_Result result = GetBuffer(indexBufferHandle, &buffer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateUsable(*buffer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (bufferOffsetInBytes > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+            return InvalidArgument(
+                "The IndexBuffer destination offset is outside the native range.");
+        }
+        TransferView view{};
+        if (const CNA_Result result = ValidateTransfer(
+                transfer, capacity, data, false, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (view.elementSize != buffer->value->getIndexElementSizeProperty()) {
+            return InvalidArgument(
+                "The source index width does not match the IndexBuffer element size.");
+        }
+        // A windowed upload rewrites part of the buffer's own contents, which is the one thing a
+        // streaming hint cannot describe: Discard means "the old contents are gone", and that is
+        // exactly what this route promises not to do.
+        if (view.options != SetDataOptions::None) {
+            return Fail(
+                CNA_RESULT_NOT_SUPPORTED,
+                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+                "A windowed upload preserves the rest of the buffer, so it accepts no "
+                "SetDataOptions other than None.");
+        }
+        if (view.elementSize == IndexElementSize::ThirtyTwoBits) {
+            return SetTypedAt<uint32_t>(*buffer, bufferOffsetInBytes, view, data);
+        }
+        return SetTypedAt<uint16_t>(*buffer, bufferOffsetInBytes, view, data);
+    });
+}
+
 CNA_Result cna_index_buffer_set_data(
     const CNA_IndexBufferHandle indexBufferHandle,
     const CNA_IndexBufferTransfer* const transfer,
