@@ -296,6 +296,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-18 | same binary, `CNA_GRAPHICS_RENDERER=STUB` | same | 7814 ran · 7213 pass · 572 skip · **29 fail**, none in the engine layer |
 | 2026-08-18 | `cmake-build-cnaext` (EasyGL) re-verified after the Phase 16.6 probes and the shader-execution sweep | Xvfb :99 | 7829 ran · 7765 pass · 64 skip · **0 fail** |
 | 2026-08-18 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`** re-verified after the same | Xvfb :99 | 7556 ran · 7494 pass · 62 skip · **0 fail** |
+| 2026-08-18 | `cmake-build-cnaext`, after closing Phases 0–3 (the rows those phases had left open) | Xvfb :99 | 7879 ran · 7815 pass · 64 skip · **0 fail** |
 
 The `CNA_CNAEXT=OFF` row is the one that answers "can this break what already works". It configures,
 builds and passes with the whole engine layer compiled out. Its lower test count is expected and not
@@ -367,6 +368,41 @@ from the build directory (with no media fixtures resolvable); from the repo root
 remembering if a future run aborts mid-suite.
 
 ---
+
+
+### Closing Phases 0–3: what the leftover rows were actually hiding
+
+The plan's early phases had been reported as done while 60-odd of their rows were still ⬜. Most were
+documentation and verification the implementation had outrun — but working through them found four
+things that were not bookkeeping:
+
+- **`TINYGL` did not configure at all.** `MOD-134`'s renderer sweep caught it on its first full run.
+  Its dispatch arm called `add_compile_definitions()` directly instead of appending to
+  `_cna_identity_defines`, so its `CNA_RENDERER_TARGET_DEFINES` entry was the empty string — which
+  makes that list *empty*, not one element long — and `modules/renderers/CMakeLists.txt` died with
+  "list GET given empty list". It was the only one of 45 dispatch arms doing this. The sweep now
+  covers all 49 identities: 22 configure here, 27 skip by toolchain, 0 fail.
+
+- **A pass that threw left its destination bound** (`MOD-203`). Fixed with `ScopedRenderTarget` —
+  and the fix then caused its own regression, which `MOD-318` caught two rows later: the class
+  restores what a pass *found* bound, so the chain, entered with the scene target still bound,
+  faithfully put it back after the last pass wrote the back buffer, and `Present` refused.
+  `RenderPipeline::end()` now unbinds the scene target first, which it should have done regardless.
+
+- **Skia supports every float render-target format**, which is the opposite of what "CPU raster"
+  suggests and was about to be written into the docs the other way round. Checked in its source
+  rather than assumed.
+
+- **`MOD-220` changed no behaviour, and that is the finding.** `SpriteBatch::Begin` already
+  documents a null sampler as `LinearClamp`, so bloom's pyramid was being filtered correctly by a
+  default that had nothing to do with bloom. The row's value is the attachment, not a fix.
+
+Two rows were refused rather than done, both with the reason in the row: `MOD-314` (goldens — see
+`MOD-1703`) and `MOD-320` (`RenderQuality` deliberately does not touch tonemapping, because there is
+nothing to turn down and the operator is an artistic choice). One deviated from its own instruction:
+`MOD-219` **logs rather than throws**, because three renderers report `CustomEffects` true and never
+compile GLSL source, so throwing on a failed compile would turn a documented capability boundary
+into a crash on all three.
 
 ### Phase 16.6: what measuring the three no-op renderers actually found
 
