@@ -8,10 +8,12 @@ session needs to start work without re-deriving the state.
 
 - **Branch:** `feature/gltf`, with local commits. The owner explicitly requested a push when the
   current autonomous run reaches its weekly-limit cutoff; no pull request has been requested.
-- **Working document:** `plan_gltf.md`, **474** numbered rows. **Seven remain open: `GLTF-344` and
-  `GLTF-465` (both `✅/⬜`), and `GLTF-459`, `GLTF-460`, `GLTF-464`, `GLTF-473`, `GLTF-474` (`⬜`).**
+- **Working document:** `plan_gltf.md`, **475** numbered rows. **Seven remain open: `GLTF-344` and
+  `GLTF-465` (both `✅/⬜`), and `GLTF-459`, `GLTF-460`, `GLTF-464`, `GLTF-474`, `GLTF-475` (`⬜`).**
   `GLTF-463` closed on 2026-08-17; `GLTF-472` (the adversarial audit) closed on 2026-08-18 and opened
-  the last two. `GLTF-465` is half closed: **no PBR renderer draws a `COLOR_0` asset with different
+  three rows; `GLTF-473` closed the same day and opened `GLTF-475`. **No renderer in the tree is in
+  the forbidden third state any more** — nothing accepts a valid core glTF primitive and renders it
+  with different semantics. `GLTF-465` is half closed: **no PBR renderer draws a `COLOR_0` asset with different
   core semantics any more** (thirteen apply the product, four refuse the draw), and what remains is
   implementing it in those four. §27.2 carries a row-by-row ROBUST assessment; that section, not this
   file, is the record of what the milestone still needs.
@@ -25,9 +27,12 @@ session needs to start work without re-deriving the state.
   primitive at all: `SDL_GPU`'s dispatch still selected its PBR queue for `stride == 48`/`68` only, and
   `DILIGENT` picked its stride-80 shader variant and then refused stride 80 nine lines later. Both are
   fixed. The name stays qualified because renderer coverage is not uniform — four PBR renderers refuse
-  the feature, `LLGL` cannot draw glTF's own default material at all, and `OPENGLES1` (outside the
-  seventeen) still accepts a PBR draw and reads a stride-60 record's `NORMAL` as its vertex colour
-  (`GLTF-473`). **Read §27.1.3 before §27.1, and §27.1.2 before either.**
+  the feature (`GLTF-465`), and `LLGL`, `SDL_GPU` and `DILIGENT` each cannot draw content the tables
+  did not say was unreachable (`GLTF-474`). `OPENGLES1` (outside the seventeen) used to accept a PBR
+  draw and read a stride-60 record's `NORMAL` as its vertex colour; `GLTF-473` closed that against a
+  real ES 1.1 driver, so **the forbidden third state is now empty** and the qualifier survives for a
+  different reason — coverage, not wrong output.
+  **Read §27.1.3 before §27.1, and §27.1.2 before either.**
 
   The rejected argument is the rule this campaign now works to: a renderer that **accepts** a valid
   `COLOR_0` metallic-roughness asset and substitutes the opaque-white identity renders a visibly wrong
@@ -269,6 +274,27 @@ found by *running the thing that was said to be impossible* rather than by reaso
   `CNA_D3D11_VIRTUAL_DESKTOP` on Xvfb (`GLTF-471`).
 - **The SOFTWARE L7 policy was not blocked by the environment at all** — the harness's own
   identity check made it structurally unrunnable (`GLTF-467`).
+- **A real ES 1.1 driver is on this host** (found by `GLTF-473`, 2026-08-18). `docs/opengles1-renderer.md`
+  records a side-by-side Mesa build from 2026-07-22 and it is still installed at
+  `~/deps/mesa-es1-install` with `gles1: enabled`, so `OPENGLES1` can be built **and run**, not merely
+  compiled. Configure `cmake-build-opengles1` normally (`-DCNA_GRAPHICS_RENDERER=OPENGLES1`; CMake
+  finds the system `libGLESv1_CM`), then run with the private vendor selected — the one step the
+  document does not have, because SDL3 reaches ES 1.1 through EGL and glvnd needs to be pointed at the
+  private `libEGL_mesa`:
+
+  ```bash
+  MESA=~/deps/mesa-es1-install/lib/x86_64-linux-gnu
+  printf '{"file_format_version":"1.0.0","ICD":{"library_path":"%s/libEGL_mesa.so.0"}}\n' "$MESA" > /tmp/es1_egl.json
+  LD_LIBRARY_PATH=$MESA LIBGL_DRIVERS_PATH=$MESA/dri __EGL_VENDOR_LIBRARY_FILENAMES=/tmp/es1_egl.json \
+    LIBGL_ALWAYS_SOFTWARE=1 SDL_VIDEODRIVER=x11 DISPLAY=:<n> ./cmake-build-opengles1/CnaTests \
+    --gtest_filter='*Gltf*:RendererStrideConformance.*:FixedFunctionArrayLayout.*'
+  ```
+
+  It reports `OpenGL ES-CM 1.1 Mesa 25.0.7`. That subset is 613/610/3 skipped/0 failed. The **full**
+  suite is not runnable there: `GamePlatformOwnershipTest.*` fails and
+  `EveryImplementation/GameEventSemanticsGoldenTest.*` segfaults, both windowed platform tests that
+  never reach a draw route — the same instability already recorded for OPENGLES3 and FNA3D, not
+  anything this renderer's draw paths do.
 
 | Boundary | Rows | Note |
 |---|---|---|

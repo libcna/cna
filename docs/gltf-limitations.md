@@ -183,10 +183,12 @@ Two qualifications belong next to that count, both measured by drawing rather th
 source (`GLTF-472`). **`LLGL` applies the product only where a base-colour texture is bound**: it
 treats `PbrEffect`'s base-colour map as mandatory and refuses the draw without one, so it cannot draw
 a material that carries only a `baseColorFactor` — glTF's own default material, §3.9.2 — on any
-stride (`GLTF-474`). And **`OPENGLES1` is outside the seventeen and does not refuse**: it has no PBR
-path, and routes a PBR draw to its fixed-function colour path, which reads a four-byte colour at
-offset 12 — the `NORMAL` floats on a stride-60 record (`GLTF-473`). That one *is* the forbidden third
-state, in a renderer the PBR inventory does not cover.
+stride (`GLTF-474`). **`OPENGLES1` is outside the seventeen and refuses**: it has no PBR path at all,
+and used to route a PBR draw to its fixed-function colour path, which reads a four-byte colour at
+offset 12 — the `NORMAL` floats on a stride-60 record. `GLTF-473` replaced that with an explicit
+refusal naming the semantic, the offset, what the record actually keeps there and the effect
+responsible, verified against a real `OpenGL ES-CM 1.1` driver. Nothing in the tree now accepts a
+valid core glTF primitive and renders it with different semantics.
 
 An **uncoloured** primitive is unaffected everywhere — its slot holds opaque white, the multiplier's
 identity, and the effect's switch is false — so nothing that rendered before this rule stops

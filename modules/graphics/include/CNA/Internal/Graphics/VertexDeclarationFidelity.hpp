@@ -441,6 +441,62 @@ namespace CNA::Internal::Graphics
     }
 
     /**
+     * @brief Where the canonical layout for one stride puts one semantic.
+     *
+     * plan_gltf.md `GLTF-473`. `InferredLayoutForStride` answers "what does this stride mean";
+     * this answers the narrower question a **fixed-function** renderer has to ask before it binds a
+     * client array: *at which byte offset does this stride's canonical record carry Normal / Color /
+     * TextureCoordinate 0?* A renderer that hard-codes that offset instead of asking is reading one
+     * layout's bytes through another's rule, and the two agree only by coincidence.
+     *
+     * The two "not found" cases are kept apart on purpose, because a caller must treat them
+     * differently: a stride the table does not list is a layout this file has no opinion about (a
+     * renderer-local record), and abstaining is right; a stride it does list which simply has no such
+     * semantic is a definite answer, and binding an array for it is a defect.
+     *
+     * @param strideInBytes The record stride the renderer strides the buffer by.
+     * @param usage The semantic being looked for.
+     * @param usageIndex The semantic's usage index.
+     * @return The offset, with `strideKnown` false for an unlisted stride and `present` false when
+     *         the listed layout carries no such element.
+     */
+    struct CanonicalSemanticOffsetEXT
+    {
+        /** @brief False when the canonical table lists no layout for the stride at all. */
+        bool strideKnown = false;
+        /** @brief True when the listed layout carries the requested semantic. */
+        bool present = false;
+        /** @brief The byte offset, meaningful only when @c present. */
+        int offset = 0;
+    };
+
+    /**
+     * @brief Looks up @p usage / @p usageIndex in the canonical layout for @p strideInBytes.
+     *
+     * @param strideInBytes The record stride.
+     * @param usage The semantic being looked for.
+     * @param usageIndex The semantic's usage index.
+     * @return Where the semantic lives, or why it could not be answered.
+     */
+    [[nodiscard]] inline CanonicalSemanticOffsetEXT CanonicalOffsetOfSemanticEXT(
+        int strideInBytes,
+        Microsoft::Xna::Framework::Graphics::VertexElementUsage usage,
+        int usageIndex) noexcept
+    {
+        const InferredVertexLayout layout =
+            InferredLayoutForStride(strideInBytes, UnlistedStrideLayout::RendererRefusesIt);
+        if (!layout.known) { return CanonicalSemanticOffsetEXT{false, false, 0}; }
+        for (std::size_t i = 0; i < layout.count; ++i)
+        {
+            if (layout.elements[i].usage == usage && layout.elements[i].usageIndex == usageIndex)
+            {
+                return CanonicalSemanticOffsetEXT{true, true, layout.elements[i].offset};
+            }
+        }
+        return CanonicalSemanticOffsetEXT{true, false, 0};
+    }
+
+    /**
      * @brief Why @p declaredElements cannot be represented by @p inferred, or an empty string.
      *
      * Pure: it allocates a message only when it has one to give, touches no device state and never

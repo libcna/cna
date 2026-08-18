@@ -268,7 +268,21 @@ silently fell back to the system Mesa.
 
 This renderer has **no programmable shader path at all** — `CreateEffectRenderer()` keeps
 `IGraphicsRenderer`'s base `nullptr` default. The following are **permanent, not "not yet
-implemented"**, gaps for a fixed-function ES 1.1 pipeline:
+implemented"**, gaps for a fixed-function ES 1.1 pipeline.
+
+**How an unsupported effect behaves, since 2026-08-18 (plan_gltf.md `GLTF-473`).** Each of these used
+to fall through to the plain colored path, and that was worse than it sounds: the colour path binds
+`glColorPointer` at byte offset 12, which is a colour in exactly two of CNA's vertex records (stride
+16 and stride 24) and is the `NORMAL` in every PBR and skinned one. Six of the eight canonical glTF
+fixtures were therefore drawn with per-vertex colours read out of the bytes of their own normals — a
+stable, plausible, wrong tint reported as a successful draw. All four draw routes now call the shared
+`RequireFixedFunctionClientArrayEXT` guard before touching any GL state, which asks the canonical
+layout table whether the record really carries that semantic at that offset and **refuses the draw by
+name when it does not**. The message names this renderer, the route, the array, the semantic and
+offset it would have read, what the record actually keeps there, `GLTF-473`, and which effect sent the
+draw down the fallback. A draw whose record genuinely is a `VertexPositionColor` or
+`VertexPositionColorTexture` one is unaffected, and so is this renderer's own 28-byte dual-UV record,
+which the shared table does not list and the guard therefore leaves alone.
 
 - **Custom `ShaderEffect` / GLSL shaders** — no shader compiler exists in ES 1.1 at all.
 - **`SkinnedEffect`/`SkinnedPbrEffect`** — no vertex skinning without the rare
@@ -279,8 +293,10 @@ implemented"**, gaps for a fixed-function ES 1.1 pipeline:
   texgen, see above); only the per-pixel Fresnel weight and `EnvironmentMapSpecular` tint are not,
   since neither has a fixed-function equivalent without much deeper `GL_COMBINE` staging than
   this baseline implements (flat `envMapAmount` blending is used instead).
-- **Instancing** (`DrawInstancedPrimitivesEx`) — no fixed-function instancing mechanism exists;
-  falls back to the plain colored path.
+- **Instancing** (`DrawInstancedPrimitivesEx`) — no fixed-function instancing mechanism exists.
+  `DrawInstancedPrimitivesEx` itself is not overridden, so it takes `IGraphicsRenderer`'s own
+  throwing default; an `instanceCount > 1` reaching the ordinary route takes the fallback above and
+  is refused there unless the record really is a colour one.
 - **Multi-stream vertex input** (REMED-GFX-201) — the fixed-function pointer setup binds one
   `GL_ARRAY_BUFFER` and reads every attribute out of it at stride offsets, so there is no second
   per-vertex stream to resolve.
