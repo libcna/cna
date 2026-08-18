@@ -1027,3 +1027,84 @@ nothing would run into it later — and in each case invisibly, because the defa
 build cannot express the difference. A ✅ in this plan should now be read as "implemented, verified,
 **and** guarded", and where it is not guarded, P13 says so. The mechanical gates are the durable
 part of that phase; the four fixes are not.
+
+---
+
+## Renderer descriptor integrity (2026-08-18)
+
+`scripts/check_runtime_renderer_discipline.py` reports "every family owns one descriptor unit and a
+family-namespaced factory". It does that with regular expressions and never parses the file, so
+three descriptors sat on `next` unable to compile at all while the gate stayed green:
+
+| File | Damage | Effect |
+|------|--------|--------|
+| `BgfxRendererDescriptor.cpp` | one `}` too many after `ResolvedWindowKind()` | `GetDescriptor()` fell outside `namespace ...::Bgfx` |
+| `LlglRendererDescriptor.cpp` | `namespace { return 0; }` | a `return` statement at namespace scope |
+| `OpenGL1RendererDescriptor.cpp` | two orphaned `}` after the factory declaration | an unmatched brace at file scope |
+
+All three were **born broken** in `f242134`, which added the files (`new file mode`); they are the
+orphaned tails of a deleted `prepareWindowFlags()` hook. `-DCNA_GRAPHICS_RENDERER=BGFX|LLGL|OPENGL1`
+therefore could not configure-and-build on `next` at all. Fixed by removing the orphaned fragments;
+`ResolvedWindowKind()` in the Bgfx file is real and kept.
+
+### The gate: compile every descriptor, in the build system
+
+A descriptor is the only file per family that a build needs whether or not that family is
+selected, and the only file per family that no ordinary configuration compiles -- a
+single-renderer build enters one family's directory, so 44 of the 45 descriptors are never seen by
+a compiler. Every gate the project had reads them as *text*. That is the whole defect class.
+
+**`cmake/RendererDescriptorGate.cmake` closes it with the real build system.**
+`cna_renderer_descriptor_gate` is an OBJECT library that nothing links -- the descriptors it
+compiles here would be duplicate definitions of symbols the real archives own, and compiling them
+is the entire point. It is part of `all`, so an ordinary build of *any* renderer now compiles
+every registered family's descriptor with the project's real flags, include roots and C++ standard.
+
+Its inventory comes from `cna_all_renderer_identities()`, i.e. from
+`cmake/RendererRegistry.cmake`'s identity map itself -- the map was hoisted into
+`_cna_renderer_identity_map()` for exactly this, so it is still written once and a family added
+there is gated on the same commit. There is no second list to fall behind, which is the property
+the identity checker had to be rewritten to gain (design decision 10). Configuration fails outright
+if a registered identity has no descriptor declaring `namespace CNA::Internal::Renderers::<Family>`,
+so a missing or misnamespaced descriptor is caught before a single object is built.
+
+Each descriptor is compiled by exactly one thing:
+
+| Family set | Compiled by | Why |
+|------------|-------------|-----|
+| in this configuration's renderer set | its own family target | already real, with that family's own dependencies |
+| `bgfx`, `directx9` | their own family target, in a BGFX / DIRECTX9 build | the descriptor consults that family's SDK: bgfx asks `bgfx::RendererType` which native API it will pick; D3D9's `adapterQueries` answer from real `D3DCAPS9`/`D3DFORMAT` values. Neither can be made self-contained without dropping behaviour. |
+| everything else | `cna_renderer_descriptor_gate` | needs nothing but CNA's own headers |
+
+That two-family exclusion is the only declared list, it is two entries long with a stated reason
+each, and it is fail-closed: a new family is gated by default and excusing it takes a deliberate
+edit.
+
+Measured: `-DCNA_GRAPHICS_RENDERER=OPENGL1` configures as "42 compiled here, 3 by their own family
+target", and the gate target builds 42/42. A multi-renderer build (`HEADLESS;SOFTWARE;STUB`) reports
+"40 compiled here, 5 by their own family target". Restoring the original `LlglRendererDescriptor.cpp`
+makes the gate target fail with three real compiler errors; renaming a descriptor's namespace makes
+`cmake` fail at configure time naming the identity.
+
+### The script beside it: `scripts/check_renderer_descriptors.py`
+
+Kept, with two jobs the CMake target does not have:
+
+1. **A pre-check that needs no configure.** `-fsyntax-only` per descriptor with the framework
+   include roots and that family's own `CNA_RENDERER_*` define, read out of
+   `cmake/RendererSelection.cmake` arm by arm so the defines are the build system's answer rather
+   than the script's. It runs as the first CI step, before anything is configured, and it also
+   covers the configuration's own selected family.
+2. **A structural rule a compiler cannot state.** Brace balance and "no statement directly inside a
+   namespace body", for every descriptor. This is not redundant: the Bgfx defect -- a stray `}`
+   closing the family namespace early -- still *compiles*. It fails only at link time, only in a
+   BGFX build, when the generated registry calls `Bgfx::GetDescriptor()`. A structural rule about
+   where a descriptor's declarations live catches it directly.
+
+Its two host-unreachable families are **discovered, not declared**: a family drops to
+structure-only when, and only when, the compiler reports a missing include naming a header this
+repository does not contain. Any other compiler error is a hard failure.
+
+Measured on the fix commit: 45 descriptors, 43 compiled, 2 structure-only, 0 problems. Run against
+the three original files it reports 6 problems and names each -- including the Bgfx one, which only
+layer 2 can see.

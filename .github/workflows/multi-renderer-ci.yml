@@ -69,6 +69,11 @@ jobs:
           python3 scripts/check_renderer_combinations.py
           python3 scripts/check_runtime_renderer_discipline.py
           python3 scripts/check_renderer_target_discipline.py
+          # The discipline gate above is regex-only: it checks that each family HAS a descriptor,
+          # never that the descriptor parses. Three of them sat on `next` with unbalanced braces
+          # while it reported "OK: 45 renderer families". This runs before any configure, and the
+          # cna_renderer_descriptor_gate target below compiles them for real.
+          python3 scripts/check_renderer_descriptors.py
 
       - name: Configure and build (multi-renderer)
         run: |
@@ -78,7 +83,11 @@ jobs:
             -DCNA_GRAPHICS_RENDERER=HEADLESS \
             -DCNA_GRAPHICS_RENDERERS="HEADLESS;SOFTWARE;STUB" \
             -DCNA_BUILD_TESTS=ON
-          cmake --build build-multi --target CnaTests cna_demo_renderer_selection -j2
+          # cna_renderer_descriptor_gate compiles the descriptor of every registered family this
+          # configuration does not enter (cmake/RendererDescriptorGate.cmake). Named explicitly
+          # because this step builds specific targets rather than `all`.
+          cmake --build build-multi \
+            --target CnaTests cna_demo_renderer_selection cna_renderer_descriptor_gate -j2
 
       - name: Every compiled-in renderer is reachable at runtime
         run: |

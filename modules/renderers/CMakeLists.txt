@@ -192,6 +192,11 @@ endforeach()
 
 set(CNA_GRAPHICS_RENDERER "${_cna_saved_graphics_renderer}")
 
+# Compile the descriptors of every family this configuration did NOT enter above, so that no
+# registered renderer's pre-construction contract can rot unseen between the rare builds that
+# select it (cmake/RendererDescriptorGate.cmake).
+cna_add_renderer_descriptor_gate()
+
 # CANVAS, HTML_DOM, SVG_DOM and PIXIJS are Emscripten-only selections, but their
 # implementation-independent contract tests deliberately compile on a native host with EM_JS
 # bodies excluded. Register those opt-in host targets here, outside selected-renderer dispatch, so
