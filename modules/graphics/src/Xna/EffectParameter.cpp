@@ -132,12 +132,14 @@ namespace Microsoft::Xna::Framework::Graphics
     // --- GetValue ---
     bool EffectParameter::GetValueBoolean() const
     {
+        RequireNumericParameter("GetValueBoolean");
         if (compiledStorage_)
             return ReadCell<int>(compiledStorage_->bytes, compiledByteOffset_) != 0;
         return !intData_.empty() && intData_[0] != 0;
     }
     std::vector<bool> EffectParameter::GetValueBooleanArray(int count) const
     {
+        RequireNumericParameter("GetValueBooleanArray");
         if (compiledStorage_)
         {
             std::vector<bool> result;
@@ -160,12 +162,14 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     int EffectParameter::GetValueInt32() const
     {
+        RequireNumericParameter("GetValueInt32");
         if (compiledStorage_)
             return ReadCell<int>(compiledStorage_->bytes, compiledByteOffset_);
         return intData_.empty() ? 0 : intData_[0];
     }
     std::vector<int> EffectParameter::GetValueInt32Array(int count) const
     {
+        RequireNumericParameter("GetValueInt32Array");
         if (compiledStorage_)
         {
             std::vector<int> result;
@@ -187,12 +191,14 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     float EffectParameter::GetValueSingle() const
     {
+        RequireNumericParameter("GetValueSingle");
         if (compiledStorage_)
             return ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_);
         return floatData_.empty() ? 0.0f : floatData_[0];
     }
     std::vector<float> EffectParameter::GetValueSingleArray(int count) const
     {
+        RequireNumericParameter("GetValueSingleArray");
         if (compiledStorage_)
         {
             std::vector<float> result;
@@ -235,8 +241,50 @@ namespace Microsoft::Xna::Framework::Graphics
             name_ + "' is not one.");
     }
 
+    namespace
+    {
+        /// The reflected object type's public XNA name, for FX-105's refusal text.
+        [[nodiscard]] const char* ObjectParameterTypeName(EffectParameterType type)
+        {
+            switch (type)
+            {
+                case EffectParameterType::String:      return "String";
+                case EffectParameterType::Texture:     return "Texture";
+                case EffectParameterType::Texture1D:   return "Texture1D";
+                case EffectParameterType::Texture2D:   return "Texture2D";
+                case EffectParameterType::Texture3D:   return "Texture3D";
+                case EffectParameterType::TextureCube: return "TextureCube";
+                default:                               return "an object";
+            }
+        }
+    }
+
+    void EffectParameter::RequireNumericParameter(const char* operation) const
+    {
+        // plan_fx.md FX-105: the other direction of the type check FX-089 added.
+        //
+        // A compiled effect's OBJECT parameters -- strings, textures, samplers, shaders -- do not
+        // store a value in the register file at all. What sits at their byte offset is the effect
+        // object table's INDEX, so reading it through a numeric accessor returns that index
+        // reinterpreted as a float or an int, and writing through one overwrites the index and
+        // detaches the parameter from its object. Both were silent. XNA rejects the same pairings
+        // with InvalidCastException.
+        //
+        // Only the OBJECT class is refused. A `Struct` parameter has real numeric storage behind
+        // it and its members are reachable through StructureMembers, so it is left alone; so is
+        // every CNA-constructed stock/CNAEXT parameter, which has no compiled storage and keeps
+        // the lenient behaviour the C API's standalone-parameter tests rely on (the same carve-out
+        // RequireStringParameter makes).
+        if (paramClass_ != EffectParameterClass::Object) return;
+        throw System::InvalidCastException(
+            std::string("EffectParameter::") + operation + " requires a numeric parameter; '" +
+            name_ + "' is an object parameter (" + ObjectParameterTypeName(paramType_) +
+            "), whose value storage is an effect object-table index rather than a number.");
+    }
+
     Matrix EffectParameter::GetValueMatrix() const
     {
+        RequireNumericParameter("GetValueMatrix");
         if (compiledStorage_)
             return ReadCompiledMatrix(compiledStorage_->bytes, compiledByteOffset_,
                                       compiledByteSize_, rowCount_, columnCount_, false);
@@ -248,6 +296,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     std::vector<Matrix> EffectParameter::GetValueMatrixArray(int count) const
     {
+        RequireNumericParameter("GetValueMatrixArray");
         if (compiledStorage_)
         {
             std::vector<Matrix> result;
@@ -275,6 +324,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     Matrix EffectParameter::GetValueMatrixTranspose() const
     {
+        RequireNumericParameter("GetValueMatrixTranspose");
         if (compiledStorage_)
             return ReadCompiledMatrix(compiledStorage_->bytes, compiledByteOffset_,
                                       compiledByteSize_, rowCount_, columnCount_, true);
@@ -282,6 +332,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     std::vector<Matrix> EffectParameter::GetValueMatrixTransposeArray(int count) const
     {
+        RequireNumericParameter("GetValueMatrixTransposeArray");
         if (compiledStorage_)
         {
             std::vector<Matrix> result;
@@ -302,6 +353,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     Quaternion EffectParameter::GetValueQuaternion() const
     {
+        RequireNumericParameter("GetValueQuaternion");
         if (compiledStorage_)
         {
             return {
@@ -316,6 +368,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     std::vector<Quaternion> EffectParameter::GetValueQuaternionArray(int count) const
     {
+        RequireNumericParameter("GetValueQuaternionArray");
         if (compiledStorage_)
         {
             std::vector<Quaternion> result;
@@ -342,6 +395,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     Vector2 EffectParameter::GetValueVector2() const
     {
+        RequireNumericParameter("GetValueVector2");
         if (compiledStorage_)
             return {ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_),
                     ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + 4)};
@@ -350,6 +404,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     std::vector<Vector2> EffectParameter::GetValueVector2Array(int count) const
     {
+        RequireNumericParameter("GetValueVector2Array");
         if (compiledStorage_)
         {
             std::vector<Vector2> result;
@@ -371,6 +426,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     Vector3 EffectParameter::GetValueVector3() const
     {
+        RequireNumericParameter("GetValueVector3");
         if (compiledStorage_)
             return {ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_),
                     ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + 4),
@@ -380,6 +436,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     std::vector<Vector3> EffectParameter::GetValueVector3Array(int count) const
     {
+        RequireNumericParameter("GetValueVector3Array");
         if (compiledStorage_)
         {
             std::vector<Vector3> result;
@@ -402,6 +459,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     Vector4 EffectParameter::GetValueVector4() const
     {
+        RequireNumericParameter("GetValueVector4");
         if (compiledStorage_)
             return {ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_),
                     ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + 4),
@@ -412,6 +470,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     std::vector<Vector4> EffectParameter::GetValueVector4Array(int count) const
     {
+        RequireNumericParameter("GetValueVector4Array");
         if (compiledStorage_)
         {
             std::vector<Vector4> result;
@@ -452,6 +511,7 @@ namespace Microsoft::Xna::Framework::Graphics
     // --- SetValue ---
     void EffectParameter::SetValue(bool value)
     {
+        RequireNumericParameter("SetValue(bool)");
         if (compiledStorage_)
         {
             const int cell = value ? 1 : 0;
@@ -463,6 +523,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void EffectParameter::SetValue(const std::vector<bool>& v)
     {
+        RequireNumericParameter("SetValue(bool[])");
         if (compiledStorage_)
         {
             const int columns = std::max(columnCount_, 1);
@@ -482,6 +543,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void EffectParameter::SetValue(int value)
     {
+        RequireNumericParameter("SetValue(int)");
         if (compiledStorage_)
         {
             const bool wrote = paramType_ == EffectParameterType::Single
@@ -494,6 +556,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void EffectParameter::SetValue(const std::vector<int>& v)
     {
+        RequireNumericParameter("SetValue(int[])");
         if (compiledStorage_)
         {
             const int columns = std::max(columnCount_, 1);
@@ -511,6 +574,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void EffectParameter::SetValue(float value)
     {
+        RequireNumericParameter("SetValue(float)");
         if (compiledStorage_)
         {
             if (WriteCell(compiledStorage_->bytes, compiledByteOffset_, value))
@@ -521,6 +585,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void EffectParameter::SetValue(const std::vector<float>& v)
     {
+        RequireNumericParameter("SetValue(float[])");
         if (compiledStorage_)
         {
             const int columns = std::max(columnCount_, 1);
@@ -594,6 +659,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void EffectParameter::SetValue(const Matrix& m)
     {
+        RequireNumericParameter("SetValue(Matrix)");
         if (compiledStorage_)
         {
             WriteCompiledMatrix(compiledStorage_->bytes, compiledByteOffset_, compiledByteSize_,
@@ -610,6 +676,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void EffectParameter::SetValue(const std::vector<Matrix>& v)
     {
+        RequireNumericParameter("SetValue(Matrix[])");
         if (compiledStorage_)
         {
             const std::size_t stride = static_cast<std::size_t>(std::max(rowCount_, 1)) * 16;
@@ -635,6 +702,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void EffectParameter::SetValueTranspose(const Matrix& m)
     {
+        RequireNumericParameter("SetValueTranspose(Matrix)");
         if (compiledStorage_)
         {
             WriteCompiledMatrix(compiledStorage_->bytes, compiledByteOffset_, compiledByteSize_,
@@ -646,6 +714,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void EffectParameter::SetValueTranspose(const std::vector<Matrix>& v)
     {
+        RequireNumericParameter("SetValueTranspose(Matrix[])");
         if (compiledStorage_)
         {
             const std::size_t stride = static_cast<std::size_t>(std::max(rowCount_, 1)) * 16;
@@ -666,6 +735,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void EffectParameter::SetValue(const Quaternion& q)
     {
+        RequireNumericParameter("SetValue(Quaternion)");
         if (compiledStorage_)
         {
             const float values[4] = {q.X, q.Y, q.Z, q.W};
@@ -681,6 +751,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void EffectParameter::SetValue(const std::vector<Quaternion>& v)
     {
+        RequireNumericParameter("SetValue(Quaternion[])");
         if (compiledStorage_)
         {
             for (std::size_t i = 0; i < v.size(); ++i)
@@ -699,6 +770,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void EffectParameter::SetValue(const Vector2& v)
     {
+        RequireNumericParameter("SetValue(Vector2)");
         if (compiledStorage_)
         {
             const float values[2] = {v.X, v.Y};
@@ -714,6 +786,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void EffectParameter::SetValue(const std::vector<Vector2>& v)
     {
+        RequireNumericParameter("SetValue(Vector2[])");
         if (compiledStorage_)
         {
             for (std::size_t i = 0; i < v.size(); ++i)
@@ -732,6 +805,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void EffectParameter::SetValue(const Vector3& v)
     {
+        RequireNumericParameter("SetValue(Vector3)");
         if (compiledStorage_)
         {
             const float values[3] = {v.X, v.Y, v.Z};
@@ -747,6 +821,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void EffectParameter::SetValue(const std::vector<Vector3>& v)
     {
+        RequireNumericParameter("SetValue(Vector3[])");
         if (compiledStorage_)
         {
             for (std::size_t i = 0; i < v.size(); ++i)
@@ -765,6 +840,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void EffectParameter::SetValue(const Vector4& v)
     {
+        RequireNumericParameter("SetValue(Vector4)");
         if (compiledStorage_)
         {
             const float values[4] = {v.X, v.Y, v.Z, v.W};
@@ -780,6 +856,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void EffectParameter::SetValue(const std::vector<Vector4>& v)
     {
+        RequireNumericParameter("SetValue(Vector4[])");
         if (compiledStorage_)
         {
             for (std::size_t i = 0; i < v.size(); ++i)

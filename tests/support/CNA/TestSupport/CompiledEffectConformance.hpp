@@ -656,12 +656,34 @@ namespace CNA::TestSupport
         EXPECT_EQ(clonedCaption->GetValueString(), "clone only")
             << "and writing the source's string must not reach the clone";
 
-        // NOT asserted here, and recorded as plan_fx.md FX-105 instead: the OTHER direction of the
-        // type check. XNA rejects `GetValueSingle()`/`SetValue(float)` on a String parameter with
-        // InvalidCastException; CNA's numeric accessors reach the compiled byte storage without a
-        // type check, so they read and write the object-table index behind the string. Every
-        // numeric accessor on EffectParameter would need the guard, which is a wider change than
-        // this repair pass, so it is written down rather than half-done.
+        // plan_fx.md FX-105: the OTHER direction of the type check, which XNA also makes. A
+        // compiled effect's object parameters store an effect object-table INDEX at their byte
+        // offset, not a number, so a numeric accessor used to read that index back as a float and
+        // a numeric setter used to overwrite it -- detaching the parameter from its object. Both
+        // were silent.
+        EXPECT_THROW((void) caption->GetValueSingle(), System::InvalidCastException);
+        EXPECT_THROW((void) caption->GetValueInt32(), System::InvalidCastException);
+        EXPECT_THROW((void) caption->GetValueVector4(), System::InvalidCastException);
+        EXPECT_THROW((void) caption->GetValueMatrix(), System::InvalidCastException);
+        EXPECT_THROW(caption->SetValue(1.0f), System::InvalidCastException);
+        EXPECT_THROW(caption->SetValue(1), System::InvalidCastException);
+        EXPECT_THROW(caption->SetValue(Vector4(1.0f, 1.0f, 1.0f, 1.0f)),
+                     System::InvalidCastException);
+        // A texture parameter is an object parameter too, and gets the same treatment.
+        ASSERT_NE(parameters["Gain"], nullptr);
+        Effect samplerEffect(device, BuildSyntheticSamplingEffect({}));
+        EffectParameter* fxTexture = samplerEffect.getParametersProperty()["FxTexture"];
+        ASSERT_NE(fxTexture, nullptr);
+        EXPECT_THROW((void) fxTexture->GetValueSingle(), System::InvalidCastException);
+        EXPECT_THROW(fxTexture->SetValue(2.0f), System::InvalidCastException);
+        // ...and the value it really holds still reads back through its own accessor.
+        EXPECT_NO_THROW((void) fxTexture->GetValueTexture2D());
+        // A numeric parameter is unaffected: the guard rejects the object CLASS, not everything.
+        EXPECT_NO_THROW((void) parameters["Gain"]->GetValueSingle());
+        EXPECT_NO_THROW((void) parameters["Transform"]->GetValueMatrix());
+        EXPECT_NO_THROW((void) parameters["Lighting"]->getStructureMembersProperty()[0]
+                                   .GetValueSingle())
+            << "a Struct parameter has real numeric storage and must not be caught by this guard";
 
         // Applying an effect that carries a string parameter must not try to upload it: a string
         // object's value storage is its object-table index, not text.

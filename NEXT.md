@@ -101,9 +101,11 @@ reverted, not merely to pass now:
 
 ### Still open, deliberately
 
-- `FX-105` -- `EffectParameter`'s numeric accessors do not reject a `String` parameter (XNA throws
-  `InvalidCastException`). ~30 accessors and ~140 `compiledStorage_` touch points; too wide for a
-  repair pass, written down rather than half-done.
+- ~~`FX-105`~~ **closed 2026-08-18.** `EffectParameter`'s numeric accessors now refuse an object
+  parameter with `InvalidCastException`, as XNA does. Written against the parameter CLASS, not the
+  String type alone: a compiled effect stores an object-table index at every object parameter's byte
+  offset, so a numeric getter read that index back as a number and a numeric setter overwrote it.
+  All 36 accessors guarded; `Struct` and non-compiled parameters deliberately excluded.
 - `FX-109` -- `GraphicsDevice.VertexTextures`/`VertexSamplerStates` are public XNA API that reaches
   **no renderer**: `IGraphicsRenderer` has no hook at all. Renderer-wide, not FX-specific. The one
   place vertex-stage sampling works in CNA is FNA3D's compiled effect, which reads the effect's own

@@ -465,6 +465,7 @@ namespace Microsoft::Xna::Framework::Graphics
                         std::size_t byteOffset, std::size_t byteSize);
 
         void RequireStringParameter(const char* operation) const;
+        void RequireNumericParameter(const char* operation) const;
 
         [[nodiscard]] bool IsCompiledInternal() const noexcept;
         [[nodiscard]] const void* GetRawValueInternal() const noexcept;
