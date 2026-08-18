@@ -7,6 +7,11 @@
 
 typedef struct GameSmokeState {
     int validated;
+    /* CBIND-063: the delivered lifecycle order, one letter per event. Counting calls is what every
+       assertion here used to do, and counting cannot see an ordering defect at all -- which is how
+       initialize and load_content ran in the wrong order for as long as they did. */
+    char order[32];
+    int order_length;
     int initialize_calls;
     int begin_run_calls;
     int end_run_calls;
@@ -19,6 +24,14 @@ typedef struct GameSmokeState {
 typedef struct EventState {
     int calls;
 } EventState;
+
+static void record(GameSmokeState* const state, const char event)
+{
+    if (state->order_length + 1 < (int)sizeof(state->order)) {
+        state->order[state->order_length++] = event;
+        state->order[state->order_length] = '\0';
+    }
+}
 
 static CNA_StringView view(const char* const text)
 {
@@ -43,6 +56,20 @@ static CNA_Result on_initialize(
     (void)game_time;
     (void)out_error;
     ++((GameSmokeState*)context)->initialize_calls;
+    record((GameSmokeState*)context, 'i');
+    return CNA_RESULT_SUCCESS;
+}
+
+static CNA_Result on_load_content(
+    const CNA_Handle game,
+    const CNA_GameTime* const game_time,
+    void* const context,
+    CNA_CallbackError* const out_error)
+{
+    (void)game;
+    (void)game_time;
+    (void)out_error;
+    record((GameSmokeState*)context, 'l');
     return CNA_RESULT_SUCCESS;
 }
 
@@ -593,6 +620,7 @@ static CNA_Result on_update(
     (void)out_error;
     GameSmokeState* const state = (GameSmokeState*)context;
     EventState exiting = {0};
+    record(state, 'u');
     if (game_time == 0 || !validate_properties(game) || !validate_launch_parameters(game) ||
         !validate_title(game) || !validate_events(game, &exiting) || !validate_window(game) ||
         !validate_content_manager(game)) {
@@ -616,6 +644,7 @@ int main(void)
     callbacks.struct_version = UINT32_C(1);
     callbacks.update = on_update;
     callbacks.draw = on_draw;
+    callbacks.load_content = on_load_content;
     callbacks.context = &smoke_state;
 
     memset(&hooks, 0, sizeof(hooks));
@@ -655,6 +684,14 @@ int main(void)
     /* The frame hooks the grown callback table adds all ran, and drawing happened between them. */
     if (smoke_state.initialize_calls != 1 || smoke_state.begin_draw_calls < 1 ||
         smoke_state.end_draw_calls < 1 || smoke_state.draw_calls < 1) {
+        return 2;
+    }
+    /* CBIND-063: and they ran in the documented ORDER, which counting them cannot see.
+       `initialize` is documented as running "while the game initializes, before content loads";
+       the canonical Game::Initialize() ends by calling LoadContent(), so a hook invoked after the
+       base delivered the two backwards. Most ported games touch fields in LoadContent that
+       Initialize set, so the reversal breaks them at the first frame. */
+    if (strncmp(smoke_state.order, "ilu", 3U) != 0) {
         return 2;
     }
     /* Suppressing the draw skips exactly one frame's drawing. */

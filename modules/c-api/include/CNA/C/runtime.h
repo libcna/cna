@@ -123,7 +123,15 @@ typedef struct CNA_GameFrameHooks {
     /** @brief Version of this caller-provided structure. */
     uint32_t struct_version;
 
-    /** @brief Invoked once while the game initializes, before content loads. */
+    /**
+     * @brief Invoked once while the game initializes, before content loads.
+     *
+     * The order is a contract, not an accident: this runs, then the runtime initializes its
+     * components and creates the device, and only then does `CNA_GameCallbacks::load_content` run.
+     * A first frame therefore delivers `initialize`, `load_content`, `begin_run`, `update`,
+     * `draw` -- which is the canonical order, and the one a ported game depends on when its
+     * content load reads something its initialization decided.
+     */
     CNA_GameLifecycleCallback initialize;
 
     /** @brief Invoked once before the first frame of a run. */

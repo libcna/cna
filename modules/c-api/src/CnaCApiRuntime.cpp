@@ -216,8 +216,15 @@ protected:
 
     void Initialize() override
     {
-        Game::Initialize();
+        // The hook runs BEFORE the base, and the order is the whole point. `Game::Initialize()`
+        // ends by calling `LoadContent()`, exactly as XNA's does, so invoking the hook after it
+        // delivered load_content first and initialize second -- the reverse of what this ABI's own
+        // header promises ("invoked once while the game initializes, before content loads") and of
+        // what a ported game expects, since most touch fields in LoadContent that Initialize set.
+        // This mirrors the canonical C++ shape, where a subclass does its own work and *then* calls
+        // base.Initialize().
         Invoke(frameHooks_.initialize, nullptr, frameHooks_.context);
+        Game::Initialize();
     }
 
     void BeginRun() override
