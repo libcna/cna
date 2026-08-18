@@ -151,6 +151,11 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_register_renderer_test(NAME CNAEXT_BloomInTenLines COMMAND cna_test_cnaext_bloom
         TIMEOUT 90 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_modern.md MOD-743: 1000 frames + 50 resizes, for a leak checker to watch.
+    cna_graphics_ext_test(cna_test_cnaext_leak_loop cnaext_leak_loop_test.cpp)
+    cna_register_renderer_test(NAME CNAEXT_LeakLoop COMMAND cna_test_cnaext_leak_loop
+        TIMEOUT 600 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_modern.md MOD-738..MOD-742: the layer's showcase -- 2D and 3D through the full stack.
     cna_graphics_ext_test(cna_test_cnaext_render_pipeline cnaext_render_pipeline_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_RenderPipeline COMMAND cna_test_cnaext_render_pipeline

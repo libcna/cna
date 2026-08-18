@@ -370,6 +370,29 @@ remembering if a future run aborts mid-suite.
 ---
 
 
+### Running the engine layer under ASan
+
+`cmake-build-asan`, configured `-DCMAKE_BUILD_TYPE=Debug -DCNA_GRAPHICS_RENDERER=OPENGLES3
+-DCNA_CNAEXT=ON -DCNA_SANITIZE=address -DCNA_BUILD_EXAMPLES=OFF -DCMAKE_CXX_COMPILER_LAUNCHER=ccache`.
+Three things are worth knowing before repeating it:
+
+- **Drive the build in bounded foreground chunks.** This container restarts, and a restart kills a
+  detached background build without a trace in the log — the log simply stops. Ninja resumes from
+  where it stopped, so `timeout 570 cmake --build cmake-build-asan --target CnaTests -j4`, repeated,
+  is the reliable shape. The first attempt here lost about 50 minutes to a build that had been dead
+  the whole time.
+- **Disk.** The ASan tree needs room the three existing build directories did not leave. The
+  14 GB `cmake-build-multi` was deleted to make space; its findings are recorded in
+  `plan_modern.md` `MOD-1692`/`MOD-1696`/`MOD-1697` and the tree itself is reproducible from the
+  recipe in `CLAUDE.md`.
+- **The one expected leak.** `1032 bytes in libdbus via SDL_DBus_Init`. It is the *same single
+  allocation* whether you run the whole suite once or 3000 pipeline frames, which is what makes it
+  identifiable as external rather than as something that scales with the work.
+
+Xvfb also dies periodically in this container. A wrapper that checks `xdpyinfo` and restarts it
+before running is worth having; without one, a test run fails with "x11 not available" and looks
+like a regression.
+
 ### Closing Phases 0–3: what the leftover rows were actually hiding
 
 The plan's early phases had been reported as done while 60-odd of their rows were still ⬜. Most were

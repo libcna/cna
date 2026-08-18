@@ -68,19 +68,37 @@ TEST(RenderPipelineSettingsTest, EveryNewFieldRoundTrips)
     EXPECT_TRUE(settings.isFXAAEnabled());
 }
 
-TEST(RenderPipelineSettingsTest, OutOfRangeValuesAreStoredRatherThanRejected)
+TEST(RenderPipelineSettingsTest, ExtremeButMeaningfulValuesAreStoredRatherThanRejected)
 {
     // The settings bag stores; the passes clamp when they apply a value, and document their range.
     // Rejecting here would make a quality preset need to know every pass's limits.
+    //
+    // plan_modern.md MOD-730 narrowed this rule and this test with it. It used to assert that a
+    // bloom threshold of -1 was stored too, and that is now clamped: a *negative* threshold or
+    // intensity is a sign error rather than a look, and the pass would have had to guard against
+    // it anyway. What survives -- and is what MOD-22 was really about -- is that values which are
+    // merely extreme go through untouched, because their limits are pass-specific.
     RenderPipelineSettings settings;
 
-    settings.setBloomThreshold(-1.0f);
+    settings.setBloomThreshold(100.0f);
     settings.setBloomIterations(999);
     settings.setSSAOSampleCount(1);
 
-    EXPECT_FLOAT_EQ(settings.getBloomThreshold(), -1.0f);
+    EXPECT_FLOAT_EQ(settings.getBloomThreshold(), 100.0f);
     EXPECT_EQ(settings.getBloomIterations(), 999);
     EXPECT_EQ(settings.getSSAOSampleCount(), 1);
+}
+
+TEST(RenderPipelineSettingsTest, ValuesWhoseOutOfRangeCaseIsUndefinedAreClamped)
+{
+    // The other half of MOD-730's split, asserted next to the rule it narrows so the two are read
+    // together rather than looking like a contradiction.
+    RenderPipelineSettings settings;
+
+    settings.setBloomThreshold(-1.0f);
+    EXPECT_FLOAT_EQ(settings.getBloomThreshold(), 0.0f);
+    settings.setGamma(0.0f);
+    EXPECT_FLOAT_EQ(settings.getGamma(), RenderPipelineSettings::kMinimumGamma);
 }
 
 TEST(RenderPipelineSettingsTest, TonemappingModeOrdinalsAreStable)
