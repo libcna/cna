@@ -515,7 +515,7 @@ Three dispositions, all machine-checked — read the tests, not this table, whic
 | LLGL | yes | yes (`GLTF-465` added strides 76 and 80) | **applies** — the precondition this row carried is gone: LLGL used to treat PbrEffect's base-colour map as mandatory and throw "needs Texture bound" without one, so it could not draw glTF's own default material (`baseColorFactor` alone, §3.9.2), which is what both `COLOR_0` corpus fixtures author. `GLTF-474` resolves the same 1×1 white its optional PBR maps already use. Its PBR pipeline used to *strip* the colour attribute ("this shader never reads one"); it now passes it through, and `specularState.z` carries the effect's switch. Regenerating touched only the PBR blobs: every other one is byte-identical, so the committed header was a **mix** of `glslangValidator`- and libshaderc-produced SPIR-V, and only the shaders being changed moved to the documented tool |
 | Metal | no layout | refuses | **refuses** (`GLTF-465`): no stride-60/80 pipeline, and Metal cannot be built or run on this host |
 | SDL GPU | yes (`GLTF-465` added the layout **and** the pipeline axis; **`GLTF-472` made it reachable**) | yes (same) | **applies** — its PC block already carried the flag, commented "unused -- PbrEffect has no vertex-color path"; the shaders are compiled offline with libshaderc, so the colour-carrying variants are two more entries in the same list. `GLTF-465` left `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` selecting the PBR queue for `stride == 48`/`68` only, so none of that was reachable: a stride-60/80 draw matched no branch and was refused by the stride-16 coloured path. `GLTF-472` fixed the dispatch and gave sampler slot 0 the neutral-white fallback slots 1..6 already had, without which a factor-only material (both `COLOR_0` fixtures) is still refused |
-| WebGPU | no layout | refuses | **refuses** (`GLTF-465`): needs new WGSL pipeline variants |
+| WebGPU | yes (`GLTF-465`) | yes (`GLTF-465`) | **applies** — one marked WGSL source expanded into a bare and a colour-carrying module, because WGSL rejects a vertex input with no matching attribute; `Unorm8x4` at offset 56/76 and `u.light0DiffuseVertexColor.w` (already uploaded by `FillExtUniforms`) as the effect's switch. Verified on a **live** wgpu-native device, not from shader text |
 | Wicked | no layout | refuses | **refuses** (`GLTF-465`): needs WickedEngine shader work |
 
 **There is no third column value, and that is the point.** A renderer either evaluates §3.9.2's
@@ -573,8 +573,8 @@ rendered all 146 corpus assets twice on this revision, and their `skin-vertex-co
 carry the authored per-vertex alpha product while their `mat-vertex-color-pbr` captures carry the
 rigid path's own green-channel witness.
 
-*Live draw* — seven renderers, added by `GLTF-472`: **SOFTWARE**, **OpenGL 2**, **OpenGL 4**,
-**SDL GPU**, **Magnum**, **LLGL** and **Diligent** each drew both colour-carrying corpus fixtures
+*Live draw* — eight renderers: **SOFTWARE**, **OpenGL 2**, **OpenGL 4**,
+**SDL GPU**, **Magnum**, **LLGL**, **Diligent** and **WebGPU** each drew both colour-carrying corpus fixtures
 through a real device in the multi-renderer tree, selected with `CNA_GRAPHICS_RENDERER` and
 `SDL_VIDEODRIVER=x11` on an Xvfb display
 (`RendererStrideConformance.AColourCarryingPbrPrimitiveEitherDrawsOrRefusesByName`). This tier is the
