@@ -346,6 +346,53 @@ protected:
         }
         check(everyPresetOccludes, "MOD-522: every quality preset produces occlusion");
 
+        // --- G: the documented route, which nothing had ever exercised ---------------------------
+        // `pipeline.setDepthNormalInputs(...)` is how docs/cnaext-engine-layer.md, the prepass
+        // header and the getting-started guide all tell a game to feed SSAO -- and until this check
+        // existed, no test, example or production caller anywhere in the repository called it. The
+        // path everything points at was the one path never run.
+        {
+            CNA::Graphics::RenderPipeline ssaoPipeline(device);
+            ssaoPipeline.resize(kFrame, kFrame);
+            auto& ssaoSettings = ssaoPipeline.getSettings();
+            ssaoSettings.setHDREnabled(false);
+            ssaoSettings.setBloomEnabled(false);
+            ssaoSettings.setFXAAEnabled(false);
+            ssaoSettings.setTonemappingMode(CNA::Graphics::TonemappingMode::None);
+            ssaoSettings.setSSAOEnabled(true);
+            ssaoSettings.setSSAORadius(0.5f);
+            ssaoSettings.setSSAOIntensity(1.0f);
+
+            // Without the inputs first: SSAO is enabled but has nothing to read, which is the
+            // documented misconfiguration, and it must render rather than fail.
+            ssaoPipeline.begin(Color::Black);
+            DrawScene();
+            ssaoPipeline.end();
+            const long withoutInputs = TotalLight(ReadFrame(device));
+
+            ssaoPipeline.setDepthNormalInputs(steppedDepth.get(), normals.get());
+            ssaoPipeline.begin(Color::Black);
+            DrawScene();
+            ssaoPipeline.end();
+            const long withInputs = TotalLight(ReadFrame(device));
+
+            std::printf("    through the pipeline: %ld without inputs, %ld with\n", withoutInputs,
+                        withInputs);
+            check(withoutInputs > 0,
+                  "SSAO enabled with no depth/normal inputs still renders the frame");
+            check(withInputs < withoutInputs,
+                  "setDepthNormalInputs is the documented route and it works");
+
+            // And it can be taken back: a game that stops running its prepass must not keep an
+            // occlusion buffer that no longer describes the scene.
+            ssaoPipeline.setDepthNormalInputs(nullptr, nullptr);
+            ssaoPipeline.begin(Color::Black);
+            DrawScene();
+            ssaoPipeline.end();
+            check(TotalLight(ReadFrame(device)) == withoutInputs,
+                  "clearing the inputs returns to the unoccluded frame");
+        }
+
         if (benchmark_) RunBenchmark(device);
 
         std::printf("%d/%d checks passed\n", passCount_, checkCount_);

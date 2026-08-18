@@ -307,6 +307,13 @@ TEST_F(CascadedShadowVisibilityTest, TheCascadeStateReachesGpuDrawParamsIntact)
     CascadedShadowMap cascades(device, ShadowQuality::Low, 3);
     cascades.setBlendBand(2.5f);
     cascades.setDebugTintEnabled(true);
+
+    // plan_modern.md MOD-1901's sweep found these two getters had no reader anywhere -- their
+    // setters were used here and in the example, but nothing ever read the value back. A setter
+    // whose getter is never exercised is a setter nobody has checked actually stores anything.
+    EXPECT_FLOAT_EQ(cascades.getBlendBand(), 2.5f);
+    EXPECT_TRUE(cascades.isDebugTintEnabled());
+
     cascades.update(Sun(), TiltedView(), Projection());
 
     BasicEffect effect(device);
