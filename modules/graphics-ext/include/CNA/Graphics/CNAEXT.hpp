@@ -21,6 +21,7 @@
 #ifdef CNA_CNAEXT
 
 // ---- Configuration and enumerations -------------------------------------------------------
+#include "CNA/Graphics/EngineLayerVersion.hpp"
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
 #include "CNA/Graphics/RenderQuality.hpp"
 #include "CNA/Graphics/ShadowQuality.hpp"
