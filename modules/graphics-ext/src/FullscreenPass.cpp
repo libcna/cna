@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/FullscreenPass.hpp"
+#include "CNA/Graphics/ScopedRenderTarget.hpp"
 
 #ifdef CNA_CNAEXT
 
@@ -42,7 +43,10 @@ namespace CNA::Graphics {
         if (width <= 0 || height <= 0)
             throw std::invalid_argument("CNA::Graphics::FullscreenPass::draw: destination size must be positive");
 
-        device_.SetRenderTarget(destination);
+        // plan_modern.md MOD-203: bound for this scope only. If the draw throws -- a shader that
+        // will not link, a SpriteBatch already inside a Begin -- the destination does not stay
+        // bound, so the next thing to render does not silently draw into a pass's intermediate.
+        ScopedRenderTarget bound(device_, destination);
         drawOverCurrentTarget(source, effect, width, height);
     }
 
