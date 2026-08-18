@@ -565,6 +565,56 @@ CNA_C_API CNA_Result cna_game_launch_parameters_copy_value(
     uint64_t* out_bytes);
 
 /**
+ * @brief Returns the byte count of the launch parameter name at one index.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param index Zero-based index below `cna_game_launch_parameters_get_count`.
+ * @param out_bytes Receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index at or above the count
+ *         or a null output, or a documented handle/thread failure.
+ *
+ * Every other accessor here is keyed, which is enough to *read* a parameter a caller can already
+ * name and not enough to *materialize the map* -- and the canonical value is a
+ * `Dictionary<string, string>` that games enumerate. This pair is that enumeration.
+ *
+ * **The order is by name, ordinal byte order, ascending** -- deliberately not the canonical
+ * container's own order. That container is a hash map, so its traversal order is unspecified and a
+ * single insertion may rehash and reorder every element; an index into it would be meaningless
+ * between calls. Sorting makes the sequence a function of the key set alone: for a fixed set of
+ * parameters the same index always names the same key, in this process and the next. Each name
+ * appears exactly once.
+ *
+ * Adding or replacing a parameter still invalidates indices obtained before it, exactly as it
+ * would for any snapshot: read the count and walk it without adding in between.
+ */
+CNA_C_API CNA_Result cna_game_launch_parameters_get_key_size(
+    CNA_Handle game,
+    uint64_t index,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the launch parameter name at one index.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param index Zero-based index below `cna_game_launch_parameters_get_count`.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT` for an index at or above the count, or a documented
+ *         handle/thread failure.
+ *
+ * The index order is the one `cna_game_launch_parameters_get_key_size` documents. Pair the name
+ * this returns with `cna_game_launch_parameters_copy_value` to read the whole map.
+ */
+CNA_C_API CNA_Result cna_game_launch_parameters_copy_key(
+    CNA_Handle game,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
  * @brief Adds or replaces one launch parameter.
  *
  * @param game Active owned or callback-borrowed game handle.

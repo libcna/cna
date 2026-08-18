@@ -14,6 +14,7 @@
 #include "System/IO/Stream.hpp"
 #include "System/TimeSpan.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <mutex>
 #include <stdexcept>
@@ -640,6 +641,87 @@ CNA_Result cna_game_launch_parameters_copy_value(
             return result;
         }
         return CopyText(value, destination, capacity, outBytes);
+    });
+}
+
+namespace {
+
+/// The parameter names in the order the ABI publishes: by name, ordinal, ascending.
+///
+/// Rebuilt per call rather than cached. The canonical container is a hash map the game owns and
+/// anything may add to, so a cache would need an invalidation signal it does not offer; a command
+/// line holds a handful of entries, and recomputing a handful is cheaper than being wrong.
+[[nodiscard]] CNA_Result SortedLaunchParameterNames(
+    const CNA_Handle gameHandle,
+    std::vector<std::string>* const outNames)
+{
+    Game* game = nullptr;
+    if (const CNA_Result result = BorrowGame(gameHandle, &game);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& parameters = game->getLaunchParametersProperty();
+    outNames->clear();
+    outNames->reserve(parameters.size());
+    for (const auto& entry : parameters) {
+        outNames->push_back(entry.first);
+    }
+    std::sort(outNames->begin(), outNames->end());
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result FindLaunchParameterName(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    std::string* const outName)
+{
+    std::vector<std::string> names;
+    if (const CNA_Result result = SortedLaunchParameterNames(gameHandle, &names);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (index >= names.size()) {
+        return InvalidInput("The launch parameter index is outside the parameter count.");
+    }
+    *outName = names[static_cast<std::size_t>(index)];
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_game_launch_parameters_get_key_size(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The launch parameter name size output is null.");
+        }
+        std::string name;
+        if (const CNA_Result result = FindLaunchParameterName(gameHandle, index, &name);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = name.size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_launch_parameters_copy_key(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string name;
+        if (const CNA_Result result = FindLaunchParameterName(gameHandle, index, &name);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(name, destination, capacity, outBytes);
     });
 }
 

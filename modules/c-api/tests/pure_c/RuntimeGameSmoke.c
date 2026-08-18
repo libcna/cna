@@ -248,11 +248,64 @@ static int validate_launch_parameters(const CNA_Handle game)
         count != UINT64_C(3)) {
         return 0;
     }
+    /* CBIND-054: the keys are enumerable, which is what turns three keyed accessors into a map a
+       caller can actually materialize. The order is by name ascending and deliberately not the
+       canonical hash map's own, so "depth" comes first here however the map happens to be laid
+       out; a single insertion may rehash and reorder that container, and an index into it would
+       mean nothing between calls. */
+    /* The copy routes write no terminator, so each name is read into a freshly cleared buffer --
+       otherwise a shorter name would inherit the tail of the longer one before it. */
+    memset(text, 0, sizeof(text));
+    if (cna_game_launch_parameters_get_key_size(game, UINT64_C(0), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        bytes != (uint64_t)strlen("depth") ||
+        cna_game_launch_parameters_copy_key(
+            game, UINT64_C(0), text, (uint64_t)sizeof(text), &bytes) != CNA_RESULT_SUCCESS ||
+        strcmp(text, "depth") != 0) {
+        return 0;
+    }
+    memset(text, 0, sizeof(text));
+    if (cna_game_launch_parameters_copy_key(
+            game, UINT64_C(1), text, (uint64_t)sizeof(text), &bytes) != CNA_RESULT_SUCCESS ||
+        strcmp(text, "height") != 0) {
+        return 0;
+    }
+    memset(text, 0, sizeof(text));
+    if (cna_game_launch_parameters_copy_key(
+            game, UINT64_C(2), text, (uint64_t)sizeof(text), &bytes) != CNA_RESULT_SUCCESS ||
+        strcmp(text, "width") != 0) {
+        return 0;
+    }
+    /* Every name the enumeration answers resolves through the keyed accessor, which is the only
+       property that makes the pair usable together. */
+    if (cna_game_launch_parameters_contains_key(game, view(text), &present) !=
+            CNA_RESULT_SUCCESS ||
+        present != CNA_TRUE) {
+        return 0;
+    }
+    /* An index at or above the count is refused, the two-call size/copy contract holds, and a
+       null output is refused before anything is read. */
+    if (cna_game_launch_parameters_get_key_size(game, UINT64_C(3), &bytes) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_game_launch_parameters_copy_key(
+            game, UINT64_C(3), text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_game_launch_parameters_get_key_size(game, UINT64_C(0), 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_game_launch_parameters_copy_key(game, UINT64_C(0), text, UINT64_C(2), &bytes) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        bytes != (uint64_t)strlen("depth")) {
+        return 0;
+    }
+
     /* An empty argument list leaves the game with no parameters rather than re-reading the command
        line, which is what makes this route usable at all in a test. */
     return cna_game_launch_parameters_parse_ext(game, 0, UINT64_C(0)) == CNA_RESULT_SUCCESS &&
         cna_game_launch_parameters_get_count(game, &count) == CNA_RESULT_SUCCESS &&
         count == UINT64_C(0) &&
+        /* With no parameters at all, index zero is out of range rather than empty. */
+        cna_game_launch_parameters_get_key_size(game, UINT64_C(0), &bytes) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
         cna_game_launch_parameters_parse_ext(game, 0, UINT64_C(1)) == CNA_RESULT_INVALID_ARGUMENT;
 }
 
