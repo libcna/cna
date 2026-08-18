@@ -2732,8 +2732,8 @@
       "kinds": [
         "method"
       ],
-      "mapping": "`cna_content_manager_load_texture2d`, `cna_content_manager_load_texture_cube` and `cna_content_manager_load_sound_effect` cover the canonical specializations of this template; the generic `Load<T>` itself has no C route because C cannot name an arbitrary C++ type, so each further asset type needs its own typed C route",
-      "tests": "real UTF-8 fixture, cache, unload and pixel tests plus extension-less resolution and the unsupported/IO refusals for cube and sound assets in `ContentSmoke.c`",
+      "mapping": "`cna_content_manager_load_texture2d`, `_load_texture_cube`, `_load_sound_effect`, `_load_sprite_font` and `cna_content_manager_load_effect` cover the canonical specializations of this template, and `cna_content_manager_load_foreign_ext` covers an asset whose root reader the caller registered. The generic `Load<T>` itself has no C route because C cannot name an arbitrary C++ type, so each further asset type needs its own typed C route",
+      "tests": "real UTF-8 fixture, cache, unload and pixel tests plus extension-less resolution and the unsupported/IO refusals for cube and sound assets in `ContentSmoke.c`, a `.cnj` SpriteFont fixture loaded as a font plus its atlas with the destroy-order rule asserted, a `.cnj` stock-effect fixture loaded as an ordinary effect handle, and a hand-assembled `.xnb` whose root reader is a caller-registered one",
       "status": "partial",
       "task": "CBIND-036B1",
       "limitation": {

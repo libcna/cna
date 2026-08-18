@@ -249,6 +249,12 @@ CNA_C_API CNA_Result cna_content_manager_load_foreign_ext(
     CNA_StringView asset_name,
     void** out_object);
 
+/*
+ * The Effect loader, `cna_content_manager_load_effect`, is declared in `CNA/C/effects.h` beside
+ * the rest of the effect surface, because that is where its `CNA_EffectHandle` return type lives.
+ * It maps the canonical `Load<Effect>` specialization and belongs to this same family of loaders.
+ */
+
 /**
  * @brief Gets the UTF-8 byte count of the resolved filesystem path for an asset name.
  *

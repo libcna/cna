@@ -2,10 +2,13 @@
 
 #include "CNA/C/effects.h"
 #include "CNA/C/graphics_ext.h"
+#include "CnaCApiContentDetail.hpp"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectAnnotation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectAnnotationCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
@@ -41,6 +44,7 @@
 
 #include <algorithm>
 #include <array>
+#include <any>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -3420,6 +3424,56 @@ CNA_Result cna_effect_create_compiled(
             std::make_shared<CApiEffect>(*graphicsDevice->value, code),
             graphicsDevice->parentGame,
             outEffect);
+    });
+}
+
+CNA_Result cna_content_manager_load_effect(
+    const CNA_Handle contentManagerHandle,
+    const CNA_StringView assetName,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return InvalidArgument("The loaded Effect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::string assetNameCopy;
+        if (const CNA_Result result = CopyStringView(assetName, true, &assetNameCopy);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The content asset name is not valid UTF-8.");
+        }
+        if (assetNameCopy.empty()) {
+            return InvalidArgument("The content asset name must not be empty.");
+        }
+        CNA::C::Detail::BorrowedContentManager contentManager;
+        if (const CNA_Result result = CNA::C::Detail::BorrowContentManager(
+                contentManagerHandle, &contentManager);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        try {
+            std::shared_ptr<Effect> loaded =
+                contentManager.value->Load<std::shared_ptr<Effect>>(assetNameCopy);
+            if (loaded == nullptr) {
+                return Fail(
+                    CNA_RESULT_IO,
+                    CNA_ERROR_CATEGORY_IO,
+                    "The Effect asset loaded as a null effect.");
+            }
+            return CreateEffectHandle(
+                std::move(loaded), contentManager.parentGame, outEffect);
+        } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
+            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+        } catch (const std::bad_any_cast&) {
+            // The asset's root reader produced something that is not an Effect. Reporting the
+            // mismatch beats the exception barrier's catch-all calling it an internal fault.
+            return Fail(
+                CNA_RESULT_IO,
+                CNA_ERROR_CATEGORY_IO,
+                "The asset's root type reader did not produce an Effect.");
+        }
     });
 }
 

@@ -1282,6 +1282,7 @@
   "cna_content_manager_get_root_directory_size",
   "cna_content_manager_get_xnb_reader_usage",
   "cna_content_manager_get_xnb_reader_usage_count",
+  "cna_content_manager_load_effect",
   "cna_content_manager_load_foreign_ext",
   "cna_content_manager_load_sound_effect",
   "cna_content_manager_load_sprite_font",

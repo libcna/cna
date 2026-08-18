@@ -197,6 +197,7 @@ CNA_Result BorrowContentManager(
     }
     outContentManager->value = contentManager->value.get();
     outContentManager->owner = contentManager;
+    outContentManager->parentGame = contentManager->parentGame;
     return CNA_RESULT_SUCCESS;
 }
 

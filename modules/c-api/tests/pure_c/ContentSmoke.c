@@ -751,6 +751,61 @@ static int validate_foreign_load(const CNA_Handle manager)
     return state.destroy_calls >= 1;
 }
 
+/* CBIND-061: ContentManager.Load<Effect>. The stock-effect descriptor is the shape that works on
+   any renderer with shaders, so it is the one this fixture uses; a compiled .xnb Effect depends on
+   the compiled-effect capability, which no tree in this campaign advertises. */
+static const char EffectAssetName[] = "cna_c_api_content_effect";
+static const char EffectDescriptorPath[] = "cna_c_api_content_effect.cnj";
+
+static int write_effect_fixture(void)
+{
+    /* The envelope's own "type" names the stock effect; there is no separate field for it. */
+    static const char descriptor[] = "{\"cnjVersion\":1,\"type\":\"BasicEffect\"}";
+    return write_text_file(EffectDescriptorPath, descriptor);
+}
+
+static int validate_effect_load(const CNA_Handle manager)
+{
+    CNA_EffectHandle effect = UINT64_C(77);
+    CNA_Result loaded = CNA_RESULT_SUCCESS;
+
+    if (cna_content_manager_load_effect(manager, view(EffectAssetName), 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_content_manager_load_effect(manager, (CNA_StringView){0, 0U}, &effect) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        effect != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_content_manager_load_effect(
+            manager, view("cna_c_api_content_no_such_effect"), &effect) != CNA_RESULT_IO ||
+        effect != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    /* A renderer without a programmable pipeline refuses the effect rather than substituting one,
+       so both answers are correct here and only a third would be a fault. */
+    loaded = cna_content_manager_load_effect(manager, view(EffectAssetName), &effect);
+    if (loaded == CNA_RESULT_NOT_SUPPORTED) {
+        return effect == CNA_INVALID_HANDLE;
+    }
+    if (loaded != CNA_RESULT_SUCCESS || effect == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    /* What comes back is an ordinary effect handle: it names its type and owns its collections. */
+    {
+        CNA_Handle owner = CNA_INVALID_HANDLE;
+        uint64_t bytes = 0U;
+        if (cna_effect_get_graphics_device(effect, &owner) != CNA_RESULT_SUCCESS ||
+            owner == CNA_INVALID_HANDLE ||
+            cna_effect_get_type_name_byte_count(effect, &bytes) != CNA_RESULT_SUCCESS ||
+            bytes == 0U) {
+            (void)cna_effect_destroy(effect);
+            return 0;
+        }
+    }
+    return cna_effect_destroy(effect) == CNA_RESULT_SUCCESS;
+}
+
 static CNA_Result on_load(
     const CNA_Handle game,
     const CNA_GameTime* const game_time,
@@ -866,7 +921,8 @@ static CNA_Result on_load(
     if (!validate_paths_and_device(state->content_manager, graphics_device) ||
         !validate_resource_manager(graphics_device) ||
         !validate_font_load(state->content_manager) ||
-        !validate_foreign_load(state->content_manager)) {
+        !validate_foreign_load(state->content_manager) ||
+        !validate_effect_load(state->content_manager)) {
         return CNA_RESULT_INVALID_STATE;
     }
 
@@ -917,7 +973,8 @@ static int call_unload_on_wrong_thread(void* const context)
 
 int main(void)
 {
-    if (!write_fixture() || !write_font_fixture() || !write_foreign_asset()) {
+    if (!write_fixture() || !write_font_fixture() || !write_foreign_asset() ||
+        !write_effect_fixture()) {
         return 1;
     }
 
@@ -955,6 +1012,7 @@ int main(void)
     (void)remove(FontAtlasPath);
     (void)remove(FontDescriptorPath);
     (void)remove(ForeignAssetPath);
+    (void)remove(EffectDescriptorPath);
 
     if (cna_content_manager_destroy(state.content_manager) != CNA_RESULT_SUCCESS ||
         cna_content_manager_unload(state.content_manager) != CNA_RESULT_INVALID_HANDLE ||

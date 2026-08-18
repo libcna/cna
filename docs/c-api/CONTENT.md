@@ -60,7 +60,7 @@ Renderer refusal and a successfully decoded non-Color Texture2D return
 `CNA_RESULT_NOT_SUPPORTED`. Argument, UTF-8, handle and thread failures retain their standard C API
 results. No native exception crosses the ABI.
 
-Songs, video, models, effects and 3D textures still have no typed C load route. Each needs its own
+Songs, video, models and 3D textures still have no typed C load route. Each needs its own
 load function and ownership contract, because C cannot name the C++ type the generic `Load<T>` is
 instantiated with. Fonts are no longer on that list -- see `cna_content_manager_load_sprite_font`
 below -- and an asset of a type CNA does not know at all is reachable through
@@ -86,6 +86,15 @@ the texture it draws from, and both have to be nameable — the font for measuri
 `cna_sprite_batch_draw_string`, the atlas for a consumer that places glyphs itself from
 `cna_sprite_font_copy_glyphs`. Both handles are owned, and the atlas refuses to be destroyed while
 the font lives, which is the same ordering rule `cna_sprite_font_create` already imposes.
+
+`cna_content_manager_load_effect` maps `Load<Effect>` -- the route an XNA game's
+`ContentManager.Load<Effect>` takes -- and reads all three shapes CNA supports: a compiled `.xnb`
+Effect asset, a `.cnj` descriptor naming one of the stock effects, and a `.cnj` descriptor carrying
+custom shader source. It is declared in `CNA/C/effects.h` rather than here, beside the rest of the
+effect surface, because that is where its `CNA_EffectHandle` return type lives. Which of the three
+shapes an asset is decides which failures are possible, so branch on the result rather than on the
+file name: only the compiled shape depends on
+`CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`.
 
 One failure is worth naming because it used to be reported wrongly: an `.xnb` whose root reader
 produces a **different type** than the loader wants answers `CNA_RESULT_IO` naming the mismatch.

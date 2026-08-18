@@ -1238,6 +1238,33 @@ CNA_C_API CNA_Result cna_effect_create_compiled(
     CNA_EffectHandle* out_effect);
 
 /**
+ * @brief Loads an Effect asset as an owned effect handle.
+ *
+ * @param content_manager Owned content-manager handle.
+ * @param asset_name UTF-8 logical asset name, with or without its extension.
+ * @param out_effect Receives an owned effect handle on success, destroyed with
+ *        `cna_effect_destroy`. Failure leaves it `CNA_INVALID_HANDLE`.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_IO` for a missing, malformed or wrongly-typed asset;
+ *         `CNA_RESULT_NOT_SUPPORTED` when the asset is compiled Effect Framework bytecode and the
+ *         active renderer's `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS` is false, or when it names a
+ *         shader the renderer cannot compile; or a documented argument/handle/thread failure.
+ *
+ * This maps the canonical `Load<Effect>` specialization, which is the route an XNA game's
+ * `ContentManager.Load<Effect>` takes, and it reads all three shapes CNA supports: a compiled
+ * `.xnb` Effect asset, a `.cnj` descriptor naming one of the stock effects, and a `.cnj` descriptor
+ * carrying custom shader source. What comes back is an ordinary effect handle -- parameters,
+ * techniques, passes and `cna_effect_apply` all behave as they do for an effect built by hand.
+ *
+ * Which of the three an asset is decides which failures are possible, so branch on the result
+ * rather than on the file name: only the compiled shape depends on the compiled-effect capability,
+ * and `cna_graphics_device_supports_capability` answers that in advance.
+ */
+CNA_C_API CNA_Result cna_content_manager_load_effect(
+    CNA_Handle content_manager,
+    CNA_StringView asset_name,
+    CNA_EffectHandle* out_effect);
+
+/**
  * @brief Creates a source-based ShaderEffect.
  * @param graphics_device Borrowed graphics-device handle from an active game callback.
  * @param vertex_source UTF-8 vertex-shader source copied by the call.
