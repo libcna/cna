@@ -105,7 +105,10 @@ Effect Framework header are `CNA_RESULT_INVALID_ARGUMENT`, and MonoGame's distin
 is `CNA_RESULT_NOT_SUPPORTED` — a recognized format this route does not accept, not a malformed
 one. Whether *valid* bytecode is then accepted is the renderer's answer, and
 `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS` is how a caller asks in advance rather than by
-attempting it.
+attempting it. That capability is true for the `FNA3D` renderer always, and for `SDL_GPU`, `VULKAN`
+and the EasyGL family when their build option is on; every other renderer reports false and refuses
+the bytecode rather than quietly drawing with a stock shader, because a silent fallback makes a
+porting bug look like an art bug. `docs/fx-compiled-effects.md` is the full matrix.
 
 `cna_effect_get_is_compiled_ext` reports whether an effect carries a compiled runtime. The
 canonical accessor hands back the runtime object, which is renderer-owned implementation a C caller
@@ -120,11 +123,17 @@ retains the native effect, its game-child ownership and any shader-bound texture
 view is released. A current technique must originate from the same effect; the invalid handle
 explicitly selects null, after which applying one of that effect's passes reports invalid state.
 
-Type names and vertex/fragment shader sources use exact count/copy operations. Compiled XNA `.fx`
-bytecode construction reaches CNA's current native limitation and returns
-`CNA_RESULT_NOT_SUPPORTED`; it does not silently reinterpret bytecode as source. Renderer program
-pointers and `GpuDrawParams` remain private C++ implementation details consumed through Apply and
-draw paths.
+Type names and vertex/fragment shader sources use exact count/copy operations. Compiled bytecode is
+never reinterpreted as source: `cna_shader_effect_create` takes GLSL/HLSL/SPIR-V/Metal **source**
+text and `cna_effect_create_compiled` takes Effect Framework **binaries**, and neither accepts the
+other's input. Ask `cna_graphics_device_get_shader_dialect_ext` which dialect the active renderer
+wants rather than inferring one from the renderer identity -- that inference is wrong in a build
+carrying several renderers and meaningless for a renderer that picks its native API per process.
+Where the dialect has no loose uniforms, which is every SPIR-V target,
+`cna_shader_effect_declare_uniform_block_ext` declares the std140 block the parameters live in; it
+is harmlessly ignored elsewhere, so the call can sit unconditionally beside construction. Renderer
+program pointers and `GpuDrawParams` remain private C++ implementation details consumed through
+Apply and draw paths.
 
 ShaderEffect exposes all named scalar/vector/matrix/array uniform setters, Texture2D/TextureCube/
 Texture3D bindings, world/view/projection properties and distinct renderer-present/program-valid
