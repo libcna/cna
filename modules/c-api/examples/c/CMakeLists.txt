@@ -18,7 +18,9 @@ project(cna_c_examples LANGUAGES C)
 
 # One package, one target. Requesting the version is the CMake half of the runtime check the
 # example makes with cna_get_abi_version(): the package version *is* the C ABI version, and the
-# installed CNAConfigVersion.cmake accepts a same-minor match.
+# installed CNAConfigVersion.cmake accepts any same-major version at or above the requested one.
+# The number below stays at the version this example was written against on purpose -- raising it
+# with every additive minor would turn a compatibility test into a restatement of today's value.
 find_package(CNA 0.1 CONFIG REQUIRED)
 
 add_executable(hello_cna hello_cna.c)

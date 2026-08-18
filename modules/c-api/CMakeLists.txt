@@ -229,10 +229,17 @@ install(EXPORT CNACTargets
 # been aspirational.
 #
 # The package version is read out of abi.h rather than written twice, so `find_package(CNA 0.1
-# CONFIG)` cannot come to mean something different from what cna_get_abi_version() returns. The
-# compatibility is SameMinorVersion because that is exactly what docs/c-api/ABI_VERSIONING.md
-# promises within experimental 0.x: a consumer must reject a different major and may require a
-# minimum minor.
+# CONFIG)` cannot come to mean something different from what cna_get_abi_version() returns.
+#
+# CBIND-062: the compatibility is SameMajorVersion, which is what docs/c-api/ABI_VERSIONING.md
+# actually promises -- "a consumer must reject a different major and may require a minimum minor".
+# It read SameMinorVersion until the minor first moved, and nothing noticed because it never had:
+# SameMinorVersion demands an *exact* minor, so it cannot express "a minimum minor" at all, and the
+# 0.1 -> 0.2 bump made `find_package(CNA 0.1 CONFIG)` fail against a library that is additively
+# compatible with it in every respect. CApi_InstalledConsumer caught exactly that, which is what it
+# is for. Requesting 0.1 now means "0.1 or newer within major 0", so the example keeps requesting
+# the version it was written against and thereby tests the compatibility claim instead of pinning
+# to whatever today's minor happens to be.
 include(CMakePackageConfigHelpers)
 file(STRINGS include/CNA/C/abi.h _cna_abi_version_lines
     REGEX "^#define CNA_ABI_VERSION_(MAJOR|MINOR|PATCH) UINT32_C\\([0-9]+\\)$")
@@ -260,7 +267,7 @@ configure_package_config_file(
 write_basic_package_version_file(
     ${CMAKE_CURRENT_BINARY_DIR}/CNAConfigVersion.cmake
     VERSION ${CNA_C_ABI_VERSION}
-    COMPATIBILITY SameMinorVersion
+    COMPATIBILITY SameMajorVersion
 )
 install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/CNAConfig.cmake
