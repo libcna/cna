@@ -179,6 +179,15 @@ identity and draw the surface anyway: they **refuse the draw** through the share
 Accepting a valid asset and rendering it with different core semantics would be a wrong picture
 reported as success; refusing it is limited backend coverage, which is what it actually is.
 
+Two qualifications belong next to that count, both measured by drawing rather than by reading shader
+source (`GLTF-472`). **`LLGL` applies the product only where a base-colour texture is bound**: it
+treats `PbrEffect`'s base-colour map as mandatory and refuses the draw without one, so it cannot draw
+a material that carries only a `baseColorFactor` — glTF's own default material, §3.9.2 — on any
+stride (`GLTF-474`). And **`OPENGLES1` is outside the seventeen and does not refuse**: it has no PBR
+path, and routes a PBR draw to its fixed-function colour path, which reads a four-byte colour at
+offset 12 — the `NORMAL` floats on a stride-60 record (`GLTF-473`). That one *is* the forbidden third
+state, in a renderer the PBR inventory does not cover.
+
 An **uncoloured** primitive is unaffected everywhere — its slot holds opaque white, the multiplier's
 identity, and the effect's switch is false — so nothing that rendered before this rule stops
 rendering. An application that wants the identity on coloured geometry can say so explicitly with

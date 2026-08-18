@@ -12,6 +12,8 @@
 // the same way the table does would agree with any value at all; these are written out, one
 // assertion per element, so that changing the table is a deliberate act with a diff to review.
 
+#include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -385,6 +387,80 @@ TEST(RendererStrideConformance, EveryGltfStrideReachesTheNativeDrawBoundary)
         // Deferred renderers submit the draw here. Without Present, a Vulkan command can be
         // recorded but never reach the driver's input-layout validation.
         EXPECT_NO_THROW(gd.Present());
+    }
+}
+
+TEST(RendererStrideConformance, AColourCarryingPbrPrimitiveEitherDrawsOrRefusesByName)
+{
+    // plan_gltf.md GLTF-465, at the draw boundary rather than in shader text. The audit above it
+    // asks whether a renderer DECLARES the stride-60/80 colour; this asks whether a real
+    // vertex-coloured metallic-roughness Model can be drawn through it at all.
+    //
+    // That distinction is not academic. Both of the following shipped with a complete layout row, a
+    // complete shader and a passing source-text audit, and neither could draw the asset:
+    //
+    //   - SDL_GPU built the stride-60/80 pipelines and left `DrawPrimitivesEx` selecting the PBR
+    //     queue for `stride == 48`/`68` only, so the draw fell through to the stride-16 coloured
+    //     path and was refused there as "requires a stride-16 (VertexPositionColor) vertex buffer";
+    //   - DILIGENT chose `SkinnedPbrColor3D` for stride 80 and then refused it nine lines later as
+    //     "needs a skinned PBR vertex layout (stride 68 or 76)".
+    //
+    // So the assertion is the partition itself, in the only form that can tell those two apart from
+    // a real refusal: the draw either SUCCEEDS, or it fails with a diagnostic that names the vertex
+    // colour. A renderer that has not implemented the product calls the shared
+    // `RequireVertexColourPbrSupportEXT`, whose message says `COLOR_0` -- that is a limitation. A
+    // renderer that fails for any other reason is refusing content it has the code to draw, and the
+    // message a caller would have to debug points at the wrong thing entirely.
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+    {
+        GTEST_SKIP() << "renderer has no native 3D draw boundary";
+    }
+
+    ContentManager cm(nullptr, "tests/assets/gltf");
+    cm.setGraphicsDevice(gd);
+    const auto identity = Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+
+    // The rigid stride-60 record and the skinned stride-80 one -- the only two layouts a core glTF
+    // `COLOR_0` on a metallic-roughness material can import to.
+    for (const char* fixture : {"mat-vertex-color-pbr", "skin-vertex-color-pbr"})
+    {
+        SCOPED_TRACE(fixture);
+        Model model = cm.Load<Model>(fixture);
+        std::string failure;
+        try
+        {
+            model.Draw(identity, identity, identity);
+            gd.Present();
+        }
+        catch (const std::exception& error)
+        {
+            failure = error.what();
+        }
+        if (failure.empty()) { continue; }
+        if (failure.find("COLOR_0") != std::string::npos) { continue; }
+
+        // One renderer refuses this draw for a different reason, and its diagnostic is accurate
+        // about it, so it is named here in full rather than allowed by a looser rule. LLGL treats
+        // PbrEffect's base colour map as mandatory; glTF's own default material has none
+        // (`baseColorFactor` alone is a complete metallic-roughness material, §3.9.2), which is
+        // what both fixtures below author, so LLGL cannot draw them at all. That is limited
+        // coverage with an honest message, not the silent degradation this test forbids -- but it
+        // is also the reason LLGL's "applies COLOR_0" row carries a precondition in
+        // `docs/gltf-renderer-pbr-fallbacks.md`. Pinned verbatim so it cannot quietly widen.
+        constexpr std::array<const char*, 2> namedPreconditions{{
+            "LLGL renderer: PbrEffect needs Texture bound",
+            "LLGL renderer: SkinnedPbrEffect needs Texture bound",
+        }};
+        const bool named = std::any_of(
+            namedPreconditions.begin(), namedPreconditions.end(),
+            [&](const char* known) { return failure.find(known) != std::string::npos; });
+        EXPECT_TRUE(named)
+            << "this renderer refused a valid core glTF vertex-coloured metallic-roughness "
+               "primitive without naming either the semantic it cannot honour or a precondition "
+               "of its own, which is what a renderer whose PBR route never learned the "
+               "colour-carrying stride looks like. The diagnostic was: "
+            << failure;
     }
 }
 

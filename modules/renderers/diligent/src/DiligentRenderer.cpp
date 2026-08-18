@@ -3855,9 +3855,14 @@ namespace CNA::Internal::Renderers::Diligent
             throw std::runtime_error(
                 "CNA Diligent: PbrEffect needs a position/normal/tangent/UV vertex layout "
                 "(stride 48 or 60)");
-        if (params != nullptr && params->pbr && params->skinned && stride != 68 && stride != 76)
+        // plan_gltf.md GLTF-463: stride 80 is the stride-76 record with a packed COLOR_0
+        // appended, and the switch above already selects SkinnedPbrColor3D for it. Omitting it
+        // here refused the layout this renderer has, one line after choosing it.
+        if (params != nullptr && params->pbr && params->skinned && stride != 68 &&
+            stride != 76 && stride != 80)
             throw std::runtime_error(
-                "CNA Diligent: SkinnedPbrEffect needs a skinned PBR vertex layout (stride 68 or 76)");
+                "CNA Diligent: SkinnedPbrEffect needs a skinned PBR vertex layout "
+                "(stride 68, 76 or 80)");
 
         SyncSwapChainSize();
         EnsureRenderTargetsBound();

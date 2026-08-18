@@ -8,18 +8,26 @@ session needs to start work without re-deriving the state.
 
 - **Branch:** `feature/gltf`, with local commits. The owner explicitly requested a push when the
   current autonomous run reaches its weekly-limit cutoff; no pull request has been requested.
-- **Working document:** `plan_gltf.md`, **471** numbered rows. **Five remain open: `GLTF-344` and
-  `GLTF-465` (both `✅/⬜`), and `GLTF-459`, `GLTF-460`, `GLTF-464` (`⬜`).** `GLTF-463` closed on
-  2026-08-17. `GLTF-465` is half closed: **no renderer draws a `COLOR_0` asset with different core
-  semantics any more** (thirteen apply the product, four refuse the draw), and what remains is
-  implementing it in those eight. §27.2 carries a row-by-row ROBUST assessment; that section, not this
+- **Working document:** `plan_gltf.md`, **474** numbered rows. **Seven remain open: `GLTF-344` and
+  `GLTF-465` (both `✅/⬜`), and `GLTF-459`, `GLTF-460`, `GLTF-464`, `GLTF-473`, `GLTF-474` (`⬜`).**
+  `GLTF-463` closed on 2026-08-17; `GLTF-472` (the adversarial audit) closed on 2026-08-18 and opened
+  the last two. `GLTF-465` is half closed: **no PBR renderer draws a `COLOR_0` asset with different
+  core semantics any more** (thirteen apply the product, four refuse the draw), and what remains is
+  implementing it in those four. §27.2 carries a row-by-row ROBUST assessment; that section, not this
   file, is the record of what the milestone still needs.
 
-- **The milestone in force is `GLTF CORE 2.0 CORRECT` (§27.1.3, 2026-08-18), and it is stated with
-  its renderer coverage beside it: `PBR renderer coverage: 13/17 apply COLOR_0, 4 refuse such a draw by
-  name`.** The name was written on 2026-08-17, rejected by the owner the next day, held for a day as
-  `GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT`, and taken back only when the owner's own condition was
-  met. **Read §27.1.3 before §27.1, and §27.1.2 before either.**
+- **The milestone in force is `GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT` (§27.1.3), and it is
+  stated with its renderer coverage beside it: `PBR renderer coverage: 13/17 apply COLOR_0, 4 refuse
+  such a draw by name`.** The unqualified `GLTF CORE 2.0 CORRECT` was written on 2026-08-17, rejected
+  by the owner the next day, held as the qualified name, taken back when the owner's condition looked
+  met — and **qualified again by `GLTF-472`, which showed the condition had not actually been met when
+  it was reclaimed**. Two of the thirteen renderers counted as applying `COLOR_0` could not draw such a
+  primitive at all: `SDL_GPU`'s dispatch still selected its PBR queue for `stride == 48`/`68` only, and
+  `DILIGENT` picked its stride-80 shader variant and then refused stride 80 nine lines later. Both are
+  fixed. The name stays qualified because renderer coverage is not uniform — four PBR renderers refuse
+  the feature, `LLGL` cannot draw glTF's own default material at all, and `OPENGLES1` (outside the
+  seventeen) still accepts a PBR draw and reads a stride-60 record's `NORMAL` as its vertex colour
+  (`GLTF-473`). **Read §27.1.3 before §27.1, and §27.1.2 before either.**
 
   The rejected argument is the rule this campaign now works to: a renderer that **accepts** a valid
   `COLOR_0` metallic-roughness asset and substitutes the opaque-white identity renders a visibly wrong
@@ -28,6 +36,19 @@ session needs to start work without re-deriving the state.
   bar is a two-way partition — render it correctly, or refuse it — with **no third state**, and that
   partition is machine-checked over all seventeen PBR renderers by
   `GltfRendererPbrFallbackPolicy.EveryPbrRendererEitherAppliesVertexColourOrRefusesTheDrawExplicitly`.
+
+  **That test alone is not enough, and `GLTF-472` is why.** It — and every other audit in
+  `docs/gltf-renderer-pbr-fallbacks.md` — reads *declarations*: a layout row, a shader expression, a
+  guard call. None of them can see a renderer whose layout and shader are complete while the draw
+  route that selects them still enumerates only the uncoloured strides, which has now happened three
+  times (`OPENGL2` under `GLTF-465`, `SDL_GPU` and `DILIGENT` under `GLTF-472`). Two tests close it:
+  `EveryStrideGatedPbrRouteAdmitsBothColourCarryingStrides` pins each stride-gated route's acceptance
+  predicate, and `RendererStrideConformance.AColourCarryingPbrPrimitiveEitherDrawsOrRefusesByName`
+  draws both colour-carrying fixtures through a **live device**. **If you add a renderer to the
+  applying set, run the second one under that renderer** —
+  `CNA_GRAPHICS_RENDERER=<X> SDL_VIDEODRIVER=x11 DISPLAY=:<n> ./cmake-build-multi/Debug/bin/CnaTests
+  --gtest_filter='RendererStrideConformance.*'` — because compiling it proves nothing about whether
+  the draw arrives.
 
   Evidence for the import/runtime half was recaptured whole rather than argued from the old run: 146
   assets / 734 files byte-identical across two generator runs, and **all four** L7 policies (EasyGL,
@@ -252,9 +273,9 @@ found by *running the thing that was said to be impossible* rather than by reaso
 | Boundary | Rows | Note |
 |---|---|---|
 | **format/material breadth** | `GLTF-344` | `KHR_materials_specular`'s two texture inputs reach **12 of the 16** PBR renderers. `igl`, `metal`, `webgpu` and `wicked` sample neither, and none of the four carries a second UV stream at all, so the dual-UV foundation comes first. Machine-checked by `GltfRendererPbrFallbackPolicy.SpecularTextureInventoryClassifiesEveryPbrRenderer` — read it rather than any prose count. |
-| **renderer shader toolchains** | `GLTF-465` | The eight PBR renderers that **refuse** a `COLOR_0` draw rather than applying the product. Each is blocked on something this environment does not have: `bgfx` needs bgfx's own `shaderc`; `directx9` needs the pinned native `d3dcompiler_47.dll` Wine prefix; `llgl`'s committed SPIR-V was produced by a glslang this environment cannot reproduce (regenerating with the available one rewrites every blob in a renderer with no pixel coverage here); `diligent` is now buildable and its runtime-substituted HLSL is tractable, so it is the next one to implement; `metal`, `sdl-gpu`, `webgpu` and `wicked` have no stride-60/80 layout at all. None of them draws such an asset wrongly meanwhile — that is what the shared `RequireVertexColourPbrSupportEXT` guard buys. |
+| **renderer shader toolchains** | `GLTF-465` | The **four** PBR renderers that **refuse** a `COLOR_0` draw rather than applying the product, each blocked on something this environment does not have: `directx9` needs the pinned native `d3dcompiler_47.dll` Wine prefix; `metal` cannot be compiled anywhere this repository runs; `webgpu` and `wicked` have no stride-60/80 layout at all. None of them draws such an asset wrongly meanwhile — that is what the shared `RequireVertexColourPbrSupportEXT` guard buys. (`bgfx`, `diligent`, `llgl` and `sdl-gpu` were on this list and are now implemented; `GLTF-472` found that two of them had shipped complete shaders behind a draw route that never selected them, so **treat "the shader is written" and "the draw arrives" as separate claims**.) |
 | **corpus asset count** | `GLTF-464` | The corpus is pinned at **146** assets by four L7 provenance reports that enumerate every asset, so a new fixture fails each report's completeness assertion until every policy is re-captured. `GLTF-463` did exactly that and all four were re-captured on 2026-08-17, which is what makes `GLTF-464` (promoting `GLTF-461`/`468`/`470`'s inline probes to real fixtures) ordinary work rather than blocked work — budget ~40 minutes for the recapture, most of it DirectX11. |
-| **milestone chain** | `GLTF-459`–`460` | ROBUST is **9 of 12** green in §27.2 (rows 3, 6 and 12 open). `CORE` is declared (§27.1.3, 2026-08-18) with its renderer coverage stated beside it, after a day held under a narrower name; §27.1.2 remains the record of why the 2026-08-15 declaration was premature, and §27.1.3 of why the 2026-08-17 one was renamed. |
+| **milestone chain** | `GLTF-459`–`460` | ROBUST is **9 of 12** green in §27.2 (rows 3, 6 and 12 open). `CORE` is declared under the qualified name `GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT` (§27.1.3) with its renderer coverage stated beside it; §27.1.2 records why the 2026-08-15 declaration was premature, and §27.1.3 why the unqualified name was reclaimed and then withdrawn again by `GLTF-472`. |
 
 ## Suggested next clusters
 
@@ -263,7 +284,10 @@ Rewritten 2026-08-17 after the re-audit. Ordered by cost, cheapest first.
 1. **`GLTF-465`: carry `COLOR_0` into the remaining four PBR renderers.** Thirteen are done (EasyGL,
    SOFTWARE, IGL, OpenGL 2, OpenGL 4, Vulkan, DirectX 11, DirectX 12, Magnum, Diligent, Bgfx, LLGL,
    SDL GPU) and the other four refuse such a draw, so nothing renders wrongly meanwhile — coverage
-   work, not correctness work. What is left is genuinely harder than what is done: `directx9` needs
+   work, not correctness work. **Before marking one done, draw with it:**
+   `CNA_GRAPHICS_RENDERER=<X> SDL_VIDEODRIVER=x11 DISPLAY=:<n> ./cmake-build-multi/Debug/bin/CnaTests
+   --gtest_filter='RendererStrideConformance.*'`. `GLTF-472` found two renderers marked done whose
+   shaders were unreachable, and both had passed every source-text audit in the file. What is left is genuinely harder than what is done: `directx9` needs
    the pinned native `d3dcompiler_47.dll` Wine prefix (`~/.wine-cna-d3d9-spike`, SHA-256 gated) before
    its `vs_3_0`/`ps_3_0` bytecode can be regenerated; `webgpu` and `wicked` have **no stride-60/80
    vertex layout at all**, so each needs a layout, a pipeline variant and a shader change rather than

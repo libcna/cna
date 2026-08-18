@@ -3072,6 +3072,136 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherAppliesVertexColourOrR
            "colour-carrying PBR strides, or it starts refusing content that renders correctly";
 }
 
+TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarryingStrides)
+{
+    // plan_gltf.md GLTF-465, and the hole the two tests above cannot see. They ask whether a
+    // renderer DECLARES the colour -- a layout row at offset 56/76, a shader that multiplies
+    // `cnaVertexColor` into albedo. Neither asks whether a stride-60 or stride-80 draw ever REACHES
+    // that shader, and in a renderer whose PBR route is chosen from an explicit stride list those
+    // are different questions: the layout can be complete while the route that selects it still
+    // enumerates only the two uncoloured strides, so the whole implementation is unreachable.
+    //
+    // That is not hypothetical. It has now happened three times in this renderer set:
+    //
+    //   - OPENGL2 selected its PBR program for stride 48 only, so a stride-60 draw fell through to
+    //     the Blinn-Phong `lit` branch (fixed with GLTF-465's own OpenGL2 row, see the comment at
+    //     the predicate below);
+    //   - SDL_GPU shipped the stride-60/80 pipelines, shaders and attributes and left
+    //     `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` gating on `stride == 48`/`68`, so every such
+    //     draw fell past every branch into the stride-16 coloured path and was refused there;
+    //   - DILIGENT chose `SkinnedPbrColor3D` for stride 80 in one switch and then threw
+    //     "needs a skinned PBR vertex layout (stride 68 or 76)" nine lines later.
+    //
+    // All three passed every layout- and shader-text audit in this file while doing it. So the
+    // predicate itself is pinned here: for each renderer whose PBR route is stride-gated, the gate
+    // must name the colour-carrying stride alongside its bare twin.
+    const std::filesystem::path renderers = RepositoryRoot() / "modules" / "renderers";
+    ASSERT_TRUE(std::filesystem::is_directory(renderers));
+
+    struct RouteGate
+    {
+        const char* renderer;
+        const char* what;
+        const char* predicate;
+    };
+    // Each row is the predicate that decides whether a PBR draw of that stride reaches the PBR
+    // shader at all -- not the layout it would then be read with.
+    const std::array<RouteGate, 15> gates{{
+        {"sdl-gpu", "the draw-entry dispatch (both routes)",
+         "if (needsPbr &&"
+         "    ((params.skinned && (stride == 68 || stride == 80)) ||"
+         "     (!params.skinned && (stride == 48 || stride == 60))))"},
+        {"sdl-gpu", "QueuePbrDraw's own acceptance",
+         "const bool acceptable = skinned ? (stride == 68u || stride == 80u)"
+         "                                : (stride == 48u || stride == 60u);"},
+        {"diligent", "the rigid PBR stride check",
+         "if (params != nullptr && params->pbr && !params->skinned && stride != 48 && stride != 60)"},
+        {"diligent", "the skinned PBR stride check",
+         "if (params != nullptr && params->pbr && params->skinned && stride != 68 &&"
+         "    stride != 76 && stride != 80)"},
+        {"vulkan", "the rigid PBR pipeline's stride check", "if (stride != 48 && stride != 60)"},
+        {"vulkan", "the skinned PBR pipeline's stride check",
+         "if (stride != 68 && stride != 76 && stride != 80)"},
+        {"directx11", "the rigid PBR stride check",
+         "if (needsPbr && !params.skinned && stride != 48 && stride != 60)"},
+        {"directx11", "the skinned PBR stride check",
+         "if (needsPbr && params.skinned && stride != 68 && stride != 76 && stride != 80)"},
+        {"directx12", "the rigid PBR stride check",
+         "if (needsPbr && !params.skinned && stride != 48 && stride != 60)"},
+        {"directx12", "the skinned PBR stride check",
+         "if (needsPbr && params.skinned && stride != 68 && stride != 76 && stride != 80)"},
+        {"magnum", "SelectStockProgram's rigid PBR arm",
+         "if (selector.strideInBytes != 48 && selector.strideInBytes != 60)"},
+        {"magnum", "SelectStockProgram's skinned PBR arm",
+         "if (selector.strideInBytes != 68 && selector.strideInBytes != 80)"},
+        {"opengl2", "the rigid PBR route selector",
+         "(vb->stride == 48 || vb->stride == 60)"},
+        {"opengl2", "the skinned PBR route selector",
+         "(vb->stride == 68 || vb->stride == 76 || vb->stride == 80)"},
+        {"opengl4", "the PBR route selector",
+         "if (params.pbr && (strideInBytes == 48 || strideInBytes == 60 ||"
+         "                   strideInBytes == 68 || strideInBytes == 76 || strideInBytes == 80))"},
+    }};
+
+    for (const RouteGate& gate : gates)
+    {
+        SCOPED_TRACE(std::string(gate.renderer) + ": " + gate.what);
+        const std::string source = RendererSlotText(renderers, gate.renderer);
+        ASSERT_FALSE(source.empty());
+        EXPECT_NE(std::string::npos, source.find(Normalize(gate.predicate)))
+            << "this renderer's PBR route is chosen from a stride list, and the list no longer "
+               "matches the one pinned here. If the colour-carrying stride was dropped from it, a "
+               "vertex-coloured metallic-roughness primitive can no longer reach the shader that "
+               "was written for it -- which every other test in this file would still call correct.";
+    }
+
+    // The rest of the implementing set does not gate on a stride list at all: their PBR route is
+    // selected from `params.pbr` (and the layout separately from the stride), or -- IGL -- from the
+    // public VertexDeclaration, so there is no second list that can fall out of step with the first.
+    // Stated as evidence rather than as an absence, so that a renderer which GROWS a stride gate
+    // stops matching and has to be classified above.
+    struct UngatedRoute
+    {
+        const char* renderer;
+        const char* evidence;
+    };
+    const std::array<UngatedRoute, 4> ungated{{
+        {"easygl", "if (params.pbr && params.skinned) return StockProgramShape::PbrSkinned;"},
+        {"bgfx", "else if (params.pbr && params.skinned && bgfx::isValid(pbrSkinned3DProgram_))"},
+        {"igl", "if (params.pbr)"},
+        {"software", "if (stride == 48 || stride == 60 || stride == 68 || stride == 76 || stride == 80)"},
+    }};
+    for (const UngatedRoute& route : ungated)
+    {
+        SCOPED_TRACE(route.renderer);
+        const std::string source = RendererSlotText(renderers, route.renderer);
+        ASSERT_FALSE(source.empty());
+        EXPECT_NE(std::string::npos, source.find(Normalize(route.evidence)))
+            << "this renderer's PBR route selection changed; re-check whether it now depends on a "
+               "stride list, and if so pin that list above";
+    }
+
+    // LLGL selects its PBR shader variant from the vertex attributes the caller declared rather
+    // than from a stride, which is why it has no row in either table -- but it must still HAVE the
+    // colour-carrying variants, or "attribute-driven" would just mean the colour is dropped.
+    const std::string llgl = RendererSlotText(renderers, "llgl");
+    ASSERT_FALSE(llgl.empty());
+    EXPECT_NE(std::string::npos, llgl.find(Normalize("hasVertexColour ? Shaders::kPbr3dSkinnedDualUvColorVertGlsl")))
+        << "LLGL's skinned PBR variant no longer branches on the declared colour attribute";
+
+    // And the two dispositions together are still the whole implementing set, so a renderer cannot
+    // be added to `applies` above and quietly skip this test.
+    std::set<std::string> covered;
+    for (const RouteGate& gate : gates) { covered.insert(gate.renderer); }
+    for (const UngatedRoute& route : ungated) { covered.insert(route.renderer); }
+    covered.insert("llgl");
+    const std::set<std::string> applies{
+        "easygl", "igl", "software", "opengl2", "opengl4", "vulkan", "directx11", "directx12",
+        "magnum", "diligent", "bgfx", "llgl", "sdl-gpu"};
+    EXPECT_EQ(applies, covered)
+        << "a renderer listed as applying COLOR_0 has no route-reachability disposition";
+}
+
 TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
 {
     // A provider has a local CreateIndexBuffer32 implementation. The two explicit rejecters also

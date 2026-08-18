@@ -34,22 +34,30 @@ Oracle repository: `openeggbert/cna-gltf-viewer` (`develop`), writable and exerc
 > a row closes, so the correction is mechanical: extract every `| GLTF-nnn | … | <state> |` cell and
 > tally it. Anyone editing a state must re-tally.
 >
-> Of 471 rows: **466 are closed (`✔` 275, `✅` 191)** and **5 remain open** — 2 `✅/⬜`
-> (`GLTF-344`, `GLTF-465`) and 3 `⬜` (`GLTF-459`, `GLTF-460`, `GLTF-464`). `GLTF-463` closed on
+> Of 474 rows: **467 are closed (`✔` 275, `✅` 192)** and **7 remain open** — 2 `✅/⬜`
+> (`GLTF-344`, `GLTF-465`) and 5 `⬜` (`GLTF-459`, `GLTF-460`, `GLTF-464`, `GLTF-473`, `GLTF-474`). `GLTF-463` closed on
 > 2026-08-17 (stride 80: a skinned vertex-coloured metallic-roughness primitive keeps its material).
-> `GLTF-465` is half closed: **no renderer draws a `COLOR_0` asset with different core semantics any
-> more** — thirteen of seventeen apply the product and the other four refuse the draw explicitly — and
-> what remains is implementing it in those eight. There is no
+> `GLTF-465` is half closed: **no PBR renderer draws a `COLOR_0` asset with different core semantics
+> any more** — thirteen of seventeen apply the product and the other four refuse the draw explicitly —
+> and what remains is implementing it in those four, plus `GLTF-472`'s own named residue. There is no
 > `✅/🐛` residue, standalone `🐛`, `🔬`, or environment-blocked `⛔`. Every closed row carries its own
 > evidence in its Scope cell: what was decided, what it cost, and which fixture or test proves it.
 >
-> **The milestone in force is `GLTF CORE 2.0 CORRECT` (§27.1.3, 2026-08-18), with PBR renderer
-> coverage stated beside it: 13 of 17 renderers apply `COLOR_0`, and the other 4 refuse such a draw by
-> name rather than drawing it wrongly.** The name was withheld for a day — as
-> `GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT` — because renderers were still accepting a valid
-> `COLOR_0` asset and substituting the white identity, which is wrong output rather than limited
-> coverage; `GLTF-465` closed that gap by implementing the product where it could and refusing the
-> draw everywhere else. The first declaration, on 2026-08-15 (`GLTF-458`), was premature.** A 2026-08-17 re-audit against the pinned specification found three core divergences
+> **The milestone in force is `GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT` (§27.1.3, restated
+> 2026-08-18 after `GLTF-472`'s adversarial audit), with PBR renderer coverage stated beside it:
+> 13 of 17 renderers apply `COLOR_0`, and the other 4 refuse such a draw by name rather than drawing
+> it wrongly.** The unqualified `GLTF CORE 2.0 CORRECT` was claimed for part of 2026-08-18 on the
+> ground that no renderer was left in the forbidden third state. **`GLTF-472` falsified that:** two
+> of the thirteen renderers counted as applying the product could not in fact draw such a primitive
+> at all — `SDL_GPU`'s draw-entry dispatch still selected its PBR queue for `stride == 48`/`68` only,
+> and `DILIGENT` chose its stride-80 shader variant and then refused stride 80 nine lines later — so
+> both refused content they had the complete layout, pipeline and shader for, with a diagnostic
+> naming the wrong thing. Both are fixed and the partition is now checked **at the draw boundary on a
+> live device**, not only in shader text. The name stays qualified because renderer coverage is
+> genuinely not uniform: four PBR renderers refuse the feature, `LLGL` additionally cannot draw
+> glTF's own default material (`baseColorFactor` with no `baseColorTexture`), and `OPENGLES1` — which
+> is outside the seventeen — still *accepts* a PBR draw and renders it through its fixed-function
+> colour path. The first declaration, on 2026-08-15 (`GLTF-458`), was premature.** A 2026-08-17 re-audit against the pinned specification found three core divergences
 > that §27.1's own row set did not ask about, all now fixed (`GLTF-461`, `GLTF-462`) with the residue
 > named and owned (`GLTF-463`–`GLTF-465`): §3.7.2.1's flat normals were *averaged* at shared vertices
 > rather than produced per face; §3.7.2.2's "MUST calculate flat normals for each morph target" was
@@ -1895,13 +1903,13 @@ decision. §27.1.3 below declares what the evidence supports — `GLTF CORE 2.0 
 CORRECT` — and records why the unqualified `GLTF CORE 2.0 CORRECT` is **not** claimed while any
 renderer still accepts a `COLOR_0` asset and renders it with the white identity.
 
-#### 27.1.3 Declaration — 2026-08-18: `GLTF CORE 2.0 CORRECT`, with limited renderer coverage stated beside it
+#### 27.1.3 Declaration — 2026-08-18: `GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT`, with renderer coverage stated beside it
 
-**This section was written on 2026-08-17 as `GLTF CORE 2.0 CORRECT`, renamed the next day to
-`GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT` when the project owner rejected the first name, and now
-carries the unqualified name again — because the condition the owner set for it was met, not because
-the argument was dropped.** The argument, and the whole reason this row exists, is worth keeping in
-full:
+**This section was written on 2026-08-17 as `GLTF CORE 2.0 CORRECT`, renamed the same week to
+`GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT` when the project owner rejected the first name, briefly
+carried the unqualified name again on the ground that the owner's condition had been met — and now
+carries the qualified name once more, because `GLTF-472` showed the condition had *not* been met when
+it was reclaimed.** The argument, and the whole reason this row exists, is worth keeping in full:
 
 > A renderer that ACCEPTS a valid glTF asset with `COLOR_0` on a metallic-roughness material and then
 > substitutes the white identity for the authored colour renders a **visually wrong** picture. That the
@@ -1917,21 +1925,38 @@ So the bar is a two-way partition with a forbidden third state:
 | Explicitly and safely **refuses** the unsupported combination | acceptable (limited coverage, not wrong output) |
 | **Accepts the asset and renders it with different core semantics** | **blocker** |
 
-**The partition holds for all seventeen PBR renderers**, machine-checked by
-`GltfRendererPbrFallbackPolicy.EveryPbrRendererEitherAppliesVertexColourOrRefusesTheDrawExplicitly`:
+**The partition holds for all seventeen PBR renderers.** It is machine-checked in two independent
+ways since `GLTF-472`, and the second one exists because the first was not enough:
+`GltfRendererPbrFallbackPolicy.EveryPbrRendererEitherAppliesVertexColourOrRefusesTheDrawExplicitly`
+reads shader and guard *text*, and
+`RendererStrideConformance.AColourCarryingPbrPrimitiveEitherDrawsOrRefusesByName` draws both
+colour-carrying fixtures through a **live device** and requires the draw to succeed or to fail with a
+diagnostic that names the semantic. Two renderers passed every text audit while being unable to draw
+the asset at all (`GLTF-472`), which is precisely the gap a text audit cannot see.
 
-> **`GLTF CORE 2.0 CORRECT`** — the importer, the `.cnj` path, the shared vertex ABI, the
-> effect/`GpuDrawParams` runtime model and every renderer's observable behaviour implement core
-> glTF 2.0 correctly: a renderer either renders the feature or refuses the draw.
+> **`GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT`** — the importer, the `.cnj` path, the shared vertex
+> ABI and the effect/`GpuDrawParams` runtime model implement core glTF 2.0 correctly, and **every one
+> of the seventeen PBR renderers either renders the feature or refuses the draw by name**.
 >
 > **PBR renderer coverage: 13 of 17 apply `COLOR_0`; the other 4 refuse a `COLOR_0` draw by name**
 > (`directx9`, `metal`, `webgpu`, `wicked`). `GLTF-465` tracks
 > implementing it in each of them; none of them draws such an asset wrongly meanwhile.
+>
+> **Why the name is qualified rather than unqualified.** An unqualified `GLTF CORE 2.0 CORRECT` reads
+> as "every renderer CNA advertises as glTF/PBR-capable renders every valid core glTF input", and
+> three things make that untrue: four PBR renderers refuse `COLOR_0` outright; `LLGL` treats
+> PbrEffect's base-colour map as mandatory and therefore cannot draw glTF's own **default material**
+> (`baseColorFactor` with no `baseColorTexture`, §3.9.2) on any stride; and `OPENGLES1`, which is
+> outside the seventeen because it has no PBR path, does not refuse a PBR draw — it routes it to its
+> fixed-function colour path, which reads a 4-byte colour at offset 12 and therefore reads a stride-60
+> record's `NORMAL` floats as a vertex colour (`GLTF-473`). The import/runtime half of the milestone
+> is what the evidence supports; the renderer half is stated as coverage, not as correctness.
 
 **What changed since 2026-08-15.** `GLTF-461` (§3.7.2.1 per-face flat normals, §3.7.2.1's
 tangent-ignore MUST, §3.7.2.2's per-target flat normals), `GLTF-462` (`COLOR_0` is a multiplier on
 base colour, not a different material model), `GLTF-463` (stride 80, so the **skinned** case is
-carried too) and `GLTF-465` (the product in nine renderers, an explicit refusal in the other eight).
+carried too), `GLTF-465` (the product in thirteen renderers, an explicit refusal in the other four)
+and `GLTF-472` (the two of those thirteen whose route never reached the shader).
 After `GLTF-463`, `MeshOut::unsupportedMaterialModelEXT` is **assigned nowhere in the importer**:
 there is no attribute combination left that costs a primitive its material model. Four further
 defects were found while implementing the renderer half, all by compiling or running things nobody
@@ -1951,21 +1976,51 @@ uses base-colour **alpha** — the one term with no view dependence — with a `
 the same golden set to calibrate the rig, plus a rigid-path witness (a green channel of exactly 0 that
 the white identity cannot produce).
 
-**How far each renderer's disposition is verified.** Pixel-level for the four L7 policies (EasyGL,
-Vulkan, SOFTWARE, DirectX11). Compiled and source-verified for `opengl2`, `opengl4`, `directx12`
-(which shares DirectX11's pixel-proven HLSL, constant buffer and input-element table) and `magnum`
-(whose four generated PBR sources additionally compile under `glslangValidator`). `igl` is correct by
-construction. Of the eight refusing renderers, `bgfx`, `llgl`, `sdl-gpu` and `diligent` compile with
-the guard in a multi-renderer build; `directx9` syntax-checks under MinGW; `webgpu` and `wicked`
-syntax-check against their own SDK headers; **`metal` alone cannot be compiled in any environment this
+**How far each renderer's disposition is verified.** Three tiers, and `GLTF-472` added the middle one
+because the gap between the first and the last is where both of its defects lived.
+
+*Pixel-level* for the four L7 policies — EasyGL/OPENGLES3, Vulkan on lavapipe, SOFTWARE, and
+DirectX11 under Wine + DXVK — whose committed goldens carry the authored product for both the rigid
+and the skinned path.
+
+*Live draw* for seven renderers, added by `GLTF-472`: `SOFTWARE`, `OPENGL2`, `OPENGL4`, `SDL_GPU`,
+`MAGNUM`, `LLGL` and `DILIGENT` each drew both colour-carrying corpus fixtures through a real device
+in the multi-renderer tree (selected with `CNA_GRAPHICS_RENDERER`, `SDL_VIDEODRIVER=x11` on an Xvfb
+display) and either completed the draw or refused it by name. This tier is what says the shader is
+*reachable*, and it is the only tier that could have caught `SDL_GPU`'s and `DILIGENT`'s route
+defects.
+
+*Source-verified only* for `DIRECTX12` (which shares DirectX11's pixel-proven HLSL, constant buffer
+and input-element table) and `BGFX` (whose offline-compiled blobs this host can rebuild but whose
+draw it cannot run). `IGL` is correct by construction and by its own generated shader library. Of the
+four refusing renderers, `directx9` syntax-checks under MinGW, `webgpu` and `wicked` syntax-check
+against their own SDK headers, and **`metal` alone cannot be compiled in any environment this
 repository has** — its two-line call mirrors the one immediately above it and its argument types were
 checked by hand, which is the honest limit of what this host can say about it.
+
+**What the live tier also measured, and what it costs.** Running the pre-existing
+`RendererStrideConformance.EveryGltfStrideReachesTheNativeDrawBoundary` under each selection — which
+nothing in this environment had done, because the suite always runs on the *default* renderer —
+found three coverage gaps that no `⬜` row had claimed and no test had reported. `SDL_GPU` cannot draw
+`mat-unlit`, `skin-unlit` or `skin-vertex-color`; `DILIGENT` cannot draw `skin-vertex-color`
+("unsupported vertex stride 56"); `LLGL` cannot draw any PbrEffect or SkinnedEffect primitive with no
+base-colour texture. All three refuse deterministically and by name, so none is in the forbidden
+state — but all three are `KHR_materials_unlit` or default-material content that the renderer tables
+did not say was unreachable. `GLTF-474` owns them.
 
 **What would reopen this.** Any renderer moving into the third state — accepting stride 60 or 80 and
 drawing it with the identity, accepting the stride with a layout that does not describe it (the state
 `EverySkinnedPbrRendererEitherBindsTheStride80RecordOrRefusesIt` forbids), or applying `COLOR_0` to
 RGB but not to alpha. All three are machine-checked; a renderer added to the tree without a
 disposition fails the partition test rather than defaulting into one.
+
+**And a fourth, added by `GLTF-472` because it actually happened twice:** a renderer whose layout,
+pipeline and shader are all complete while the *route* that selects them still enumerates only the
+uncoloured strides, so the implementation is unreachable and the draw is refused by whatever branch it
+falls into. Nothing in the three checks above can see that — all three read declarations.
+`EveryStrideGatedPbrRouteAdmitsBothColourCarryingStrides` pins each stride-gated PBR route's
+acceptance predicate, and `AColourCarryingPbrPrimitiveEitherDrawsOrRefusesByName` settles it from a
+real draw.
 
 **Declaration — 2026-08-15: `GLTF CORE 2.0 CORRECT`.** *(Superseded in part by §27.1.2 above; read
 that first.)* All 20 requirements above are green at
@@ -2834,6 +2889,9 @@ passes numerically at L4 **and** `GLTF-260` proves no double application.*
 | GLTF-467 | The L7 harness's renderer-identity check had rotted for two of its four policies | ✅ | GLTF-387 | `scripts/gltf-l7-corpus.py` proves the pixels came from the renderer the policy names by requiring **exactly one** renderer identity across both processes, matched with `line.startswith(prefix)`. EasyGL's and Vulkan's markers are printed raw, but SOFTWARE's and DirectX11's go through **CNA's own logger**, which prefixes every line with a severity/category tag — so the moment that tag existed, `"CNA: graphics renderer: SOFTWARE"` became `"[INFO][RENDER] CNA: graphics renderer: SOFTWARE"` and those two policies became **structurally unrunnable**: the harness completes all 145 assets and then fails its own final check with `got []`. That is why neither had been re-captured since, and why `GltfFixtureCorpus.SoftwareCorpusL7ReportIsCompleteExactAndReproducible` could only ever verify the *committed* report against itself rather than against a fresh run. Found by running it. **Accept:** the marker is matched anywhere in the line, with the reason recorded at the call site; the check keeps its full strength (exactly one identity, across both processes) and the SOFTWARE policy completes end to end again. |
 | GLTF-469 | The L7 goldens pin PNG **bytes**, so a Pillow upgrade rewrites all 137 | ✔ | GLTF-467 | Refreshing the two re-runnable L7 golden sets exposed a property of the oracle worth recording rather than rediscovering: the policy's own comparison is a **pixel** comparison at zero tolerance, but the report additionally pins each golden's `sha256`, and the harness writes its PNGs through Pillow. A different Pillow/zlib produces a different byte stream for identical pixels — measured here as 3 275 → 12 755 bytes on an unchanged frame — so **every** golden's hash moves on a toolchain upgrade even when no renderer changed. This is not a defect and the pixel oracle is not weakened by it, but it means a golden refresh is *all or nothing*: restoring the pixel-identical files to their old bytes while the report records the new ones makes the report's own "these bytes came out of two independent processes and match the committed golden" claim false, which is exactly the failure `GltfFixtureCorpus.SoftwareCorpusL7ReportIsCompleteExactAndReproducible` then reports. **Accept:** recorded here, and the refresh taken whole for both re-runnable renderers. The genuinely changed *pixels* are separable and were measured before the refresh — **7 assets on EasyGL** (the six rigid vertex-colour fixtures, now PBR-shaded with `COLOR_0` multiplied in, plus `mode-triangle-strip-morph`'s recomputed morph normals) and **1 on SOFTWARE** (`mat-vertex-color-pbr`, the only vertex-colour fixture carrying a real material for the old `BasicEffect` path to discard). `uv1-material` is **pixel-identical** on both, which is the safety result that matters: stride 60's new colour slot and its opaque-white fill change nothing for uncoloured dual-UV content. |
 | GLTF-471 | Re-capture the DirectX11 L7 corpus, and prove the route is the committed one | ✅ | GLTF-467, GLTF-469 | `GLTF-461`/`GLTF-462` changed what the importer emits, so the DirectX11 golden set needed re-capturing too — the one L7 policy `NEXT_gltf.md` recorded as needing "a DXVK'd prefix this environment does not have". It does have one: Wine, MinGW and DXVK are all present and `~/.wine-cna-d3d11` is set up, so the viewer cross-built for Windows (`cmake/toolchains/mingw-w64.cmake`, `DCNA_GRAPHICS_RENDERER=DIRECTX11`, the prebuilt Windows SDL3) and the capture ran through `scripts/run-wine-dxvk.sh` under `CNA_D3D11_VIRTUAL_DESKTOP` on an Xvfb display: **145 explicit dispositions, 137 deterministic PNGs, 8 deterministic safe rejections**, at the policy's zero RGB/alpha tolerance. It was only runnable at all because `GLTF-467` fixed the identity check that had made this policy structurally unrunnable. **The part worth recording is the negative result.** The committed goldens were captured on the Intel GPU, and the row warned that lavapipe "shifts every row by one LSB against a tolerance of 0" — which would have made a refreshed set a different renderer route wearing the same name. Measured before the refresh: **130 of the 137 assets are pixel-identical to the committed goldens**, byte-for-byte in their decoded pixels, so this run reproduced the original route rather than substituting one. The 7 that moved are **exactly the 7 that moved on EasyGL** — the six rigid vertex-colour fixtures and `mode-triangle-strip-morph` — which is what makes the two independent renderers corroborate each other instead of each asserting its own output. **Accept:** report regenerated, `GltfFixtureCorpus.DirectX11CorpusL7ReportIsCompleteExactAndReproducible` green against a fresh run rather than against itself. **The Vulkan corpus was re-captured on the same revision** (its own report records `llvmpipe (LLVM 19.1.7, 256 bits)`, which is what this machine has, so the route is reproducible) and gives the **identical** answer: 130 of 137 pixel-identical, the same 7 assets moved, and DirectX11's and Vulkan's per-asset deltas agree to the unit (191 / 254 / 193 / 8 / 255 / 254 / 191). Four independently implemented renderers therefore agree on exactly which assets the importer change moved, which is what separates "the importer changed" from "one renderer's output drifted". |
+| GLTF-472 | Adversarial audit of the `GLTF CORE 2.0` declaration, and the two route defects it found | ✅ | GLTF-465 | An independent audit tasked with **falsifying** the milestone rather than confirming it, starting from the assumption that `plan_gltf.md`, the closure states and the passing tests were all wrong. It found the declaration **not defensible as written**, for one structural reason: every check `GLTF-465` left behind reads *declarations* — a layout row at offset 56/76, a shader that multiplies `cnaVertexColor` into albedo, a guard call or its absence — and **none of them asks whether a stride-60/80 draw ever reaches that shader**. Two of the thirteen renderers counted as applying the product could not draw such a primitive at all, and both passed every existing audit while doing it. **`SDL_GPU`:** `703f96591` added the pipelines, the attribute at offset 56/76, the two SPIR-V variants and the fragment product, removed the shared guard — and left `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` selecting the PBR queue for `stride == 48`/`68` only. A stride-60 or stride-80 draw matched no branch and fell through to `DrawColoredPrimitives`, which refused it as *"requires a stride-16 (VertexPositionColor) vertex buffer"* — a renderer in **neither** allowed state: not applying the product, not refusing by name. **`DILIGENT`:** `ae9337ebe` added the complete stride-80 `LayoutElement` list and the `SkinnedPbrColor3D` variant, and the `switch` selects that variant for stride 80 — nine lines before a validation that still read `stride != 68 && stride != 76` and threw *"needs a skinned PBR vertex layout (stride 68 or 76)"*. Its rigid stride-60 path was correct throughout; only the skinned half was unreachable. Both are one-predicate fixes. **The audit also confirmed, independently and from the source rather than from the tables:** the seventeen-renderer PBR set; that `SelectVertexLayoutEXT` sends **every** coloured metallic-roughness primitive to stride 60 or 80 and nowhere else, so the guard's `stride == 60 \|\| stride == 80` has no hole; that `VertexColorEnabledEXT` cannot default to false on imported `COLOR_0` content, because both loaders set it from `MeshOut::colored` and the runtime loader's `EffectCacheKey` carries `colored` as a key component, so a material shared between a coloured and an uncoloured primitive cannot hand the wrong flag to either; that stride 80 is byte-for-byte stride 76 plus a packed colour at offset 76 (`static_assert`ed); that `GLTF-461`'s split remaps **every** per-vertex stream including the morph deltas, through one `vertexSource` gather; and that `BuildFlatNormalGeometryEXT`'s `kParallelFaceDotEXT` is a 0.081° reproducibility floor rather than a smoothing threshold. **Accept:** both defects fixed, and the class of defect closed by two new tests rather than by two more table entries — `GltfRendererPbrFallbackPolicy.EveryStrideGatedPbrRouteAdmitsBothColourCarryingStrides` pins the acceptance predicate of every stride-gated PBR route (it fails on the pre-fix source naming exactly `sdl-gpu` and `diligent`, and nothing else), and `RendererStrideConformance.AColourCarryingPbrPrimitiveEitherDrawsOrRefusesByName` draws both colour-carrying fixtures through a **live device**, requiring the draw to succeed or to fail with a diagnostic that names the semantic. The second one is now in the `gltf-renderer-stride-ci.yml` gate. Verified live on `SOFTWARE`, `OPENGL2`, `OPENGL4`, `SDL_GPU`, `MAGNUM`, `LLGL`, `DILIGENT`, `OPENGLES3` and `HEADLESS`. Root suite 7522/7294/228/0; multi-renderer 7621/7392/229/0; `ctest -L gltf-conformance` 10/10; OPENGLES3 `*Gltf*` subset 605/602/3/0. The milestone name is qualified again as a result — see §27.1.3. |
+| GLTF-473 | `OPENGLES1` accepts a PBR draw and reads a stride-60 record's `NORMAL` as its vertex colour | ⬜ | GLTF-472 | Found by `GLTF-472` outside the seventeen-renderer PBR set, and outside every test that guards it. `OpenGLES1Renderer::DrawPrimitivesEx` routes `params.pbr` (with `skinned`, `customEffectRenderer` and instancing) to `DrawColoredPrimitives`, which calls `SetupClientArraysForStride(stride, /*color*/true, …)`, and that helper binds a 4-byte `GL_UNSIGNED_BYTE` colour array **at offset 12 unconditionally**. Offset 12 is the colour only for strides 16 and 24; on a stride-60 rigid PBR record it is the `NORMAL`'s three floats, so a valid core glTF vertex-coloured metallic-roughness primitive is drawn unlit with per-vertex colours read from the bytes of its normals. `REMED-GFX-DECL-GUARD` does not stop it: stride 60 **is** in the canonical table, so the declaration is faithful and the check passes. `docs/opengles1-renderer.md` documents `PbrEffect` as a permanent gap and the route as "falls back to the plain colored path", which a reader would take to mean the geometry draws with its own vertex colours — not this. **This is the forbidden third state**, in a renderer the `GLTF-465` inventory excludes because it has no PBR path at all, which is exactly why no test sees it. **Not fixed here, deliberately:** the minimal correction (bind the colour array only for the strides that have a colour at offset 12) still leaves a PBR asset drawn as flat unlit geometry, and the correct fix — refusing a PBR draw the way `TINYGL`, `SOKOL`, `GLIDE` and `PORTABLEGL` already do — changes the same fallback that also serves skinned, instanced and custom-effect draws, and **this environment has no ES 1.1 driver to run the result against** (`docs/opengles1-renderer.md` records the side-by-side Mesa build needed). Changing untestable renderer code inside an audit is worse than naming it. **Accept:** `OPENGLES1` refuses a PBR draw by name, or binds no colour array for a stride whose offset 12 is not a colour — proven on a real ES 1.1 driver, with the `docs/opengles1-renderer.md` limitation rewritten to say which. |
+| GLTF-474 | Renderer coverage gaps the live-draw tier measured for the first time | ⬜ | GLTF-472 | `GLTF-472` ran the pre-existing `RendererStrideConformance.EveryGltfStrideReachesTheNativeDrawBoundary` under each renderer selection in the multi-renderer tree. Nothing in this environment had done that — the suite always runs on the **default** renderer, so eight compiled-in renderers had only ever been compiled, and the "7619 tests, 0 failed" figure quoted for the multi-renderer build measured `HEADLESS`. Three gaps fell out, none of them in the forbidden state and none of them previously claimed by any `⬜` row: **`SDL_GPU`** cannot draw `mat-unlit`, `skin-unlit` or `skin-vertex-color` — its non-PBR dispatch branches all require `params.texture0 != nullptr`, and an untextured primitive falls through to the stride-16 coloured path and is refused there (the PBR branch had the same defect and `GLTF-472` fixed it, giving slot 0 the neutral-white fallback slots 1..6 already had); **`DILIGENT`** cannot draw `skin-vertex-color` ("unsupported vertex stride 56": no stride-56 layout); **`LLGL`** refuses any `PbrEffect`/`SkinnedPbrEffect`/`SkinnedEffect` draw with no base-colour texture ("needs Texture bound"), which means it cannot draw glTF's own **default material** — `baseColorFactor` alone, §3.9.2 — on any stride, and is why its "applies `COLOR_0`" row now carries a precondition. All three refuse deterministically and name a real precondition, so all three are limited coverage rather than wrong output; LLGL's two PBR messages are pinned verbatim in `AColourCarryingPbrPrimitiveEitherDrawsOrRefusesByName` so the exception cannot quietly widen. **Accept:** each of the three either draws the content or is recorded as refusing it in `docs/gltf-renderer-pbr-fallbacks.md`'s own tables, and the live-draw tier runs in CI for every renderer a runner can create a device for — not only for the default one. |
 
 ---
 

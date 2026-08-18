@@ -495,6 +495,8 @@ Three dispositions, all machine-checked — read the tests, not this table, whic
 - `GltfRendererPbrFallbackPolicy.EveryPbrRendererEitherBindsTheStride60RecordOrIsNamedAsNotYet`
 - `GltfRendererPbrFallbackPolicy.EverySkinnedPbrRendererEitherBindsTheStride80RecordOrRefusesIt`
 - `GltfRendererPbrFallbackPolicy.VertexColourReachesTheBaseColourProductOnlyWhereItIsImplemented`
+- `GltfRendererPbrFallbackPolicy.EveryStrideGatedPbrRouteAdmitsBothColourCarryingStrides` (`GLTF-472`)
+- `RendererStrideConformance.AColourCarryingPbrPrimitiveEitherDrawsOrRefusesByName` (`GLTF-472`, live draw)
 
 | Renderer | Stride 60 | Stride 80 | `COLOR_0` in the base-colour product (RGB **and** alpha) |
 |---|---|---|---|
@@ -507,12 +509,12 @@ Three dispositions, all machine-checked — read the tests, not this table, whic
 | DirectX 11 | yes | yes | **applies** — one shared HLSL pair and one shared `VertexColorFlags` constant serve both D3D families |
 | DirectX 12 | yes | yes | **applies** — same shared HLSL and constant as DirectX 11 |
 | Magnum | yes (`GLTF-465` added the colour attribute **and** the program selection: its `SelectStockProgram` had accepted only strides 48/68, so a stride-60 draw was refused outright) | yes (`GLTF-465` added the layout) | **applies** — generated GLSL, so the product is in the source that is compiled at runtime; `BindDrawParams` raises the flag only for strides 60/80, because one program serves 48/60 and an unsupplied attribute would read GL's generic default `(0,0,0,1)` |
-| Diligent | yes | yes (`GLTF-465` added the stride-80 variant) | **applies** — its HLSL is a per-variant template expanded at pipeline creation, so the colour attribute, its interpolant and the product exist **only** in the variants whose input layout supplies them; `g_Flags.y` is the effect's switch |
+| Diligent | yes | yes (`GLTF-465` added the stride-80 variant; **`GLTF-472` made it reachable** — the `switch` selected `SkinnedPbrColor3D` for stride 80 and a validation nine lines later still read `stride != 68 && stride != 76` and threw) | **applies** — its HLSL is a per-variant template expanded at pipeline creation, so the colour attribute, its interpolant and the product exist **only** in the variants whose input layout supplies them; `g_Flags.y` is the effect's switch |
 | Bgfx | yes (its stride-60 `skip(4)` **was** the colour slot) | yes (`GLTF-465` added the layout) | **applies** — the `.sc` sources are compiled offline into all four backend bytecodes; only the three PBR shaders' 12 blobs changed, every other blob byte-identical, which is also the proof the rebuilt `shaderc` matches the one the committed header came from |
 | DirectX 9 | binds it for non-PBR routes; its PBR path accepts only strides 48/68 | refuses | **refuses** (`GLTF-465`): `vs_3_0`/`ps_3_0` bytecode is regenerated only through the pinned native `d3dcompiler_47.dll` Wine prefix, which this environment does not have |
-| LLGL | yes | yes (`GLTF-465` added strides 76 and 80) | **applies** — its PBR pipeline used to *strip* the colour attribute ("this shader never reads one"); it now passes it through, and `specularState.z` carries the effect's switch. Regenerating touched only the PBR blobs: every other one is byte-identical, so the committed header was a **mix** of `glslangValidator`- and libshaderc-produced SPIR-V, and only the shaders being changed moved to the documented tool |
+| LLGL | yes | yes (`GLTF-465` added strides 76 and 80) | **applies, with a precondition**: LLGL treats PbrEffect's base-colour map as mandatory and throws "needs Texture bound" without one, so it cannot draw glTF's own default material (`baseColorFactor` alone, §3.9.2) — which is what both `COLOR_0` corpus fixtures author, so the product is unreachable for them (`GLTF-474`). Where a base colour map *is* bound, the product applies: its PBR pipeline used to *strip* the colour attribute ("this shader never reads one"); it now passes it through, and `specularState.z` carries the effect's switch. Regenerating touched only the PBR blobs: every other one is byte-identical, so the committed header was a **mix** of `glslangValidator`- and libshaderc-produced SPIR-V, and only the shaders being changed moved to the documented tool |
 | Metal | no layout | refuses | **refuses** (`GLTF-465`): no stride-60/80 pipeline, and Metal cannot be built or run on this host |
-| SDL GPU | yes (`GLTF-465` added the layout **and** the pipeline axis) | yes | **applies** — its PC block already carried the flag, commented "unused -- PbrEffect has no vertex-color path"; the shaders are compiled offline with libshaderc, so the colour-carrying variants are two more entries in the same list |
+| SDL GPU | yes (`GLTF-465` added the layout **and** the pipeline axis; **`GLTF-472` made it reachable**) | yes (same) | **applies** — its PC block already carried the flag, commented "unused -- PbrEffect has no vertex-color path"; the shaders are compiled offline with libshaderc, so the colour-carrying variants are two more entries in the same list. `GLTF-465` left `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` selecting the PBR queue for `stride == 48`/`68` only, so none of that was reachable: a stride-60/80 draw matched no branch and was refused by the stride-16 coloured path. `GLTF-472` fixed the dispatch and gave sampler slot 0 the neutral-white fallback slots 1..6 already had, without which a factor-only material (both `COLOR_0` fixtures) is still refused |
 | WebGPU | no layout | refuses | **refuses** (`GLTF-465`): needs new WGSL pipeline variants |
 | Wicked | no layout | refuses | **refuses** (`GLTF-465`): needs WickedEngine shader work |
 
@@ -547,17 +549,39 @@ makes the identity an explicit decision instead of a silent substitution. Everyt
 material survives everywhere: the authored `NORMAL`, the tangent basis, every PBR factor and every PBR
 map, which is strictly more than the stride-24 fallback carried before `GLTF-462`.
 
-**How far each "applies" is verified, precisely.** Four of the thirteen are proven at the pixel level,
-because they are the four renderers the L7 corpus oracle has policies for: **EasyGL/OPENGLES3**,
-**Vulkan** (lavapipe), **SOFTWARE** and **DirectX11** (Wine + DXVK) each rendered all 146 corpus assets
-twice on this revision and their `skin-vertex-color-pbr` captures carry the authored per-vertex alpha
-product. **OpenGL 2**, **OpenGL 4**, **DirectX 12**, **Magnum**, **Diligent**, **Bgfx**, **LLGL** and **SDL GPU** are compiled and source-verified but have no L7
-policy, so their colour product is asserted from their shader text and their layout rows rather than
-from pixels — DirectX 12 additionally shares its HLSL, its constant buffer and its input-element table
-with DirectX 11, which *is* pixel-proven. **IGL** is verified by construction and by its own generated
-shader library, and Magnum's four generated PBR sources additionally compile under a real GLSL
-compiler (`glslangValidator`) rather than only being grepped. That distinction is worth keeping in
-mind before treating this table as thirteen equal rows.
+**How far each "applies" is verified, precisely.** Three tiers, not one, and `GLTF-472` added the
+middle tier because the distance between the top and the bottom is where two defects lived.
+
+*Pixel-level* — four of the thirteen, the renderers the L7 corpus oracle has policies for:
+**EasyGL/OPENGLES3**, **Vulkan** (lavapipe), **SOFTWARE** and **DirectX11** (Wine + DXVK) each
+rendered all 146 corpus assets twice on this revision, and their `skin-vertex-color-pbr` captures
+carry the authored per-vertex alpha product while their `mat-vertex-color-pbr` captures carry the
+rigid path's own green-channel witness.
+
+*Live draw* — seven renderers, added by `GLTF-472`: **SOFTWARE**, **OpenGL 2**, **OpenGL 4**,
+**SDL GPU**, **Magnum**, **LLGL** and **Diligent** each drew both colour-carrying corpus fixtures
+through a real device in the multi-renderer tree, selected with `CNA_GRAPHICS_RENDERER` and
+`SDL_VIDEODRIVER=x11` on an Xvfb display
+(`RendererStrideConformance.AColourCarryingPbrPrimitiveEitherDrawsOrRefusesByName`). This tier is the
+only one that says the shader is *reachable*, and it is the only one that could have caught SDL GPU's
+and Diligent's route defects — both of which had a complete layout row, a complete shader and a
+passing source audit.
+
+*Source-verified only* — **DirectX 12**, which shares its HLSL, its constant buffer and its
+input-element table with DirectX 11 and is therefore covered transitively by a pixel-proven pair, and
+**Bgfx**, whose offline blobs this host can rebuild but whose draw it cannot run. **IGL** is verified
+by construction and by its own generated shader library, and Magnum's four generated PBR sources
+additionally compile under a real GLSL compiler (`glslangValidator`) rather than only being grepped.
+
+**The lesson, stated so the next renderer does not repeat it.** Every audit in this document reads
+*declarations* — a layout row, a shader expression, a guard call. None of them can see whether the
+draw route that selects that layout still enumerates only the uncoloured strides. Three renderers
+have now shipped exactly that shape (OpenGL 2 under `GLTF-465`, SDL GPU and Diligent under
+`GLTF-472`), so a renderer whose PBR route is chosen from a stride list has its acceptance predicate
+pinned in
+`GltfRendererPbrFallbackPolicy.EveryStrideGatedPbrRouteAdmitsBothColourCarryingStrides`, and the live
+tier settles it from a real draw. Adding a layout row without adding the stride to the route is not a
+partial implementation — it is a renderer in neither allowed state.
 
 **The rendered product itself is verified numerically, not by reading shader source.**
 `GltfFixtureCorpus.EveryL7GoldenCarriesTheVertexColourAlphaProductRatherThanTheWhiteIdentity` reads

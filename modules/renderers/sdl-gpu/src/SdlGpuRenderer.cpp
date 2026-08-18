@@ -5585,7 +5585,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUSampler* sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                     command.addressV, command.maxAnisotropy,
                                                     "Pbr3D");
-        samplerBindings[0].texture = command.texture.texture;
+        // plan_gltf.md GLTF-465: slot 0 was the one PBR map with no fallback, so a material
+        // with only a baseColorFactor -- glTF's own default material, and what both COLOR_0
+        // corpus fixtures author -- had to be refused upstream instead of multiplying the
+        // factor by white. Same neutral-white contract as slots 1..6, and as every other
+        // renderer's PBR base-colour bind.
+        samplerBindings[0].texture = command.texture ? command.texture.texture
+                                                    : defaultWhiteTexture_->Texture();
         samplerBindings[0].sampler = sampler;
         samplerBindings[1].texture = command.normalMap ? command.normalMap.texture : defaultFlatNormalTexture_->Texture();
         samplerBindings[1].sampler = sampler;
@@ -6193,7 +6199,14 @@ namespace CNA::Internal::Renderers::SdlGpu
             QueueEnvMapDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (needsPbr && ((params.skinned && stride == 68) || (!params.skinned && stride == 48)) && params.texture0 != nullptr)
+        // plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the stride-48 and
+        // stride-68 records with TEXCOORD_1 and a packed COLOR_0 appended, and QueuePbrDraw
+        // selects the colour-carrying pipeline for them. They must be listed HERE too: this is
+        // the only route into that queue, and a stride the dispatch omits falls through every
+        // branch below to the stride-16 coloured path, which refuses it.
+        if (needsPbr &&
+            ((params.skinned && (stride == 68 || stride == 80)) ||
+             (!params.skinned && (stride == 48 || stride == 60))))
         {
             QueuePbrDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
@@ -6259,7 +6272,14 @@ namespace CNA::Internal::Renderers::SdlGpu
             QueueEnvMapDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (needsPbr && ((params.skinned && stride == 68) || (!params.skinned && stride == 48)) && params.texture0 != nullptr)
+        // plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the stride-48 and
+        // stride-68 records with TEXCOORD_1 and a packed COLOR_0 appended, and QueuePbrDraw
+        // selects the colour-carrying pipeline for them. They must be listed HERE too: this is
+        // the only route into that queue, and a stride the dispatch omits falls through every
+        // branch below to the stride-16 coloured path, which refuses it.
+        if (needsPbr &&
+            ((params.skinned && (stride == 68 || stride == 80)) ||
+             (!params.skinned && (stride == 48 || stride == 60))))
         {
             QueuePbrDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;

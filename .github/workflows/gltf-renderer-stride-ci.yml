@@ -111,7 +111,7 @@ jobs:
             export VK_ICD_FILENAMES="${lvp_icd}"
           fi
           xvfb-run -a ./build/CnaTests \
-            --gtest_filter='GltfStrideAndBuffer.EveryImportedGltfStrideCarriesItsCanonicalVertexDeclaration:RendererStrideConformance.EveryGltfStrideReachesTheNativeDrawBoundary'
+            --gtest_filter='GltfStrideAndBuffer.EveryImportedGltfStrideCarriesItsCanonicalVertexDeclaration:RendererStrideConformance.*'
 
   l7-corpus:
     name: glTF conformance (OPENGLES3 L7)
