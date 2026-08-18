@@ -47,16 +47,24 @@ value was not evenly distributed either.
 | L7 | rendered pixels vs committed goldens, two independent processes | Renderer-specific divergence, and the only layer that can prove a shader is *evaluated* rather than *written*. |
 
 **The gap the ladder did not cover, and the lesson of the last week:** every layer above reads either
-data or source. None of them asks whether a draw *arrives*. Four defects lived in exactly that gap —
+data or source. None of them asks whether a draw *arrives*. Five defects lived in exactly that gap —
 `SDL_GPU` and `DILIGENT`'s unreachable `COLOR_0` (`GLTF-472`), `OPENGLES1`'s misread PBR record
-(`GLTF-473`), and `OPENGL4`'s colour fallback (`GLTF-475`, still open) — and **every static inventory
-in the repository reported all four as correct**, because each renderer genuinely declared the layout
-and genuinely contained the shader expression the audit greps for.
+(`GLTF-473`), and `OPENGL4`'s and `DILIGENT`'s stride-chosen programs (`GLTF-475`) — and **every
+static inventory in the repository reported all five as correct**, because each renderer genuinely
+declared the layout and genuinely contained the shader expression the audit greps for.
 
-The fix was a new tier, not a new assertion: `RendererStrideConformance`'s live draw-boundary tests
-(`docs/gltf-renderer-stride-conformance.md`). They draw real corpus fixtures through a real device and
-require the draw to succeed or to be refused by name. They are cheap, they run in CI on five
-renderers, and between them they found the four defects above.
+The fix was a new tier, not a new assertion: the live draw tests — `RendererStrideConformance`
+(`docs/gltf-renderer-stride-conformance.md`) and
+`CrossRendererContract.NoRendererPaintsAVertexAttributeInsteadOfTheEffectsDiffuseColour`. They draw
+through a real device and require the draw to succeed, or to be refused by name, or to answer the
+exact colour the caller asked for. They are cheap, the stride half runs in CI on five renderers, and
+between them they found the five defects above.
+
+**The fifth one is the sharpest argument for the tier**, because the row that predicted the fourth
+got the fifth wrong. `GLTF-475` was opened from a source reading of `OPENGL4` alone and named one
+renderer; the probe that closed it answered eight, and `DILIGENT` — which the row never mentioned —
+was drawing the same input **black**. A source audit finds the instance it was looking for. A live
+draw enumerates the instances that exist.
 
 > **Reusable rule.** A source audit can only see what a component *declares*. If a subsystem has a
 > dispatch step between "the feature exists" and "the feature runs", the audit must include one test

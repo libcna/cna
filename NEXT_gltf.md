@@ -8,14 +8,18 @@ session needs to start work without re-deriving the state.
 
 - **Branch:** `feature/gltf`, with local commits. The owner explicitly requested a push when the
   current autonomous run reaches its weekly-limit cutoff; no pull request has been requested.
-- **Working document:** `plan_gltf.md`, **475** numbered rows. **Four remain open: `GLTF-344` and
-  `GLTF-465` (both `✅/⬜`), and `GLTF-459`, `GLTF-475` (`⬜`).** The campaign retrospective
+- **Working document:** `plan_gltf.md`, **475** numbered rows. **Three remain open: `GLTF-344` and
+  `GLTF-465` (both `✅/⬜`), and `GLTF-459` (`⬜`).** The campaign retrospective
   (`GLTF-460`) is written: `docs/gltf-campaign-retrospective.md`. Read it before starting the next
   subsystem campaign — its central finding is that this campaign's own L0–L7 ladder reads data and
-  source but never asks whether a draw *arrives*, and four defects lived in that gap.
+  source but never asks whether a draw *arrives*, and five defects lived in that gap.
   `GLTF-463` closed on 2026-08-17; `GLTF-472` (the adversarial audit) closed on 2026-08-18 and opened
-  three rows; `GLTF-473` closed the same day and opened `GLTF-475`. **No renderer in the tree is in
-  the forbidden third state any more** — nothing accepts a valid core glTF primitive and renders it
+  three rows; `GLTF-473` closed the same day and opened `GLTF-475`, which closed on 2026-08-18 after
+  a live probe showed the defect was in **two** renderers rather than the one the row named —
+  `OPENGL4` painted a stride-48 record's `NORMAL` as the surface colour and `DILIGENT` drew the same
+  input black, both for a plain XNA `BasicEffect` draw. `OPENGL4` now renders the effect's colour;
+  `DILIGENT`, which has no unlit program for that layout, refuses by name before touching GPU state.
+  **No renderer in the tree is in the forbidden third state any more** — nothing accepts a valid core glTF primitive and renders it
   with different semantics. `GLTF-465` is half closed: **no PBR renderer draws a `COLOR_0` asset with different
   core semantics any more** (thirteen apply the product, four refuse the draw), and what remains is
   implementing it in those four. §27.2 carries a row-by-row ROBUST assessment; that section, not this

@@ -42,6 +42,13 @@ stride-dispatched programs (FNA fog-vector form, REMED-GFX-010) · real **occlus
 `glVertexAttribDivisor`, unified vertex-stream transport, custom-effect driven) ·
 `TransformWindowToLogical`/`TransformLogicalToWindow` · resize/reset · disposal.
 
+The unrecognised-stride fallback renders the applied effect's `DiffuseColor`, gated by its
+`VertexColorEnabled` (`plan_gltf.md GLTF-475`). It used to reach that fallback through the
+params-free colour route, which discarded `GpuDrawParams` and left the program painting attribute
+location 1 -- the `NORMAL` on every record from stride 32 upward -- as the surface colour. The
+stride-16 `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` entry points are unchanged: they
+have no effect to read and state white with the attribute enabled, which is the old formula.
+
 ## Unsupported — every one rejects or reports truthfully, none silently
 
 - **Multi-stream vertex input** (`GraphicsCapability::MultiStreamVertexInput` = `false`):

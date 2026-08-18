@@ -3914,6 +3914,28 @@ namespace CNA::Internal::Renderers::Diligent
                 throw std::runtime_error("CNA Diligent: unsupported vertex stride " +
                                          std::to_string(stride));
         }
+        // plan_gltf.md GLTF-475: the switch above picks a metallic-roughness variant from the
+        // stride ALONE, so a BasicEffect draw on a stride-48 record -- a legitimate XNA
+        // VertexPositionNormalTangentTexture buffer -- selected the PBR shader and rendered the
+        // surface BLACK (measured against SOFTWARE, OPENGL2, OPENGL4 and LLGL, which all rendered
+        // the effect's red DiffuseColor). A different wrong picture from OPENGL4's old one, but
+        // the same defect: the program is chosen from the layout instead of from the effect.
+        //
+        // This renderer has no unlit solid-colour program for those layouts, so the honest
+        // answer is the second of the two permitted states -- refuse by name, before any GPU
+        // state is touched -- rather than a third one that reports a wrong image as a successful
+        // draw. MAGNUM and SDL_GPU already refuse this same input. The glTF path is unaffected:
+        // it drives these strides through PbrEffect/SkinnedPbrEffect, which set `pbr`.
+        if ((stride == 48 || stride == 60 || stride == 68 || stride == 76 || stride == 80) &&
+            (params == nullptr || !params->pbr))
+            throw std::runtime_error(
+                "CNA Diligent: a stride-" + std::to_string(stride) +
+                " vertex record is a metallic-roughness layout, and this renderer only has a PBR "
+                "program for it. The draw did not come from PbrEffect/SkinnedPbrEffect, so it is "
+                "refused rather than rendered through the PBR shader, which would produce a "
+                "visibly wrong surface reported as a successful draw (plan_gltf.md GLTF-475). Use "
+                "PbrEffect for this layout, or a renderer with an unlit program for it "
+                "(SOFTWARE, OPENGL2, OPENGL4, LLGL).");
         if (dualTexture && stride != 20 && stride != 24)
             throw std::runtime_error(
                 "CNA Diligent: DualTextureEffect needs a textured vertex layout (stride 20 or 24)");

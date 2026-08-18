@@ -58,10 +58,21 @@ declaration directly. STUB and HEADLESS keep honest non-rendering capability bou
   and `RendererStrideConformance.NoPbrOrSkinnedRecordIsEverReadThroughAnIncompatibleLayout`
   (`GLTF-473`) draw the colour-carrying and the whole PBR/skinned record families through a **live
   device**. These are standing renderer-conformance gates, not artefacts of the glTF campaign that
-  found the bugs, and the reason to keep them is empirical: between them they found four defects
-  (`SDL_GPU`'s and `DILIGENT`'s unreachable `COLOR_0` shaders, `OPENGLES1`'s misread PBR records,
-  and `OPENGL4`'s fallback) that **every static inventory in this repository reported as correct**.
-  A source audit can only see what a renderer declares; only a draw sees what it reads.
+  found the bugs, and the reason to keep them is empirical: between them they found three defects
+  (`SDL_GPU`'s and `DILIGENT`'s unreachable `COLOR_0` shaders and `OPENGLES1`'s misread PBR records)
+  that **every static inventory in this repository reported as correct**, and the search they
+  prompted found two more (`GLTF-475`). A source audit can only see what a renderer declares; only a
+  draw sees what it reads.
+- `CrossRendererContract.NoRendererPaintsAVertexAttributeInsteadOfTheEffectsDiffuseColour`
+  (`GLTF-475`) is the same tier applied one level lower: not "does the draw arrive?" but "is the
+  answer the one the caller asked for?". It draws a plain XNA `VertexPositionNormalTangentTexture`
+  buffer (stride 48) with a `BasicEffect` whose `DiffuseColor` is opaque red, then reads the centre
+  pixel back on every renderer in the build. A renderer may render it -- the answer must be exactly
+  that red -- or refuse it by name; a third answer is a defect. It found two, in two renderers,
+  giving two different wrong colours: `OPENGL4` painted the record's `NORMAL` and `DILIGENT` drew
+  black, where the plan row that opened the investigation had predicted one renderer. It needs a
+  multi-renderer build (`CNA_MULTI_RENDERER`) and colour readback, so it is not in the CI matrix
+  below; it runs in `cmake-build-multi`, which covers eight renderers with `ThreeD`.
 - `FixedFunctionArrayLayout.*` (`GLTF-473`) pins the shared fixed-function layout guard's decision
   as a table over every canonical stride. It needs no device, so it runs in every build.
 - `.github/workflows/gltf-renderer-stride-ci.yml` builds and runs those tests for `STUB`,

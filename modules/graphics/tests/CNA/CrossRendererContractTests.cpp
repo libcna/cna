@@ -19,6 +19,17 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTangentTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
+#include <cstdio>
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 
 #include <memory>
 #include <stdexcept>
@@ -179,6 +190,109 @@ TEST_F(CrossRendererContractTest, SelectingEveryRendererInTurnLeavesNoFallbackRe
     ForEachRenderer([](GraphicsDevice&, GraphicsRendererType) {
         EXPECT_TRUE(GraphicsRendererSelection::GetFallbackHistory().empty());
     });
+}
+
+// plan_gltf.md GLTF-475. A renderer picks its shader program from the vertex stride; the effect the
+// caller applied says what that program should COMPUTE. Where those two are conflated, the renderer
+// draws a wrong picture and reports success -- and no static inventory in this repository can see
+// it, because every declaration involved is correct.
+//
+// The input below is the cheapest instance of that conflation: a plain XNA
+// VertexPositionNormalTangentTexture buffer (stride 48, the same layout glTF emits for a tangented
+// primitive) drawn with a BasicEffect whose DiffuseColor is RED, lighting off, no texture. Every
+// renderer that draws it must produce red. Two did not when this test was written:
+//
+//   * OPENGL4 produced rgba(0,0,255) -- the colour fallback dropped GpuDrawParams and its program
+//     painted attribute location 1, which on this record is the NORMAL (0,0,1), as the surface;
+//   * DILIGENT produced rgba(0,0,0) -- it selected a metallic-roughness program from the stride
+//     alone, for a draw that never came from PbrEffect.
+//
+// Refusing is the other acceptable answer and several renderers give it: a renderer without a
+// program for this layout says so by name instead of substituting a different one. What no renderer
+// may do is the third state -- accept the draw and answer with a colour that is neither the
+// effect's nor a refusal.
+TEST_F(CrossRendererContractTest, NoRendererPaintsAVertexAttributeInsteadOfTheEffectsDiffuseColour)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    int judged = 0;
+    ForEachRenderer([&judged](GraphicsDevice& device, GraphicsRendererType type) {
+        if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD)) { return; }
+        const std::string name{CNA::getGraphicsRendererName(type)};
+        SCOPED_TRACE("stride-48 BasicEffect on " + name);
+
+        RenderTarget2D target(device, 8, 8);
+        VertexBuffer vb(device, VertexPositionNormalTangentTexture::getVertexDeclarationStatic(),
+                        3, BufferUsage::None);
+        // A NORMAL of (0,0,1) and a TANGENT of (1,0,0,1): both are unit vectors along an axis, so a
+        // renderer that paints either one instead of the diffuse colour answers a saturated blue or
+        // red-with-full-alpha rather than something ambiguous. The triangle covers the whole target.
+        const VertexPositionNormalTangentTexture verts[3] = {
+            {Vector3(-1, -1, 0), Vector3(0, 0, 1), Vector4(1, 0, 0, 1), Vector2(0, 0)},
+            {Vector3(3, -1, 0), Vector3(0, 0, 1), Vector4(1, 0, 0, 1), Vector2(1, 0)},
+            {Vector3(-1, 3, 0), Vector3(0, 0, 1), Vector4(1, 0, 0, 1), Vector2(0, 1)},
+        };
+        vb.SetData(verts, 3);
+
+        BasicEffect fx(device);
+        fx.setDiffuseColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+        fx.setLightingEnabledProperty(false);
+
+        bool drew = false;
+        std::string refusal;
+        try
+        {
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Black);
+            // Without this the default rasterizer state culls the triangle and every renderer
+            // agrees on the cleared colour, which would make this test pass while measuring nothing.
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.SetVertexBuffer(&vb);
+            for (auto& pass : fx.getCurrentTechniqueProperty()->getPassesProperty()) { pass.Apply(); }
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+            device.SetRenderTarget(nullptr);
+            drew = true;
+        }
+        catch (const std::exception& e)
+        {
+            refusal = e.what();
+            device.SetRenderTarget(nullptr);
+        }
+
+        if (!drew)
+        {
+            // The other permitted state. A refusal has to SAY something -- an empty or generic
+            // message is how a limitation becomes indistinguishable from a crash.
+            EXPECT_GT(refusal.size(), 20u)
+                << name << " refused the draw without a usable diagnostic: \"" << refusal << "\"";
+            return;
+        }
+
+        std::vector<Color> pixels(64, Color::Black);
+        try
+        {
+            target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+        }
+        catch (const std::exception&)
+        {
+            // A renderer with no colour readback (HEADLESS) cannot be judged on pixels here. Its
+            // draw-boundary behaviour is covered by RendererStrideConformance instead.
+            return;
+        }
+
+        ++judged;
+        const Color centre = pixels[8 * 4 + 4];
+        EXPECT_EQ(centre, Color(255, 0, 0, 255))
+            << name << " drew rgba(" << int(centre.getRProperty()) << ","
+            << int(centre.getGProperty()) << "," << int(centre.getBProperty()) << ","
+            << int(centre.getAProperty()) << ") for a BasicEffect whose DiffuseColor is opaque red. "
+            << "A renderer may refuse this layout, but not answer it with a different colour.";
+    });
+
+    EXPECT_GT(judged, 0)
+        << "no renderer in this build both drew the stride-48 record and could read the result "
+           "back, so this test measured nothing";
 }
 
 #endif  // CNA_MULTI_RENDERER

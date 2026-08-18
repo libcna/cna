@@ -93,10 +93,22 @@ void main()
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec4 aColor;
 uniform mat4 uWorldViewProj;
+// plan_gltf.md GLTF-475: the same two uniforms kColoredTextured3DVertSrc already has, and for the
+// same reason -- `vColor = aColor` unconditionally made this program paint whatever attribute
+// location 1 happens to hold. That is a colour only on the stride-16 and stride-24 records; on the
+// PBR and skinned ones location 1 is the NORMAL, so a BasicEffect draw on a stride-48 buffer
+// rendered the normal vector as the surface colour (measured: rgba(0,0,255) for a normal of
+// (0,0,1) where SOFTWARE, OPENGL2 and LLGL all rendered the effect's red DiffuseColor).
+//
+// Reading the effect's own switch instead is what those three renderers do, and it fixes the whole
+// family rather than one stride: with VertexColorEnabled false the attribute is not read at all.
+// The legacy no-GpuDrawParams route sets white/true, which is exactly today's `vColor = aColor`.
+uniform vec4 uDiffuseColor;
+uniform bool uVertexColorEnabled;
 out vec4 vColor;
 void main()
 {
-    vColor = aColor;
+    vColor = uVertexColorEnabled ? (aColor * uDiffuseColor) : uDiffuseColor;
     gl_Position = uWorldViewProj * vec4(aPos, 1.0);
 }
 )GLSL";
@@ -3176,12 +3188,29 @@ void main()
         return std::make_unique<OpenGL4IndexBufferRenderer>(index_capacity, /*thirtyTwoBit=*/true);
     }
 
+    /// plan_gltf.md GLTF-475: uploads the colored3d program's tint pair.
+    ///
+    /// @param params The draw's effect state, or null for the legacy colour route, which has none
+    ///        and therefore states the identity (white, attribute enabled).
+    void OpenGL4Renderer::SetColored3DTintEXT(const GpuDrawParams* params)
+    {
+        const float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        const float* diffuse = params != nullptr ? params->diffuseColor : white;
+        const bool vertexColor = params == nullptr || params->vertexColorEnabled;
+        if (colored3DDiffuseLoc_ >= 0)
+            gl4_glUniform4f(colored3DDiffuseLoc_, diffuse[0], diffuse[1], diffuse[2], diffuse[3]);
+        if (colored3DVertexColorLoc_ >= 0)
+            gl4_glUniform1i(colored3DVertexColorLoc_, vertexColor ? 1 : 0);
+    }
+
     void OpenGL4Renderer::EnsureColored3DProgram()
     {
         if (colored3DProgram_.IsValid()) return;
         if (!colored3DProgram_.Compile(kColored3DVertSrc, kColored3DFragSrc))
             throw std::runtime_error("OpenGL4: colored3d program failed to compile: " + colored3DProgram_.GetError());
         colored3DWvpLoc_ = colored3DProgram_.UniformLocation("uWorldViewProj");
+        colored3DDiffuseLoc_ = colored3DProgram_.UniformLocation("uDiffuseColor");
+        colored3DVertexColorLoc_ = colored3DProgram_.UniformLocation("uVertexColorEnabled");
     }
 
     void OpenGL4Renderer::EnsureColoredParams3DProgram()
@@ -3768,7 +3797,12 @@ void main()
 
         if (!BindProgramForStride(vb.GetStrideInBytes(), world, view, projection, params))
         {
-            DrawColoredPrimitives(vb_in, world, view, projection, primitive, primitiveCount);
+            // plan_gltf.md GLTF-475: this fallback used to call the params-free colour route, which
+            // discarded the effect entirely and made the program paint attribute location 1 -- the
+            // NORMAL on every PBR/skinned record -- as the surface colour. The route name stays
+            // "ordinary-nonindexed" because that is the guard this draw already passed above.
+            DrawColoredPrimitivesInternalEXT(vb_in, world, view, projection, primitive,
+                                             primitiveCount, "ordinary-nonindexed", &params);
             return;
         }
 
@@ -3817,7 +3851,9 @@ void main()
 
         if (!BindProgramForStride(vb.GetStrideInBytes(), world, view, projection, params))
         {
-            DrawIndexedColoredPrimitives(vb_in, ib_in, world, view, projection, primitive, primitiveCount);
+            // plan_gltf.md GLTF-475: see DrawPrimitivesEx's fallback.
+            DrawIndexedColoredPrimitivesInternalEXT(vb_in, ib_in, world, view, projection, primitive,
+                                                    primitiveCount, "ordinary-indexed", &params);
             return;
         }
 
@@ -3936,15 +3972,17 @@ void main()
         if (!BindProgramForStride(vb.GetStrideInBytes(), world, view, projection, params))
         {
             // plan_opengl4.md GL4-33: unrecognized stride, no custom effect -- fall back to the
-            // params-free colored3d program, mirroring DrawIndexedColoredPrimitives's own
-            // fallback shape (matches EasyGLRenderer::SelectProgram's own `default:`
-            // colored-program case, which always succeeds for any stride rather than failing).
+            // colored3d program, mirroring DrawIndexedColoredPrimitives's own fallback shape
+            // (matches EasyGLRenderer::SelectProgram's own `default:` colored-program case, which
+            // always succeeds for any stride rather than failing). plan_gltf.md GLTF-475: the
+            // fallback does read `params` now -- see SetColored3DTintEXT for why it must.
             EnsureColored3DProgram();
             const Matrix wvp = world * view * projection;
             float wvpCol[16];
             wvp.ToColumnMajor(wvpCol);
             colored3DProgram_.Use();
             if (colored3DWvpLoc_ >= 0) gl4_glUniformMatrix4fv(colored3DWvpLoc_, 1, GL_FALSE, wvpCol);
+            SetColored3DTintEXT(&params);
             gl4_glBindVertexArray(vb.VaoHandle());
             gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
             gl4_glDrawElementsInstanced(ToGLPrimitive(primitive), indexCount, idxType, nullptr, instanceCount);
@@ -3968,12 +4006,18 @@ void main()
         return spriteProgram_;
     }
 
-    void OpenGL4Renderer::DrawColoredPrimitives(const IVertexBufferRenderer& vb_in,
-                                                       const Matrix& world, const Matrix& view, const Matrix& projection,
-                                                       PrimitiveType primitive, int primitiveCount)
+    /// plan_gltf.md GLTF-475: the colour route's body, with the draw's effect state when there is
+    /// one. The public override below has none and passes null, which reproduces its old formula
+    /// exactly; the two `*PrimitivesEx` fallbacks now pass theirs instead of dropping it.
+    void OpenGL4Renderer::DrawColoredPrimitivesInternalEXT(const IVertexBufferRenderer& vb_in,
+                                                           const Matrix& world, const Matrix& view,
+                                                           const Matrix& projection,
+                                                           PrimitiveType primitive, int primitiveCount,
+                                                           const char* routeName,
+                                                           const GpuDrawParams* params)
     {
         // REMED-GFX-DECL-GUARD: this route reads the fixed stride-16 position+colour layout.
-        RequireFaithfulDeclarationEXT(vb_in, "colored-nonindexed");
+        RequireFaithfulDeclarationEXT(vb_in, routeName);
         EnsureColored3DProgram();
         const auto& vb = static_cast<const OpenGL4VertexBufferRenderer&>(vb_in);
 
@@ -3984,6 +4028,7 @@ void main()
         colored3DProgram_.Use();
         if (colored3DWvpLoc_ >= 0)
             gl4_glUniformMatrix4fv(colored3DWvpLoc_, 1, GL_FALSE, wvpCol);
+        SetColored3DTintEXT(params);
 
         const int vertexCount = VertexCountForPrimitives(primitive, primitiveCount);
         gl4_glBindVertexArray(vb.VaoHandle());
@@ -3991,12 +4036,23 @@ void main()
         gl4_glBindVertexArray(0);
     }
 
-    void OpenGL4Renderer::DrawIndexedColoredPrimitives(const IVertexBufferRenderer& vb_in, const IIndexBufferRenderer& ib_in,
-                                                              const Matrix& world, const Matrix& view, const Matrix& projection,
-                                                              PrimitiveType primitive, int primitiveCount)
+    void OpenGL4Renderer::DrawColoredPrimitives(const IVertexBufferRenderer& vb_in,
+                                                       const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                       PrimitiveType primitive, int primitiveCount)
+    {
+        DrawColoredPrimitivesInternalEXT(vb_in, world, view, projection, primitive, primitiveCount,
+                                         "colored-nonindexed", nullptr);
+    }
+
+    /// plan_gltf.md GLTF-475: see DrawColoredPrimitivesInternalEXT -- the indexed twin.
+    void OpenGL4Renderer::DrawIndexedColoredPrimitivesInternalEXT(
+        const IVertexBufferRenderer& vb_in, const IIndexBufferRenderer& ib_in,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount, const char* routeName,
+        const GpuDrawParams* params)
     {
         // REMED-GFX-DECL-GUARD: see DrawColoredPrimitives above.
-        RequireFaithfulDeclarationEXT(vb_in, "colored-indexed");
+        RequireFaithfulDeclarationEXT(vb_in, routeName);
         EnsureColored3DProgram();
         const auto& vb = static_cast<const OpenGL4VertexBufferRenderer&>(vb_in);
         const auto& ib = static_cast<const OpenGL4IndexBufferRenderer&>(ib_in);
@@ -4008,6 +4064,7 @@ void main()
         colored3DProgram_.Use();
         if (colored3DWvpLoc_ >= 0)
             gl4_glUniformMatrix4fv(colored3DWvpLoc_, 1, GL_FALSE, wvpCol);
+        SetColored3DTintEXT(params);
 
         const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
         gl4_glBindVertexArray(vb.VaoHandle());
@@ -4016,6 +4073,14 @@ void main()
         const GLenum idxType = ib.IsThirtyTwoBit() ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
         glDrawElements(ToGLPrimitive(primitive), indexCount, idxType, nullptr);
         gl4_glBindVertexArray(0);
+    }
+
+    void OpenGL4Renderer::DrawIndexedColoredPrimitives(const IVertexBufferRenderer& vb_in, const IIndexBufferRenderer& ib_in,
+                                                              const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                              PrimitiveType primitive, int primitiveCount)
+    {
+        DrawIndexedColoredPrimitivesInternalEXT(vb_in, ib_in, world, view, projection, primitive,
+                                                primitiveCount, "colored-indexed", nullptr);
     }
 
     void OpenGL4Renderer::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
