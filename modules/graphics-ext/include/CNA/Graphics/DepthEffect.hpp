@@ -78,7 +78,7 @@ namespace CNA::Graphics {
          * (mirrors ShaderEffect's own "no device.renderer_" tolerance — building a texture
          * with GraphicsDevice::GetRenderer() throws when there is no renderer).
          */
-        void EnsurePaletteTextures();
+        void ensurePaletteTextures();
 
         DepthEffectMode mode_ = DepthEffectMode::Color16Bit;
         DitherMode ditherMode_ = DitherMode::None;

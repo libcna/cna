@@ -33,7 +33,7 @@ namespace CNA::Graphics::detail {
      *                      first frame. Pass a member of the pass, not a local.
      * @return True when the effect is valid; false when it is not (and the failure was reported).
      */
-    bool ReportShaderCompileFailure(
+    bool reportShaderCompileFailure(
         Microsoft::Xna::Framework::Graphics::GraphicsDevice& device, const std::string& passName,
         const Microsoft::Xna::Framework::Graphics::ShaderEffect* effect, bool& alreadyLogged);
 

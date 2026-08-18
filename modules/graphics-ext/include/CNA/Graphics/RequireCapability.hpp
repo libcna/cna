@@ -23,7 +23,7 @@ namespace CNA::Graphics::detail {
      * @param capability The capability to name.
      * @return A short noun phrase, e.g. `"float render targets"`.
      */
-    [[nodiscard]] std::string NameOfCapability(CNA::GraphicsCapability capability);
+    [[nodiscard]] std::string nameOfCapability(CNA::GraphicsCapability capability);
 
     /**
      * @brief Returns, or throws @ref CNA::Graphics::EngineException, if a capability is missing.
@@ -42,7 +42,7 @@ namespace CNA::Graphics::detail {
      * @param subsystem  The caller's name, used in the message, e.g. `"BloomPass"`.
      * @throws CNA::Graphics::EngineException If @p device does not support @p capability.
      */
-    void RequireCapability(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+    void requireCapability(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
                            CNA::GraphicsCapability capability, const std::string& subsystem);
 
 /** @} */ // end of cnaext_engine

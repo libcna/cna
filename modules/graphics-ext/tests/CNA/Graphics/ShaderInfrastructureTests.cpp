@@ -155,7 +155,7 @@ TEST(ShaderDiagnosticsTest, AWorkingShaderReportsNothing)
         << "a shader that compiled reported an error anyway";
 
     bool logged = false;
-    EXPECT_TRUE(CNA::Graphics::detail::ReportShaderCompileFailure(gd, "Working", &effect, logged));
+    EXPECT_TRUE(CNA::Graphics::detail::reportShaderCompileFailure(gd, "Working", &effect, logged));
     EXPECT_FALSE(logged) << "nothing failed, so nothing should have been reported";
 }
 
@@ -179,12 +179,12 @@ TEST(ShaderDiagnosticsTest, TheFailureIsReportedOnceAndNamesThePass)
 
     ShaderEffect effect(gd, kVertex, kBroken);
     bool logged = false;
-    EXPECT_FALSE(CNA::Graphics::detail::ReportShaderCompileFailure(gd, "MyPass", &effect, logged));
+    EXPECT_FALSE(CNA::Graphics::detail::reportShaderCompileFailure(gd, "MyPass", &effect, logged));
     EXPECT_TRUE(logged);
 
     // The flag is what keeps a per-frame caller from filling the log; the second call must be
     // silent and still answer the question.
-    EXPECT_FALSE(CNA::Graphics::detail::ReportShaderCompileFailure(gd, "MyPass", &effect, logged));
+    EXPECT_FALSE(CNA::Graphics::detail::reportShaderCompileFailure(gd, "MyPass", &effect, logged));
 }
 
 TEST(ShaderDiagnosticsTest, ANullEffectIsAFailureAndNotACrash)
@@ -192,7 +192,7 @@ TEST(ShaderDiagnosticsTest, ANullEffectIsAFailureAndNotACrash)
     // The state on a renderer that accepts no custom effect at all: the pass never built one.
     GraphicsDevice gd;
     bool logged = false;
-    EXPECT_FALSE(CNA::Graphics::detail::ReportShaderCompileFailure(gd, "NoEffect", nullptr, logged));
+    EXPECT_FALSE(CNA::Graphics::detail::reportShaderCompileFailure(gd, "NoEffect", nullptr, logged));
     EXPECT_TRUE(logged);
 }
 
@@ -205,7 +205,7 @@ TEST(ShaderDiagnosticsTest, ItDoesNotThrowWhateverTheRenderer)
     bool logged = false;
     EXPECT_NO_THROW({
         ShaderEffect effect(gd, kVertex, kBroken);
-        (void)CNA::Graphics::detail::ReportShaderCompileFailure(gd, "Broken", &effect, logged);
+        (void)CNA::Graphics::detail::reportShaderCompileFailure(gd, "Broken", &effect, logged);
     });
 }
 

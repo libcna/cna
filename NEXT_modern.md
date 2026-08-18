@@ -299,6 +299,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-18 | `cmake-build-cnaext`, after closing Phases 0–3 (the rows those phases had left open) | Xvfb :99 | 7879 ran · 7815 pass · 64 skip · **0 fail** |
 | 2026-08-18 | `cmake-build-cnaext`, after the ASan pass and the device-lifecycle tests (`MOD-743`, `MOD-1708`, `MOD-1714`, `MOD-1715`) | Xvfb :99 | 7940 ran · 7876 pass · 64 skip · **0 fail** |
 | 2026-08-18 | **`cmake-build-cnaext-release`** — the same tree at `-DCMAKE_BUILD_TYPE=Release` (`MOD-1716`) | Xvfb :99 | 7940 ran · 7876 pass · 64 skip · **0 fail** |
+| 2026-08-18 | `cmake-build-cnaext`, after Phase 19's API review and renames (`MOD-1900`, `MOD-1902`, `MOD-1742`) | Xvfb :99 | 7942 ran · 7878 pass · 64 skip · **0 fail** |
 
 The `CNA_CNAEXT=OFF` row is the one that answers "can this break what already works". It configures,
 builds and passes with the whole engine layer compiled out. Its lower test count is expected and not

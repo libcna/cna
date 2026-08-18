@@ -117,7 +117,7 @@ void main() {
         // plan_modern.md MOD-219: a failed compile makes this pass copy its input through, which is
         // correct and completely silent. This names the pass and prints the compiler's log once.
         bool logged = false;
-        detail::ReportShaderCompileFailure(device, "TonemapPass", effect_.get(), logged);
+        detail::reportShaderCompileFailure(device, "TonemapPass", effect_.get(), logged);
     }
 
     TonemapPass::~TonemapPass() = default;

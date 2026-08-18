@@ -169,12 +169,12 @@ void main() {
         // need a flag to avoid doing so. Falling back to a copy is silent by design, and this is
         // what turns "bloom looks weak" into a line naming the pass and the compiler's own log.
         bool logged = false;
-        detail::ReportShaderCompileFailure(device, "BloomPass (extract)", extractEffect_.get(),
+        detail::reportShaderCompileFailure(device, "BloomPass (extract)", extractEffect_.get(),
                                            logged);
-        detail::ReportShaderCompileFailure(device, "BloomPass (blur)", blurEffect_.get(), logged);
-        detail::ReportShaderCompileFailure(device, "BloomPass (upsample)", upsampleEffect_.get(),
+        detail::reportShaderCompileFailure(device, "BloomPass (blur)", blurEffect_.get(), logged);
+        detail::reportShaderCompileFailure(device, "BloomPass (upsample)", upsampleEffect_.get(),
                                            logged);
-        detail::ReportShaderCompileFailure(device, "BloomPass (combine)", combineEffect_.get(),
+        detail::reportShaderCompileFailure(device, "BloomPass (combine)", combineEffect_.get(),
                                            logged);
     }
 

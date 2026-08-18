@@ -24,7 +24,7 @@ using CNA::Graphics::EngineException;
 TEST(EngineExceptionTest, TheStandardMessageNamesSubsystemRequirementAndRenderer)
 {
     const EngineException exception =
-        EngineException::NotSupported("BloomPass", "float render targets", "Headless");
+        EngineException::notSupported("BloomPass", "float render targets", "Headless");
 
     EXPECT_EQ(exception.getMessageProperty(),
               "BloomPass: float render targets is not supported by the Headless renderer");
@@ -35,7 +35,7 @@ TEST(EngineExceptionTest, TheStandardMessageKeepsItsThreeParts)
     // Recorded separately from the sentence so a caller can act on the parts -- a log line is not
     // the only consumer, and re-parsing the message would tie every caller to its wording.
     const EngineException exception =
-        EngineException::NotSupported("ShadowMap", "custom effects", "SdlRenderer");
+        EngineException::notSupported("ShadowMap", "custom effects", "SdlRenderer");
 
     EXPECT_EQ(exception.getSubsystemProperty(), "ShadowMap");
     EXPECT_EQ(exception.getRequirementProperty(), "custom effects");
@@ -58,7 +58,7 @@ TEST(EngineExceptionTest, ItIsCatchableAsItsBasesAndKeepsItsMessage)
     // knows std::exception -- a test harness, a top-level handler -- should still get the text.
     try
     {
-        throw EngineException::NotSupported("SsaoPass", "a depth prepass", "Stub");
+        throw EngineException::notSupported("SsaoPass", "a depth prepass", "Stub");
     }
     catch (const System::Exception& sharp)
     {
@@ -68,7 +68,7 @@ TEST(EngineExceptionTest, ItIsCatchableAsItsBasesAndKeepsItsMessage)
 
     try
     {
-        throw EngineException::NotSupported("SsaoPass", "a depth prepass", "Stub");
+        throw EngineException::notSupported("SsaoPass", "a depth prepass", "Stub");
     }
     catch (const std::exception& standard)
     {
@@ -83,7 +83,7 @@ TEST(EngineExceptionTest, TheDerivedTypeSurvivesBeingThrown)
     // be an EngineException, or the properties above are unreachable at every real throw site.
     try
     {
-        throw EngineException::NotSupported("Skybox", "cube maps", "Gdi");
+        throw EngineException::notSupported("Skybox", "cube maps", "Gdi");
     }
     catch (const EngineException& engine)
     {

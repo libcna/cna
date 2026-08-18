@@ -321,7 +321,7 @@ namespace CNA::Graphics {
 
     private:
         /// Draws the skybox, if one is set. Called by begin(), never by the caller.
-        void DrawSkybox();
+        void drawSkybox();
         /// Whether anything at all would happen between begin() and end() this frame.
         [[nodiscard]] bool wantsSceneTarget() const;
         /// The best scene-target format the settings ask for and the renderer can actually create.

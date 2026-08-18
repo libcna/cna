@@ -20,7 +20,7 @@ namespace CNA::Graphics {
      * wanted something the active renderer does not provide — and the useful message names all
      * three parts: which subsystem asked, what it wanted, and which renderer said no. Assembling
      * that by hand at each throw site produced three slightly different sentences for the same
-     * situation, so @ref NotSupported builds it once.
+     * situation, so @ref notSupported builds it once.
      *
      * The layer's preferred behaviour is still to *ask* rather than throw: every subsystem exposes
      * an `isSupported()` and degrades quietly where it sensibly can. This exception is for the
@@ -47,7 +47,7 @@ namespace CNA::Graphics {
          *                     `GraphicsDevice::GetGraphicsRendererName()`.
          * @return The exception, ready to throw.
          */
-        [[nodiscard]] static EngineException NotSupported(const std::string& subsystem,
+        [[nodiscard]] static EngineException notSupported(const std::string& subsystem,
                                                           const std::string& what,
                                                           const std::string& rendererName);
 

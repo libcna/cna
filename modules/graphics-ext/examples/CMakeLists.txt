@@ -224,6 +224,19 @@ if(CNA_BUILD_TESTS)
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "CnaExt")
     endif()
 
+    # plan_modern.md MOD-1900: MOD-6's naming rule -- verbs are lowerCamelCase here, because there
+    # is no XNA name to preserve. Every UpperCamelCase function must therefore be a named exception
+    # with its reason (an XNA base-class override, a System.Object mirror, or a C ABI surface), and
+    # the script fails on a stale exemption too, so the list cannot outlive what it excuses.
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME CNAEXT_NamingRule
+                 COMMAND ${Python3_EXECUTABLE}
+                         "${CMAKE_SOURCE_DIR}/scripts/check_cnaext_naming.py"
+                         "${CMAKE_SOURCE_DIR}")
+        set_tests_properties(CNAEXT_NamingRule PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "CnaExt")
+    endif()
+
     # plan_modern.md MOD-7: the layer builds one Doxygen module page and has no undocumented public
     # member. SKIPs (77) where doxygen is not installed, since the check is about these headers and
     # not about the container.

@@ -13,7 +13,7 @@ namespace CNA::Graphics::detail {
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
     using Microsoft::Xna::Framework::Graphics::ShaderEffect;
 
-    bool ReportShaderCompileFailure(GraphicsDevice& device, const std::string& passName,
+    bool reportShaderCompileFailure(GraphicsDevice& device, const std::string& passName,
                                     const ShaderEffect* effect, bool& alreadyLogged)
     {
         if (effect != nullptr && effect->IsEffectValid())

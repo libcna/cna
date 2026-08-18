@@ -8,7 +8,7 @@
 
 namespace CNA::Graphics::detail {
 
-    std::string NameOfCapability(const CNA::GraphicsCapability capability)
+    std::string nameOfCapability(const CNA::GraphicsCapability capability)
     {
         // Listed exhaustively and with no `default:`, so a capability added later fails to compile
         // here rather than reaching a log as "an unnamed capability" -- the one outcome that would
@@ -39,13 +39,13 @@ namespace CNA::Graphics::detail {
         return "an unrecognised capability";
     }
 
-    void RequireCapability(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+    void requireCapability(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
                            const CNA::GraphicsCapability capability, const std::string& subsystem)
     {
         if (device.SupportsCapability(capability))
             return;
 
-        throw EngineException::NotSupported(subsystem, NameOfCapability(capability),
+        throw EngineException::notSupported(subsystem, nameOfCapability(capability),
                                             std::string(device.GetGraphicsRendererName()));
     }
 

@@ -131,7 +131,7 @@ namespace CNA::Graphics {
         {
             device_.SetRenderTarget(nullptr);
             device_.Clear(clearColor);
-            DrawSkybox();
+            drawSkybox();
             return;
         }
 
@@ -148,10 +148,10 @@ namespace CNA::Graphics {
 
         device_.SetRenderTarget(sceneTarget_.get());
         device_.Clear(clearColor);
-        DrawSkybox();
+        drawSkybox();
     }
 
-    void RenderPipeline::DrawSkybox()
+    void RenderPipeline::drawSkybox()
     {
         // MOD-1104: after the target is bound and cleared, before the game draws anything. See
         // setSkybox() for why that is the order rather than the usual draw-last-at-the-far-plane.

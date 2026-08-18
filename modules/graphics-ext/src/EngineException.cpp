@@ -18,7 +18,7 @@ namespace CNA::Graphics {
     {
     }
 
-    EngineException EngineException::NotSupported(const std::string& subsystem,
+    EngineException EngineException::notSupported(const std::string& subsystem,
                                                   const std::string& what,
                                                   const std::string& rendererName)
     {

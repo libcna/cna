@@ -164,9 +164,9 @@ void main() {
         // plan_modern.md MOD-219: a failed compile makes this pass copy its input through, which is
         // correct and completely silent. This names the pass and prints the compiler's log once.
         bool logged = false;
-        detail::ReportShaderCompileFailure(device, "SsaoPass (occlusion)", occlusionEffect_.get(),
+        detail::reportShaderCompileFailure(device, "SsaoPass (occlusion)", occlusionEffect_.get(),
                                            logged);
-        detail::ReportShaderCompileFailure(device, "SsaoPass (compose)", composeEffect_.get(),
+        detail::reportShaderCompileFailure(device, "SsaoPass (compose)", composeEffect_.get(),
                                            logged);
 
         generateKernel();

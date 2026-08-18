@@ -36,7 +36,7 @@ namespace CNA::Graphics {
         // Reported here rather than by every caller: the factory is the one place that knows a
         // compile just happened, and it already knows the shader's name (MOD-219).
         bool logged = false;
-        detail::ReportShaderCompileFailure(device_, name, effect.get(), logged);
+        detail::reportShaderCompileFailure(device_, name, effect.get(), logged);
 
         ShaderEffect* raw = effect.get();
         effects_.emplace(name, std::move(effect));

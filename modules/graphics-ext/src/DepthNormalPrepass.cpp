@@ -182,8 +182,8 @@ void main() {
         skinnedEffect_ = std::make_unique<ShaderEffect>(device, kSkinnedVertexCommon, fragment);
 
         bool logged = false;
-        detail::ReportShaderCompileFailure(device, "DepthNormalPrepass", effect_.get(), logged);
-        detail::ReportShaderCompileFailure(device, "DepthNormalPrepass (skinned)",
+        detail::reportShaderCompileFailure(device, "DepthNormalPrepass", effect_.get(), logged);
+        detail::reportShaderCompileFailure(device, "DepthNormalPrepass (skinned)",
                                            skinnedEffect_.get(), logged);
 
         supported_ = effect_->IsEffectValid() && device.ExecutesShaderEffectSourceEXT();

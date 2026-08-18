@@ -24,8 +24,8 @@ namespace {
 
 using CNA::GraphicsCapability;
 using CNA::Graphics::EngineException;
-using CNA::Graphics::detail::NameOfCapability;
-using CNA::Graphics::detail::RequireCapability;
+using CNA::Graphics::detail::nameOfCapability;
+using CNA::Graphics::detail::requireCapability;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 
 /// Every value of the enum, in declaration order. Written out rather than derived, so a capability
@@ -63,7 +63,7 @@ TEST(RequireCapabilityTest, ASupportedCapabilityReturnsWithoutThrowing)
         if (!gd.SupportsCapability(capability))
             continue;
         ++checked;
-        EXPECT_NO_THROW(RequireCapability(gd, capability, "RequireCapabilityTest"));
+        EXPECT_NO_THROW(requireCapability(gd, capability, "RequireCapabilityTest"));
     }
     EXPECT_GT(checked, 0) << "this renderer supports nothing at all, so the quiet path went "
                              "unchecked";
@@ -82,18 +82,18 @@ TEST(RequireCapabilityTest, AnUnsupportedCapabilityThrowsWithTheRenderersOwnName
         foundOne = true;
         try
         {
-            RequireCapability(gd, capability, "SsaoPass");
+            requireCapability(gd, capability, "SsaoPass");
             ADD_FAILURE() << "an unsupported capability did not throw";
         }
         catch (const EngineException& engine)
         {
             EXPECT_EQ(engine.getSubsystemProperty(), "SsaoPass");
-            EXPECT_EQ(engine.getRequirementProperty(), NameOfCapability(capability));
+            EXPECT_EQ(engine.getRequirementProperty(), nameOfCapability(capability));
             EXPECT_EQ(engine.getRendererNameProperty(),
                       std::string(gd.GetGraphicsRendererName()))
                 << "the renderer name must come from the device, not the call site";
             EXPECT_EQ(engine.getMessageProperty(),
-                      "SsaoPass: " + NameOfCapability(capability) + " is not supported by the "
+                      "SsaoPass: " + nameOfCapability(capability) + " is not supported by the "
                           + std::string(gd.GetGraphicsRendererName()) + " renderer");
         }
         break;
@@ -111,7 +111,7 @@ TEST(RequireCapabilityTest, EveryCapabilityHasItsOwnName)
     std::vector<std::string> names;
     for (const GraphicsCapability capability : kEveryCapability)
     {
-        const std::string name = NameOfCapability(capability);
+        const std::string name = nameOfCapability(capability);
         EXPECT_FALSE(name.empty());
         EXPECT_NE(name, "an unrecognised capability")
             << "capability " << static_cast<int>(capability) << " has no name of its own";
@@ -127,7 +127,7 @@ TEST(RequireCapabilityTest, AValueOutsideTheEnumGetsADefinedAnswer)
 {
     // Not a legal input, but an integer cast reaches it, and a name lookup that walked off the end
     // of a table would be a crash inside error handling -- the worst place for one.
-    EXPECT_EQ(NameOfCapability(static_cast<GraphicsCapability>(9999)),
+    EXPECT_EQ(nameOfCapability(static_cast<GraphicsCapability>(9999)),
               "an unrecognised capability");
 }
 
