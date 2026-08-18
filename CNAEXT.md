@@ -824,8 +824,47 @@ implementation precedes its per‑renderer follow‑ups.
 - **Not a forced upgrade.** XNA 4.0 ports compile and run unchanged; the engine layer is off by default.
 - **Not renderer‑specific.** Every `CNA::Graphics` abstraction stays renderer‑agnostic; GPU work lives
   behind `IGraphicsRenderer`. No subsystem makes any single renderer mandatory.
-- **Not an ABI guarantee.** The engine‑layer API may change until it stabilizes.
+- **Not an ABI guarantee.** The engine‑layer API may change until it stabilizes. §9.1 says how far
+  from stable it actually is, rather than leaving "until it stabilizes" to the reader's optimism.
 - **Not a node‑based material editor.** Material graphs are explicitly out of scope (§5.5).
+
+---
+
+## 9.1 How stable is it, actually (2026-08-18)
+
+`plan_modern.md` **MOD-1905** asked for one of two statements — "v1 is stable" or an honest "still
+moving". **It is still moving**, and saying otherwise would be the more expensive mistake. But
+"still moving" is not the same as "anything might change", so here is the line, drawn where the
+evidence puts it.
+
+**Settled, and unlikely to move:**
+
+- The **shape** of the layer: `RenderPipeline` + `RenderPipelineSettings`, a `PostProcessPass` chain
+  with a `RenderTargetPool` behind it, one shadow class per light type, `Skybox` and
+  `EnvironmentProcessor` for image-based lighting. Every subsystem has landed against this shape and
+  none of them fought it.
+- The **ownership rules** (`docs/cnaext-ownership.md`): three shapes, no `shared_ptr`, nothing
+  outlives its `GraphicsDevice`.
+- The **two-part support question** (`MOD-1699`): asking a capability is not asking whether the
+  renderer will run your shader. This one cost three separate bugs to learn and is not going to be
+  unlearned.
+- The **naming and accessor conventions**, now gated by `CNAEXT_NamingRule` and
+  `CNAEXT_AccessorConventions` rather than by memory.
+
+**Still moving, and here is what would move it:**
+
+- **Per-renderer behaviour.** EasyGL is the reference and is complete; the rest of Phase 16 is open.
+  A renderer picking a subsystem up can force an interface change, and has before.
+- **Anything a capability query cannot yet answer.** Every time a renderer turned out to promise
+  something it did not do, the answer was a new `…EXT()` query on `GraphicsDevice`. There is no
+  reason to think the four that exist are the last four.
+- **Compute and storage buffers.** One renderer implements them. A second implementation is the
+  usual moment an interface designed against one backend gets corrected.
+
+**What this means for a consumer**, Nova-3D included: build against a pinned CNA revision, read
+`CNA_CNAEXT_ENGINE_VERSION` and `docs/cnaext-engine-changelog.md` when you move, and expect renames
+of the kind revision 2 already carried. The layer will say when that stops being true — in this
+section, with a date on it.
 
 ---
 
