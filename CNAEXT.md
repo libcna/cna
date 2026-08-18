@@ -935,6 +935,10 @@ Nova‑3D is a planned CNA‑based 3D framework / Urho3D‑like renderer. It wil
 Nova‑3D never calls OpenGL/Vulkan/D3D/bgfx directly — all GPU access flows through the CNA renderer
 interface.
 
+**What Nova‑3D can actually rely on today** — as opposed to what this section intends — is
+inventoried in [`docs/cnaext-nova3d.md`](docs/cnaext-nova3d.md) (`MOD-1813`): what is implemented and
+measured, what to ask a renderer before using it, and what not to depend on yet.
+
 ---
 
 ## 11. Quick start
