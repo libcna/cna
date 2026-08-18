@@ -167,6 +167,13 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
         TIMEOUT 90 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_modern.md MOD-526/MOD-527/MOD-528: SSAO end to end, from the prepass to the frame.
+    # plan_modern.md MOD-1808/MOD-1811: every subsystem in one frame, each one A/B'd against the
+    # same frame with only itself switched off. Longer timeout than the single-subsystem examples
+    # because it renders the scene seven times.
+    cna_graphics_ext_test(cna_test_cnaext_showcase cnaext_showcase_test.cpp)
+    cna_register_renderer_test(NAME CNAEXT_Showcase COMMAND cna_test_cnaext_showcase
+        TIMEOUT 300 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_graphics_ext_test(cna_test_cnaext_ssao cnaext_ssao_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_Ssao COMMAND cna_test_cnaext_ssao
         TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
