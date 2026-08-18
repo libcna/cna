@@ -234,7 +234,23 @@ namespace CNA::Internal::Renderers::Fna3d
         if (passIndex >= technique.pass_count)
             throw std::out_of_range("FNA3D compiled effect: pass index is out of range.");
 
-        std::memset(&stateChanges_, 0, sizeof(stateChanges_));
+        // plan_fx.md FX-101: `stateChanges_` is NOT cleared before each application, and that is
+        // load-bearing rather than an oversight.
+        //
+        // MojoShader writes this struct only in `MOJOSHADER_effectBeginPass`. FNA3D reaches that
+        // only when the effect, technique or pass actually CHANGES; re-applying the same pass takes
+        // its `MOJOSHADER_effectCommitChanges` shortcut, which re-runs preshaders and re-copies
+        // parameter data but leaves the struct exactly as the last BeginPass wrote it -- still
+        // pointing at this pass's own render states and sampler states. FNA relies on that: it
+        // allocates the struct once per Effect and never clears it, so every `EffectPass.Apply()`
+        // re-establishes the pass's state whether or not MojoShader wrote it again.
+        //
+        // Clearing it first made a repeat application publish NOTHING: no render states, no sampler
+        // states, no texture binding. The second and every later Apply() of one compiled effect
+        // silently dropped its own sampler binding, and the draw that followed rendered nothing at
+        // all -- reproduced with two consecutive draws of one sampling effect, which produced the
+        // clear colour from the second onwards. It is zero-initialised once at construction, which
+        // is all the "no stale pointers before the first apply" the safety check below needs.
         FNA3D_ApplyEffect(device_, effect_, passIndex, &stateChanges_);
         if (stateChanges_.render_state_change_count > kMaximumReflectedItems ||
             (stateChanges_.render_state_change_count > 0 &&
