@@ -192,6 +192,17 @@ namespace CNA::TestSupport
         /// with it set the geometry moves by exactly the second stream's own values, so binding
         /// that stream from the wrong buffer, stride or offset changes the pixels.
         bool vertexShaderReadsSecondStream = false;
+        /// plan_fx.md FX-104: adds a `Caption` parameter of reflected type String, with an initial
+        /// value, so the XNA `SetValue(string)`/`GetValueString()` pair can be exercised on a
+        /// parameter that really is one instead of only through its rejection path.
+        bool includeStringParameter = false;
+        /// plan_fx.md FX-093: the drawable pixel shader SAMPLES the effect's own sampler instead
+        /// of writing `Tint` flat -- `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint` -- and the vertex
+        /// shader forwards TEXCOORD0 to it. Without this every drawable fixture had no sampler at
+        /// all, so the whole texture/sampler half of a compiled Effect could break with the draw
+        /// suite still green: the read-back pixel was `Tint` whatever the backend did with its
+        /// sampler state. Requires `includeSampler`.
+        bool pixelShaderSamplesTexture = false;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -223,7 +234,9 @@ namespace CNA::TestSupport
      */
     inline std::vector<std::uint8_t> BuildSyntheticPixelShader(std::uint32_t samplerRegister,
                                                        bool breakSymbolBinding = false,
-                                                       bool includeSampler = true)
+                                                       bool includeSampler = true,
+                                                       bool samplesTexture = false,
+                                                       bool swizzleTint = false)
     {
         constexpr std::uint32_t versionToken = 0xFFFF0200u;
         const int constantCount = includeSampler ? 2 : 1;
@@ -300,15 +313,63 @@ namespace CNA::TestSupport
         AppendUInt32(shader, 0x42415443u); // 'CTAB'
         shader.insert(shader.end(), ctab.begin(), ctab.end());
 
-        // mov oC0, c0 -- one destination and one source token.
-        constexpr std::uint32_t colorOut = 8;
-        constexpr std::uint32_t constantRegister = 2;
+        // Direct3D 9 shader-token register types and the two token shapes every instruction below
+        // is built from. Every encoding here was checked against fxc's own output for
+        // modules/renderers/fna3d/effects/CnaConformanceEffect.fx, whose MainPixelShader is the
+        // same `tex2D(sampler, texcoord) * constant` shape.
+        constexpr std::uint32_t regTemp = 0;
+        constexpr std::uint32_t regTexture = 3;    // ps_2_0 texture-coordinate input t#
+        constexpr std::uint32_t regConst = 2;
+        constexpr std::uint32_t regColorOut = 8;   // oC#
+        constexpr std::uint32_t regSampler = 10;   // s#
+        constexpr std::uint32_t swizzleIdentity = 0xE4u;  // .xyzw
+        // .yzxw: x<-y, y<-z, z<-x, w<-w, two bits per component, lowest component first.
+        constexpr std::uint32_t swizzleYzxw = 1u | (2u << 2) | (0u << 4) | (3u << 6);
         const auto registerBits = [](std::uint32_t type) {
             return ((type & 0x7u) << 28) | ((type >> 3) << 11);
         };
-        AppendUInt32(shader, 0x00000001u | (2u << 24));
-        AppendUInt32(shader, 0x80000000u | registerBits(colorOut) | (0xFu << 16));
-        AppendUInt32(shader, 0x80000000u | registerBits(constantRegister) | (0xE4u << 16));
+        const auto destination = [&registerBits](std::uint32_t type, std::uint32_t number,
+                                                 std::uint32_t writeMask) {
+            return 0x80000000u | registerBits(type) | number | (writeMask << 16);
+        };
+        const auto source = [&registerBits](std::uint32_t type, std::uint32_t number,
+                                            std::uint32_t swizzle = 0xE4u) {
+            return 0x80000000u | registerBits(type) | number | (swizzle << 16);
+        };
+
+        if (samplesTexture)
+        {
+            // dcl t0.xy -- the interpolated texture coordinate the vertex shader forwards.
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24));
+            AppendUInt32(shader, 0x80000000u);
+            AppendUInt32(shader, destination(regTexture, 0, 0x3u));
+            // dcl_2d s<samplerRegister> -- the texture type lives in bits 27..30 of the usage
+            // token; 2 is D3DSTT_2D.
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24));
+            AppendUInt32(shader, 0x80000000u | (2u << 27));
+            AppendUInt32(shader, destination(regSampler, samplerRegister, 0xFu));
+            // texld r0, t0, s<samplerRegister>
+            AppendUInt32(shader, 0x00000042u | (3u << 24));
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regTexture, 0));
+            AppendUInt32(shader, source(regSampler, samplerRegister));
+            // mul oC0, r0, c0 -- the sampled texel modulated by Tint, so a test can read the raw
+            // texel back with Tint at (1,1,1,1) and still prove the compiled shader is what ran by
+            // changing Tint.
+            AppendUInt32(shader, 0x00000005u | (3u << 24));
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(regTemp, 0));
+            AppendUInt32(shader, source(regConst, 0));
+        }
+        else
+        {
+            // mov oC0, c0 -- or c0.yzxw for the alternate program that makes one pass
+            // GPU-observably different from another (plan_fx.md FX-094).
+            AppendUInt32(shader, 0x00000001u | (2u << 24));
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(regConst, 0,
+                                        swizzleTint ? swizzleYzxw : swizzleIdentity));
+        }
         AppendUInt32(shader, 0x0000FFFFu);
         return shader;
     }
@@ -323,9 +384,12 @@ namespace CNA::TestSupport
      * sibling above.
      *
      * @param readsSecondStream Whether the shader declares and consumes a TEXCOORD0 input.
+     * @param forwardsTexCoord plan_fx.md FX-093: whether the shader also declares TEXCOORD0 and
+     *        writes it to `oT0`, which is what a sampling pixel shader reads.
      * @return The complete vertex-shader token buffer.
      */
-    inline std::vector<std::uint8_t> BuildSyntheticVertexShader(bool readsSecondStream)
+    inline std::vector<std::uint8_t> BuildSyntheticVertexShader(bool readsSecondStream,
+                                                                bool forwardsTexCoord = false)
     {
         constexpr std::uint32_t versionToken = 0xFFFE0200u;
         const std::uint32_t constantCount = readsSecondStream ? 2u : 1u;
@@ -403,11 +467,13 @@ namespace CNA::TestSupport
         constexpr std::uint32_t regInput = 1;
         constexpr std::uint32_t regConst = 2;
         constexpr std::uint32_t regRastOut = 4;
+        constexpr std::uint32_t regTexCoordOut = 6;  // vs_2_0 oT#
         const auto registerBits = [](std::uint32_t type) {
             return ((type & 0x7u) << 28) | ((type >> 3) << 11);
         };
-        const auto destination = [&registerBits](std::uint32_t type, std::uint32_t number) {
-            return 0x80000000u | registerBits(type) | number | (0xFu << 16);
+        const auto destination = [&registerBits](std::uint32_t type, std::uint32_t number,
+                                                 std::uint32_t writeMask = 0xFu) {
+            return 0x80000000u | registerBits(type) | number | (writeMask << 16);
         };
         const auto source = [&registerBits](std::uint32_t type, std::uint32_t number) {
             return 0x80000000u | registerBits(type) | number | (0xE4u << 16);
@@ -424,12 +490,17 @@ namespace CNA::TestSupport
         AppendUInt32(shader, 0x0000001Fu | (2u << 24));
         AppendUInt32(shader, 0x80000000u | 0u);            // D3DDECLUSAGE_POSITION, index 0
         AppendUInt32(shader, destination(regInput, 0));
-        if (readsSecondStream)
+        // One declaration serves both consumers: the multi-stream fixture scales POSITION0 by it,
+        // the sampling fixture forwards it, and a fixture that does both declares it once.
+        if (readsSecondStream || forwardsTexCoord)
         {
             // dcl_texcoord v1
             AppendUInt32(shader, 0x0000001Fu | (2u << 24));
             AppendUInt32(shader, 0x80000000u | 5u);        // D3DDECLUSAGE_TEXCOORD, index 0
             AppendUInt32(shader, destination(regInput, 1));
+        }
+        if (readsSecondStream)
+        {
             // mad r0, v1, c4, v0
             AppendUInt32(shader, 0x00000004u | (4u << 24));
             AppendUInt32(shader, destination(regTemp, 0));
@@ -442,6 +513,13 @@ namespace CNA::TestSupport
         AppendUInt32(shader, destination(regRastOut, 0));
         AppendUInt32(shader, readsSecondStream ? source(regTemp, 0) : source(regInput, 0));
         AppendUInt32(shader, source(regConst, 0));
+        if (forwardsTexCoord)
+        {
+            // mov oT0.xy, v1 -- the interpolated coordinate the sampling pixel shader reads.
+            AppendUInt32(shader, 0x00000001u | (2u << 24));
+            AppendUInt32(shader, destination(regTexCoordOut, 0, 0x3u));
+            AppendUInt32(shader, source(regInput, 1));
+        }
         AppendUInt32(shader, 0x0000FFFFu);
         return shader;
     }
@@ -483,6 +561,10 @@ namespace CNA::TestSupport
         const std::uint32_t textureName = AppendEffectString(bytes, "FxTexture");
         const std::uint32_t samplerName = AppendEffectString(bytes, "FxSampler");
         const std::uint32_t streamMixName = AppendEffectString(bytes, "StreamMix");
+        const std::uint32_t captionName = AppendEffectString(bytes, "Caption");
+        // The Effect Framework stores a string object's own characters in the large-object table;
+        // this is the initial value the reflected parameter reports before a game assigns one.
+        const std::string captionInitial = "initial caption";
 
         // plan_fx.md FX-084: a drawable fixture needs a shader pair on StatePass; the multi-stream
         // variant additionally declares StreamMix, the parameter its vertex shader scales
@@ -528,6 +610,34 @@ namespace CNA::TestSupport
         const std::uint32_t streamMixType = AppendNumericType(
             bytes, EffectFormat::TypeFloat, EffectFormat::ClassVector,
             streamMixName, empty, 0, 4, 1);
+        const std::uint32_t captionType =
+            AppendObjectType(bytes, EffectFormat::TypeString, captionName, empty);
+
+        // Object indices: 0 stays unused (the Effect Framework reserves it); the rest are packed
+        // in emission order so no index is ever declared without a record behind it.
+        constexpr std::uint32_t textureObjectIndex = 1;
+        const std::uint32_t pixelShaderObjectIndex = options.includeSampler ? 2u : 1u;
+        const std::uint32_t vertexShaderObjectIndex = pixelShaderObjectIndex + 1u;
+        // plan_fx.md FX-094: a drawable fixture carries a SECOND pixel shader, `oC0 = Tint.yzxw`,
+        // and gives it to pass P0 alone. Before this every pass of a drawable fixture bound the
+        // identical program pair, so a backend that applied pass 0 where the contract asked for
+        // pass 1 -- or fell back to "the first pass" when it could not resolve one -- rendered
+        // exactly the same pixels and passed. One channel rotation is enough to tell them apart
+        // and costs one extra object.
+        const std::uint32_t altPixelShaderObjectIndex = vertexShaderObjectIndex + 1u;
+        std::uint32_t objectCount = 0u;
+        if (includeProgram)
+        {
+            objectCount = pixelShaderObjectIndex + 1u;
+            if (includeVertexShader) objectCount = vertexShaderObjectIndex + 1u;
+            if (options.includeDrawableProgram) objectCount = altPixelShaderObjectIndex + 1u;
+        }
+        else if (options.includeStringParameter)
+        {
+            objectCount = 1u;  // index 0 stays reserved; the string takes index 1.
+        }
+        const std::uint32_t captionObjectIndex = options.includeStringParameter ? objectCount : 0u;
+        if (options.includeStringParameter) objectCount += 1u;
 
         const std::uint32_t gainValue = AppendValueBits(bytes, FloatBits(0.25f));
         const std::uint32_t tintValue =
@@ -545,19 +655,13 @@ namespace CNA::TestSupport
         // A zero default keeps the second stream's contribution off unless a test asks for it.
         const std::uint32_t streamMixValue =
             AppendFloatValues(bytes, {0.0f, 0.0f, 0.0f, 0.0f});
+        const std::uint32_t captionValue =
+            options.includeStringParameter ? AppendValueBits(bytes, captionObjectIndex) : 0u;
         std::vector<std::uint32_t> stateValueOffsets;
         stateValueOffsets.reserve(renderStates.size());
         for (const auto& state : renderStates)
             stateValueOffsets.push_back(AppendValueBits(bytes, state.valueBits));
 
-        // Object indices: 0 stays unused (the Effect Framework reserves it); the rest are packed
-        // in emission order so no index is ever declared without a record behind it.
-        constexpr std::uint32_t textureObjectIndex = 1;
-        const std::uint32_t pixelShaderObjectIndex = options.includeSampler ? 2u : 1u;
-        const std::uint32_t vertexShaderObjectIndex = pixelShaderObjectIndex + 1u;
-        const std::uint32_t objectCount = includeProgram
-            ? (includeVertexShader ? vertexShaderObjectIndex + 1u : pixelShaderObjectIndex + 1u)
-            : 0u;
         std::uint32_t textureValue = 0;
         std::uint32_t samplerValue = 0;
         // One value dword per pass that references a shader object, so no two pass states share
@@ -568,6 +672,11 @@ namespace CNA::TestSupport
         {
             for (std::uint32_t& value : pixelShaderValues)
                 value = AppendValueBits(bytes, pixelShaderObjectIndex);
+            // Pass ordinal 0 is technique 0's "P0"; the drawable fixture points it at the
+            // alternate program instead, leaving StatePass and P1 on the primary one so every
+            // existing draw expectation is untouched.
+            if (options.includeDrawableProgram)
+                pixelShaderValues[0] = AppendValueBits(bytes, altPixelShaderObjectIndex);
         }
         if (includeVertexShader)
         {
@@ -605,7 +714,8 @@ namespace CNA::TestSupport
         const auto structureOffset = static_cast<std::uint32_t>(bytes.size() - 8);
         PatchUInt32(bytes, 4, structureOffset);
         AppendUInt32(bytes, 5u + (options.includeSampler ? 2u : 0u) +
-                                (includeStreamMix ? 1u : 0u)); // parameters
+                                (includeStreamMix ? 1u : 0u) +
+                                (options.includeStringParameter ? 1u : 0u)); // parameters
         AppendUInt32(bytes, 2); // techniques
         AppendUInt32(bytes, 0); // ignored legacy count
         AppendUInt32(bytes, objectCount); // objects
@@ -654,6 +764,14 @@ namespace CNA::TestSupport
         {
             AppendUInt32(bytes, streamMixType);
             AppendUInt32(bytes, streamMixValue);
+            AppendUInt32(bytes, 0); // flags
+            AppendUInt32(bytes, 0); // annotations
+        }
+
+        if (options.includeStringParameter)
+        {
+            AppendUInt32(bytes, captionType);
+            AppendUInt32(bytes, captionValue);
             AppendUInt32(bytes, 0); // flags
             AppendUInt32(bytes, 0); // annotations
         }
@@ -717,16 +835,33 @@ namespace CNA::TestSupport
         AppendUInt32(bytes, otherPassStateCount);
         if (otherPassStateCount > 0) appendProgramStates(2);
 
+        // A string object carries its characters inline in the small-object table, exactly like the
+        // sampler's mapped-texture name below: index, byte length, bytes, padded to a dword.
+        const auto appendStringObject = [&bytes](std::uint32_t index, const std::string& value) {
+            AppendUInt32(bytes, index);
+            AppendUInt32(bytes, static_cast<std::uint32_t>(value.size() + 1));
+            bytes.insert(bytes.end(), value.begin(), value.end());
+            bytes.push_back(0);
+            while ((bytes.size() & 3u) != 0) bytes.push_back(0);
+        };
+
         if (!includeProgram)
         {
-            AppendUInt32(bytes, 0); // small objects
+            AppendUInt32(bytes, options.includeStringParameter ? 1u : 0u); // small objects
             AppendUInt32(bytes, 0); // large objects
+            if (options.includeStringParameter)
+                appendStringObject(captionObjectIndex, captionInitial);
             return bytes;
         }
 
         AppendUInt32(bytes, 1u + (options.includeSampler ? 1u : 0u) +
-                                (includeVertexShader ? 1u : 0u)); // small objects
+                                (includeVertexShader ? 1u : 0u) +
+                                (options.includeDrawableProgram ? 1u : 0u) +
+                                (options.includeStringParameter ? 1u : 0u)); // small objects
         AppendUInt32(bytes, 0); // large objects
+
+        if (options.includeStringParameter)
+            appendStringObject(captionObjectIndex, captionInitial);
 
         if (options.includeSampler)
         {
@@ -740,18 +875,32 @@ namespace CNA::TestSupport
         }
 
         const std::vector<std::uint8_t> shader = BuildSyntheticPixelShader(
-            options.samplerRegister, options.breakShaderSymbolBinding, options.includeSampler);
+            options.samplerRegister, options.breakShaderSymbolBinding, options.includeSampler,
+            options.pixelShaderSamplesTexture);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
 
         if (includeVertexShader)
         {
-            const std::vector<std::uint8_t> vertexShader =
-                BuildSyntheticVertexShader(options.vertexShaderReadsSecondStream);
+            const std::vector<std::uint8_t> vertexShader = BuildSyntheticVertexShader(
+                options.vertexShaderReadsSecondStream, options.pixelShaderSamplesTexture);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());
+        }
+
+        if (options.includeDrawableProgram)
+        {
+            // The alternate program declares NO sampler even in a sampling fixture: pass P0 must
+            // stay drawable on a backend that requires every reflected sampler to have a texture
+            // bound, and its whole job is to differ from the primary program's output colour.
+            const std::vector<std::uint8_t> alternate = BuildSyntheticPixelShader(
+                options.samplerRegister, /*breakSymbolBinding=*/false, /*includeSampler=*/false,
+                /*samplesTexture=*/false, /*swizzleTint=*/true);
+            AppendUInt32(bytes, altPixelShaderObjectIndex);
+            AppendUInt32(bytes, static_cast<std::uint32_t>(alternate.size()));
+            bytes.insert(bytes.end(), alternate.begin(), alternate.end());
         }
         return bytes;
     }
@@ -780,6 +929,51 @@ namespace CNA::TestSupport
         SyntheticEffectOptions options;
         options.includeDrawableProgram = true;
         options.vertexShaderReadsSecondStream = readsSecondStream;
+        return BuildSyntheticEffect(options);
+    }
+
+    /**
+     * @brief plan_fx.md FX-093: a drawable fixture whose pixel shader actually SAMPLES a texture.
+     *
+     * `StatePass` (technique 0, pass 1) binds `oPos = mul(POSITION0, Transform)` with TEXCOORD0
+     * forwarded, and `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint`. With `Tint` at (1,1,1,1) the
+     * read-back pixel IS the texel the sampler selected, so the texture binding, addressing mode,
+     * filter and LOD clamp a backend applied are all visible in the result rather than only on
+     * `GraphicsDevice.SamplerStates`.
+     *
+     * Pass `P0` (technique 0, pass 0) keeps the non-sampling alternate program, so a fixture built
+     * here is still pass-discriminating.
+     *
+     * @param samplerStates The `sampler_state` assignments the pass declares, in order.
+     * @param samplerRegister The sampler register the shader declares.
+     * @return The complete effect bytecode.
+     */
+    /**
+     * @brief plan_fx.md FX-104: the conformance fixture plus a reflected String parameter.
+     *
+     * `Caption` is an Effect Framework string object with an initial value, which is what
+     * `EffectParameter.SetValue(string)` and `GetValueString()` are actually specified against.
+     * Opt-in, so the reflection contract's parameter counts are untouched.
+     *
+     * @return The complete effect bytecode.
+     */
+    inline std::vector<std::uint8_t> BuildSyntheticStringParameterEffect()
+    {
+        SyntheticEffectOptions options;
+        options.includeStringParameter = true;
+        return BuildSyntheticEffect(options);
+    }
+
+    inline std::vector<std::uint8_t> BuildSyntheticSamplingEffect(
+        const std::vector<SyntheticSamplerState>& samplerStates,
+        std::uint32_t samplerRegister = 0)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.pixelShaderSamplesTexture = true;
+        options.samplerStates = samplerStates;
+        options.samplerRegister = samplerRegister;
         return BuildSyntheticEffect(options);
     }
 
