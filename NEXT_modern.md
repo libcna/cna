@@ -24,9 +24,9 @@ upscalers and virtual texturing — each with the specific reason rather than si
 
 **Phase 20 progress** (updated as sections close): 20.1 render-target coordinates, 20.2
 screen-space reflections, 20.3 the lens and grade passes, 20.4 motion blur and depth of field,
-20.5 clustered forward lighting (`MOD-2040`–`MOD-2048`), 20.6 volumetrics (`MOD-2050`–`MOD-2054`)
-and 20.7 area lights (`MOD-2060`–`MOD-2063`) are done. Still open: 20.8 the glTF material
-extensions, 20.9 probe-based GI, 20.10 GPU-driven and display.
+20.5 clustered forward lighting (`MOD-2040`–`MOD-2048`), 20.6 volumetrics (`MOD-2050`–`MOD-2054`),
+20.7 area lights (`MOD-2060`–`MOD-2063`) and 20.8 the material extensions (`MOD-2070`–`MOD-2077`)
+are done. Still open: 20.9 probe-based GI, 20.10 GPU-driven and display.
 
 Two rows in the closed sections carry a bound rather than a tick, and both bounds are the same
 shape — **the engine layer cannot put code in `PbrEffect`**. `PbrEffect` owns no shader source: it
@@ -36,7 +36,23 @@ term there would be a change to EasyGL's built-in effect family, compiled into e
 delivered in `ClusteredForwardEffect`, the layer's own `ShaderEffect`-based PBR effect. A game using
 it gives up `PbrEffect`'s texture set and its one shadowed punctual light, and gains the light
 count and the area lights. **Anything else in Phase 20 that the plan words as "in `PbrEffect`" will
-hit the same wall** — `MOD-2070`–`MOD-2074` and `MOD-2082` are worded that way today. Two rows stay deliberately
+hit the same wall** — `MOD-2070`–`MOD-2074` did, and `MOD-2082` is worded that way today.
+
+**Section 20.8 met it and produced a second rule.** `PbrMaterial` is *lossless* against `PbrEffect`
+by design (Phase 13), so a field for a lobe `PbrEffect` cannot shade would be silently dropped by
+its round trip. The extensions therefore live in a **separate** `PbrMaterialExtensions` carried
+beside a material rather than inside one, and `ClusteredForwardEffect` — which owns its shader —
+consumes them. `MOD-2082` will want the same shape for probe lighting.
+
+**A pattern worth naming, because six rows in a row hit it.** Every lobe added in 20.7 and 20.8 was
+written twice — once in GLSL and once in C++ — and every one was compared against the other on the
+GPU rather than against a screenshot. That is what found: the area light's tube seen edge-on, a NaN
+at exactly normal incidence, a BRDF table read on the texture's wrap seam, a NaN when a light sits
+exactly behind a surface, an `isfinite` guard that let cgltf's `FLT_MAX` sentinel through, and a
+zero-thickness thin film that was not quite the material without it. **None of those produced a
+broken frame.** Every one produced a plausible one.
+
+Two rows stay deliberately
 open rather than closed: `MOD-2033` (per-object velocity — an obligation on the application, not
 something the layer can supply) and `MOD-2035`, which is the one red gate, `CNAEXT_Showcase`, and
 whose cause is bisected to EasyGL's half-float render target rather than to anything in the pass.
