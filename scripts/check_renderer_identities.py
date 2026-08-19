@@ -143,6 +143,7 @@ IDENTITIES = [
     ("TINYGL", "TinyGL"),
     ("IGL", "Igl"),
     ("PIXIJS", "PixiJs"),
+    ("NANOVG", "NanoVg"),
 ]
 
 

@@ -82,6 +82,7 @@ namespace
             case GraphicsRendererType::Igl:
             case GraphicsRendererType::Fna3d:
             case GraphicsRendererType::OpenVg:
+            case GraphicsRendererType::NanoVg:
                 return GraphicsBackendCategory::TranslationLayer;
 
             case GraphicsRendererType::Software:

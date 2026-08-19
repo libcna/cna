@@ -63,7 +63,7 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 [[nodiscard]] inline bool CubeStorageSupported()
 {
     return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi, OpenVg,
-                            PortableGL, TinyGL, PixiJs);
+                            PortableGL, TinyGL, PixiJs, NanoVg);
 }
 
 [[nodiscard]] inline bool CubeLevel0ReadbackSupported() { return CubeStorageSupported(); }

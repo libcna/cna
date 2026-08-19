@@ -185,6 +185,12 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
     ++enabled;
 #endif
 
+    // plan_nanovg.md: same registration discipline -- add the NANOVG entry here in the same task
+    // that adds the identity everywhere else, not after the fact.
+#ifdef CNA_RENDERER_NANOVG
+    ++enabled;
+#endif
+
     // plan_runtimerenderer.md RTR-P7-8: exactly one, in BOTH modes.
     //
     // In a multi-renderer build this is not an accident -- it is the property that keeps this whole
@@ -249,6 +255,14 @@ TEST(GraphicsRendererCompileDefinitionsTest, OpenVgMacroMatchesPublicRendererIde
 {
     EXPECT_EQ(CNA::getCurrentGraphicsRendererType(), CNA::GraphicsRendererType::OpenVg);
     EXPECT_EQ(CNA::getCurrentGraphicsRendererName(), "OPENVG");
+}
+#endif
+
+#ifdef CNA_RENDERER_NANOVG
+TEST(GraphicsRendererCompileDefinitionsTest, NanoVgMacroMatchesPublicRendererIdentity)
+{
+    EXPECT_EQ(CNA::getCurrentGraphicsRendererType(), CNA::GraphicsRendererType::NanoVg);
+    EXPECT_EQ(CNA::getCurrentGraphicsRendererName(), "NANOVG");
 }
 #endif
 

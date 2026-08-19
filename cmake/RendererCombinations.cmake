@@ -17,6 +17,7 @@ set(CNA_RENDERER_REAL_GL_FAMILIES
     OPENGLES2 OPENGLES3 OPENGL33 WEBGL1 WEBGL2   # EasyGL
     OPENGL1 OPENGL2 OPENGL4 OPENGLES1            # native GL
     OPENVG                                        # ShivaVG on a real GL context
+    NANOVG                                        # NanoVG's compiled-shader backend on a real GL context
     MAGNUM                                        # Magnum's own GL wrappers
     SOKOL)                                        # sokol_gfx on GL
 

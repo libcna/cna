@@ -21,24 +21,25 @@ Authoritative companions:
 
 ## 1. What CNA supports today
 
-**49 public renderer identities**, mechanically verified by `scripts/check_renderer_identities.py`
+**50 public renderer identities**, mechanically verified by `scripts/check_renderer_identities.py`
 against `modules/core/include/CNA/GraphicsRendererType.hpp` and `cmake/RendererSelection.cmake`
-(`OK: 49 public renderer identities preserved in both registries`). Selected at configure time via
+(`OK: 50 public renderer identities preserved in both registries`). Selected at configure time via
 `-DCNA_GRAPHICS_RENDERER=<selector>`; implementations live in `modules/renderers/<family>/`.
 
-The 47 map to 43 concrete factories, because the five GL profiles (`OPENGLES2`, `OPENGLES3`,
-`OPENGL33`, `WEBGL1`, `WEBGL2`) share the internal EasyGL implementation while keeping distinct
-public contracts (context, shader profile, platform).
+The 48 (this table's own count, pre-existing drift from the registry's true 50 -- IGL/PIXIJS are
+also live but not yet reflected below) map to concrete factories, because the five GL profiles
+(`OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`) share the internal EasyGL implementation
+while keeping distinct public contracts (context, shader profile, platform).
 
 | Class | Identities | Count |
 |---|---|---:|
 | No pixels (validation/no-op) | `HEADLESS`, `STUB` | 2 |
-| 2D-oriented | `SDL_RENDERER`, `CANVAS`, `HTML_DOM`, `SVG_DOM`, `SKIA`, `BLEND2D`, `OPENVG`, `FREEDIRECT`, `DIRECTX1`, `DIRECT2D`, `GDI` | 11 |
+| 2D-oriented | `SDL_RENDERER`, `CANVAS`, `HTML_DOM`, `SVG_DOM`, `SKIA`, `BLEND2D`, `OPENVG`, `NANOVG`, `FREEDIRECT`, `DIRECTX1`, `DIRECT2D`, `GDI` | 12 |
 | CPU 3D | `SOFTWARE`, `PORTABLEGL`, `TINYGL` | 3 |
 | Legacy / fixed-function 3D | `OPENGLES1`, `OPENGL1`, `DIRECTX2`, `DIRECTX3`, `DIRECTX5`, `DIRECTX6`, `DIRECTX7`, `DIRECTX8`, `GLIDE` | 9 |
 | Programmable / modern | `OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`, `OPENGL2`, `OPENGL4`, `VULKAN`, `WEBGPU`, `METAL`, `DIRECTX9`, `DIRECTX10`, `DIRECTX11`, `DIRECTX12`, `SDL_GPU` | 15 |
 | Abstraction / engine RHI | `BGFX`, `MAGNUM`, `WICKED`, `SOKOL`, `DILIGENT`, `LLGL`, `FNA3D` | 7 |
-| **Total** | | **47** |
+| **Total** | | **48** |
 
 Notes that must not be misstated anywhere: `WEBGPU`, `SOKOL`, `DILIGENT`, `LLGL` and `WICKED` are
 experimental with bounded verified surfaces; `SKIA` is CPU-raster 2D only; the `ASCII` identity was
@@ -60,14 +61,15 @@ over anything in §3 unless the owner says otherwise.
 | `THORVG` | ThorVG | 2D vector |
 | `REACT_DOM` | React/DOM | Web DOM — only if it can truthfully satisfy a graphics contract |
 
-Live 47 + these 8 = the current **55** roadmap ceiling.
+Live 48 (this document's own table above) + these 8 = the current **56** roadmap ceiling per this
+document's own count.
 
 ## 3. New candidates
 
 **41 candidate identities** as first catalogued, none of which duplicated a live identity or a §2
-entry. One — **A2 `TINYGL`** — has since been implemented and is now a live identity; it is left in
-place below, marked DELIVERED, so the catalog stays readable as a record rather than silently
-shrinking. **40 remain open.** Each row states
+entry. Two — **A2 `TINYGL`** and **A6 `NANOVG`** — have since been implemented and are now live
+identities; both are left in place below, marked DELIVERED, so the catalog stays readable as a
+record rather than silently shrinking. **39 remain open.** Each row states
 the one thing it proves that no existing CNA identity proves — that column is the admission test,
 because `docs/renderer-registry.md` forbids counting a conceptual alias of an existing identity.
 
@@ -85,7 +87,7 @@ copyleft or version-dependent and could be disqualifying.
 | A3 | `SWIFTSHADER` | google/swiftshader | CPU Vulkan | A conformant **Vulkan** API surface with no GPU — lets the `VULKAN` renderer's contract be regression-tested on GPU-less machines without claiming it as `VULKAN`. | none | M | med | Apache-2.0 |
 | A4 | `CAIRO` | cairo | 2D vector | A third, independent 2D vector model next to `SKIA`/`BLEND2D` — and the only one with a *device-agnostic* backend set (image, X11, PDF, SVG) behind one API. | system pkg | M | med | LGPL-2.1 / MPL-1.1 — **verify** |
 | A5 | `XLIB` | X11 `XImage`/MIT-SHM | 2D presentation | The Linux peer of `GDI`: CPU pixels pushed straight to a bare X server, no SDL, no GL, no toolkit. | Linux + X11 | S | low | MIT |
-| A6 | `NANOVG` | memononen/nanovg | 2D vector on GL | Vector-first 2D **on a GPU context** — path/stroke/AA semantics `SKIA`/`BLEND2D` only prove on CPU. | GL context | S | low | zlib |
+| A6 | `NANOVG` | memononen/nanovg | 2D vector on GL | **DELIVERED 2026-08-19.** Vector-first 2D on a real GPU context, driven through NanoVG's own compiled GLSL shader pipeline (GL2 backend) rather than fixed-function GL (`OPENVG`) or CPU raster (`SKIA`/`BLEND2D`). Genuinely supports `BlendState.Additive`, unlike `OPENVG`. See `nanovg-renderer.md` / `../plan_nanovg.md`. | GL context | S | low | zlib |
 | A7 | `FBDEV` | Linux `/dev/fb0` | 2D presentation | Rendering with no window system **and no GPU driver stack** at all — the minimum viable embedded/console target. | Linux | S | low | n/a (kernel ABI) |
 | A8 | `DRM_KMS` | DRM/KMS dumb buffers | 2D presentation | Direct modeset + scanout ownership (kiosk/appliance), incl. real vsync/page-flip semantics `FBDEV` cannot express. | Linux + DRM | M | med | n/a (kernel ABI) |
 | A9 | `OPENGLES32` | OpenGL ES 3.2 | Programmable | The GL family's 6th profile: **compute shaders, tessellation, geometry stage** — capabilities no current GL profile may truthfully report. | ES 3.2 driver | M | low | n/a |
@@ -196,10 +198,10 @@ the first CNA identity that could truthfully report compute-shader capability.
 
 ## 7. Arithmetic
 
-    47 live today (46 at first writing, + TINYGL)
-     + 8 planned but unstarted (FUTURE.md Phase 2)               = 55
-     + 40 candidates still open here                             = 95 theoretical ceiling
+    50 live today (46 at first writing, + TINYGL, + IGL, + PIXIJS, + NANOVG)
+     + 8 planned but unstarted (FUTURE.md Phase 2)               = 58
+     + 39 candidates still open here                             = 97 theoretical ceiling
 
-**95 is not a target and not a plan.** It is the size of the surveyed option space. The only number
+**97 is not a target and not a plan.** It is the size of the surveyed option space. The only number
 that may ever be published as CNA's renderer count is the one
-`scripts/check_renderer_identities.py` prints for the actual tree — today, **47**.
+`scripts/check_renderer_identities.py` prints for the actual tree — today, **50**.
