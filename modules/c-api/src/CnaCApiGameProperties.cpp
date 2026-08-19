@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameWindow.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "CNA/Platform/NativeWindowHandle.hpp"
 #include "Microsoft/Xna/Framework/LaunchParameters.hpp"
 #include "Microsoft/Xna/Framework/TitleContainer.hpp"
 #include "Microsoft/Xna/Framework/TitleLocation.hpp"
@@ -40,6 +41,34 @@ using Microsoft::Xna::Framework::TitleLocation;
 [[nodiscard]] CNA_Result InvalidInput(const char* const message)
 {
     return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
+}
+
+constexpr uint32_t NativeWindowHandleVersion = UINT32_C(1);
+
+[[nodiscard]] CNA_NativeWindowSystem MapNativeWindowSystem(
+    const CNA::Platform::NativeWindowSystem system) noexcept
+{
+    switch (system) {
+        case CNA::Platform::NativeWindowSystem::Win32:
+            return CNA_NATIVE_WINDOW_SYSTEM_WIN32;
+        case CNA::Platform::NativeWindowSystem::X11:
+            return CNA_NATIVE_WINDOW_SYSTEM_X11;
+        case CNA::Platform::NativeWindowSystem::Wayland:
+            return CNA_NATIVE_WINDOW_SYSTEM_WAYLAND;
+        case CNA::Platform::NativeWindowSystem::Cocoa:
+            return CNA_NATIVE_WINDOW_SYSTEM_COCOA;
+        case CNA::Platform::NativeWindowSystem::Android:
+            return CNA_NATIVE_WINDOW_SYSTEM_ANDROID;
+        case CNA::Platform::NativeWindowSystem::Web:
+            return CNA_NATIVE_WINDOW_SYSTEM_WEB;
+        case CNA::Platform::NativeWindowSystem::Headless:
+            return CNA_NATIVE_WINDOW_SYSTEM_HEADLESS;
+        case CNA::Platform::NativeWindowSystem::Terminal:
+            return CNA_NATIVE_WINDOW_SYSTEM_TERMINAL;
+        case CNA::Platform::NativeWindowSystem::Unknown:
+            break;
+    }
+    return CNA_NATIVE_WINDOW_SYSTEM_UNKNOWN;
 }
 
 [[nodiscard]] CNA_Result CopyText(
@@ -1040,8 +1069,49 @@ CNA_Result cna_game_window_get_native_handle_ext(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        // The canonical property and the canonical native accessor answer the same pointer.
+        // XNA's `Handle` property, which is not the native window: CNA initializes it to zero and
+        // never writes a platform value into it. `cna_game_window_get_native_window_ext` is the
+        // route that asks the platform.
         *outHandle = static_cast<uint64_t>(window->getHandleProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_native_window_handle_init(CNA_NativeWindowHandle* const handle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (handle == nullptr) {
+            return InvalidInput("The native-window-handle structure is null.");
+        }
+        *handle = CNA_NativeWindowHandle{};
+        handle->struct_size = static_cast<uint32_t>(sizeof(CNA_NativeWindowHandle));
+        handle->struct_version = NativeWindowHandleVersion;
+        handle->system = CNA_NATIVE_WINDOW_SYSTEM_UNKNOWN;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_window_get_native_window_ext(
+    const CNA_Handle gameHandle,
+    CNA_NativeWindowHandle* const handle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (handle == nullptr ||
+            handle->struct_size < sizeof(CNA_NativeWindowHandle) ||
+            handle->struct_version != NativeWindowHandleVersion) {
+            return InvalidInput("The native-window-handle structure is invalid.");
+        }
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA::Platform::NativeWindowHandle native = window->GetNativeWindowHandleEXT();
+        handle->system = MapNativeWindowSystem(native.system);
+        handle->display = native.display;
+        handle->window = native.window;
+        handle->surface = native.surface;
+        handle->window_id = native.windowId;
         return CNA_RESULT_SUCCESS;
     });
 }

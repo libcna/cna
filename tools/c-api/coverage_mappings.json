@@ -13742,8 +13742,8 @@
       ]
     },
     {
-      "id": "platform-shutdown-and-native-handle",
-      "qualified_name_regex": "^(Microsoft::Devices::VibrateController::DevicesShutdownCoordinator|Microsoft::Xna::Framework::GameWindow::GetNativeWindowHandleEXT)$",
+      "id": "devices-shutdown-coordinator",
+      "qualified_name_regex": "^Microsoft::Devices::VibrateController::DevicesShutdownCoordinator$",
       "kinds": [
         "class",
         "struct",
@@ -13762,12 +13762,40 @@
         "event",
         "friend"
       ],
-      "mapping": "no C form, for two different reasons that land in the same place. The shutdown coordinator is a friendship declaration letting the devices module order its own teardown; and `GetNativeWindowHandleEXT` hands back the platform's native window handle -- an X11 window number, an NSWindow pointer, an HWND -- which is exactly the kind of backend detail this ABI exists to keep out of a consumer's program. A C caller that needs the window asks the game for what it can do, not for the handle",
-      "tests": "`DevicesSmoke.c` covers vibration and its shutdown; `RuntimeGameSmoke.c` covers the window surface",
+      "mapping": "no C form: a friendship declaration letting the devices module order its own teardown. It declares no callable operation",
+      "tests": "`DevicesSmoke.c` covers vibration and its shutdown",
       "status": "not-applicable",
-      "task": "CBIND-047",
+      "task": "CBIND-072",
       "approved_symbols": [
-        "CPP-74DEDC53555F",
+        "CPP-74DEDC53555F"
+      ]
+    },
+    {
+      "id": "game-window-native-handle",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameWindow::GetNativeWindowHandleEXT$",
+      "kinds": [
+        "class",
+        "struct",
+        "enum",
+        "enum-value",
+        "method",
+        "function",
+        "typedef",
+        "variable",
+        "field",
+        "constructor",
+        "destructor",
+        "operator",
+        "alias",
+        "constant",
+        "event",
+        "friend"
+      ],
+      "mapping": "`cna_game_window_get_native_window_ext`, filling a versioned `CNA_NativeWindowHandle` whose `system` field says which of the borrowed pointers and the X11 XID carry anything. This row read not-applicable until `CBIND-072`, on the ground that a native window handle is the backend detail this ABI keeps out; the reason was true of the value and did not force the conclusion, because the canonical struct is already the portable tagged form and names no platform type. `cna_game_window_get_native_handle_ext` is a different accessor despite the name -- XNA's integer `Handle` round-trip token -- and covers the property, not this",
+      "tests": "`RuntimeGameSmoke.c` checks the versioned-structure refusal, the initialized empty state, the per-system field invariants, and that a reported windowing system implies a round-trip token",
+      "status": "implemented",
+      "task": "CBIND-072",
+      "approved_symbols": [
         "CPP-829275CD0357"
       ]
     },

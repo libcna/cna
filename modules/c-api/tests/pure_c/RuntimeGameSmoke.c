@@ -458,6 +458,8 @@ static int validate_window(const CNA_Handle game)
     CNA_Bool flag = UINT8_C(9);
     uint64_t bytes = UINT64_C(9);
     uint64_t native = UINT64_C(1);
+    CNA_NativeWindowHandle native_window;
+    CNA_NativeWindowHandle uninitialized;
     char text[256];
     char device_name[256];
 
@@ -476,6 +478,73 @@ static int validate_window(const CNA_Handle game)
         cna_game_window_get_current_orientation(game, &display_orientation) != CNA_RESULT_SUCCESS ||
         cna_game_window_get_native_handle_ext(game, &native) != CNA_RESULT_SUCCESS) {
         return 0;
+    }
+    /* The structure must be initialized for this ABI version; an uninitialized one is refused
+       rather than filled in, so a consumer built against a later header cannot be handed fields it
+       does not know how to read. */
+    memset(&uninitialized, 0, sizeof(uninitialized));
+    if (cna_game_window_get_native_window_ext(game, &uninitialized) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_game_window_get_native_window_ext(game, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_native_window_handle_init(0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_native_window_handle_init(&native_window) != CNA_RESULT_SUCCESS ||
+        native_window.system != CNA_NATIVE_WINDOW_SYSTEM_UNKNOWN ||
+        native_window.display != 0 || native_window.window != 0 ||
+        native_window.surface != 0 || native_window.window_id != UINT64_C(0)) {
+        return 0;
+    }
+    /* No native window is an answer, not a failure, so every platform this runs on succeeds here
+       and the system identity is what separates the cases. */
+    if (cna_game_window_get_native_window_ext(game, &native_window) != CNA_RESULT_SUCCESS ||
+        native_window.system > CNA_NATIVE_WINDOW_SYSTEM_MAXIMUM) {
+        return 0;
+    }
+    /* CBIND-072. The two routes answer different things -- the header claimed they answered the
+       same pointer, and they do not -- but they are not unrelated: both come from the platform
+       window, so a reported native windowing system implies the round-trip token exists. The
+       converse does not hold, and deliberately is not asserted: a driver with no native window
+       system still creates a platform window, which is exactly the case a dummy video driver
+       produces. */
+    if (native_window.system != CNA_NATIVE_WINDOW_SYSTEM_UNKNOWN &&
+        native_window.system != CNA_NATIVE_WINDOW_SYSTEM_HEADLESS &&
+        native_window.system != CNA_NATIVE_WINDOW_SYSTEM_TERMINAL &&
+        native == UINT64_C(0)) {
+        return 0;
+    }
+
+    /* Which fields carry anything is decided by the system identity, and a caller that reads one
+       without checking gets a null it cannot distinguish from a real value. These are the same
+       per-system invariants the canonical accessors enforce. */
+    switch (native_window.system) {
+        case CNA_NATIVE_WINDOW_SYSTEM_X11:
+            /* An XID is an integer resource id, so it lives in its own field and `window` stays
+               null even though the window is perfectly real. */
+            if (native_window.display == 0 || native_window.window != 0 ||
+                native_window.surface != 0 || native_window.window_id == UINT64_C(0)) {
+                return 0;
+            }
+            break;
+        case CNA_NATIVE_WINDOW_SYSTEM_WAYLAND:
+            if (native_window.display == 0 || native_window.surface == 0 ||
+                native_window.window_id != UINT64_C(0)) {
+                return 0;
+            }
+            break;
+        case CNA_NATIVE_WINDOW_SYSTEM_UNKNOWN:
+        case CNA_NATIVE_WINDOW_SYSTEM_HEADLESS:
+        case CNA_NATIVE_WINDOW_SYSTEM_TERMINAL:
+            if (native_window.display != 0 || native_window.window != 0 ||
+                native_window.surface != 0 || native_window.window_id != UINT64_C(0)) {
+                return 0;
+            }
+            break;
+        default:
+            /* Win32, Cocoa and Android all answer through `window`; Web answers through none of
+               them, because its target is a canvas the host page selects. */
+            if (native_window.window_id != UINT64_C(0)) {
+                return 0;
+            }
+            break;
     }
     /* The title round-trips through the route this ABI has had since its first release. */
     memset(text, 0, sizeof(text));

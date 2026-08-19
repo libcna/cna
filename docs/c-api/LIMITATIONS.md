@@ -15,9 +15,9 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 6,312 | A C route exists and is tested. |
+| Fully mapped | 6,313 | A C route exists and is tested. |
 | **Partially mapped** | 15 | A route exists but covers a stated subset. Read the next section before relying on one. |
-| **No C form** | 381 | Nothing callable was omitted; see the reasons below. |
+| **No C form** | 380 | Nothing callable was omitted; see the reasons below. |
 
 ## Partially mapped: a route exists, and it does less than the C++ does
 
@@ -82,11 +82,7 @@ C cannot name a C++ type, so a generic operation cannot be called from C at all.
 
 Sharp Runtime is an implementation dependency and never a C type. An operation whose value *is* such an object has nothing to hand across the boundary; see SHARP_RUNTIME_BOUNDARY.md.
 
-### Raw native backend pointers — 2 symbols
-
-A route that accepts or returns an SDL pointer would make the caller's program depend on CNA's backend choice, which is the one thing this ABI exists to prevent.
-
-### Friendship declarations — 12 symbols
+### Friendship declarations — 13 symbols
 
 A friend declaration grants a canonical CNA type access to another's internals. It declares no callable operation.
 
@@ -122,7 +118,7 @@ promise rather than of any declaration.
 | Subject | What it means | Status |
 |---|---|---|
 | **FFmpeg stays a system dependency** | The package installs the SDL3, SDL3_image and SDL3_mixer libraries this project builds, beside `libcna_c_api.so`, whose RPATH is `$ORIGIN` -- so an installed CNA links and runs with no environment variable. FFmpeg is different: libavcodec, libavformat, libavutil and libswresample come from the distribution. Copying a distribution's binaries into this package would take on their redistribution terms, freeze their soname against future security updates and drag in the transitive libraries they were linked against, so they remain a system dependency a deployment installs the ordinary way. | by design (CONSUMING.md) |
-| **The static archive keeps 83 C++ statics visible** | A static CNA exists and exports exactly the same 2,853 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly. | by design (CONSUMING.md) |
+| **The static archive keeps 83 C++ statics visible** | A static CNA exists and exports exactly the same 2,855 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly. | by design (CONSUMING.md) |
 | **One active CNA runtime per process** | A second `cna_game_create` while a game is alive returns `CNA_RESULT_INVALID_STATE`. This makes the interaction with CNA's process-level graphics and input state explicit; simultaneous runtimes are an ABI-semantic change requiring a reviewed design. | by design (HANDLES.md) |
 | **Handles are thread-affine and never leave their process** | A handle used from a thread other than its creator's answers `CNA_RESULT_THREAD`. Handles are not pointers, not serializable and not stable across processes. | by design (HANDLES.md) |
 | **The ABI is 0.x and experimental** | An incompatible change requires only a minor-version increment, release notes and a regenerated baseline. The additive-only guarantee begins at 1.0, which is a separate, later decision. | by design (ABI_VERSIONING.md) |

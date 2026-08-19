@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 1024,
+  "encoded": 1280,
   "major": 0,
-  "minor": 4,
+  "minor": 5,
   "patch": 0,
-  "runtime": 1024
+  "runtime": 1280
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -1686,6 +1686,7 @@
   "cna_game_window_get_current_orientation",
   "cna_game_window_get_is_borderless_ext",
   "cna_game_window_get_native_handle_ext",
+  "cna_game_window_get_native_window_ext",
   "cna_game_window_get_screen_device_name_size",
   "cna_game_window_get_title_size",
   "cna_game_window_get_type_name_size",
@@ -2655,6 +2656,7 @@
   "cna_mouse_subscribe_clicked_ext",
   "cna_mouse_unsubscribe_clicked_ext",
   "cna_mouse_warp_global_ext",
+  "cna_native_window_handle_init",
   "cna_net_get_last_join_error",
   "cna_network_gamer_copy_machine",
   "cna_network_gamer_create",
@@ -3710,9 +3712,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 1024,
+  "CNA_ABI_VERSION": 1280,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 4,
+  "CNA_ABI_VERSION_MINOR": 5,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
@@ -4603,6 +4605,16 @@
   "CNA_MOUSE_CURSOR_STOCK_SIZE_WE": 9,
   "CNA_MOUSE_CURSOR_STOCK_WAIT": 10,
   "CNA_MOUSE_CURSOR_STOCK_WAIT_ARROW": 11,
+  "CNA_NATIVE_WINDOW_SYSTEM_ANDROID": 5,
+  "CNA_NATIVE_WINDOW_SYSTEM_COCOA": 4,
+  "CNA_NATIVE_WINDOW_SYSTEM_HEADLESS": 7,
+  "CNA_NATIVE_WINDOW_SYSTEM_MAXIMUM": 8,
+  "CNA_NATIVE_WINDOW_SYSTEM_TERMINAL": 8,
+  "CNA_NATIVE_WINDOW_SYSTEM_UNKNOWN": 0,
+  "CNA_NATIVE_WINDOW_SYSTEM_WAYLAND": 3,
+  "CNA_NATIVE_WINDOW_SYSTEM_WEB": 6,
+  "CNA_NATIVE_WINDOW_SYSTEM_WIN32": 1,
+  "CNA_NATIVE_WINDOW_SYSTEM_X11": 2,
   "CNA_NETWORK_EVENT_TYPE_GAMER_JOIN": 1,
   "CNA_NETWORK_EVENT_TYPE_GAMER_LEAVE": 2,
   "CNA_NETWORK_EVENT_TYPE_HOST_CHANGE": 3,
@@ -5597,6 +5609,10 @@
   "CNA_NativeHandleValue": [
    8,
    8
+  ],
+  "CNA_NativeWindowSystem": [
+   4,
+   4
   ],
   "CNA_NetworkEventType": [
    4,
@@ -9356,6 +9372,40 @@
     ]
    },
    "size": 40
+  },
+  "CNA_NativeWindowHandle": {
+   "align": 8,
+   "fields": {
+    "display": [
+     16,
+     8
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "surface": [
+     32,
+     8
+    ],
+    "system": [
+     8,
+     4
+    ],
+    "window": [
+     24,
+     8
+    ],
+    "window_id": [
+     40,
+     8
+    ]
+   },
+   "size": 48
   },
   "CNA_NetworkEventInfo": {
    "align": 8,
