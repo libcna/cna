@@ -249,6 +249,53 @@ CNA_C_API CNA_Result cna_content_manager_load_foreign_ext(
     CNA_StringView asset_name,
     void** out_object);
 
+/**
+ * @brief Builds one caller-owned object from a `.cnj` descriptor's raw JSON.
+ *
+ * @param context The context supplied at registration.
+ * @param cnj_json The descriptor's whole text, borrowed for the duration of the call and **not**
+ *        NUL-terminated -- read exactly `byte_length` bytes.
+ * @param out_object Receives the caller's opaque object. This ABI never dereferences, copies or
+ *        frees it.
+ * @return `CNA_RESULT_SUCCESS`, or any documented result code to fail the load that asked for it.
+ */
+typedef CNA_Result (*CNA_CnjLoaderCallback)(
+    void* context,
+    CNA_StringView cnj_json,
+    void** out_object);
+
+/**
+ * @brief Registers a loader for one `"type"` value in a `.cnj` descriptor.
+ *
+ * @param content_manager Owned content-manager handle.
+ * @param type_name The descriptor's `"type"` string this loader handles, copied during the call.
+ *        Must not be empty.
+ * @param callback Non-null loader.
+ * @param context Caller-owned context passed back to @p callback; it must outlive the content
+ *        manager, which is what owns this registration.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_ARGUMENT` for a null callback or an empty or
+ *         non-UTF-8 type name; `CNA_RESULT_INVALID_STATE` when that type name is already
+ *         registered on this manager; or a documented handle/thread failure.
+ *
+ * The `.cnj` counterpart of `cna_content_type_reader_manager_register`, and the piece that made
+ * `cna_content_manager_load_foreign_ext` reach more than compiled assets: a registered reader
+ * answers for an `.xnb`, and this answers for a `.cnj`. Load the result through that same route --
+ * it needs no type argument and does not care which of the two produced the object.
+ *
+ * **Registration is per manager and lives as long as it.** There is no unregister, because the
+ * canonical surface has none: the table belongs to the content manager and goes with it. That is
+ * the one way this differs from the reader registry, which is process-wide and hands back a
+ * handle to release.
+ *
+ * A descriptor whose `"type"` names nothing registered fails the load rather than falling back,
+ * for the same reason a compiled asset naming an unregistered reader does.
+ */
+CNA_C_API CNA_Result cna_content_manager_register_cnj_loader_ext(
+    CNA_Handle content_manager,
+    CNA_StringView type_name,
+    CNA_CnjLoaderCallback callback,
+    void* context);
+
 /*
  * The Effect loader, `cna_content_manager_load_effect`, is declared in `CNA/C/effects.h` beside
  * the rest of the effect surface, because that is where its `CNA_EffectHandle` return type lives.

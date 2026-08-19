@@ -806,6 +806,91 @@ static int validate_effect_load(const CNA_Handle manager)
     return cna_effect_destroy(effect) == CNA_RESULT_SUCCESS;
 }
 
+/* CBIND-069: a caller-supplied .cnj loader, the descriptor counterpart of the registered XNB
+   reader. The coverage matrix recorded this family as having no C form "because registering a
+   reader requires naming an arbitrary C++ type T"; true of the general template, and not of the
+   one instantiation a C caller needs, which is the same carrier CBIND-056 already produces. */
+
+static const char CnjAssetName[] = "cna_c_api_content_custom";
+static const char CnjDescriptorPath[] = "cna_c_api_content_custom.cnj";
+static const char CnjTypeName[] = "CnaCApiCustomType";
+
+typedef struct CnjLoaderState {
+    int calls;
+    int saw_type_name;
+    int payload;
+} CnjLoaderState;
+
+static CNA_Result on_cnj_load(
+    void* const context,
+    const CNA_StringView cnj_json,
+    void** const out_object)
+{
+    CnjLoaderState* const state = (CnjLoaderState*)context;
+    ++state->calls;
+    /* The whole descriptor text arrives, and it is not NUL-terminated -- reading it as a C string
+       is the mistake this assertion exists to catch. */
+    if (cnj_json.data == 0 || cnj_json.byte_length == 0U) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    if (memchr(cnj_json.data, 'C', (size_t)cnj_json.byte_length) != 0) {
+        state->saw_type_name = 1;
+    }
+    *out_object = &state->payload;
+    return CNA_RESULT_SUCCESS;
+}
+
+static int write_cnj_fixture(void)
+{
+    static const char descriptor[] =
+        "{\"cnjVersion\":1,\"type\":\"CnaCApiCustomType\",\"payload\":7}";
+    return write_text_file(CnjDescriptorPath, descriptor);
+}
+
+static int validate_cnj_loader(const CNA_Handle manager)
+{
+    CnjLoaderState state;
+    void* object = 0;
+
+    memset(&state, 0, sizeof(state));
+
+    /* Refusals first, none of which may register anything. */
+    if (cna_content_manager_register_cnj_loader_ext(manager, view(CnjTypeName), 0, &state) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_content_manager_register_cnj_loader_ext(
+            manager, (CNA_StringView){0, 0U}, on_cnj_load, &state) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    if (cna_content_manager_register_cnj_loader_ext(
+            manager, view(CnjTypeName), on_cnj_load, &state) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* The same type name twice on one manager is a state failure, not a silent replacement. */
+    if (cna_content_manager_register_cnj_loader_ext(
+            manager, view(CnjTypeName), on_cnj_load, &state) != CNA_RESULT_INVALID_STATE) {
+        return 0;
+    }
+
+    /* And the descriptor loads through the same foreign route a registered XNB reader uses --
+       that route takes no type argument and does not care which of the two produced the object. */
+    if (cna_content_manager_load_foreign_ext(manager, view(CnjAssetName), &object) !=
+            CNA_RESULT_SUCCESS ||
+        object != (void*)&state.payload || state.calls != 1 || state.saw_type_name != 1) {
+        return 0;
+    }
+    /* Cached like any other asset. */
+    {
+        void* again = 0;
+        if (cna_content_manager_load_foreign_ext(manager, view(CnjAssetName), &again) !=
+                CNA_RESULT_SUCCESS ||
+            again != object || state.calls != 1) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 static CNA_Result on_load(
     const CNA_Handle game,
     const CNA_GameTime* const game_time,
@@ -922,7 +1007,8 @@ static CNA_Result on_load(
         !validate_resource_manager(graphics_device) ||
         !validate_font_load(state->content_manager) ||
         !validate_foreign_load(state->content_manager) ||
-        !validate_effect_load(state->content_manager)) {
+        !validate_effect_load(state->content_manager) ||
+        !validate_cnj_loader(state->content_manager)) {
         return CNA_RESULT_INVALID_STATE;
     }
 
@@ -974,7 +1060,7 @@ static int call_unload_on_wrong_thread(void* const context)
 int main(void)
 {
     if (!write_fixture() || !write_font_fixture() || !write_foreign_asset() ||
-        !write_effect_fixture()) {
+        !write_effect_fixture() || !write_cnj_fixture()) {
         return 1;
     }
 
@@ -1013,6 +1099,7 @@ int main(void)
     (void)remove(FontDescriptorPath);
     (void)remove(ForeignAssetPath);
     (void)remove(EffectDescriptorPath);
+    (void)remove(CnjDescriptorPath);
 
     if (cna_content_manager_destroy(state.content_manager) != CNA_RESULT_SUCCESS ||
         cna_content_manager_unload(state.content_manager) != CNA_RESULT_INVALID_HANDLE ||

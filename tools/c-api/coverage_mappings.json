@@ -6106,15 +6106,20 @@
         "method",
         "alias"
       ],
-      "mapping": "No C mapping: registering a reader or a named `.cnj` factory requires naming an arbitrary C++ type `T` and returning a C++ object of that type, neither of which exists in C. The C API exposes the concrete typed load routes the built-in readers produce instead of inventing an untyped registration operation",
-      "tests": "Doxygen declaration inventory; the typed load routes these readers back are covered by `ContentSmoke.c`",
-      "status": "not-applicable",
-      "task": "CBIND-036B1",
+      "mapping": "`cna_content_manager_register_cnj_loader_ext` maps `RegisterCnjLoader` and its `CnjLoaderFn` alias, instantiated at `CNA::Content::ForeignContentObjectEXT` -- the carrier a registered XNB reader already produces, and a concrete type C can name. The callback receives the descriptor's raw JSON and returns the caller's opaque object; `cna_content_manager_load_foreign_ext` then loads it through the same route that answers for a compiled asset. **`RegisterTypeReader` stays without a C form**, and for a different reason than the pair beside it: it takes a `LooseFileContentTypeReader<T>` *subclass instance*, so a caller would have to author a C++ class rather than supply a callback. There is no unregister here because the canonical surface has none: the table belongs to the content manager and goes with it",
+      "tests": "`ContentSmoke.c` registers a loader for one `\"type\"` value, asserts the descriptor's whole non-NUL-terminated text reaches the callback, loads it through `cna_content_manager_load_foreign_ext` and gets back the exact pointer the loader produced, finds it cached on a second load, and refuses a null callback, an empty type name and a second registration of a name this manager already holds",
+      "status": "partial",
+      "task": "CBIND-069",
       "approved_symbols": [
         "CPP-7E83FA04242C",
         "CPP-C49B5635E9CC",
         "CPP-F4D589AF0BF1"
-      ]
+      ],
+      "limitation": {
+        "kind": "cpp-subclass-required",
+        "reports_through": "`cna_content_manager_register_cnj_loader_ext` covers the named `.cnj` factory; `RegisterTypeReader` requires a C++ subclass instance and has no C form",
+        "approval": "recorded by CBIND-069 on 2026-08-19"
+      }
     },
     {
       "id": "content-namespace-logger-alias",

@@ -770,6 +770,73 @@ CNA_Result cna_content_manager_load_foreign_ext(
     });
 }
 
+CNA_Result cna_content_manager_register_cnj_loader_ext(
+    const CNA_Handle contentManagerHandle,
+    const CNA_StringView typeName,
+    const CNA_CnjLoaderCallback callback,
+    void* const context)
+{
+    return CallWithExceptionBarrier([&]() {
+        if (callback == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The .cnj loader callback is null.");
+        }
+        std::string typeNameCopy;
+        if (const CNA_Result result = CopyStringView(typeName, true, &typeNameCopy);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The .cnj type name is not valid UTF-8.");
+        }
+        if (typeNameCopy.empty()) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The .cnj type name must not be empty.");
+        }
+
+        std::shared_ptr<ContentManagerResource> contentManager;
+        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        try {
+            // The canonical factory is a std::function returning T by value, which is why this
+            // route exists at all: T is CNA::Content::ForeignContentObjectEXT, a concrete type C
+            // can name through the same carrier a registered XNB reader already produces. The
+            // coverage matrix recorded this family as having no C form "because registering a
+            // reader requires naming an arbitrary C++ type T" -- true of the general template and
+            // not of the one instantiation a C caller needs.
+            contentManager->value->RegisterCnjLoader<CNA::Content::ForeignContentObjectEXT>(
+                typeNameCopy,
+                [callback, context](const std::string& json, ContentManager&)
+                    -> CNA::Content::ForeignContentObjectEXT {
+                    const CNA_StringView view{json.data(), json.size()};
+                    void* object = nullptr;
+                    const CNA_Result result = callback(context, view, &object);
+                    if (result != CNA_RESULT_SUCCESS) {
+                        throw ContentLoadException(
+                            "A caller-supplied .cnj loader failed (CNA_Result " +
+                            std::to_string(result) + ").");
+                    }
+                    return CNA::Content::ForeignContentObjectEXT{object};
+                });
+        } catch (const std::invalid_argument& exception) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, exception.what());
+        } catch (const std::logic_error& exception) {
+            // The canonical refusal for a name already taken. It is a state failure rather than a
+            // bad argument: the same name is perfectly valid on a manager that does not hold it.
+            return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_content_manager_get_asset_path_size(
     const CNA_Handle contentManagerHandle,
     const CNA_StringView assetName,
