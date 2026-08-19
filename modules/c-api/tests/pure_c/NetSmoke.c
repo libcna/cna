@@ -951,6 +951,21 @@ static int validate_session_rosters(const CNA_NetworkSessionHandle session)
         rejected != CNA_INVALID_HANDLE) {
         return 0;
     }
+    /* CBIND-065: the session's host, which nothing named while the matrix recorded it implemented.
+       A session with a roster has one, and it is a gamer in that roster -- the property XNA code
+       reads to decide whether it is the authority. */
+    {
+        CNA_NetworkGamerHandle host = CNA_INVALID_HANDLE;
+        CNA_Bool host_is_host = CNA_FALSE;
+        if (cna_network_session_get_host(session, &host) != CNA_RESULT_SUCCESS ||
+            host == CNA_INVALID_HANDLE ||
+            cna_network_gamer_get_is_host(host, &host_is_host) != CNA_RESULT_SUCCESS ||
+            host_is_host != CNA_TRUE ||
+            cna_network_session_get_host(session, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_network_gamer_destroy(host) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
     /* Signed-in gamers have no C representation yet, so only the no-gamer form is accepted. */
     if (cna_network_session_add_local_gamer(session, UINT64_C(1234)) !=
             CNA_RESULT_NOT_SUPPORTED ||
@@ -1161,6 +1176,45 @@ static void on_write_leaderboards(
     ((SessionEventCounters*)context)->leaderboards += 1;
 }
 
+static int validate_invite_accepted_info(void)
+{
+    CNA_InviteAcceptedEventInfo info;
+    int index = 0;
+
+    /* Caller-initialised, like every versioned structure in this ABI. */
+    memset(&info, 9, sizeof(info));
+    info.struct_size = (uint32_t)sizeof(info);
+    info.struct_version = UINT32_C(1);
+    if (cna_invite_accepted_event_info_init(CNA_INVALID_HANDLE, CNA_TRUE, &info) !=
+            CNA_RESULT_SUCCESS ||
+        info.struct_size != (uint32_t)sizeof(info) || info.struct_version != UINT32_C(1) ||
+        info.gamer != CNA_INVALID_HANDLE || info.is_current_session != CNA_TRUE) {
+        return 0;
+    }
+    for (index = 0; index < (int)(sizeof(info.reserved) / sizeof(info.reserved[0])); ++index) {
+        if (info.reserved[index] != 0U) {
+            return 0;
+        }
+    }
+    /* The other flag value, an undefined one, and a null output. */
+    if (cna_invite_accepted_event_info_init(CNA_INVALID_HANDLE, CNA_FALSE, &info) !=
+            CNA_RESULT_SUCCESS ||
+        info.is_current_session != CNA_FALSE ||
+        cna_invite_accepted_event_info_init(CNA_INVALID_HANDLE, CNA_TRUE, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    /* CBIND-065: a flag outside {CNA_FALSE, CNA_TRUE} is refused rather than stored. This route
+       writes into a structure an event *subscriber* then reads, so a byte of 9 accepted here
+       would leave a reader with a Boolean that is neither true nor false. */
+    if (cna_invite_accepted_event_info_init(CNA_INVALID_HANDLE, UINT8_C(9), &info) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        info.is_current_session != CNA_FALSE) {
+        return 0;
+    }
+    return 1;
+}
+
 static void on_invite_accepted(const CNA_InviteAcceptedEventInfo* const info, void* const context)
 {
     (void)info;
@@ -1215,6 +1269,10 @@ static int validate_session_subscriptions(const CNA_NetworkSessionHandle session
     if (cna_network_session_subscribe_game_started(session, 0, 0, &rejected) !=
             CNA_RESULT_INVALID_ARGUMENT ||
         rejected != CNA_INVALID_HANDLE ||
+        /* CBIND-065: the constructor for the argument that event carries. Callers build one to
+           raise the event themselves, and nothing named it while the matrix recorded it
+           implemented -- so the versioned structure it fills in went unproved. */
+        !validate_invite_accepted_info() ||
         cna_network_session_subscribe_invite_accepted(on_invite_accepted, 0, 0) !=
             CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
@@ -1480,6 +1538,11 @@ static int validate_local_gamers(
     memset(buffer, 0, sizeof(buffer));
     ok = cna_local_network_gamer_get_signed_in_gamer(local, &backing) == CNA_RESULT_SUCCESS &&
         backing != CNA_INVALID_HANDLE &&
+        /* CBIND-065: the size half of the two-call pair, which was never asked for even though
+           the copy half was -- so nothing proved the two agree. */
+        cna_signed_in_gamer_get_gamertag_size(backing, &bytes) == CNA_RESULT_SUCCESS &&
+        bytes == (uint64_t)strlen("Player") &&
+        cna_signed_in_gamer_get_gamertag_size(backing, 0) == CNA_RESULT_INVALID_ARGUMENT &&
         cna_signed_in_gamer_copy_gamertag(backing, buffer, (uint64_t)sizeof(buffer), &bytes) ==
             CNA_RESULT_SUCCESS &&
         strcmp(buffer, "Player") == 0 &&

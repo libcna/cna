@@ -527,6 +527,80 @@ static int validate_picture_family(const CNA_Handle game, const CNA_MediaLibrary
         (void)remove(saved_token);
     }
 
+    /* CBIND-065: the picture-tree surface the walk above reached around. The root album, its
+       child-album collection and its own pictures are all already in hand. */
+    memset(text, 0, sizeof(text));
+    if (cna_picture_album_copy_name(root, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        bytes == 0U ||
+        cna_picture_album_equals(root, root, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE) {
+        return 0;
+    }
+    {
+        CNA_PictureCollectionHandle root_pictures = CNA_INVALID_HANDLE;
+        int32_t root_count = 9;
+        if (cna_picture_album_get_pictures(root, &root_pictures) != CNA_RESULT_SUCCESS ||
+            cna_picture_collection_get_count(root_pictures, &root_count) != CNA_RESULT_SUCCESS ||
+            root_count < 0 ||
+            cna_picture_collection_get_is_disposed(root_pictures, &flag) != CNA_RESULT_SUCCESS ||
+            flag != CNA_FALSE ||
+            cna_picture_collection_destroy(root_pictures) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+    memset(text, 0, sizeof(text));
+    if (cna_picture_album_collection_get_type_name_size(child_albums, &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        bytes >= (uint64_t)sizeof(text) ||
+        cna_picture_album_collection_copy_type_name(
+            child_albums, text, (uint64_t)sizeof(text), &bytes) != CNA_RESULT_SUCCESS ||
+        strcmp(text, "Microsoft.Xna.Framework.Media.PictureAlbumCollection") != 0 ||
+        cna_picture_album_collection_get_is_disposed(child_albums, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE) {
+        return 0;
+    }
+    {
+        /* The fixture's picture folder may or may not hold a sub-album, so the index route is
+           asserted against the count rather than against an assumed shape. */
+        CNA_PictureAlbumHandle child = CNA_INVALID_HANDLE;
+        int32_t child_count = 0;
+        if (cna_picture_album_collection_get_count(child_albums, &child_count) !=
+            CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        if (child_count > 0) {
+            if (cna_picture_album_collection_get_at(child_albums, 0, &child) !=
+                CNA_RESULT_SUCCESS) {
+                return 0;
+            }
+        }
+        if (cna_picture_album_collection_get_at(child_albums, child_count, &child) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
+    }
+    memset(text, 0, sizeof(text));
+    if (cna_picture_get_type_name_size(picture, &bytes) != CNA_RESULT_SUCCESS ||
+        bytes >= (uint64_t)sizeof(text) ||
+        cna_picture_copy_type_name(picture, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        strcmp(text, "Microsoft.Xna.Framework.Media.Picture") != 0) {
+        return 0;
+    }
+    /* The stream-taking save is covered by its refusal only. Its accepting path needs a storage
+       container, and this test's whole determinism rests on the XDG root its own scan reads --
+       creating a storage device here would move that root out from under the fixture. Said
+       plainly rather than dressed up: this proves the handle is validated, and nothing more. */
+    {
+        CNA_PictureHandle from_stream = UINT64_C(9);
+        if (cna_media_library_save_picture_from_stream(
+                library, view("cna_stream_saved"), CNA_INVALID_HANDLE, &from_stream) !=
+                CNA_RESULT_INVALID_HANDLE ||
+            from_stream != CNA_INVALID_HANDLE) {
+            return 0;
+        }
+    }
+
     /* Disposal marks a picture and empties a collection, and every index is then refused. */
     if (cna_picture_dispose(picture) != CNA_RESULT_SUCCESS ||
         cna_picture_dispose(picture) != CNA_RESULT_SUCCESS ||
@@ -555,6 +629,195 @@ static int validate_picture_family(const CNA_Handle game, const CNA_MediaLibrary
         cna_picture_get_name_size(rejected, &bytes) == CNA_RESULT_INVALID_HANDLE &&
         cna_picture_album_get_hash_code(rejected, &count) == CNA_RESULT_INVALID_HANDLE &&
         cna_picture_collection_get_count(rejected, &count) == CNA_RESULT_INVALID_HANDLE;
+}
+
+/* CBIND-065: the entity surface the graph test reached around.
+ *
+ * `check_route_test_coverage.py` measured 49 media-library routes that no test named, while the
+ * coverage matrix recorded their families implemented and cited this file. That is the shape
+ * CBIND-052A found once already: a rule credits its test description to every symbol it covers,
+ * including the ones the test never calls. Everything below is reachable from the same fixture the
+ * graph test already builds -- one artist, one album, one genre, one folder of pictures -- so none
+ * of it needed new scaffolding, only asking.
+ */
+static int validate_entity_type_names(
+    const CNA_ArtistCollectionHandle artists,
+    const CNA_GenreCollectionHandle genres,
+    const CNA_PlaylistCollectionHandle playlists,
+    const CNA_AlbumHandle album,
+    const CNA_ArtistHandle artist,
+    const CNA_GenreHandle genre)
+{
+    char text[256];
+    uint64_t bytes = UINT64_C(9);
+
+    /* Every entity and collection answers its own fully qualified .NET name, and the two-call
+       contract holds for each: the size first, then a copy that writes exactly that many bytes. */
+    struct { const char* expected; CNA_Result (*size)(CNA_Handle, uint64_t*);
+             CNA_Result (*copy)(CNA_Handle, char*, uint64_t, uint64_t*); CNA_Handle handle; }
+    cases[] = {
+        {"Microsoft.Xna.Framework.Media.Album", cna_album_get_type_name_size,
+         cna_album_copy_type_name, album},
+        {"Microsoft.Xna.Framework.Media.Artist", cna_artist_get_type_name_size,
+         cna_artist_copy_type_name, artist},
+        {"Microsoft.Xna.Framework.Media.ArtistCollection",
+         cna_artist_collection_get_type_name_size, cna_artist_collection_copy_type_name, artists},
+        {"Microsoft.Xna.Framework.Media.GenreCollection",
+         cna_genre_collection_get_type_name_size, cna_genre_collection_copy_type_name, genres},
+        {"Microsoft.Xna.Framework.Media.PlaylistCollection",
+         cna_playlist_collection_get_type_name_size, cna_playlist_collection_copy_type_name,
+         playlists},
+        {"Microsoft.Xna.Framework.Media.Genre", cna_genre_get_type_name_size,
+         cna_genre_copy_type_name, genre},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        memset(text, 0, sizeof(text));
+        if (cases[i].size(cases[i].handle, &bytes) != CNA_RESULT_SUCCESS ||
+            bytes != (uint64_t)strlen(cases[i].expected) ||
+            bytes >= (uint64_t)sizeof(text) ||
+            cases[i].copy(cases[i].handle, text, (uint64_t)sizeof(text), &bytes) !=
+                CNA_RESULT_SUCCESS ||
+            strcmp(text, cases[i].expected) != 0 ||
+            /* and the same too-small refusal every count/copy pair in this ABI makes */
+            cases[i].copy(cases[i].handle, text, UINT64_C(1), &bytes) !=
+                CNA_RESULT_BUFFER_TOO_SMALL) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int validate_genre_and_artist_reach(
+    const CNA_GenreCollectionHandle genres,
+    const CNA_ArtistHandle artist,
+    const CNA_AlbumHandle album)
+{
+    CNA_GenreHandle genre = CNA_INVALID_HANDLE;
+    CNA_GenreHandle same_genre = CNA_INVALID_HANDLE;
+    CNA_SongCollectionHandle genre_songs = CNA_INVALID_HANDLE;
+    CNA_SongCollectionHandle artist_songs = CNA_INVALID_HANDLE;
+    CNA_AlbumCollectionHandle genre_albums = CNA_INVALID_HANDLE;
+    CNA_AlbumHandle genre_album = CNA_INVALID_HANDLE;
+    CNA_Bool flag = UINT8_C(9);
+    int32_t count = 9;
+    int32_t hash = 0;
+    int32_t other_hash = 1;
+
+    /* The fixture's one genre, reached by index, is the same genre twice -- which is what makes
+       equality and the hash meaningful rather than tautological. */
+    if (cna_genre_collection_get_at(genres, 0, &genre) != CNA_RESULT_SUCCESS ||
+        cna_genre_collection_get_at(genres, 0, &same_genre) != CNA_RESULT_SUCCESS ||
+        cna_genre_equals(genre, same_genre, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
+        cna_genre_get_hash_code(genre, &hash) != CNA_RESULT_SUCCESS ||
+        cna_genre_get_hash_code(same_genre, &other_hash) != CNA_RESULT_SUCCESS ||
+        hash != other_hash) {
+        return 0;
+    }
+    /* Both songs carry that genre, and its one album is the album the library also reports. */
+    if (cna_genre_get_songs(genre, &genre_songs) != CNA_RESULT_SUCCESS ||
+        cna_song_collection_get_count(genre_songs, &count) != CNA_RESULT_SUCCESS || count != 2 ||
+        cna_genre_get_albums(genre, &genre_albums) != CNA_RESULT_SUCCESS ||
+        cna_album_collection_get_count(genre_albums, &count) != CNA_RESULT_SUCCESS || count != 1 ||
+        cna_album_collection_get_at(genre_albums, 0, &genre_album) != CNA_RESULT_SUCCESS ||
+        cna_album_equals(album, genre_album, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE) {
+        return 0;
+    }
+    /* The artist's songs are the same two, reached by the other edge of the graph. */
+    if (cna_artist_get_songs(artist, &artist_songs) != CNA_RESULT_SUCCESS ||
+        cna_song_collection_get_count(artist_songs, &count) != CNA_RESULT_SUCCESS || count != 2) {
+        return 0;
+    }
+    {
+        /* An artist compared with itself, for the same reason as the genre above. */
+        CNA_Bool same = UINT8_C(9);
+        if (cna_artist_equals(artist, artist, &same) != CNA_RESULT_SUCCESS || same != CNA_TRUE) {
+            return 0;
+        }
+    }
+
+    /* Disposal is idempotent and observable on every entity kind, and an emptied collection
+       still answers its count as zero rather than refusing. */
+    if (cna_genre_get_is_disposed(genre, &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE ||
+        cna_genre_collection_get_is_disposed(genres, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_genre_collection_dispose(genres) != CNA_RESULT_SUCCESS ||
+        cna_genre_collection_dispose(genres) != CNA_RESULT_SUCCESS ||
+        cna_genre_collection_get_is_disposed(genres, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_genre_collection_get_count(genres, &count) != CNA_RESULT_SUCCESS || count != 0 ||
+        cna_genre_collection_get_at(genres, 0, &same_genre) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    /* The genre handle taken before the collection was emptied still answers -- the collection
+       never owned it, the same rule the artist handle already proves below. The artist is only
+       *observed* here: disposing it is left to the caller, because the graph test still reads its
+       name after emptying the artist collection. */
+    if (cna_genre_get_is_disposed(genre, &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE ||
+        cna_artist_get_is_disposed(artist, &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE) {
+        return 0;
+    }
+    return cna_song_collection_destroy(genre_songs) == CNA_RESULT_SUCCESS &&
+        cna_song_collection_destroy(artist_songs) == CNA_RESULT_SUCCESS &&
+        cna_album_collection_destroy(genre_albums) == CNA_RESULT_SUCCESS;
+}
+
+/* CBIND-065: the collection disposal surface, and the playlist family the fixture cannot build.
+ *
+ * A music folder with no playlist file produces an empty playlist collection, so the playlist
+ * *entity* routes have no entity to answer for. They are covered here by the refusal a caller
+ * actually meets -- an invalid handle -- and that is said plainly rather than dressed up: this
+ * proves each route validates its handle before doing anything, and nothing more.
+ */
+static int validate_collection_disposal_and_playlists(
+    const CNA_AlbumCollectionHandle albums,
+    const CNA_PlaylistCollectionHandle playlists)
+{
+    CNA_Bool flag = UINT8_C(9);
+    int32_t count = 9;
+    int32_t hash = 0;
+    uint64_t bytes = UINT64_C(9);
+    char text[128];
+    CNA_SongCollectionHandle songs = CNA_INVALID_HANDLE;
+
+    if (cna_album_collection_get_is_disposed(albums, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_album_collection_dispose(albums) != CNA_RESULT_SUCCESS ||
+        cna_album_collection_dispose(albums) != CNA_RESULT_SUCCESS ||
+        cna_album_collection_get_is_disposed(albums, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_album_collection_get_count(albums, &count) != CNA_RESULT_SUCCESS || count != 0) {
+        return 0;
+    }
+    /* An already-empty collection disposes exactly as a populated one does. */
+    if (cna_playlist_collection_get_is_disposed(playlists, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_playlist_collection_dispose(playlists) != CNA_RESULT_SUCCESS ||
+        cna_playlist_collection_get_is_disposed(playlists, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_playlist_collection_get_count(playlists, &count) != CNA_RESULT_SUCCESS ||
+        count != 0) {
+        return 0;
+    }
+
+    /* Refusal-path only, for the reason given above. */
+    memset(text, 0, sizeof(text));
+    if (cna_playlist_get_name_size(CNA_INVALID_HANDLE, &bytes) != CNA_RESULT_INVALID_HANDLE ||
+        cna_playlist_copy_name(CNA_INVALID_HANDLE, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_INVALID_HANDLE ||
+        cna_playlist_get_type_name_size(CNA_INVALID_HANDLE, &bytes) !=
+            CNA_RESULT_INVALID_HANDLE ||
+        cna_playlist_copy_type_name(CNA_INVALID_HANDLE, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_INVALID_HANDLE ||
+        cna_playlist_get_songs(CNA_INVALID_HANDLE, &songs) != CNA_RESULT_INVALID_HANDLE ||
+        cna_playlist_get_hash_code(CNA_INVALID_HANDLE, &hash) != CNA_RESULT_INVALID_HANDLE ||
+        cna_playlist_equals(CNA_INVALID_HANDLE, CNA_INVALID_HANDLE, &flag) !=
+            CNA_RESULT_INVALID_HANDLE ||
+        cna_playlist_get_is_disposed(CNA_INVALID_HANDLE, &flag) != CNA_RESULT_INVALID_HANDLE ||
+        cna_playlist_dispose(CNA_INVALID_HANDLE) != CNA_RESULT_INVALID_HANDLE ||
+        cna_playlist_destroy(CNA_INVALID_HANDLE) != CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+    return 1;
 }
 
 static int validate_library_graph(const CNA_Handle game)
@@ -648,6 +911,19 @@ static int validate_library_graph(const CNA_Handle game)
         }
     }
 
+    /* CBIND-065: everything the graph walk above reached around -- type names, the genre and
+       artist edges, entity equality and the disposal observability -- while every one of those
+       routes was recorded implemented. Run before the disposals below, which empty the
+       collections these need. */
+    {
+        CNA_GenreHandle first_genre = CNA_INVALID_HANDLE;
+        if (cna_genre_collection_get_at(genres, 0, &first_genre) != CNA_RESULT_SUCCESS ||
+            !validate_entity_type_names(artists, genres, playlists, album, artist, first_genre) ||
+            !validate_genre_and_artist_reach(genres, artist, album)) {
+            return 0;
+        }
+    }
+
     /* Disposal marks the entity and empties a collection, exactly as the canonical types do. */
     if (cna_album_dispose(album) != CNA_RESULT_SUCCESS ||
         cna_album_dispose(album) != CNA_RESULT_SUCCESS ||
@@ -669,6 +945,20 @@ static int validate_library_graph(const CNA_Handle game)
         cna_artist_copy_name(artist, text, (uint64_t)sizeof(text), &bytes) !=
             CNA_RESULT_SUCCESS ||
         strcmp(text, ArtistName) != 0) {
+        return 0;
+    }
+
+    /* CBIND-065: the collection disposal surface and the playlist family. Placed after the
+       artist-name check for the same reason -- these empty the album collection. */
+    if (!validate_collection_disposal_and_playlists(albums, playlists)) {
+        return 0;
+    }
+
+    /* CBIND-065: and now the artist may go. Disposal is idempotent and observable, and it is
+       asserted last precisely because the check above needs the artist still answering. */
+    if (cna_artist_dispose(artist) != CNA_RESULT_SUCCESS ||
+        cna_artist_dispose(artist) != CNA_RESULT_SUCCESS ||
+        cna_artist_get_is_disposed(artist, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE) {
         return 0;
     }
 

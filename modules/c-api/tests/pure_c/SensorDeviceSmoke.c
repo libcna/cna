@@ -222,6 +222,8 @@ static int validate_gyroscope(const CNA_Handle game)
     CNA_SensorState state = UINT32_C(99);
     CNA_Bool flag = UINT8_C(9);
     ReadingState readings = {0, {0U, 0U, {0, 0}, {0.0F, 0.0F, 0.0F}}};
+    HookState hook = {0};
+    int64_t ticks = INT64_C(0);
     uint64_t bytes = UINT64_C(9);
     char text[256];
 
@@ -251,10 +253,82 @@ static int validate_gyroscope(const CNA_Handle game)
         flag != CNA_TRUE) {
         return 0;
     }
-    return cna_sensor_unsubscribe_ext(registration) == CNA_RESULT_SUCCESS &&
-        cna_gyroscope_dispose(sensor) == CNA_RESULT_SUCCESS &&
-        cna_gyroscope_dispose(sensor) == CNA_RESULT_INVALID_STATE &&
-        cna_gyroscope_destroy(sensor) == CNA_RESULT_SUCCESS;
+    /* CBIND-065: everything below already existed for the accelerometer and was simply never
+       written for the gyroscope, which is why `check_route_test_coverage.py` measured thirteen
+       gyroscope routes that no test named while the matrix recorded both sensors implemented
+       against this same file. The two classes are separate canonical types with separate
+       process-wide test state, so the accelerometer's assertions say nothing about these. */
+
+    /* The update interval round-trips. */
+    if (cna_gyroscope_set_time_between_updates_ticks(sensor, INT64_C(200000)) !=
+            CNA_RESULT_SUCCESS ||
+        cna_gyroscope_get_time_between_updates_ticks(sensor, &ticks) != CNA_RESULT_SUCCESS ||
+        ticks != INT64_C(200000)) {
+        return 0;
+    }
+
+    /* The dispatcher walks a registered instance list, and an explicit set can be dispatched. */
+    {
+        const CNA_GyroscopeHandle sensors[1] = {sensor};
+        if (cna_gyroscope_register_started_instance_for_tests_ext(sensor) != CNA_RESULT_SUCCESS ||
+            cna_gyroscope_dispatch_to_instances_for_tests_ext(
+                game, sensors, UINT64_C(1), 1.5F, 2.5F, 3.5F) != CNA_RESULT_SUCCESS ||
+            cna_gyroscope_get_current_value(sensor, &reading) != CNA_RESULT_SUCCESS ||
+            reading.rotation_rate.x != 1.5F || reading.rotation_rate.z != 3.5F ||
+            cna_gyroscope_dispatch_to_instances_for_tests_ext(
+                game, 0, UINT64_C(1), 0.0F, 0.0F, 0.0F) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_gyroscope_unregister_started_instance_for_tests_ext(sensor) !=
+                CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+
+    /* The dispatcher's swallowed-exception counters are readable. */
+    {
+        int32_t count = -1;
+        if (cna_gyroscope_get_dispatch_exception_count_for_tests_ext(game, &count) !=
+                CNA_RESULT_SUCCESS ||
+            count < 0 ||
+            cna_gyroscope_get_last_dispatch_exception_message_size_for_tests_ext(game, &bytes) !=
+                CNA_RESULT_SUCCESS ||
+            bytes >= (uint64_t)sizeof(text) ||
+            cna_gyroscope_copy_last_dispatch_exception_message_for_tests_ext(
+                game, text, (uint64_t)sizeof(text), &bytes) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+
+    /* Both process-wide test switches are restored after use. */
+    if (cna_gyroscope_set_event_watch_registration_failure_for_tests_ext(game, CNA_TRUE) !=
+            CNA_RESULT_SUCCESS ||
+        cna_gyroscope_set_event_watch_registration_failure_for_tests_ext(game, CNA_FALSE) !=
+            CNA_RESULT_SUCCESS ||
+        cna_gyroscope_is_sensor_connected_for_tests_ext(game, INT64_C(0), &flag) !=
+            CNA_RESULT_SUCCESS ||
+        (flag != CNA_FALSE && flag != CNA_TRUE) ||
+        cna_gyroscope_get_subsystem_held_for_tests_ext(sensor, &flag) != CNA_RESULT_SUCCESS ||
+        (flag != CNA_FALSE && flag != CNA_TRUE)) {
+        return 0;
+    }
+
+    /* Starting an already-started sensor is the canonical refusal. */
+    if (cna_gyroscope_start(sensor) != CNA_RESULT_INVALID_STATE) {
+        return 0;
+    }
+
+    /* The disposal hook runs during disposal, and a disposed sensor refuses every acquisition
+       route -- the same contract the accelerometer proves, on its own class. */
+    if (cna_gyroscope_set_disposal_cleanup_hook_for_tests_ext(sensor, on_disposal, &hook) !=
+            CNA_RESULT_SUCCESS ||
+        cna_sensor_unsubscribe_ext(registration) != CNA_RESULT_SUCCESS ||
+        cna_gyroscope_dispose(sensor) != CNA_RESULT_SUCCESS || hook.calls != 1 ||
+        cna_gyroscope_dispose(sensor) != CNA_RESULT_INVALID_STATE ||
+        cna_gyroscope_start(sensor) != CNA_RESULT_INVALID_STATE ||
+        cna_gyroscope_stop(sensor) != CNA_RESULT_INVALID_STATE) {
+        return 0;
+    }
+    return cna_gyroscope_destroy(sensor) == CNA_RESULT_SUCCESS &&
+        cna_gyroscope_destroy(sensor) == CNA_RESULT_INVALID_HANDLE;
 }
 
 static CNA_Result on_update(

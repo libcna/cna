@@ -361,6 +361,44 @@ static int validate_system_tray(const CNA_Handle game)
     uint64_t second = UINT64_C(99);
 
     memset(&clicks, 0, sizeof(clicks));
+    /* CBIND-065: the real-backend constructors. Neither can be relied on to succeed -- no
+       verification machine has a camera, and a tray needs a desktop environment that publishes
+       one -- so what is asserted is that each gives a *documented* answer rather than an
+       undefined one. The test backends below are what then drive the behaviour. */
+    {
+        CNA_CameraHandle real_camera = UINT64_C(9);
+        CNA_SystemTrayHandle real_tray = UINT64_C(9);
+        const CNA_Result camera_result = cna_camera_create(game, &real_camera);
+        const CNA_Result tray_result = cna_system_tray_create(game, view("CNA"), &real_tray);
+        if (camera_result != CNA_RESULT_SUCCESS && camera_result != CNA_RESULT_NOT_SUPPORTED &&
+            camera_result != CNA_RESULT_PLATFORM) {
+            return 0;
+        }
+        if (camera_result == CNA_RESULT_SUCCESS) {
+            if (cna_camera_destroy(real_camera) != CNA_RESULT_SUCCESS) {
+                return 0;
+            }
+        } else if (real_camera != CNA_INVALID_HANDLE) {
+            return 0;
+        }
+        if (tray_result != CNA_RESULT_SUCCESS && tray_result != CNA_RESULT_NOT_SUPPORTED &&
+            tray_result != CNA_RESULT_PLATFORM) {
+            return 0;
+        }
+        if (tray_result == CNA_RESULT_SUCCESS) {
+            if (cna_system_tray_destroy(real_tray) != CNA_RESULT_SUCCESS) {
+                return 0;
+            }
+        } else if (real_tray != CNA_INVALID_HANDLE) {
+            return 0;
+        }
+        /* A null output is refused whichever way the backend answers. */
+        if (cna_camera_create(game, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_system_tray_create(game, view("CNA"), 0) != CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
+    }
+
     if (cna_system_tray_get_is_supported_ext(game, &flag) != CNA_RESULT_SUCCESS ||
         (flag != CNA_FALSE && flag != CNA_TRUE) ||
         cna_system_tray_get_is_supported_ext(game, 0) != CNA_RESULT_INVALID_ARGUMENT ||
