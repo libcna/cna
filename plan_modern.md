@@ -16,7 +16,8 @@
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criterion*;
 > 🟨 code exists but the criterion is not met/verified; ⬜ not started; ⛔ deliberately not done
-> (with a reason). **As of 2026-08-19 no row is ⬜:** every task below carries a verdict.
+> (with a reason). **Phases 0–19 carry a verdict on every row** (2026-08-19); the ⬜ rows below all
+> belong to **Phase 20**, which is the modern-renderer scope the first nineteen phases did not cover.
 >
 > **Created:** 2026-08-17. **Branch:** `claude/plan-from-cnaext-m8cjop`.
 
@@ -928,6 +929,172 @@ real consumer exists.
 | MOD-1905 | Write the "engine layer v1 is stable" statement, or an honest "still moving" statement | ✅ | **Still moving** — `CNAEXT.md` §9.1, dated, with §9's "not an ABI guarantee" bullet now pointing at it instead of leaving "until it stabilizes" to the reader's optimism. The value is in the line being drawn rather than in the verdict: *settled* are the layer's shape (pipeline + pass chain + one shadow class per light type + skybox/IBL, which every subsystem landed against without fighting), the ownership rules, the `MOD-1699` two-part support question, and the naming/accessor conventions now that ctests hold them. *Still moving* are per-renderer behaviour (EasyGL is complete, the rest of Phase 16 is open, and a renderer picking up a subsystem has forced interface changes before), the set of `…EXT()` device queries (every renderer that promised something it did not do produced a new one — there is no reason the four that exist are the last), and compute/storage buffers, which have exactly one implementation. Ends with what it means for a consumer, Nova-3D included: pin a revision, read the changelog when you move, expect renames of the kind revision 2 already carried. |
 | MOD-1906 | Final regression + perf sweep across every implemented renderer | ✅ | **Reference renderer: 7944 ran · 7880 pass · 64 skip · 0 fail**, exit 0. Every renderer measured is in one table in `NEXT_modern.md` §3 alongside it — twenty identities, plus `CNA_CNAEXT=OFF` and Release, and the reason each unmeasurable identity could not be run here. Two failures were seen on the way and neither was a regression, which is itself the finding worth keeping: the audio stress test failed its own anti-vacuity assertion under three-way machine load, and `TerminalRestoration.SighupGivesTheTerminalBack` failed because the run was started under **`nohup`**, which sets SIGHUP to `SIG_IGN` — a disposition `fork` preserves, so the child the test signals ignores it and exits 0 instead of dying. Confirmed by running that one test with and without `nohup`; the sweep was then re-run in the foreground for the number above. The perf half needs no new measurement and says so: `docs/cnaext-perf.md` holds every timing, all on EasyGL, because on every other renderer the passes copy through and a timing would measure the copy. |
 | MOD-1907 | Retrospective: which CNAEXT.md design decisions did not survive contact | ✅ | `CNAEXT.md` §9.2, seven entries, written so a reader of §5 knows which paragraphs to distrust. The three that cost the most: **"ask the capability" was the wrong question** — `CustomEffects` means a renderer *accepts* a shader, not that it runs it, which produced passes reporting success while drawing nothing three separate times before the lesson stuck (`MOD-1699`); **four proposed capability enumerators became two**, because `StorageBuffers` was a synonym of `ComputeShaders` and `SeamlessCubeMapFilter` had nothing to ask about once the convolution ran on the CPU, and an enumerator that answers nothing invites a caller to branch on it; and **golden images were planned eight times and used zero times**, each replaced by a measured property, because a golden tells you a frame changed rather than that the thing you cared about is true. Also recorded: `CreateRenderTarget2DEx` was proposed for a virtual that already existed (the design was written against a mental model of the renderer interface, not the header); the two scope calls that were decided the same way and landed in opposite places (auto-exposure deferred with a named blocker and shipped once compute existed, SMAA/TAA declined for reasons that did not expire); and, on the other side, the two house rules and the layer's overall shape, which held exactly as written and are the part of §5 still worth trusting. |
+
+---
+
+## Phase 20 — Beyond the XNA-era pipeline (`MOD-2000`–`MOD-2099`)
+
+Phases 0–19 built the pipeline an XNA-era game would recognise: forward shading, four post-process
+passes, shadow maps, IBL from a static environment. This phase is the list of what a *modern*
+renderer has that the layer does not — written down as tasks rather than left as an absence a reader
+has to notice.
+
+**Scope decision (owner, 2026-08-19): EasyGL only.** Every row below is EasyGL-first and there is
+deliberately **no per-renderer rollout section**. Phase 16 measured twenty renderers and found that
+none but EasyGL executes this layer's shader source, so a "rollout" row for any other renderer would
+be a row waiting on that renderer's own plan, not on this one. When a second renderer runs GLSL,
+this phase gets its 16-style matrix; until then it would be twenty columns of the same sentence.
+
+**What "EasyGL only" costs, stated once.** The reference profile is GL ES 3.0 (compute at ES 3.1,
+image bindings desktop-GL only — `MOD-1514`) and desktop GL 3.3. Several items below are refused
+against *that* profile rather than in principle; each says which, so the refusal expires if the
+profile does.
+
+### 20.1 Screen-space reflections (`MOD-2000`–`MOD-2009`)
+
+The prepass this needs already exists and already produces exactly the right things:
+`DepthNormalPrepass` writes **linear view-space depth** and **view-space normals**, and
+`PostProcessContext` already carries `sourceDepth`, `sourceNormals`, `projection`,
+`inverseProjection`, `nearPlane` and `farPlane`. SSR is the largest modern feature reachable without
+new infrastructure.
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2000 | `SsrPass`: view-space ray march against the prepass depth buffer | ⬜ | A mirror-flat surface reflects a known bright quad into pixels that were black; the pass copies through where the prepass inputs are absent, as `SsaoPass` does. |
+| MOD-2001 | Binary-search refinement of the coarse hit | ⬜ | The reflected edge lands within one texel of the analytic position, where a march-only hit is off by the step size. |
+| MOD-2002 | Rejection: backfaces, thickness, and screen-edge fade | ⬜ | A ray that leaves the screen fades rather than clamping to the border texel; a ray that passes *behind* geometry within the thickness tolerance is rejected rather than reported as a hit. |
+| MOD-2003 | Roughness-aware reflection blur | ⬜ | A rough surface reflects a blurred image and a smooth one a sharp image, from the same scene, driven by the material's roughness. |
+| MOD-2004 | `RenderPipelineSettings`: SSR enable, max distance, step count, thickness, intensity | ⬜ | Every field round-trips and the pass reads the settings bag in preference to its own defaults, matching every other pass. |
+| MOD-2005 | Pipeline placement and ordering | ⬜ | SSR runs on scene-referred values **before** tonemapping and after SSAO; the fixed-order test is extended rather than replaced. |
+| MOD-2006 | `isSupported()` as the two-part question (`MOD-1699`) | ⬜ | Asks `CustomEffects` **and** `ExecutesShaderEffectSourceEXT()`, and reports false without the prepass inputs. |
+| MOD-2007 | Tests: hit, miss, rejection, fade, roughness, settings, unsupported | ⬜ | Every public method and each rejection reason covered; the no-inputs case asserts a pixel-identical copy-through. |
+| MOD-2008 | `docs/cnaext-engine-layer.md`: SSR section, including what screen-space reflection cannot do | ⬜ | States plainly that anything off-screen or behind another surface has no reflection, and that this is the defining limit of the technique rather than a defect of the implementation. |
+
+### 20.2 Depth of field (`MOD-2010`–`MOD-2016`)
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2010 | Circle-of-confusion computation from linear depth, focus distance and aperture | ⬜ | CoC matches the thin-lens formula at sampled depths against a CPU reference. |
+| MOD-2011 | `DepthOfFieldPass`: near/far separable blur weighted by CoC | ⬜ | A quad at the focus plane is untouched; the same quad moved out of focus is measurably softer. |
+| MOD-2012 | Bleed control: in-focus pixels must not smear onto out-of-focus neighbours | ⬜ | A sharp foreground against a blurred background keeps its silhouette — the failure mode a naive CoC-weighted blur produces. |
+| MOD-2013 | Settings wiring (enable, focus distance, focal length, aperture, max CoC) | ⬜ | Fields round-trip; the settings bag wins over pass-local defaults. |
+| MOD-2014 | Tests and `isSupported()` | ⬜ | Focus/defocus, bleed, settings, missing-depth copy-through. |
+| MOD-2015 | Documentation | ⬜ | Section in the engine-layer doc with the parameter meanings in photographic terms. |
+
+### 20.3 Lens and grading passes (`MOD-2020`–`MOD-2029`)
+
+The cheapest group: each is one fullscreen pass with no new inputs.
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2020 | `ColorGradePass`: 3D LUT applied as a 2D strip texture | ⬜ | An identity LUT reproduces the frame exactly; a known LUT maps sampled colours to their tabulated values within one 8-bit step. |
+| MOD-2021 | LUT loading and validation (size, strip layout, sRGB flag) | ⬜ | A malformed strip is refused by name rather than sampled as garbage. |
+| MOD-2022 | `ChromaticAberrationPass`: per-channel radial offset | ⬜ | The centre pixel is unchanged; channel separation grows with radius. |
+| MOD-2023 | `FilmGrainPass`: time-varying noise, luminance-weighted | ⬜ | Deterministic for a fixed `elapsedSeconds`; grain is stronger in midtones than in blacks. |
+| MOD-2024 | `LensFlarePass`: threshold, ghosts along the centre vector, halo | ⬜ | A single bright spot produces ghosts on the opposite side of the centre; a frame below the threshold is unchanged. |
+| MOD-2025 | Settings wiring for all four | ⬜ | Fields round-trip; each pass is off by default so an existing pipeline renders identically. |
+| MOD-2026 | Tests for all four | ⬜ | Identity/no-op case asserted pixel-exact for each, which is what keeps a new pass from silently altering existing frames. |
+| MOD-2027 | Documentation | ⬜ | One section, four subsections, each stating what it is *not* (grading is not tonemapping; flare is not bloom). |
+
+### 20.4 Motion blur and the velocity buffer (`MOD-2030`–`MOD-2037`)
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2030 | Decide: camera-only reprojection first, per-object velocity second | ⬜ | Recorded with the reason. Camera-only needs one extra matrix; per-object needs a second prepass output and a per-object previous-world matrix, which is a contract change on the app. |
+| MOD-2031 | Previous-frame view/projection carried in `PostProcessContext` | ⬜ | The pipeline supplies them; a first frame with no history is a no-op rather than a garbage blur. |
+| MOD-2032 | `MotionBlurPass`: reconstruct velocity from depth + reprojection, blur along it | ⬜ | A static camera leaves the frame pixel-identical; a panning camera smears along the pan axis and not across it. |
+| MOD-2033 | Per-object velocity as a third prepass target | ⬜ | Extends `DepthNormalPrepass`, honouring its existing MRT-or-two-passes fallback rather than assuming MRT. |
+| MOD-2034 | Settings, tests, documentation | ⬜ | Including the no-history and no-depth copy-through cases. |
+
+### 20.5 Many lights: clustered forward (`MOD-2040`–`MOD-2049`)
+
+Today the forward shader carries three directional lights plus one punctual light with its shadow.
+"Modern" here means hundreds.
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2040 | Decide the shape: clustered forward (`Forward+`) rather than deferred, with the reason | ⬜ | Recorded. Deferred needs a G-buffer of 3–4 MRT targets, and `DepthNormalPrepass` already had to build a two-pass fallback because MRT is not universal — a G-buffer would make that fallback four passes. Clustered keeps the existing forward effects and adds a light list. |
+| MOD-2041 | View-frustum cluster grid (16×8×24) and its bounds | ⬜ | Cluster bounds match a CPU reference for a known projection. |
+| MOD-2042 | Light assignment to clusters on the CPU | ⬜ | A light is present in exactly the clusters its bounding sphere touches, verified against brute force. |
+| MOD-2043 | GPU light assignment via compute, where compute is available | ⬜ | Agrees with the CPU assignment exactly, in the manner of `ComputeCullingTest`; falls back to the CPU path where `SupportsComputeShadersEXT()` is false. |
+| MOD-2044 | Light list upload: storage buffer where available, texture otherwise | ⬜ | The texture path is what keeps this working at GL ES 3.0, which has no storage buffers. |
+| MOD-2045 | `PbrEffect`/`SkinnedPbrEffect`: iterate the cluster's light list | ⬜ | 256 lights render; the existing single-light path produces an identical frame when only one light is present. |
+| MOD-2046 | `PunctualLightSetEXT`: the app-facing collection | ⬜ | Add/remove/clear, bounds validation, and a documented maximum. |
+| MOD-2047 | Shadow policy for many lights | ⬜ | Stated honestly: N lights, far fewer shadow maps, and a documented rule for which lights get one. |
+| MOD-2048 | Tests, perf measurement, documentation | ⬜ | A measured cost per light count in `docs/cnaext-perf.md`, with the recipe. |
+
+### 20.6 Volumetrics (`MOD-2050`–`MOD-2057`)
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2050 | `HeightFogPass`: analytic exponential height fog from depth | ⬜ | Fog density follows the analytic formula at sampled depths and heights; a frame with density zero is pixel-identical. |
+| MOD-2051 | `LightShaftPass`: radial blur from a screen-space light position | ⬜ | Shafts appear only where the occluder mask is dark and the light is on screen; off-screen lights fade rather than snapping off. |
+| MOD-2052 | Froxel volumetric scattering (3D volume march) | ⬜ | The quality step above height fog: participating media that receives shadow. Requires a 3D texture or a slice atlas — the choice recorded with what GL ES 3.0 actually allows. |
+| MOD-2053 | Atmospheric scattering sky model as a `Skybox` alternative | ⬜ | A physically parameterised sky (sun angle, turbidity) rendered instead of a sampled cube; the existing cube path is unchanged. |
+| MOD-2054 | Settings, tests, documentation | ⬜ | Each pass off by default and pixel-identical when off. |
+
+### 20.7 Area lights (`MOD-2060`–`MOD-2064`)
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2060 | `AreaLightEXT`: rectangle, disc and tube, in the XNA namespace beside `PunctualLightEXT` | ⬜ | Follows the placement `ImageBasedLightEXT` established (`MOD-1207`). |
+| MOD-2061 | Linearly-transformed-cosine tables, generated rather than shipped | ⬜ | Generated by a documented CPU routine at load, like the BRDF LUT — the layer has no asset path for a shipped table (this is why SMAA was refused, `MOD-610`). |
+| MOD-2062 | LTC shading in `PbrEffect` | ⬜ | A rectangular light produces a soft-edged highlight that a punctual light cannot; energy matches a reference integration within tolerance. |
+| MOD-2063 | Tests and documentation, including the absence of area-light shadows | ⬜ | Stated plainly rather than left to be discovered. |
+
+### 20.8 Material extensions beyond glTF core (`MOD-2070`–`MOD-2079`)
+
+`PbrMaterial` describes seven texture slots today: base colour, normal, metallic-roughness,
+emissive, occlusion and the two `KHR_materials_specular` maps.
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2070 | `KHR_materials_clearcoat`: factor, roughness, normal map | ⬜ | Round-trips through `PbrMaterial` and the importer; a clearcoated surface shows a second specular lobe. |
+| MOD-2071 | `KHR_materials_sheen`: colour and roughness | ⬜ | Round-trips; a sheened surface shows grazing-angle retroreflection. |
+| MOD-2072 | `KHR_materials_transmission` + `_volume` | ⬜ | Requires a copy of the opaque frame to refract against; the copy is a documented cost and the material is refused rather than approximated where the copy is unavailable. |
+| MOD-2073 | `KHR_materials_ior` and `_iridescence` | ⬜ | Round-trip and shading, with the thin-film term matching a CPU reference. |
+| MOD-2074 | Subsurface scattering (screen-space burley or a wrapped-diffuse approximation) | ⬜ | The choice recorded with the reason; a wrapped approximation is honest about being one. |
+| MOD-2075 | Extend `PbrMaterial` equality, hashing, `ToString` and the round-trip tests to every new field | ⬜ | The existing exhaustive round-trip test is extended, not duplicated — this is the test that has caught every field added since `MOD-1300`. |
+| MOD-2076 | glTF importer support for all of the above | ⬜ | Each extension parsed, and an unknown extension still ignored rather than failing the import. |
+| MOD-2077 | Documentation and the shader-cost note | ⬜ | Each lobe costs instructions in the *base* PBR shader; the note says what a game pays for enabling them. |
+
+### 20.9 Global illumination (`MOD-2080`–`MOD-2089`)
+
+Today the only indirect light is IBL from one static environment map, applied uniformly.
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2080 | `LightProbeEXT`: an irradiance probe with a position, built by `EnvironmentProcessor` | ⬜ | Reuses the existing CPU precompute rather than a second path. |
+| MOD-2081 | `LightProbeVolumeEXT`: a grid of probes with trilinear interpolation | ⬜ | A surface moving between two differently-lit probes changes its ambient smoothly. |
+| MOD-2082 | Probe selection and blending in `PbrEffect` | ⬜ | Replaces the single global `ImageBasedLightEXT` where a volume is bound, and falls back to it where none is. |
+| MOD-2083 | Probe-visibility leak reduction | ⬜ | Light does not bleed through a wall between two probes — the defect that makes naive probe grids unusable. |
+| MOD-2084 | Baking: an offline path that renders probes from the scene | ⬜ | The app supplies the scene draw, as with shadows and the prepass; the layer owns the cube capture and the convolution. |
+| MOD-2085 | Lightmaps: decide, with the reason | ⬜ | Recorded. Lightmaps need UV unwrapping and an offline bake pipeline, which is an asset-tool problem rather than a runtime one and has no home in this layer. |
+| MOD-2086 | Voxel-cone-traced GI: decide, with the reason | ⬜ | Recorded against the profile: voxelisation needs image stores into a 3D texture, and `MOD-1514` established that GL ES refuses image bindings for CNA's mutable textures. Reachable on desktop GL only, which would make it the layer's first desktop-only subsystem. |
+| MOD-2087 | Tests, perf and documentation | ⬜ | Including what the probe grid costs in memory at a stated density. |
+
+### 20.10 GPU-driven rendering and display output (`MOD-2090`–`MOD-2099`)
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2090 | Indirect draw: `DrawIndirect`/`DrawIndexedIndirect` on `IGraphicsRenderer` + capability | ⬜ | GL ES 3.1 has `glDrawArraysIndirect`; the capability is false at ES 3.0 and the existing per-instance path remains the fallback. |
+| MOD-2091 | GPU culling that feeds indirect arguments rather than reading back | ⬜ | Closes the gap `MOD-1551` left: the GPU culler agrees with the CPU one today but its result returns through the CPU. Needs `MOD-2090`. |
+| MOD-2092 | HDR display output: `SurfaceFormat` and swap-chain colour space | ⬜ | An HDR10 or scRGB swap chain where the platform offers one, with tonemapping bypassed or retargeted; SDR output unchanged where it does not. |
+| MOD-2093 | FSR 1 spatial upscaling as a pass | ⬜ | Pure shader arithmetic with no vendor SDK, so it fits this layer; a 1:1 scale must be pixel-identical to no pass at all. |
+| MOD-2094 | Decals: screen-space projected decals using the prepass depth | ⬜ | A decal lands on the surface under it and not on the surface behind it. |
+| MOD-2095 | A particle system as a subsystem rather than a demo | ⬜ | Promotes what `MOD-1550` left as a demo: emitters, simulation (compute where available, CPU otherwise) and an instanced draw. |
+
+### 20.11 Refused against this profile, with reasons (`MOD-2096`–`MOD-2099`)
+
+Recorded as rows so the refusal is visible in the same table as the work, rather than being an
+absence a reader has to infer.
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2096 | Hardware ray tracing (DXR / `VK_KHR_ray_tracing`) | ⛔ | **Not reachable from the reference renderer.** Neither GL ES 3.x nor desktop GL 3.3 has any ray-tracing API; there is nothing for EasyGL to call. This is a renderer-capability question for `plan_vulkan.md` and `plan_dx.md`, and it would need an acceleration-structure abstraction on `IGraphicsRenderer` before this layer could express it. Not a permanent refusal — a refusal against the only renderer this phase targets. |
+| MOD-2097 | Mesh shaders / task shaders | ⛔ | **Not reachable from the reference renderer.** Mesh shaders are GL 4.6 + `NV_mesh_shader`/`EXT_mesh_shader`, D3D12 or Vulkan; the EasyGL profile floor is GL ES 3.0. `MOD-2090`'s indirect draw is the part of GPU-driven rendering that *is* reachable here, which is why it is a task and this is not. |
+| MOD-2098 | DLSS / XeSS / FSR 2+ temporal upscaling | ⛔ | **Vendor SDKs and a temporal pipeline this layer does not have.** DLSS and XeSS are closed vendor SDKs bound to D3D12/Vulkan; FSR 2 and above are temporal and need motion vectors and a history buffer — the same requirement that put TAA out of scope in `MOD-610`. FSR 1 is spatial and pure shader arithmetic, so it is `MOD-2093` rather than a refusal. |
+| MOD-2099 | Virtual texturing / streamed terrain | ⛔ | **An asset-pipeline problem wearing a renderer's clothes.** Sparse/virtual textures need `ARB_sparse_texture`, absent from GL ES entirely, and a software fallback needs a tile store, a feedback pass and a streaming budget — a subsystem larger than this whole phase, and one whose hard part is the offline tool rather than the runtime. Out of scope, and named so nobody plans it by accident. |
 
 ---
 

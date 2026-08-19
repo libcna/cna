@@ -8,10 +8,19 @@ do not reconstruct the layer's state from the general `NEXT.md`.
 
 ## 1. Where the work stands
 
-**`plan_modern.md` has no open row left** (2026-08-19): every one of `MOD-1`–`MOD-1924` carries a
-verdict — ✅ done, 🟨 done-but-bounded with the bound stated, or ⛔ refused with the reason. Phases
-0–15 and 17–19 are complete; **Phase 16 is measured rather than implemented**, which is the honest
-description of what a per-renderer rollout turned into once every renderer was actually run.
+**Phases 0–19 are closed** (2026-08-19): every one of `MOD-1`–`MOD-1924` carries a verdict — ✅
+done, 🟨 done-but-bounded with the bound stated, or ⛔ refused with the reason. Phases 0–15 and 17–19
+are complete; **Phase 16 is measured rather than implemented**, which is the honest description of
+what a per-renderer rollout turned into once every renderer was actually run.
+
+**Phase 20 (`MOD-2000`–`MOD-2099`) is new and open** — the modern-renderer scope the first nineteen
+phases never covered: screen-space reflections, depth of field, the lens and grading passes, motion
+blur, clustered lighting for many lights, volumetrics, area lights, the glTF material extensions
+beyond core, probe-based GI, and indirect draw. **EasyGL only, by owner decision**, with no
+per-renderer rollout section: Phase 16 established that no other renderer executes this layer's
+shader source, so rollout rows would wait on those renderers' own plans rather than on this one.
+Four items are refused up front against that profile — hardware ray tracing, mesh shaders, temporal
+upscalers and virtual texturing — each with the specific reason rather than silence.
 
 The whole orchestration layer exists and is verified on EasyGL: `RenderPipeline`, the post-process
 chain, all four shadow types, skybox and IBL, materials, instancing/LOD/culling, compute and
