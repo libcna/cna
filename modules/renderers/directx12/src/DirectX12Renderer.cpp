@@ -19,6 +19,26 @@
 #include <stdexcept>
 #include <string>
 
+// plan_modern.md MOD-1605: ID3D12Debug and D3D12GetDebugInterface live in <d3d12sdklayers.h>, and
+// only MSVC's <d3d12.h> pulls it in for you -- MinGW-w64's does not, so the debug-layer block
+// below does not compile there ("'ID3D12Debug' was not declared in this scope; did you mean
+// 'ID3D11Debug'?"). It goes *last*, after every CNA header: it drags <windows.h> in with it, and
+// windows.h's macros collide with this project's own enumerator names -- put it first and
+// CNA/LogCategory.hpp stops parsing instead. Same hazard mingw-cnaext-spike/ exists to catch.
+#include <d3d12sdklayers.h>
+
+// plan_modern.md MOD-1605: two D3D12 spec constants that Ubuntu's MinGW-w64 13.2 <d3d12.h> does not
+// define, though the Windows SDK does. Both are fixed by the D3D12 specification rather than by any
+// header -- Tier 1's shader-visible CBV/SRV/UAV heap limit is 1 000 000 descriptors, and a
+// shader-visible sampler heap is capped at 2 048 -- so defining them when absent is a header-gap
+// workaround, not a policy choice. Guarded, so a newer toolchain's own definitions win.
+#ifndef D3D12_MAX_SHADER_VISIBLE_DESCRIPTOR_HEAP_SIZE_TIER_1
+#define D3D12_MAX_SHADER_VISIBLE_DESCRIPTOR_HEAP_SIZE_TIER_1 1000000
+#endif
+#ifndef D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE
+#define D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE 2048
+#endif
+
 namespace CNA::Internal::Renderers::DirectX12
 {
     using namespace CNA::Internal::Renderers::D3DCommon;
