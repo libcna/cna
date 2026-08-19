@@ -147,6 +147,21 @@ namespace CNA::Graphics {
         /** @brief Sets how wide the fade at the edge of the screen is, in screen fractions. */
         void setSSREdgeFade(float value);
 
+        /** @brief Returns the height fog's density at its base height; 0 disables it. */
+        [[nodiscard]] float getHeightFogDensity() const;
+        /** @brief Sets the height fog's density at its base height. */
+        void setHeightFogDensity(float value);
+
+        /** @brief Returns how quickly the fog thins with height. */
+        [[nodiscard]] float getHeightFogFalloff() const;
+        /** @brief Sets how quickly the fog thins with height; larger is a shallower layer. */
+        void setHeightFogFalloff(float value);
+
+        /** @brief Returns the height at which the fog density applies. */
+        [[nodiscard]] float getHeightFogBaseHeight() const;
+        /** @brief Sets the height at which the fog density applies. */
+        void setHeightFogBaseHeight(float value);
+
         /** @brief Returns how much of a pixel's movement is smeared; 0 disables motion blur. */
         [[nodiscard]] float getMotionBlurStrength() const;
         /** @brief Sets the smeared fraction of a pixel's movement, clamped to [0, 1]. */
@@ -353,6 +368,9 @@ namespace CNA::Graphics {
         float           dofFocalLength_   = 50.0f;
         float           dofFNumber_       = 5.6f;
         float           dofMaxRadius_     = 0.02f;
+        float           heightFogDensity_ = 0.0f;
+        float           heightFogFalloff_ = 0.1f;
+        float           heightFogBaseHeight_ = 0.0f;
         float           motionBlurStrength_ = 0.0f;
         float           motionBlurMaxDistance_ = 0.05f;
         float           chromaticAberration_ = 0.0f;

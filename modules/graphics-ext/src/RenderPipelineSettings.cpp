@@ -86,6 +86,15 @@ namespace CNA::Graphics {
     float           RenderPipelineSettings::getSSREdgeFade()      const { return ssrEdgeFade_; }
     void            RenderPipelineSettings::setSSREdgeFade(float v)     { ssrEdgeFade_ = std::clamp(v, 0.0f, 0.5f); }
 
+    float           RenderPipelineSettings::getHeightFogDensity()    const { return heightFogDensity_; }
+    void            RenderPipelineSettings::setHeightFogDensity(float v)    { heightFogDensity_ = AtLeast(v, 0.0f); }
+
+    float           RenderPipelineSettings::getHeightFogFalloff()    const { return heightFogFalloff_; }
+    void            RenderPipelineSettings::setHeightFogFalloff(float v)    { heightFogFalloff_ = AtLeast(v, 0.0f); }
+
+    float           RenderPipelineSettings::getHeightFogBaseHeight() const { return heightFogBaseHeight_; }
+    void            RenderPipelineSettings::setHeightFogBaseHeight(float v) { heightFogBaseHeight_ = v; }
+
     float           RenderPipelineSettings::getMotionBlurStrength()    const { return motionBlurStrength_; }
     void            RenderPipelineSettings::setMotionBlurStrength(float v)    { motionBlurStrength_ = std::clamp(v, 0.0f, 1.0f); }
 

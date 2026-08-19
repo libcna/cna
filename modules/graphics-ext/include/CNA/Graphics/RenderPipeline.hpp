@@ -46,6 +46,7 @@ namespace CNA::Graphics {
     class FilmGrainPass;
     class LensFlarePass;
     class MotionBlurPass;
+    class HeightFogPass;
     class TonemapPass;
 
     /**
@@ -372,6 +373,7 @@ namespace CNA::Graphics {
         std::unique_ptr<FilmGrainPass> filmGrainPass_;
         std::unique_ptr<LensFlarePass> lensFlarePass_;
         std::unique_ptr<MotionBlurPass> motionBlurPass_;
+        std::unique_ptr<HeightFogPass> heightFogPass_;
         Skybox* skybox_ = nullptr;
         Microsoft::Xna::Framework::Matrix skyboxView_{};
         Microsoft::Xna::Framework::Matrix skyboxProjection_{};

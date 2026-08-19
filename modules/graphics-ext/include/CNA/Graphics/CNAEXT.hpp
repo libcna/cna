@@ -47,6 +47,7 @@
 #include "CNA/Graphics/ColorGradePass.hpp"
 #include "CNA/Graphics/ChromaticAberrationPass.hpp"
 #include "CNA/Graphics/FilmGrainPass.hpp"
+#include "CNA/Graphics/HeightFogPass.hpp"
 #include "CNA/Graphics/LensFlarePass.hpp"
 #include "CNA/Graphics/MotionBlurPass.hpp"
 #include "CNA/Graphics/DepthNormalPrepass.hpp"
