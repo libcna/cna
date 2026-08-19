@@ -361,6 +361,25 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_error_smoke)
     add_test(NAME CApi_ErrorSmoke COMMAND cna_c_api_error_smoke)
 
+    # plan_binding.md CBIND-067: every CNA_Bool input refuses a byte outside {0, 1}.
+    #
+    # Generated from the public headers by tools/c-api/generate_bool_contract_test.py, because
+    # 94 hand-written assertions would leave the guarantee exactly as fragile as the one they
+    # replace -- the next flag parameter to arrive would simply not have one. The generator errors
+    # on a by-value type it has no stand-in for rather than dropping that route, so the covered
+    # set cannot shrink in silence.
+    add_executable(cna_c_api_bool_contract_smoke
+        tests/pure_c/BoolContractSmoke.c
+    )
+    set_target_properties(cna_c_api_bool_contract_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_bool_contract_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_bool_contract_smoke)
+    add_test(NAME CApi_BoolContractSmoke COMMAND cna_c_api_bool_contract_smoke)
+
     add_executable(cna_c_api_core_ext_smoke
         tests/pure_c/CoreExtSmoke.c
     )

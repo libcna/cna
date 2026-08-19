@@ -247,6 +247,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_route_test_coverage.py" --check)
 
+        # plan_binding.md CBIND-067: the generated CNA_Bool contract test must not go stale.
+        #
+        # The test itself compiles and runs beside the other smoke tests; this checks that the
+        # checked-in file still matches what the headers say, so a route declared with a new flag
+        # parameter cannot sit uncovered behind a generator nobody re-ran. Build-free.
+        add_test(NAME CApiBoolContractCurrent
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_bool_contract_test.py" --check)
+
         # plan_binding.md CBIND-042B: the experimental release gate.
         #
         # A release gate written as prose is a list of things somebody once believed. This one is a
