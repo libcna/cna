@@ -115,6 +115,39 @@ namespace CNA::Graphics {
         }
     }
 
+    void ClusteredLightAssignment::adopt(const int lightCount, std::vector<int> offsets,
+                                         std::vector<int> indices)
+    {
+        if (lightCount < 0 || offsets.empty() || offsets.front() != 0)
+            throw std::invalid_argument(
+                "CNA::Graphics::ClusteredLightAssignment::adopt: the offsets must begin at zero "
+                "and describe at least one cluster");
+        if (offsets.back() != static_cast<int>(indices.size()))
+            throw std::invalid_argument(
+                "CNA::Graphics::ClusteredLightAssignment::adopt: the last offset must be the "
+                "length of the index array");
+        for (std::size_t i = 1; i < offsets.size(); ++i)
+            if (offsets[i] < offsets[i - 1])
+                throw std::invalid_argument(
+                    "CNA::Graphics::ClusteredLightAssignment::adopt: the offsets go backwards");
+        for (const int index : indices)
+            if (index < 0 || index >= lightCount)
+                throw std::invalid_argument(
+                    "CNA::Graphics::ClusteredLightAssignment::adopt: an index names a light that "
+                    "is not in the set");
+
+        clusterCount_ = static_cast<int>(offsets.size()) - 1;
+        lightCount_   = lightCount;
+        offsets_      = std::move(offsets);
+        indices_      = std::move(indices);
+
+        maxPerCluster_ = 0;
+        for (int cluster = 0; cluster < clusterCount_; ++cluster)
+            maxPerCluster_ = std::max(maxPerCluster_,
+                                      offsets_[static_cast<std::size_t>(cluster) + 1] -
+                                      offsets_[static_cast<std::size_t>(cluster)]);
+    }
+
     int ClusteredLightAssignment::getLightCount()   const { return lightCount_; }
     int ClusteredLightAssignment::getClusterCount() const { return clusterCount_; }
 

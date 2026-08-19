@@ -65,6 +65,23 @@ namespace CNA::Graphics {
         /** @brief Drops every light and every cluster, as if freshly constructed. */
         void clear();
 
+        /**
+         * @brief Takes over a result produced elsewhere.
+         *
+         * The GPU path (`ClusteredLightCompute`) builds the same two arrays and needs somewhere to
+         * put them; without this it would either duplicate every accessor or reach into private
+         * state. The arrays are validated on the way in -- offsets monotone, one longer than the
+         * cluster count, ending at the index count, and every index naming a light that exists --
+         * because an assignment that disagrees with itself lights the wrong objects rather than
+         * failing.
+         *
+         * @param lightCount How many lights the indices refer to.
+         * @param offsets    One entry per cluster plus one; see @ref getOffsets.
+         * @param indices    The flat index array; see @ref getIndices.
+         * @throws std::invalid_argument When the two arrays are not a consistent assignment.
+         */
+        void adopt(int lightCount, std::vector<int> offsets, std::vector<int> indices);
+
         /** @brief Returns the number of lights the last assignment was given. */
         [[nodiscard]] int getLightCount() const;
         /** @brief Returns the number of clusters the last assignment filled. */

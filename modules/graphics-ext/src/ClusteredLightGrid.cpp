@@ -105,6 +105,11 @@ namespace CNA::Graphics {
     float ClusteredLightGrid::getFarPlane()  const { return farPlane_; }
     bool  ClusteredLightGrid::hasProjection() const { return hasProjection_; }
 
+    Matrix ClusteredLightGrid::getInverseProjection() const
+    {
+        return hasProjection_ ? inverseProjection_ : Matrix::getIdentityProperty();
+    }
+
     float ClusteredLightGrid::sliceDistance(const int slice) const
     {
         if (slice < 0 || slice > sliceCount_)

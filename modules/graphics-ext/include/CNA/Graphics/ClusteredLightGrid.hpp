@@ -107,6 +107,17 @@ namespace CNA::Graphics {
         [[nodiscard]] bool hasProjection() const;
 
         /**
+         * @brief Returns the inverse of the projection the grid was given.
+         *
+         * The tile shapes come from this matrix, so anything reproducing @ref clusterBounds
+         * elsewhere -- the compute path does -- needs the same one rather than its own inversion of
+         * the same projection, which would differ in the last bits and move a borderline light.
+         *
+         * @return The inverse projection; the identity when no projection has been set.
+         */
+        [[nodiscard]] Microsoft::Xna::Framework::Matrix getInverseProjection() const;
+
+        /**
          * @brief Returns the view distance where a slice begins.
          *
          * @param slice Depth slice, 0 to `getSliceCount()` -- the count itself is accepted and

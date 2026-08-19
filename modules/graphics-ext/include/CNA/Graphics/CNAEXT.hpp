@@ -77,6 +77,7 @@
 #include "CNA/Graphics/ClusteredLightAssignment.hpp"
 #include "CNA/Graphics/ClusteredLightEXT.hpp"
 #include "CNA/Graphics/ClusteredLightBuffer.hpp"
+#include "CNA/Graphics/ClusteredLightCompute.hpp"
 #include "CNA/Graphics/ClusteredLightGrid.hpp"
 #include "CNA/Graphics/ClusteredLightSetEXT.hpp"
 #include "CNA/Graphics/ClusteredLightType.hpp"
