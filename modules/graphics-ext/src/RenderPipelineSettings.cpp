@@ -86,6 +86,12 @@ namespace CNA::Graphics {
     float           RenderPipelineSettings::getSSREdgeFade()      const { return ssrEdgeFade_; }
     void            RenderPipelineSettings::setSSREdgeFade(float v)     { ssrEdgeFade_ = std::clamp(v, 0.0f, 0.5f); }
 
+    float           RenderPipelineSettings::getMotionBlurStrength()    const { return motionBlurStrength_; }
+    void            RenderPipelineSettings::setMotionBlurStrength(float v)    { motionBlurStrength_ = std::clamp(v, 0.0f, 1.0f); }
+
+    float           RenderPipelineSettings::getMotionBlurMaxDistance() const { return motionBlurMaxDistance_; }
+    void            RenderPipelineSettings::setMotionBlurMaxDistance(float v) { motionBlurMaxDistance_ = std::clamp(v, 0.0f, 0.25f); }
+
     float           RenderPipelineSettings::getChromaticAberrationStrength() const { return chromaticAberration_; }
     void            RenderPipelineSettings::setChromaticAberrationStrength(float v) { chromaticAberration_ = std::clamp(v, 0.0f, 0.1f); }
 

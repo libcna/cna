@@ -605,6 +605,37 @@ stair-step. The pass asks `GraphicsCapability::HalfFloatTextureLinearFiltering` 
 and takes the fallback silently; there is no setting for it, because there is no reason to prefer the
 worse path where the better one exists.
 
+### Motion blur, and the half of it that is not here
+
+`plan_modern.md` `MOD-2030`–`MOD-2034`. `MotionBlurPass` works out where each pixel used to be
+rather than storing it: the depth image and the camera give a world position, putting that position
+through the **previous frame's** camera says where it was on screen, and the difference is the
+pixel's velocity. It needs no new render target.
+
+```cpp
+pipeline.setCamera(view, projection, nearPlane, farPlane);   // every frame, before begin()
+pipeline.getSettings().setMotionBlurStrength(0.5f);
+```
+
+**It is camera motion only, and that is a boundary rather than an approximation.** A turning or
+advancing camera blurs correctly. A car crossing a static shot does not blur at all, because nothing
+in a depth image says the car moved rather than the world — the two are indistinguishable from one
+frame. Per-object velocity needs a third prepass output and a previous world matrix per draw, which
+is a contract change on the application; it is `MOD-2033`, left open deliberately.
+
+**Strength is a shutter angle in disguise.** 1 smears the whole distance travelled since the last
+frame, which is what a 360-degree shutter records; a real shutter is open for part of the frame, so
+lower values are the physical ones.
+
+**`maxDistance` is not a look, it is a hitch guard.** One slow frame makes every velocity enormous,
+and without a cap a single stutter smears the whole image — which reads as a defect in the blur
+rather than as the dropped frame it is.
+
+**The history advances once per frame, in `end()`.** A game that sets the camera twice in a frame,
+or once every other frame, still compares against the camera the previous frame was actually drawn
+with. The first frame after a start or a resize has no history at all and is left alone: blurring it
+along an arbitrary direction would put a one-frame glitch on every cut.
+
 ### The lens and the grade: four passes and where each one belongs
 
 `plan_modern.md` `MOD-2020`–`MOD-2027`. Four small passes, all **off by default**, whose positions in

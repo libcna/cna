@@ -45,6 +45,7 @@ namespace CNA::Graphics {
     class ChromaticAberrationPass;
     class FilmGrainPass;
     class LensFlarePass;
+    class MotionBlurPass;
     class TonemapPass;
 
     /**
@@ -370,10 +371,15 @@ namespace CNA::Graphics {
         std::unique_ptr<ChromaticAberrationPass> chromaticAberrationPass_;
         std::unique_ptr<FilmGrainPass> filmGrainPass_;
         std::unique_ptr<LensFlarePass> lensFlarePass_;
+        std::unique_ptr<MotionBlurPass> motionBlurPass_;
         Skybox* skybox_ = nullptr;
         Microsoft::Xna::Framework::Matrix skyboxView_{};
         Microsoft::Xna::Framework::Matrix skyboxProjection_{};
         Microsoft::Xna::Framework::Matrix cameraInverseProjection_{};
+        Microsoft::Xna::Framework::Matrix cameraInverseView_{};
+        Microsoft::Xna::Framework::Matrix cameraViewProjection_{};
+        Microsoft::Xna::Framework::Matrix previousViewProjection_{};
+        bool hasPreviousFrame_ = false;
         float cameraNearPlane_ = 0.0f;
         float cameraFarPlane_  = 0.0f;
         bool skyboxDrawn_ = false;

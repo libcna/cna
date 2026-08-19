@@ -12,6 +12,7 @@
 #include "CNA/Graphics/ChromaticAberrationPass.hpp"
 #include "CNA/Graphics/FilmGrainPass.hpp"
 #include "CNA/Graphics/LensFlarePass.hpp"
+#include "CNA/Graphics/MotionBlurPass.hpp"
 #include "CNA/Graphics/DepthOfFieldPass.hpp"
 #include "CNA/Graphics/SsrPass.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
@@ -44,7 +45,8 @@ namespace CNA::Graphics {
           colorGradePass_(std::make_unique<ColorGradePass>(device)),
           chromaticAberrationPass_(std::make_unique<ChromaticAberrationPass>(device)),
           filmGrainPass_(std::make_unique<FilmGrainPass>(device)),
-          lensFlarePass_(std::make_unique<LensFlarePass>(device))
+          lensFlarePass_(std::make_unique<LensFlarePass>(device)),
+          motionBlurPass_(std::make_unique<MotionBlurPass>(device))
     {
         // plan_modern.md MOD-715. After a context loss every GPU object this pipeline holds names
         // storage the driver has already destroyed; rendering into one is undefined rather than
@@ -81,7 +83,8 @@ namespace CNA::Graphics {
         if (settings_.isBloomEnabled() || settings_.isSSAOEnabled() || settings_.isFXAAEnabled() ||
             settings_.isSSREnabled() || settings_.isDOFEnabled() ||
             settings_.isColorGradeEnabled() || settings_.getChromaticAberrationStrength() > 0.0f ||
-            settings_.getFilmGrainIntensity() > 0.0f || settings_.getLensFlareIntensity() > 0.0f)
+            settings_.getFilmGrainIntensity() > 0.0f || settings_.getLensFlareIntensity() > 0.0f ||
+            settings_.getMotionBlurStrength() > 0.0f)
             return true;
         return !userPasses_.empty();
     }
@@ -204,6 +207,8 @@ namespace CNA::Graphics {
 
         setSkyboxCamera(view, projection);
         cameraInverseProjection_ = Matrix::Invert(projection);
+        cameraInverseView_       = Matrix::Invert(view);
+        cameraViewProjection_    = view * projection;
         cameraNearPlane_         = nearPlane;
         cameraFarPlane_          = farPlane;
     }
@@ -249,6 +254,11 @@ namespace CNA::Graphics {
         // because what a mirror shows should be the shaded scene, not the unshaded one.
         if (settings_.isSSREnabled())
             chain_.addPass(ssrPass_.get());
+        // Motion blur before the lens effects and before the tonemapper, for the reason every
+        // scene-referred pass is: it is averaging light the shutter collected, and averaging
+        // display-referred values instead would darken a moving highlight rather than smear it.
+        if (settings_.getMotionBlurStrength() > 0.0f)
+            chain_.addPass(motionBlurPass_.get());
         // Depth of field belongs to the lens, so it happens before anything the lens feeds: a
         // highlight that is out of focus should bloom as the spread circle it became, not as the
         // point it was. Putting it after bloom would bloom the point and then blur the glow, which
@@ -302,6 +312,9 @@ namespace CNA::Graphics {
         context.inverseProjection = cameraInverseProjection_;
         context.nearPlane         = cameraNearPlane_;
         context.farPlane          = cameraFarPlane_;
+        context.inverseView             = cameraInverseView_;
+        context.previousViewProjection  = previousViewProjection_;
+        context.hasPreviousFrame        = hasPreviousFrame_;
 
         chain_.apply(context);
         lastFramePassCount_ = static_cast<int>(chain_.getPassCount());
@@ -309,6 +322,12 @@ namespace CNA::Graphics {
         // each pass binds its own destination through FullscreenPass. Derived rather than counted
         // by a hook in the device, because a hook would make every renderer pay for a diagnostic.
         lastFrameTargetSwitches_ = 2 + lastFramePassCount_;
+
+        // The history advances here and nowhere else. Doing it in setCamera would make a game that
+        // sets the camera twice in a frame -- or once every other frame -- compare against a camera
+        // that was never rendered from.
+        previousViewProjection_ = cameraViewProjection_;
+        hasPreviousFrame_       = cameraFarPlane_ > 0.0f;
     }
 
     void RenderPipeline::addUserPass(PostProcessPass* pass)

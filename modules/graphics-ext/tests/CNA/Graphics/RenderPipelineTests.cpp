@@ -365,6 +365,42 @@ TEST(RenderPipelineTest, SsrSitsBetweenSsaoAndBloom)
     EXPECT_EQ(pipeline.getLastFramePassCount(), 5);   // ssao, ssr, bloom, tonemap, fxaa
 }
 
+TEST(RenderPipelineTest, TheCameraHistoryAdvancesOncePerFrameAndNotPerSetCamera)
+{
+    // plan_modern.md MOD-2031. Motion blur compares this frame's camera against the one the
+    // *previous frame was rendered from*, so the history has to advance in end() and nowhere else.
+    // Advancing it in setCamera would make a game that sets the camera twice in a frame -- or once
+    // every other frame -- compare against a camera nothing was ever drawn with, and the blur would
+    // be wrong in a way no single frame could reveal.
+    GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+
+    const auto view = [](const float x) {
+        return Matrix::CreateLookAt(Microsoft::Xna::Framework::Vector3(x, 0.0f, 0.0f),
+                                    Microsoft::Xna::Framework::Vector3(x, 0.0f, -1.0f),
+                                    Microsoft::Xna::Framework::Vector3::Up);
+    };
+    const Matrix projection =
+        Matrix::CreatePerspectiveFieldOfView(0.7853982f, 1.0f, 1.0f, 100.0f);
+
+    pipeline.getSettings().setMotionBlurStrength(0.5f);
+
+    // Two setCamera calls before a single frame: only the last is what the frame is drawn with, and
+    // the first must not become "the previous frame".
+    pipeline.setCamera(view(0.0f), projection, 1.0f, 100.0f);
+    pipeline.setCamera(view(5.0f), projection, 1.0f, 100.0f);
+    EXPECT_NO_THROW(pipeline.begin(Color::Black));
+    EXPECT_NO_THROW(pipeline.end());
+
+    // A second frame from the same camera. Nothing moved between the two frames that were actually
+    // rendered, whatever happened between the setCamera calls.
+    EXPECT_NO_THROW(pipeline.begin(Color::Black));
+    EXPECT_NO_THROW(pipeline.end());
+    EXPECT_EQ(pipeline.getLastFramePassCount(), 1) << "motion blur was not in the chain";
+}
+
 TEST(RenderPipelineTest, DepthOfFieldSitsBeforeBloomBecauseItBelongsToTheLens)
 {
     // plan_modern.md MOD-2011. An out-of-focus highlight should bloom as the spread circle it

@@ -147,6 +147,16 @@ namespace CNA::Graphics {
         /** @brief Sets how wide the fade at the edge of the screen is, in screen fractions. */
         void setSSREdgeFade(float value);
 
+        /** @brief Returns how much of a pixel's movement is smeared; 0 disables motion blur. */
+        [[nodiscard]] float getMotionBlurStrength() const;
+        /** @brief Sets the smeared fraction of a pixel's movement, clamped to [0, 1]. */
+        void setMotionBlurStrength(float value);
+
+        /** @brief Returns the furthest a pixel may be smeared, in screen fractions. */
+        [[nodiscard]] float getMotionBlurMaxDistance() const;
+        /** @brief Sets the furthest a pixel may be smeared, clamped to [0, 0.25]. */
+        void setMotionBlurMaxDistance(float value);
+
         /** @brief Returns how far the colour channels separate at the corner of the frame. */
         [[nodiscard]] float getChromaticAberrationStrength() const;
         /** @brief Sets the channel separation at the corner, clamped to [0, 0.1]; 0 disables it. */
@@ -343,6 +353,8 @@ namespace CNA::Graphics {
         float           dofFocalLength_   = 50.0f;
         float           dofFNumber_       = 5.6f;
         float           dofMaxRadius_     = 0.02f;
+        float           motionBlurStrength_ = 0.0f;
+        float           motionBlurMaxDistance_ = 0.05f;
         float           chromaticAberration_ = 0.0f;
         float           filmGrainIntensity_ = 0.0f;
         float           lensFlareThreshold_ = 1.0f;

@@ -63,6 +63,28 @@ namespace CNA::Graphics {
 
         /** @brief Camera far plane distance; zero means "not supplied". */
         float farPlane = 0.0f;
+
+        /**
+         * @brief Inverse of the camera's view matrix, for passes needing world-space positions.
+         *
+         * A depth image and the inverse projection give a *view*-space position, which is enough for
+         * anything comparing pixels within one frame. Comparing across frames needs a world-space
+         * position, because view space moved with the camera.
+         */
+        Microsoft::Xna::Framework::Matrix inverseView{};
+
+        /**
+         * @brief The previous frame's view-projection, or the identity when there is no history.
+         *
+         * Reprojecting this frame's world position through the last frame's camera is what gives a
+         * pixel its screen-space velocity. @ref hasPreviousFrame says whether it means anything: on
+         * the first frame after a start or a resize it does not, and a pass that used it anyway
+         * would blur the whole image along an arbitrary direction.
+         */
+        Microsoft::Xna::Framework::Matrix previousViewProjection{};
+
+        /** @brief Whether @ref previousViewProjection describes a real previous frame. */
+        bool hasPreviousFrame = false;
     };
 
 /** @} */ // end of cnaext_engine
