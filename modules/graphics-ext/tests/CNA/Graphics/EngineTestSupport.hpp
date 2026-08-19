@@ -189,6 +189,36 @@ namespace CnaTest::EngineLayer {
     }
 
     /**
+     * @brief Whether this renderer allows a **second** `GraphicsDevice` in the same process.
+     *
+     * plan_modern.md `MOD-1695`. Most renderers do; TinyGL keeps its context in one process-wide
+     * global (`glInit`/`glClose`) with no make-current entry point, so a second one is refused by
+     * name rather than quietly sharing state. That is a documented boundary, not a defect, and a
+     * multi-device test on such a renderer should skip rather than fail.
+     *
+     * Probed by doing, like the other five: constructing one is the only honest way to ask, since
+     * the limit belongs to the native library rather than to anything CNA declares.
+     *
+     * @return True when a second device can be created alongside the caller's.
+     */
+    [[nodiscard]] inline bool SupportsASecondDevice()
+    {
+        try
+        {
+            // Both, in here. Constructing one and calling that a pass would answer "can this
+            // process have a device at all", which every renderer answers yes to -- the question
+            // is whether a *second* one may exist beside the first.
+            Microsoft::Xna::Framework::Graphics::GraphicsDevice first;
+            Microsoft::Xna::Framework::Graphics::GraphicsDevice second;
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
+    /**
      * @brief Skips the current test when the renderer cannot read render targets back.
      *
      * Written as a macro rather than a function because `GTEST_SKIP()` returns from the frame it
@@ -231,6 +261,14 @@ namespace CnaTest::EngineLayer {
         if (!::CnaTest::EngineLayer::CanBindRenderTargets(device))                                 \
             GTEST_SKIP() << "this renderer cannot bind an offscreen render target, so the frame "  \
                             "this test runs has nowhere to render";                                \
+    } while (false)
+
+    /** @brief Skips the current test when the renderer allows only one device per process. */
+#define CNA_SKIP_WITHOUT_A_SECOND_DEVICE()                                                         \
+    do {                                                                                           \
+        if (!::CnaTest::EngineLayer::SupportsASecondDevice())                                      \
+            GTEST_SKIP() << "this renderer keeps its context in one process-wide global, so the "  \
+                            "second device this test needs cannot exist here";                     \
     } while (false)
 
 } // namespace CnaTest::EngineLayer

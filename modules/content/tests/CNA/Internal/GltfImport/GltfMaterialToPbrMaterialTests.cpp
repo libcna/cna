@@ -140,7 +140,7 @@ TEST(GltfMaterialToPbrMaterialTest, TheMaterialDetourReproducesTheImporterDrawPa
 
     GraphicsDevice gd;
     // plan_modern.md MOD-1690: importing a model builds a vertex buffer, which a 2D-only renderer
-    // refuses outright ("SDL_Renderer does not support 3D: CreateVertexBuffer"). Without this the
+    // refuses outright ("does not support 3D: CreateVertexBuffer"). Without this the
     // test fails there instead of skipping, and reads as a defect rather than as the renderer's
     // documented boundary.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))

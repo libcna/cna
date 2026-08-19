@@ -157,6 +157,7 @@ TEST(DeviceLossTest, AResetBetweenBeginAndEndIsIgnoredRatherThanObeyed)
 
 TEST(MultiDeviceTest, TwoPipelinesOnTwoDevicesDoNotShareState)
 {
+    CNA_SKIP_WITHOUT_A_SECOND_DEVICE();
     // Each pipeline must hold its own targets. Sharing would show up as one pipeline's frame
     // appearing in the other's window, which nothing in a unit test can see -- but the memory
     // estimates can: two pipelines each holding their own targets sum, they do not coincide.
@@ -184,6 +185,7 @@ TEST(MultiDeviceTest, TwoPipelinesOnTwoDevicesDoNotShareState)
 
 TEST(MultiDeviceTest, AResetOnOneDeviceDoesNotDisturbTheOther)
 {
+    CNA_SKIP_WITHOUT_A_SECOND_DEVICE();
     // The subscription is per device (MOD-715). If it were global -- or if the handler did not
     // check which device raised -- one window losing its context would drop the other's targets.
     GraphicsDevice first;
@@ -211,6 +213,7 @@ TEST(MultiDeviceTest, AResetOnOneDeviceDoesNotDisturbTheOther)
 
 TEST(MultiDeviceTest, APipelineOutlivingItsSiblingIsFine)
 {
+    CNA_SKIP_WITHOUT_A_SECOND_DEVICE();
     // Destroying one pipeline must not disturb the other's subscription, which is the failure a
     // shared or static handler list would produce.
     GraphicsDevice first;
