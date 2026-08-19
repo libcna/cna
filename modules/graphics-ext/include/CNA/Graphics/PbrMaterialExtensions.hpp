@@ -112,6 +112,55 @@ namespace CNA::Graphics {
          */
         void setClearcoatNormalScale(float value);
 
+        // ── KHR_materials_sheen ──────────────────────────────────────────────
+
+        /** @brief Returns the sheen lobe's colour; black disables the lobe. */
+        [[nodiscard]] Microsoft::Xna::Framework::Vector3 getSheenColorFactor() const;
+        /**
+         * @brief Sets the sheen lobe's colour.
+         *
+         * Sheen is what makes velvet look like velvet: a retroreflective lobe that brightens at
+         * *grazing* angles, where a normal specular highlight is fading. It is the rim of light
+         * along the edge of a cushion, and no roughness setting on the base material produces it --
+         * the distribution is a different shape, peaking where the half-vector is perpendicular to
+         * the normal rather than aligned with it.
+         *
+         * @param value Linear, per channel clamped to [0, 1]. Black is how the lobe is turned off.
+         */
+        void setSheenColorFactor(const Microsoft::Xna::Framework::Vector3& value);
+
+        /** @brief Returns the sheen lobe's roughness, 0 to 1. */
+        [[nodiscard]] float getSheenRoughness() const;
+        /**
+         * @brief Sets the sheen lobe's roughness.
+         *
+         * Wider than it sounds: the sheen distribution's exponent is `1 / roughness^2`, so small
+         * values give a rim so tight it is invisible at any sensible resolution. The glTF default
+         * of 0 is treated as its floor rather than as a mirror, for that reason.
+         *
+         * @param value Clamped to [0, 1].
+         */
+        void setSheenRoughness(float value);
+
+        /** @brief Returns the sheen colour map, or null. */
+        [[nodiscard]] Microsoft::Xna::Framework::Graphics::Texture2D* getSheenColorTexture() const;
+        /**
+         * @brief Sets the sheen colour map, multiplied by the factor (RGB).
+         *
+         * @param texture The map, or null. Borrowed, never owned.
+         */
+        void setSheenColorTexture(Microsoft::Xna::Framework::Graphics::Texture2D* texture);
+
+        /** @brief Returns the sheen roughness map, or null. */
+        [[nodiscard]] Microsoft::Xna::Framework::Graphics::Texture2D*
+        getSheenRoughnessTexture() const;
+        /**
+         * @brief Sets the sheen roughness map, multiplied by the roughness (A channel).
+         *
+         * @param texture The map, or null. Borrowed, never owned.
+         */
+        void setSheenRoughnessTexture(Microsoft::Xna::Framework::Graphics::Texture2D* texture);
+
         // ── Value semantics ──────────────────────────────────────────────────
 
         /**
@@ -147,11 +196,19 @@ namespace CNA::Graphics {
          */
         [[nodiscard]] std::string ToString() const;
 
+        /** @brief Returns whether the sheen lobe is on, which is whether its colour is not black. */
+        [[nodiscard]] bool isSheenEnabled() const;
+
         /** @brief Returns whether every lobe is off, so the set changes nothing. */
         [[nodiscard]] bool isNeutral() const;
 
     private:
         using Tex2D = Microsoft::Xna::Framework::Graphics::Texture2D;
+
+        Microsoft::Xna::Framework::Vector3 sheenColorFactor_{0.0f, 0.0f, 0.0f};
+        float sheenRoughness_ = 0.0f;
+        Tex2D* sheenColorTexture_     = nullptr;
+        Tex2D* sheenRoughnessTexture_ = nullptr;
 
         float clearcoatFactor_      = 0.0f;
         float clearcoatRoughness_   = 0.0f;

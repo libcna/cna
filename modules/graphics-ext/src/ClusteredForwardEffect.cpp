@@ -88,6 +88,24 @@ float cnaFalloff(float distance, float range) {
 
 uniform float uClearcoat;
 uniform float uClearcoatRoughness;
+uniform vec3  uSheenColor;
+uniform float uSheenRoughness;
+
+// KHR_materials_sheen: the Charlie distribution with Ashikhmin's visibility. Its peak is where the
+// half-vector is *perpendicular* to the normal, which is the opposite of a specular lobe -- that is
+// why sheen appears as a rim at grazing angles and why no roughness on the base material produces
+// it. The alpha floor is not cosmetic: the exponent is 1/alpha, so a small roughness gives a rim
+// too tight to survive any sensible resolution.
+float cnaSheenDistribution(float NoH, float roughness) {
+    float alpha = max(roughness * roughness, 0.07);
+    float inverseAlpha = 1.0 / alpha;
+    float sinSquared = max(1.0 - NoH * NoH, 0.0078125);
+    return (2.0 + inverseAlpha) * pow(sinSquared, inverseAlpha * 0.5) / 6.28318530718;
+}
+
+float cnaSheenVisibility(float NoV, float NoL) {
+    return 1.0 / max(4.0 * (NoL + NoV - NoL * NoV), 1e-7);
+}
 
 vec3 cnaShade(CnaClusteredLight light, vec3 surface, vec3 normal, vec3 viewDirection,
               vec3 baseColor, float metallic, float roughness) {
@@ -118,6 +136,11 @@ vec3 cnaShade(CnaClusteredLight light, vec3 surface, vec3 normal, vec3 viewDirec
                   / max(4.0 * NoV * NoL, 1e-7);
     vec3 diffuse = (vec3(1.0) - fresnel) * (1.0 - metallic) * baseColor / kCnaPi;
     vec3 layered = diffuse + specular;
+
+    if (uSheenColor.r + uSheenColor.g + uSheenColor.b > 0.0) {
+        layered += uSheenColor * cnaSheenDistribution(NoH, uSheenRoughness)
+                 * cnaSheenVisibility(NoV, NoL);
+    }
 
     // KHR_materials_clearcoat: a second, thin specular layer over the whole material, with its own
     // roughness. Not a brighter highlight -- a *second* one. What it takes from the base layer is
@@ -231,6 +254,11 @@ void main() {
         effect_->SetUniformFloat("uClearcoatRoughness",
                                  extensions_ != nullptr ? extensions_->getClearcoatRoughness()
                                                         : 0.0f);
+        const Vector3 sheen = extensions_ != nullptr ? extensions_->getSheenColorFactor()
+                                                     : Vector3(0.0f, 0.0f, 0.0f);
+        effect_->SetUniformVec3("uSheenColor", sheen.X, sheen.Y, sheen.Z);
+        effect_->SetUniformFloat("uSheenRoughness",
+                                 extensions_ != nullptr ? extensions_->getSheenRoughness() : 0.0f);
 
         lights.bind(*effect_, 1);
 
@@ -322,8 +350,22 @@ void main() {
                                                  const Vector3& surface, const Vector3& normal,
                                                  const Vector3& cameraPosition,
                                                  const Vector3& baseColor, const float metallic,
+                                                 const float roughness,
+                                                 const PbrMaterialExtensions& extensions)
+    {
+        return contribution(light, surface, normal, cameraPosition, baseColor, metallic, roughness,
+                            extensions.getClearcoatFactor(), extensions.getClearcoatRoughness(),
+                            extensions.getSheenColorFactor(), extensions.getSheenRoughness());
+    }
+
+    Vector3 ClusteredForwardEffect::contribution(const ClusteredLightEXT& light,
+                                                 const Vector3& surface, const Vector3& normal,
+                                                 const Vector3& cameraPosition,
+                                                 const Vector3& baseColor, const float metallic,
                                                  const float roughness, const float clearcoat,
-                                                 const float clearcoatRoughness)
+                                                 const float clearcoatRoughness,
+                                                 const Vector3& sheenColor,
+                                                 const float sheenRoughness)
     {
         const Vector3 toLight(light.Position.X - surface.X, light.Position.Y - surface.Y,
                               light.Position.Z - surface.Z);
@@ -370,6 +412,19 @@ void main() {
 
         const float schlick = std::pow(std::clamp(1.0f - VoH, 0.0f, 1.0f), 5.0f);
 
+        float sheenTerm = 0.0f;
+        if (sheenColor.X > 0.0f || sheenColor.Y > 0.0f || sheenColor.Z > 0.0f)
+        {
+            const float sheenAlpha = std::max(sheenRoughness * sheenRoughness, 0.07f);
+            const float inverseAlpha = 1.0f / sheenAlpha;
+            const float sinSquared = std::max(1.0f - NoH * NoH, 0.0078125f);
+            const float distribution = (2.0f + inverseAlpha) *
+                                       std::pow(sinSquared, inverseAlpha * 0.5f) /
+                                       6.28318530718f;
+            const float visibility = 1.0f / std::max(4.0f * (NoL + NoV - NoL * NoV), 1e-7f);
+            sheenTerm = distribution * visibility;
+        }
+
         float clearcoatFresnel = 0.0f;
         float clearcoatSpecular = 0.0f;
         if (clearcoat > 0.0f)
@@ -399,7 +454,7 @@ void main() {
                                    std::max(4.0f * NoV * NoL, 1e-7f);
             const float diffuse = (1.0f - fresnel) * (1.0f - metallic) * base[channel] /
                                   3.14159265359f;
-            float layered = diffuse + specular;
+            float layered = diffuse + specular + (&sheenColor.X)[channel] * sheenTerm;
             if (clearcoat > 0.0f)
                 layered = layered * (1.0f - clearcoat * clearcoatFresnel) +
                           clearcoat * clearcoatSpecular;

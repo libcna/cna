@@ -13,6 +13,7 @@
 
 #include "CNA/Graphics/PbrMaterialExtensions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include <string>
@@ -23,6 +24,7 @@ namespace {
 using CNA::Graphics::PbrMaterialExtensions;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Vector3;
 
 TEST(PbrMaterialExtensionsTest, TheDefaultSetChangesNothing)
 {
@@ -36,7 +38,43 @@ TEST(PbrMaterialExtensionsTest, TheDefaultSetChangesNothing)
     EXPECT_EQ(extensions.getClearcoatTexture(), nullptr);
     EXPECT_EQ(extensions.getClearcoatRoughnessTexture(), nullptr);
     EXPECT_EQ(extensions.getClearcoatNormalTexture(), nullptr);
+    EXPECT_FALSE(extensions.isSheenEnabled());
+    EXPECT_FLOAT_EQ(extensions.getSheenColorFactor().X, 0.0f);
+    EXPECT_FLOAT_EQ(extensions.getSheenRoughness(), 0.0f);
+    EXPECT_EQ(extensions.getSheenColorTexture(), nullptr);
+    EXPECT_EQ(extensions.getSheenRoughnessTexture(), nullptr);
     EXPECT_EQ(extensions.ToString(), "{}") << "a set with nothing on should not cost a line of zeros";
+}
+
+TEST(PbrMaterialExtensionsTest, TheSheenFieldsRoundTripAndAreValidated)
+{
+    GraphicsDevice gd;
+    Texture2D colour(gd, 1, 1);
+    Texture2D roughness(gd, 1, 1);
+
+    PbrMaterialExtensions extensions;
+    extensions.setSheenColorFactor(Vector3(0.2f, 0.4f, 0.8f));
+    extensions.setSheenRoughness(0.6f);
+    extensions.setSheenColorTexture(&colour);
+    extensions.setSheenRoughnessTexture(&roughness);
+
+    EXPECT_FLOAT_EQ(extensions.getSheenColorFactor().Z, 0.8f);
+    EXPECT_FLOAT_EQ(extensions.getSheenRoughness(), 0.6f);
+    EXPECT_EQ(extensions.getSheenColorTexture(), &colour);
+    EXPECT_EQ(extensions.getSheenRoughnessTexture(), &roughness);
+    EXPECT_TRUE(extensions.isSheenEnabled());
+    EXPECT_FALSE(extensions.isNeutral());
+
+    extensions.setSheenColorFactor(Vector3(-1.0f, 5.0f, 0.5f));
+    EXPECT_FLOAT_EQ(extensions.getSheenColorFactor().X, 0.0f);
+    EXPECT_FLOAT_EQ(extensions.getSheenColorFactor().Y, 1.0f);
+    extensions.setSheenRoughness(9.0f);
+    EXPECT_FLOAT_EQ(extensions.getSheenRoughness(), 1.0f);
+
+    // Black is how the lobe is turned off, and it has to turn off even with its maps still bound.
+    extensions.setSheenColorFactor(Vector3(0.0f, 0.0f, 0.0f));
+    EXPECT_FALSE(extensions.isSheenEnabled());
+    EXPECT_TRUE(extensions.isNeutral());
 }
 
 TEST(PbrMaterialExtensionsTest, EveryFieldRoundTripsAndIsValidated)
@@ -111,6 +149,19 @@ TEST(PbrMaterialExtensionsTest, EqualityComparesEveryFieldIncludingTheTextures)
     a.setClearcoatNormalTexture(&second);
     EXPECT_NE(a, b);
     b.setClearcoatNormalTexture(&second);
+
+    a.setSheenColorFactor(Vector3(0.1f, 0.2f, 0.3f));
+    EXPECT_NE(a, b);
+    b.setSheenColorFactor(Vector3(0.1f, 0.2f, 0.3f));
+    a.setSheenRoughness(0.7f);
+    EXPECT_NE(a, b);
+    b.setSheenRoughness(0.7f);
+    a.setSheenColorTexture(&first);
+    EXPECT_NE(a, b);
+    b.setSheenColorTexture(&first);
+    a.setSheenRoughnessTexture(&second);
+    EXPECT_NE(a, b);
+    b.setSheenRoughnessTexture(&second);
     EXPECT_EQ(a, b) << "every field has now been set on both, so they must agree again";
 }
 
@@ -137,7 +188,11 @@ TEST(PbrMaterialExtensionsTest, EqualSetsHashEqually)
     hashes.insert(b.GetHashCode());
     b.setClearcoatTexture(nullptr);
     hashes.insert(b.GetHashCode());
-    EXPECT_EQ(hashes.size(), 4u) << "a field is missing from the hash";
+    b.setSheenColorFactor(Vector3(0.5f, 0.0f, 0.0f));
+    hashes.insert(b.GetHashCode());
+    b.setSheenRoughness(0.6f);
+    hashes.insert(b.GetHashCode());
+    EXPECT_EQ(hashes.size(), 6u) << "a field is missing from the hash";
 }
 
 TEST(PbrMaterialExtensionsTest, ToStringNamesOnlyTheLobesThatAreOn)
@@ -159,6 +214,18 @@ TEST(PbrMaterialExtensionsTest, ToStringNamesOnlyTheLobesThatAreOn)
     extensions.setClearcoatFactor(0.0f);
     EXPECT_EQ(extensions.ToString(), "{}")
         << "a lobe turned off should disappear from the summary even with its maps still bound";
+
+    extensions.setSheenColorFactor(Vector3(0.5f, 0.25f, 0.0f));
+    extensions.setSheenRoughness(0.5f);
+    EXPECT_EQ(extensions.ToString(),
+              "{Sheen:{Color:{X:0.5 Y:0.25 Z:0} Roughness:0.5 Textures:0}}");
+
+    extensions.setClearcoatFactor(0.5f);
+    extensions.setClearcoatRoughness(0.25f);
+    EXPECT_EQ(extensions.ToString(),
+              "{Sheen:{Color:{X:0.5 Y:0.25 Z:0} Roughness:0.5 Textures:0} "
+              "Clearcoat:{Factor:0.5 Roughness:0.25 Textures:2}}")
+        << "two lobes on at once must be separated rather than run together";
 }
 
 } // namespace

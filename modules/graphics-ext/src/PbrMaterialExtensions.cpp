@@ -4,12 +4,15 @@
 #ifdef CNA_CNAEXT
 
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 
 #include <algorithm>
 #include <functional>
 #include <sstream>
 
 namespace CNA::Graphics {
+
+    using Microsoft::Xna::Framework::Vector3;
 
     namespace {
 
@@ -73,9 +76,43 @@ namespace CNA::Graphics {
         if (value >= 0.0f) clearcoatNormalScale_ = value;
     }
 
+    Vector3 PbrMaterialExtensions::getSheenColorFactor() const { return sheenColorFactor_; }
+    void    PbrMaterialExtensions::setSheenColorFactor(const Vector3& value)
+    {
+        sheenColorFactor_ = Vector3(std::clamp(value.X, 0.0f, 1.0f),
+                                    std::clamp(value.Y, 0.0f, 1.0f),
+                                    std::clamp(value.Z, 0.0f, 1.0f));
+    }
+
+    float PbrMaterialExtensions::getSheenRoughness() const { return sheenRoughness_; }
+    void  PbrMaterialExtensions::setSheenRoughness(const float value)
+    {
+        sheenRoughness_ = std::clamp(value, 0.0f, 1.0f);
+    }
+
+    Microsoft::Xna::Framework::Graphics::Texture2D*
+    PbrMaterialExtensions::getSheenColorTexture() const { return sheenColorTexture_; }
+    void PbrMaterialExtensions::setSheenColorTexture(Tex2D* texture)
+    {
+        sheenColorTexture_ = texture;
+    }
+
+    Microsoft::Xna::Framework::Graphics::Texture2D*
+    PbrMaterialExtensions::getSheenRoughnessTexture() const { return sheenRoughnessTexture_; }
+    void PbrMaterialExtensions::setSheenRoughnessTexture(Tex2D* texture)
+    {
+        sheenRoughnessTexture_ = texture;
+    }
+
     bool PbrMaterialExtensions::operator==(const PbrMaterialExtensions& other) const
     {
-        return clearcoatFactor_ == other.clearcoatFactor_ &&
+        return sheenColorFactor_.X == other.sheenColorFactor_.X &&
+               sheenColorFactor_.Y == other.sheenColorFactor_.Y &&
+               sheenColorFactor_.Z == other.sheenColorFactor_.Z &&
+               sheenRoughness_ == other.sheenRoughness_ &&
+               sheenColorTexture_ == other.sheenColorTexture_ &&
+               sheenRoughnessTexture_ == other.sheenRoughnessTexture_ &&
+               clearcoatFactor_ == other.clearcoatFactor_ &&
                clearcoatRoughness_ == other.clearcoatRoughness_ &&
                clearcoatNormalScale_ == other.clearcoatNormalScale_ &&
                clearcoatTexture_ == other.clearcoatTexture_ &&
@@ -91,6 +128,12 @@ namespace CNA::Graphics {
     std::size_t PbrMaterialExtensions::GetHashCode() const
     {
         std::size_t seed = 0;
+        Combine(seed, HashFloat(sheenColorFactor_.X));
+        Combine(seed, HashFloat(sheenColorFactor_.Y));
+        Combine(seed, HashFloat(sheenColorFactor_.Z));
+        Combine(seed, HashFloat(sheenRoughness_));
+        Combine(seed, std::hash<const void*>{}(sheenColorTexture_));
+        Combine(seed, std::hash<const void*>{}(sheenRoughnessTexture_));
         Combine(seed, HashFloat(clearcoatFactor_));
         Combine(seed, HashFloat(clearcoatRoughness_));
         Combine(seed, HashFloat(clearcoatNormalScale_));
@@ -100,13 +143,33 @@ namespace CNA::Graphics {
         return seed;
     }
 
-    bool PbrMaterialExtensions::isNeutral() const { return clearcoatFactor_ <= 0.0f; }
+    bool PbrMaterialExtensions::isSheenEnabled() const
+    {
+        return sheenColorFactor_.X > 0.0f || sheenColorFactor_.Y > 0.0f ||
+               sheenColorFactor_.Z > 0.0f;
+    }
+
+    bool PbrMaterialExtensions::isNeutral() const
+    {
+        return clearcoatFactor_ <= 0.0f && !isSheenEnabled();
+    }
 
     std::string PbrMaterialExtensions::ToString() const
     {
         std::string text = "{";
+        if (isSheenEnabled())
+        {
+            int maps = 0;
+            if (sheenColorTexture_ != nullptr) ++maps;
+            if (sheenRoughnessTexture_ != nullptr) ++maps;
+            text += "Sheen:{Color:{X:" + Trimmed(sheenColorFactor_.X) + " Y:" +
+                    Trimmed(sheenColorFactor_.Y) + " Z:" + Trimmed(sheenColorFactor_.Z) +
+                    "} Roughness:" + Trimmed(sheenRoughness_) + " Textures:" +
+                    std::to_string(maps) + "}";
+        }
         if (clearcoatFactor_ > 0.0f)
         {
+            if (text.size() > 1) text += " ";
             int maps = 0;
             if (clearcoatTexture_ != nullptr) ++maps;
             if (clearcoatRoughnessTexture_ != nullptr) ++maps;

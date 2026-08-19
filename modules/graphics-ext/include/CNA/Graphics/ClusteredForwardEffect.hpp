@@ -180,6 +180,8 @@ namespace CNA::Graphics {
          * @param roughness      The surface's roughness.
          * @param clearcoat      How strongly the clearcoat lobe is applied, 0 to 1.
          * @param clearcoatRoughness The clearcoat layer's own roughness.
+         * @param sheenColor     The sheen lobe's colour; black disables it.
+         * @param sheenRoughness The sheen lobe's roughness.
          * @return The contribution, unbounded above; zero when the point is out of range.
          */
         [[nodiscard]] static Microsoft::Xna::Framework::Vector3 contribution(
@@ -188,7 +190,33 @@ namespace CNA::Graphics {
             const Microsoft::Xna::Framework::Vector3& normal,
             const Microsoft::Xna::Framework::Vector3& cameraPosition,
             const Microsoft::Xna::Framework::Vector3& baseColor, float metallic, float roughness,
-            float clearcoat = 0.0f, float clearcoatRoughness = 0.0f);
+            float clearcoat = 0.0f, float clearcoatRoughness = 0.0f,
+            const Microsoft::Xna::Framework::Vector3& sheenColor = {0.0f, 0.0f, 0.0f},
+            float sheenRoughness = 0.0f);
+
+        /**
+         * @brief The same contribution, with the extra lobes taken from an extension set.
+         *
+         * The overload a caller holding a material should use: it cannot get the order of the
+         * scalar arguments wrong, and it picks up a lobe added later without a signature change.
+         *
+         * @param light          The light.
+         * @param surface        The world-space point being lit.
+         * @param normal         The surface normal, normalised.
+         * @param cameraPosition The world-space eye position.
+         * @param baseColor      The surface's base colour.
+         * @param metallic       How metallic the surface is.
+         * @param roughness      The surface's roughness.
+         * @param extensions     The material's extra lobes.
+         * @return The contribution, unbounded above; zero when the point is out of range.
+         */
+        [[nodiscard]] static Microsoft::Xna::Framework::Vector3 contribution(
+            const ClusteredLightEXT& light,
+            const Microsoft::Xna::Framework::Vector3& surface,
+            const Microsoft::Xna::Framework::Vector3& normal,
+            const Microsoft::Xna::Framework::Vector3& cameraPosition,
+            const Microsoft::Xna::Framework::Vector3& baseColor, float metallic, float roughness,
+            const PbrMaterialExtensions& extensions);
 
     private:
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> effect_;

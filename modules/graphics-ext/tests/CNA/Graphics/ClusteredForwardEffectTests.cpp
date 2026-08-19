@@ -636,6 +636,114 @@ TEST(ClusteredForwardEffectTest, TheClearcoatSettingsReachTheShader)
         << "the shader and the CPU model disagree about the clearcoat";
 }
 
+// ── The sheen lobe (MOD-2071) ────────────────────────────────────────────────
+
+TEST(ClusteredForwardEffectTest, SheenBrightensAtGrazingAnglesWhereSpecularIsFading)
+{
+    // The property that makes sheen sheen. A specular lobe peaks where the half-vector is *aligned*
+    // with the normal; the Charlie distribution peaks where it is *perpendicular* to it. So the
+    // test compares the sheen's share of the result head-on against its share at a grazing view,
+    // and the share has to grow -- not merely be present.
+    const ClusteredLightEXT light = MakePoint(Vector3(0.0f, 4.0f, 0.0f), 40.0f, 4.0f);
+    const Vector3 surface(0.0f, 0.0f, 0.0f);
+    const Vector3 normal(0.0f, 1.0f, 0.0f);
+    const Vector3 base(0.3f, 0.3f, 0.3f);
+
+    PbrMaterialExtensions velvet;
+    velvet.setSheenColorFactor(Vector3(1.0f, 1.0f, 1.0f));
+    velvet.setSheenRoughness(0.4f);
+
+    const auto share = [&](const Vector3& eye) {
+        const Vector3 plain = ClusteredForwardEffect::contribution(light, surface, normal, eye,
+                                                                   base, 0.0f, 0.6f);
+        const Vector3 sheened = ClusteredForwardEffect::contribution(light, surface, normal, eye,
+                                                                     base, 0.0f, 0.6f, velvet);
+        return (sheened.X - plain.X) / std::max(plain.X, 1e-6f);
+    };
+
+    const float headOn = share(Vector3(0.0f, 6.0f, 0.0f));
+    const float grazing = share(Vector3(0.0f, 0.35f, 6.0f));
+    EXPECT_GT(headOn, 0.0f) << "sheen contributed nothing at all";
+    EXPECT_GT(grazing, headOn * 2.0f)
+        << "sheen did not grow towards grazing, so it is behaving like an ordinary specular lobe";
+}
+
+TEST(ClusteredForwardEffectTest, ABlackSheenIsExactlyTheUnsheenedResult)
+{
+    const ClusteredLightEXT light = MakePoint(Vector3(1.0f, 3.0f, 2.0f), 20.0f, 3.0f);
+    const Vector3 surface(0.0f, 0.0f, 0.0f);
+    const Vector3 normal(0.0f, 1.0f, 0.0f);
+    const Vector3 eye(2.0f, 4.0f, 1.0f);
+    const Vector3 base(0.6f, 0.4f, 0.2f);
+
+    const PbrMaterialExtensions neutral;
+    const Vector3 plain = ClusteredForwardEffect::contribution(light, surface, normal, eye, base,
+                                                               0.2f, 0.5f);
+    const Vector3 viaExtensions = ClusteredForwardEffect::contribution(light, surface, normal, eye,
+                                                                       base, 0.2f, 0.5f, neutral);
+    EXPECT_FLOAT_EQ(plain.X, viaExtensions.X);
+    EXPECT_FLOAT_EQ(plain.Y, viaExtensions.Y);
+    EXPECT_FLOAT_EQ(plain.Z, viaExtensions.Z);
+}
+
+TEST(ClusteredForwardEffectTest, SheenKeepsItsOwnColour)
+{
+    // Sheen has a colour of its own -- a blue rim on a red cushion is a thing velvet does -- so the
+    // lobe must not be tinted by the base colour on its way out.
+    const ClusteredLightEXT light = MakePoint(Vector3(0.0f, 4.0f, 0.0f), 40.0f, 4.0f);
+    const Vector3 surface(0.0f, 0.0f, 0.0f);
+    const Vector3 normal(0.0f, 1.0f, 0.0f);
+    const Vector3 eye(0.0f, 0.4f, 6.0f);
+    const Vector3 redBase(0.5f, 0.0f, 0.0f);
+
+    PbrMaterialExtensions blueSheen;
+    blueSheen.setSheenColorFactor(Vector3(0.0f, 0.0f, 1.0f));
+    blueSheen.setSheenRoughness(0.4f);
+
+    const Vector3 plain = ClusteredForwardEffect::contribution(light, surface, normal, eye,
+                                                               redBase, 0.0f, 0.6f);
+    const Vector3 sheened = ClusteredForwardEffect::contribution(light, surface, normal, eye,
+                                                                 redBase, 0.0f, 0.6f, blueSheen);
+    EXPECT_GT(sheened.Z, plain.Z + 1e-4f) << "the blue sheen did not reach the blue channel";
+    EXPECT_NEAR(sheened.X, plain.X, 1e-5f) << "the blue sheen leaked into the red channel";
+}
+
+TEST(ClusteredForwardEffectTest, TheSheenSettingsReachTheShader)
+{
+    GraphicsDevice gd;
+    ClusteredForwardEffect effect(gd);
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+    if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
+
+    ClusteredLightSetEXT lights;
+    lights.add(MakePoint(Vector3(0.0f, 0.0f, kWallZ + 3.0f), 12.0f, 4.0f));
+
+    effect.setBaseColor(Vector3(0.3f, 0.3f, 0.3f));
+    effect.setMetallic(0.0f);
+    effect.setRoughness(0.6f);
+    const long long plain = TotalBrightness(RenderWall(gd, effect, lights));
+
+    PbrMaterialExtensions velvet;
+    velvet.setSheenColorFactor(Vector3(1.0f, 1.0f, 1.0f));
+    velvet.setSheenRoughness(0.4f);
+    effect.setMaterialExtensions(velvet);
+    const long long sheened = TotalBrightness(RenderWall(gd, effect, lights));
+    EXPECT_GT(sheened, plain) << "the sheen uniforms never reached the shader";
+
+    // And the value at the wall's centre matches the CPU model, as the other lobes do.
+    const Vector3 centre(0.0f, 0.0f, kWallZ);
+    const Vector3 expected = ClusteredForwardEffect::contribution(
+        MakePoint(Vector3(0.0f, 0.0f, kWallZ + 3.0f), 12.0f, 4.0f), centre,
+        Vector3(0.0f, 0.0f, 1.0f), Vector3::Zero, Vector3(0.3f, 0.3f, 0.3f), 0.0f, 0.6f, velvet);
+    const std::vector<Color> pixels = RenderWall(gd, effect, lights);
+    const Color middle = pixels[static_cast<std::size_t>(kSize) * (kSize / 2) + kSize / 2];
+    ASSERT_LT(expected.X, 0.95f) << "the reference saturates, so the comparison proves little";
+    EXPECT_NEAR(static_cast<float>(middle.getRProperty()) / 255.0f, expected.X, 0.03f)
+        << "the shader and the CPU model disagree about the sheen";
+}
+
 } // namespace
 
 #endif // CNA_CNAEXT
