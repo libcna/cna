@@ -396,6 +396,44 @@ Xvfb also dies periodically in this container. A wrapper that checks `xdpyinfo` 
 before running is worth having; without one, a test run fails with "x11 not available" and looks
 like a regression.
 
+### Phase 16, as a whole: what measuring fifteen renderers actually bought
+
+The sweep was worth far more than the rows it closed. Every renderer measured either confirmed the
+capability gates work or produced a defect, and the defects were not in the renderers the sweep was
+nominally about.
+
+**Found in the engine layer** (all fixed):
+
+- `InstancedRendererEXT` asked one capability where it needed two (SDL_GPU).
+- `DepthNormalPrepass` trusted the `MultipleRenderTargets` capability, which WebGPU promises and
+  does not keep; it now probes the bind once at construction and falls back.
+- Six test-gating gaps, where a documented renderer boundary produced *failures* instead of skips:
+  a fixture building a `VertexBuffer` on a 2D-only renderer, two cube-shadow tests on a renderer
+  with no `RenderTargetCube`, an `EffectPass` chain test asking only `CustomEffects`, a
+  `RequireCapability` test assuming every renderer supports *something*, and `MOD-1714`'s
+  all-subsystems fixture.
+
+**Found outside it** (fixed where small, recorded where not):
+
+- **Three renderer identities that had never compiled** — see below.
+- A process-exit segfault in `modules/devices`, renderer-independent and present with `CNA_CNAEXT`
+  off (fixed, with a regression test).
+- **Three single-context renderers**: TinyGL refused a second device cleanly; Sokol and Magnum
+  *aborted the whole test process*, and now refuse by name. The placement matters in both — the
+  guard has to run before the constructor creates its platform GL context, or the first renderer's
+  objects are torn down against the wrong context and abort anyway.
+- Eleven POSIX `setenv` call sites that had crept back after `docs/cnatests-mingw-setenv-proposal.md`
+  removed all 62, which is why `CnaTests.exe` would not build for D3D11 again (fixed, now gated).
+- LLGL terminates when a second device is attempted, and IGL segfaults on the copy-through path —
+  both recorded for their own plans.
+
+**The recurring shape**, in four different enums now: a capability describes what an API *accepts*;
+the layer needs to know what a renderer *does*. `CustomEffects` vs `ExecutesShaderEffectSourceEXT`
+was the first. `Instancing` vs `MultiStreamVertexInput` was the second. `MultipleRenderTargets`
+promised-then-thrown was the third. `IGraphicsRenderer::SupportsCapability`'s own `return true`
+default, sitting above a `DrawInstancedPrimitives` that defaults to a refusal, is the mechanism
+behind all of them.
+
 ### Three renderer identities that had never compiled
 
 `OPENGL1`, `LLGL` and `BGFX` could not be selected at all. Each of their descriptors carried
