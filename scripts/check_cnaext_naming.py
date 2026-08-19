@@ -43,6 +43,9 @@ DECL = re.compile(
 )
 NOT_A_RETURN_TYPE = {"return", "else", "if", "using", "friend", "case", "delete", "new"}
 
+# Opens a class or struct, so the constructors that follow belong to it rather than to the file.
+TYPE_DECL = re.compile(r"^(?:class|struct)\s+(?P<type>[A-Za-z_]\w*)\b(?!\s*;)")
+
 
 def main() -> int:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
@@ -54,10 +57,19 @@ def main() -> int:
     problems = []
     exercised = set()
     for header in headers:
+        # The enclosing type is tracked rather than taken from the file name. It used to be
+        # `header.stem`, which silently required one class per header named after its file: a header
+        # holding a second class had that class's *constructors* reported as UpperCamelCase
+        # functions, with a message about renaming them. The rule this script exists to enforce says
+        # nothing about file layout, so it should not have been enforcing one by accident.
         owner = header.stem
         for number, line in enumerate(header.read_text(encoding="utf-8").split("\n"), start=1):
             text = line.strip()
             if not text or text.startswith(("//", "*", "/*", "#")):
+                continue
+            opened = TYPE_DECL.match(text)
+            if opened:
+                owner = opened.group("type")
                 continue
             match = DECL.match(text)
             if not match or match.group("ret") in NOT_A_RETURN_TYPE:

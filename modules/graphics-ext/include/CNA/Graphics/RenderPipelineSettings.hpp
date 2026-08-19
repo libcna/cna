@@ -147,6 +147,31 @@ namespace CNA::Graphics {
         /** @brief Sets how wide the fade at the edge of the screen is, in screen fractions. */
         void setSSREdgeFade(float value);
 
+        /** @brief Returns how far the colour channels separate at the corner of the frame. */
+        [[nodiscard]] float getChromaticAberrationStrength() const;
+        /** @brief Sets the channel separation at the corner, clamped to [0, 0.1]; 0 disables it. */
+        void setChromaticAberrationStrength(float value);
+
+        /** @brief Returns how strong the film grain is at its peak. */
+        [[nodiscard]] float getFilmGrainIntensity() const;
+        /** @brief Sets the grain amplitude, clamped to [0, 1]; 0 disables it. */
+        void setFilmGrainIntensity(float value);
+
+        /** @brief Returns the brightness a pixel must reach before it flares. */
+        [[nodiscard]] float getLensFlareThreshold() const;
+        /** @brief Sets the brightness a pixel must reach before it flares. */
+        void setLensFlareThreshold(float value);
+
+        /** @brief Returns how strongly the flare ghosts are added to the frame. */
+        [[nodiscard]] float getLensFlareIntensity() const;
+        /** @brief Sets the flare strength; 0 disables it. */
+        void setLensFlareIntensity(float value);
+
+        /** @brief Returns how far apart successive flare ghosts sit. */
+        [[nodiscard]] float getLensFlareDispersal() const;
+        /** @brief Sets the ghost spacing, clamped to [0, 1]. */
+        void setLensFlareDispersal(float value);
+
         /** @brief Returns true if colour grading is enabled. */
         [[nodiscard]] bool isColorGradeEnabled() const;
         /** @brief Enables or disables the colour-grading pass. */
@@ -318,6 +343,11 @@ namespace CNA::Graphics {
         float           dofFocalLength_   = 50.0f;
         float           dofFNumber_       = 5.6f;
         float           dofMaxRadius_     = 0.02f;
+        float           chromaticAberration_ = 0.0f;
+        float           filmGrainIntensity_ = 0.0f;
+        float           lensFlareThreshold_ = 1.0f;
+        float           lensFlareIntensity_ = 0.0f;
+        float           lensFlareDispersal_ = 0.35f;
         bool            colorGradeEnabled_ = false;
         float           colorGradeStrength_ = 1.0f;
         float           fxaaEdgeThreshold_ = 0.125f;

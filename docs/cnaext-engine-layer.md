@@ -605,6 +605,41 @@ stair-step. The pass asks `GraphicsCapability::HalfFloatTextureLinearFiltering` 
 and takes the fallback silently; there is no setting for it, because there is no reason to prefer the
 worse path where the better one exists.
 
+### The lens and the grade: four passes and where each one belongs
+
+`plan_modern.md` `MOD-2020`–`MOD-2027`. Four small passes, all **off by default**, whose positions in
+the chain are decided by one question: is this describing the lens the scene was shot through, or
+the image the viewer is looking at?
+
+| Pass | Runs | Because |
+|---|---|---|
+| `LensFlarePass` | before bloom, scene-referred | its threshold separates a bright *light* from a white *wall*, and after tonemapping those are the same number; a ghost is a real image of the light, so it should bloom as one |
+| `ColorGradePass` | after tonemapping, before FXAA | a lookup table indexed by scene-referred values is asked about numbers past 1.0, where it has nothing to say; the edge filter should see the contrast the viewer will see |
+| `ChromaticAberrationPass` | after tonemapping | it is the lens in front of the viewer, not the one the scene was shot through |
+| `FilmGrainPass` | last, after FXAA | an edge filter handed fresh noise spends its budget smoothing the grain instead of the edges |
+
+**Grading is a table, not a list of knobs.** A colourist's decisions arrive as a 3D LUT, and anything
+a table can express — a curve, a tint, a bleach bypass, a whole film emulation — costs the same one
+lookup. The table is a strip of `size` slices of `size` by `size`, so a 32-entry table is a 1024 by
+32 texture; that is what every grading tool exports to and the only layout a renderer without 3D
+textures can sample. Anything that is not such a strip is **refused by name**: read at the wrong
+slice count a strip grades the frame into colours nothing in the table names, which is a wrong image
+that looks deliberate. `ColorGradePass::createIdentityLut` gives a starting point that changes
+nothing.
+
+**Aberration is radial, and that is the whole effect.** The offset scales with distance from the
+axis, so the centre of the frame stays sharp however strong the setting is and the corners fringe. A
+constant offset would fringe the middle too and reads immediately as a bug.
+
+**Grain lives in the midtones.** Uniform noise across the range reads as a broken sensor; real grain
+is buried in blacks and invisible in blown highlights, because that is where the emulsion stops
+responding. The pattern is a function of the pixel and of `PostProcessContext::elapsedSeconds` and
+nothing else, so a rendered sequence is reproducible rather than merely noisy.
+
+**Ghosts land on the far side of the centre.** A bright window at the top of the frame throws its
+reflections along the bottom, because that is what a reflection between lens elements does. It is the
+one property that makes flare read as a lens rather than as a smear.
+
 ### Tonemapping: what goes in, what comes out, and what CNA does not do
 
 `plan_modern.md` `MOD-316`, `MOD-320`.

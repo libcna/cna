@@ -86,6 +86,21 @@ namespace CNA::Graphics {
     float           RenderPipelineSettings::getSSREdgeFade()      const { return ssrEdgeFade_; }
     void            RenderPipelineSettings::setSSREdgeFade(float v)     { ssrEdgeFade_ = std::clamp(v, 0.0f, 0.5f); }
 
+    float           RenderPipelineSettings::getChromaticAberrationStrength() const { return chromaticAberration_; }
+    void            RenderPipelineSettings::setChromaticAberrationStrength(float v) { chromaticAberration_ = std::clamp(v, 0.0f, 0.1f); }
+
+    float           RenderPipelineSettings::getFilmGrainIntensity()  const { return filmGrainIntensity_; }
+    void            RenderPipelineSettings::setFilmGrainIntensity(float v)  { filmGrainIntensity_ = std::clamp(v, 0.0f, 1.0f); }
+
+    float           RenderPipelineSettings::getLensFlareThreshold()  const { return lensFlareThreshold_; }
+    void            RenderPipelineSettings::setLensFlareThreshold(float v)  { lensFlareThreshold_ = AtLeast(v, 0.0f); }
+
+    float           RenderPipelineSettings::getLensFlareIntensity()  const { return lensFlareIntensity_; }
+    void            RenderPipelineSettings::setLensFlareIntensity(float v)  { lensFlareIntensity_ = AtLeast(v, 0.0f); }
+
+    float           RenderPipelineSettings::getLensFlareDispersal()  const { return lensFlareDispersal_; }
+    void            RenderPipelineSettings::setLensFlareDispersal(float v)  { lensFlareDispersal_ = std::clamp(v, 0.0f, 1.0f); }
+
     bool            RenderPipelineSettings::isColorGradeEnabled()   const { return colorGradeEnabled_; }
     void            RenderPipelineSettings::setColorGradeEnabled(bool v)   { colorGradeEnabled_ = v; }
 

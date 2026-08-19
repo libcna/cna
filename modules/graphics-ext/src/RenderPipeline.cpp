@@ -9,6 +9,9 @@
 #include "CNA/Graphics/Skybox.hpp"
 #include "CNA/Graphics/SsaoPass.hpp"
 #include "CNA/Graphics/ColorGradePass.hpp"
+#include "CNA/Graphics/ChromaticAberrationPass.hpp"
+#include "CNA/Graphics/FilmGrainPass.hpp"
+#include "CNA/Graphics/LensFlarePass.hpp"
 #include "CNA/Graphics/DepthOfFieldPass.hpp"
 #include "CNA/Graphics/SsrPass.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
@@ -38,7 +41,10 @@ namespace CNA::Graphics {
           ssaoPass_(std::make_unique<SsaoPass>(device)),
           ssrPass_(std::make_unique<SsrPass>(device)),
           dofPass_(std::make_unique<DepthOfFieldPass>(device)),
-          colorGradePass_(std::make_unique<ColorGradePass>(device))
+          colorGradePass_(std::make_unique<ColorGradePass>(device)),
+          chromaticAberrationPass_(std::make_unique<ChromaticAberrationPass>(device)),
+          filmGrainPass_(std::make_unique<FilmGrainPass>(device)),
+          lensFlarePass_(std::make_unique<LensFlarePass>(device))
     {
         // plan_modern.md MOD-715. After a context loss every GPU object this pipeline holds names
         // storage the driver has already destroyed; rendering into one is undefined rather than
@@ -74,7 +80,8 @@ namespace CNA::Graphics {
             return true;
         if (settings_.isBloomEnabled() || settings_.isSSAOEnabled() || settings_.isFXAAEnabled() ||
             settings_.isSSREnabled() || settings_.isDOFEnabled() ||
-            settings_.isColorGradeEnabled())
+            settings_.isColorGradeEnabled() || settings_.getChromaticAberrationStrength() > 0.0f ||
+            settings_.getFilmGrainIntensity() > 0.0f || settings_.getLensFlareIntensity() > 0.0f)
             return true;
         return !userPasses_.empty();
     }
@@ -248,6 +255,12 @@ namespace CNA::Graphics {
         // is the wrong order in the same way tonemapping before bloom would be.
         if (settings_.isDOFEnabled())
             chain_.addPass(dofPass_.get());
+        // Flare before bloom, and both before the tonemapper: the threshold that decides what is
+        // bright enough to throw a reflection has to separate a genuinely bright light from a merely
+        // white wall, and after tonemapping those are the same number. Before bloom because a ghost
+        // is a real image of the light and should bloom as one.
+        if (settings_.getLensFlareIntensity() > 0.0f)
+            chain_.addPass(lensFlarePass_.get());
         // Bloom reads scene-referred values -- its threshold separates genuinely bright pixels
         // from merely white ones -- so it runs before the tonemapper compresses that range away.
         if (settings_.isBloomEnabled())
@@ -261,11 +274,19 @@ namespace CNA::Graphics {
         // are to find.
         if (settings_.isColorGradeEnabled())
             chain_.addPass(colorGradePass_.get());
+        // The lens sits in front of the viewer, so these two describe displayed pixels: aberration
+        // fringes what is shown, and grain lands on the finished image. Grain runs last of all --
+        // after FXAA -- because an edge filter handed fresh noise would spend its budget smoothing
+        // the grain instead of the edges.
+        if (settings_.getChromaticAberrationStrength() > 0.0f)
+            chain_.addPass(chromaticAberrationPass_.get());
         // FXAA detects edges by luminance contrast, so it runs on displayed pixels: on
         // scene-referred values a highlight ten times brighter than white reads as an enormous
         // edge and gets blurred into its surroundings.
         if (settings_.isFXAAEnabled())
             chain_.addPass(fxaaPass_.get());
+        if (settings_.getFilmGrainIntensity() > 0.0f)
+            chain_.addPass(filmGrainPass_.get());
         for (PostProcessPass* pass : userPasses_)
             chain_.addPass(pass);
 

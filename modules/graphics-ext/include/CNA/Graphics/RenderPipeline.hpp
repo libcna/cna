@@ -42,6 +42,9 @@ namespace CNA::Graphics {
     class SsrPass;
     class DepthOfFieldPass;
     class ColorGradePass;
+    class ChromaticAberrationPass;
+    class FilmGrainPass;
+    class LensFlarePass;
     class TonemapPass;
 
     /**
@@ -364,6 +367,9 @@ namespace CNA::Graphics {
         std::unique_ptr<SsrPass>  ssrPass_;
         std::unique_ptr<DepthOfFieldPass> dofPass_;
         std::unique_ptr<ColorGradePass> colorGradePass_;
+        std::unique_ptr<ChromaticAberrationPass> chromaticAberrationPass_;
+        std::unique_ptr<FilmGrainPass> filmGrainPass_;
+        std::unique_ptr<LensFlarePass> lensFlarePass_;
         Skybox* skybox_ = nullptr;
         Microsoft::Xna::Framework::Matrix skyboxView_{};
         Microsoft::Xna::Framework::Matrix skyboxProjection_{};
