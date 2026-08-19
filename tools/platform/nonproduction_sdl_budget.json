@@ -649,9 +649,17 @@
       "category": "renderer-integration-executable",
       "max_references": 12
     },
+    "modules/renderers/nanovg/examples/nanovg_presentation_viewport_scissor_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 47
+    },
     "modules/renderers/nanovg/examples/nanovg_spritebatch_rotation_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 1
+    },
+    "modules/renderers/nanovg/examples/nanovg_texture_orientation_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 12
     },
     "modules/renderers/nanovg/examples/nanovg_unsupported_3d_behavior_test.cpp": {
       "category": "renderer-integration-executable",

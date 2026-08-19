@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/NanoVg/NanoVgTextureRenderer.hpp"
+#include "CNA/Internal/Renderers/NanoVg/NanoVgRenderer.hpp"
 
 #include "nanovg.h"
 
@@ -30,8 +31,8 @@ namespace CNA::Internal::Renderers::NanoVg
         }
     }
 
-    NanoVgTextureRenderer::NanoVgTextureRenderer(NVGcontext& ctx, const ImageData& data)
-        : ctx_(ctx)
+    NanoVgTextureRenderer::NanoVgTextureRenderer(NanoVgRenderer& owner, const ImageData& data)
+        : owner_(owner)
         , width_(data.width)
         , height_(data.height)
     {
@@ -55,7 +56,8 @@ namespace CNA::Internal::Renderers::NanoVg
         // is drawn). NanoVG has no per-draw filter override, so every NanoVgTextureRenderer is
         // created linear-filtered; NanoVgSpriteBatchRenderer::SetSamplerFilter is a documented
         // no-op for the same reason (see that class's own comment).
-        image_ = nvgCreateImageRGBA(&ctx_, width_, height_, 0, initial);
+        owner_.MakeContextCurrentEXT();
+        image_ = nvgCreateImageRGBA(owner_.GetNvgContextEXT(), width_, height_, 0, initial);
         if (image_ == 0)
             throw std::runtime_error("NANOVG: nvgCreateImageRGBA failed.");
     }
@@ -63,7 +65,10 @@ namespace CNA::Internal::Renderers::NanoVg
     NanoVgTextureRenderer::~NanoVgTextureRenderer()
     {
         if (image_ != 0)
-            nvgDeleteImage(&ctx_, image_);
+        {
+            owner_.MakeContextCurrentEXT();
+            nvgDeleteImage(owner_.GetNvgContextEXT(), image_);
+        }
     }
 
     void NanoVgTextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
@@ -71,6 +76,7 @@ namespace CNA::Internal::Renderers::NanoVg
         if (image_ == 0 || !rgba) return;
         std::vector<uint8_t> scratch;
         const uint8_t* packed = TightlyPack(rgba, width_, height_, stride, scratch);
-        nvgUpdateImage(&ctx_, image_, packed);
+        owner_.MakeContextCurrentEXT();
+        nvgUpdateImage(owner_.GetNvgContextEXT(), image_, packed);
     }
 }

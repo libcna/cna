@@ -103,12 +103,13 @@ different, unbuilt NanoVG backend, so this identity does not claim them).
 | NVG-14 | `docs/nanovg-renderer.md`: capability boundary, presentation model, blend-mapping table, dependency/build notes, test status — same shape as `docs/openvg-renderer.md`. | DONE |
 | NVG-15 | Tests (`modules/renderers/nanovg/examples/`): smoke (Clear + SpriteBatch draw + readback), rotation/orientation pixel oracle, blend-mode pixel oracle (Opaque/AlphaBlend/NonPremultiplied/**Additive**), unsupported-3D-behavior guard. | DONE |
 | NVG-16 | Configure + build `-DCNA_GRAPHICS_RENDERER=NANOVG` (`cmake-build-nanovg/`), run the NanoVg-labelled CTest suite under Xvfb, confirm `scripts/check_renderer_identities.py` passes with the new count. | DONE |
+| NVG-17 | Audit pass: two adversarial test files (`nanovg_texture_orientation_test`, `nanovg_presentation_viewport_scissor_test`) closing the rigor gap against `OPENVG`'s own test precedent (partial-`sourceRectangle` crop math, `Clamp` pixel-exactness, `SpriteEffects` flips, `UpdatePixels`, every presentation mode, custom `Viewport`, resize-without-`Clear`, scissor, multi-instance coexistence). Found and genuinely fixed a real bug: `NanoVgRenderer` and its `SpriteBatch`/`Texture` helpers never called `MakeCurrent()`, so two live instances silently corrupted each other's GL state (added `MakeContextCurrentEXT()` to every GL-touching entry point). Also found and documented a real, permanent characteristic (not a bug): a partial-`sourceRectangle` crop's internal seam with its own neighboring texel bleeds under linear filtering with no flat safety margin, unlike the outer `GL_CLAMP_TO_EDGE` bound. | DONE |
 
 ## Status
 
-**Complete.** All 16 tasks above are done. See `docs/nanovg-renderer.md` for the delivered
-capability boundary and test status, and `nanovg-spike/README.md` for the existence-gate proof
-that predates the CNA integration.
+**Complete**, including a second adversarial audit pass (NVG-17). See `docs/nanovg-renderer.md`
+for the delivered capability boundary and test status, and `nanovg-spike/README.md` for the
+existence-gate proof that predates the CNA integration.
 
 No further work (a GL3/shader-effect path, render-target support via `NVGLUframebuffer`, or a
 GLES/WebGL backend) is planned. Any of it needs its own explicit owner instruction, exactly like

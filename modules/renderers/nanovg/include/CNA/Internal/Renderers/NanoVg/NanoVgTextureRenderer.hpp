@@ -3,10 +3,10 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
-struct NVGcontext;
-
 namespace CNA::Internal::Renderers::NanoVg
 {
+    class NanoVgRenderer;
+
     /**
      * @brief Texture backed by a real NanoVG image, created via `nvgCreateImageRGBA`/
      * `nvgUpdateImage`.
@@ -19,11 +19,16 @@ namespace CNA::Internal::Renderers::NanoVg
      * `ImageData`/`UpdatePixels` always hand this class straight (non-premultiplied) RGBA8 bytes;
      * `NVG_IMAGE_PREMULTIPLIED` is never set at creation, matching every other CNA renderer's own
      * "textures are never premultiplied" convention.
+     *
+     * Holds a reference back to its owning `NanoVgRenderer` (not just its `NVGcontext*`) so
+     * `UpdatePixels()` -- called any time after construction, possibly after a sibling
+     * `NanoVgRenderer` instance last made ITS OWN context current -- can re-assert the correct GL
+     * context first, the same reason `NanoVgSpriteBatchRenderer` holds one.
      */
     class NanoVgTextureRenderer : public ITextureRenderer
     {
     public:
-        NanoVgTextureRenderer(NVGcontext& ctx, const ImageData& data);
+        NanoVgTextureRenderer(NanoVgRenderer& owner, const ImageData& data);
         ~NanoVgTextureRenderer() override;
 
         NanoVgTextureRenderer(const NanoVgTextureRenderer&) = delete;
@@ -39,7 +44,7 @@ namespace CNA::Internal::Renderers::NanoVg
         [[nodiscard]] int GetImageHandle() const { return image_; }
 
     private:
-        NVGcontext& ctx_;
+        NanoVgRenderer& owner_;
         int image_ = 0;
         int width_ = 0;
         int height_ = 0;

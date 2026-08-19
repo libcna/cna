@@ -194,6 +194,7 @@ namespace CNA::Internal::Renderers::NanoVg
 
     void NanoVgRenderer::EnsureSurfaceSizeEXT()
     {
+        MakeContextCurrentEXT();
         int physW = 0, physH = 0;
         surface_.GetDrawableSize(physW, physH);
         if (physW <= 0) physW = 1;
@@ -215,6 +216,7 @@ namespace CNA::Internal::Renderers::NanoVg
 
     void NanoVgRenderer::Present()
     {
+        MakeContextCurrentEXT();
         platformContext_->SwapBuffers();
     }
 
@@ -246,6 +248,7 @@ namespace CNA::Internal::Renderers::NanoVg
             throw std::runtime_error("NANOVG: SetVirtualResolution: width/height must not be negative.");
         virtualWidth_ = width;
         virtualHeight_ = height;
+        MakeContextCurrentEXT();
         refreshPresentationDerivedStateEXT();
     }
 
@@ -259,11 +262,13 @@ namespace CNA::Internal::Renderers::NanoVg
                 " is not a valid CnaPresentationMode ordinal.");
         }
         presentationMode_ = static_cast<CnaPresentationMode>(mode);
+        MakeContextCurrentEXT();
         refreshPresentationDerivedStateEXT();
     }
 
     void NanoVgRenderer::SetSwapInterval(int interval)
     {
+        MakeContextCurrentEXT();
         if (platformContext_->SetSwapInterval(interval))
         {
             swapInterval_ = interval;
@@ -308,7 +313,8 @@ namespace CNA::Internal::Renderers::NanoVg
 
     std::unique_ptr<ITextureRenderer> NanoVgRenderer::CreateTexture(const ImageData& data)
     {
-        return std::make_unique<NanoVgTextureRenderer>(*nvg_, data);
+        MakeContextCurrentEXT();
+        return std::make_unique<NanoVgTextureRenderer>(*this, data);
     }
 
     std::unique_ptr<ISpriteBatchRenderer> NanoVgRenderer::CreateSpriteBatch()

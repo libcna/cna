@@ -160,13 +160,25 @@ established split for GPU/window-creating tests — pure-function pieces live in
 | `nanovg_spritebatch_rotation_test` | Decisive rotation/origin geometry oracle (`NativeBackBuffer`). |
 | `nanovg_blend_test` | `Opaque`/`AlphaBlend`/`NonPremultiplied`/**`Additive`** against a computed expected composite, deterministic rejection of both a custom `BlendState` and a non-default `ColorWriteChannels`. |
 | `nanovg_unsupported_3d_behavior_test` | Throw/WarnAndStub policy across every inherently-3D entry point, `AdditiveBlending`/`Texture3D` capability honesty. |
+| `nanovg_texture_orientation_test` | Upload/`UpdatePixels` row orientation, partial-`sourceRectangle` `nvgImagePattern` box crop math (including a multi-texel span), tint, rotation, both `SpriteEffects` flips, out-of-bounds `Clamp` pixel-exactness (right edge and left/top simultaneously), `Wrap`/`Mirror` + out-of-bounds rejection (22 checks). |
+| `nanovg_presentation_viewport_scissor_test` | Every `CnaPresentationMode` (`Letterbox`/`Overscan`/`Stretch`/`FixedHeightDynamicWidth`/`NativeBackBuffer`), `TransformWindowToLogical`/`TransformLogicalToWindow` round-trips, a custom `Viewport`, resize-without-`Clear`, `RasterizerState`-driven scissor pixel-clipping, two simultaneous `NanoVgRenderer` instances (construction, interleaved `Clear`/readback, and destroying one while the other stays live), 25 repeated construct/destroy cycles, `SetSwapInterval` (41 checks). |
 
 Plus `NanoVgBlendStateMapping.*` (`modules/renderers/nanovg/tests/`, the pure
 `BlendStateToNvgCompositeOperation` mapping function, no window/GL context needed).
 
 **Exact commands run** (this environment): `Xvfb :0 -screen 0 1280x1024x24 &`, then
-`DISPLAY=:0 ctest --test-dir cmake-build-nanovg -R NanoVg --output-on-failure` (9/9 pass) and
+`DISPLAY=:0 ctest --test-dir cmake-build-nanovg -R NanoVg --output-on-failure` (11/11 pass) and
 `DISPLAY=:0 ctest --test-dir cmake-build-nanovg -j4` (the complete `CnaTests` corpus).
+
+**Audit note.** The two multi-texel/presentation test files above were added in a second,
+deliberately adversarial pass after the renderer's initial delivery, closing a real rigor gap
+against `OPENVG`'s own established test precedent (partial-`sourceRectangle` crop math, `Clamp`
+pixel-exactness, `SpriteEffects` flips, `UpdatePixels`, non-`NativeBackBuffer` presentation modes,
+a custom `Viewport`, resize-without-`Clear`, scissor, and multi-instance coexistence were all
+previously untested claims). That pass found and fixed one real renderer bug — see "Known
+limitations" below for the internal-texel-seam-bleed finding, which is a documented characteristic
+rather than a bug, and the "multi-instance coexistence was broken by a missing `MakeCurrent`"
+entry, which was a genuine defect, now fixed.
 
 ## Known cross-renderer test gaps
 
@@ -227,3 +239,28 @@ assumed every renderer provides 3D/render-target/cube-texture storage:
 - **`BlendState.ColorWriteChannels` cannot be honored at all and is rejected when non-default.**
   NanoVG's own stencil-based fill implementation unconditionally resets `glColorMask` to
   all-channels-enabled before every color pass — verified empirically, not a CNA design choice.
+- **A partial `sourceRectangle`'s internal seam with its own neighboring texel bleeds under linear
+  filtering, with no flat margin.** There is no CPU-side sub-image copy (see "How it differs from
+  OPENVG" above) — cropping is purely a `nvgImagePattern` box-position trick over the SAME
+  uncropped image, so a sample point near the edge of the crop is still, physically, right next to
+  real neighboring texel data in the same texture. `GL_CLAMP_TO_EDGE` only produces a flat,
+  blend-free margin at the texture's OUTER bound (any point past a texel's own center is clamped to
+  a constant); an INTERNAL seam between two texels that are both inside the crop has no such
+  margin — the sampled colour blends linearly with distance from each texel's own center, all the
+  way up to that center. Only exactly at a texel's center is the read guaranteed pure. This is
+  irrelevant at normal sprite-sheet scale (texels many pixels wide, so any reasonable interior
+  sample point is negligibly close to its own center) and was found by
+  `nanovg_texture_orientation_test`'s multi-texel-span case, which now samples texel centers
+  exactly rather than "just inside" the texel, matching this renderer's real, no-flat-margin
+  seam behavior.
+- **Multiple simultaneous `NanoVgRenderer` instances required `MakeContextCurrentEXT()` at every
+  GL-touching entry point — found and fixed by this audit.** OpenGL context state is current to
+  the calling THREAD, not to the C++ renderer object: with two live instances, whichever one's
+  context was made current most recently silently received every subsequent GL call from EITHER
+  instance, including `Clear`/`ReadBackbuffer`/`ApplyBlendState`/`SpriteBatch` draws. This made the
+  class doc's original "no single-live-context restriction" claim false in practice (proven by
+  `nanovg_presentation_viewport_scissor_test`'s `TestMultiInstanceCoexistence`). Fixed by having
+  every entry point that issues GL/NanoVG calls — on `NanoVgRenderer` itself, and transitively
+  through `NanoVgSpriteBatchRenderer`/`NanoVgTextureRenderer`, both of which hold a reference back
+  to their owning `NanoVgRenderer` — call `NanoVgRenderer::MakeContextCurrentEXT()` first. The
+  claim is now genuinely true, not just documented.

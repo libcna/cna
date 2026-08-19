@@ -46,6 +46,21 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "NANOVG")
     cna_nanovg_test(cna_test_nanovg_blend nanovg_blend_test.cpp)
     cna_register_renderer_test(NAME NanoVg_Blend
         COMMAND cna_test_nanovg_blend TIMEOUT 30 LABELS "NanoVg")
+
+    # Texture upload orientation, UpdatePixels, partial-sourceRectangle nvgImagePattern box math
+    # (including two spans beyond OpenVG's own precedent test), tint, rotation, both SpriteEffects
+    # flips, and out-of-bounds Clamp/Wrap/Mirror sampler behavior -- see that file's own top comment.
+    cna_nanovg_test(cna_test_nanovg_texture_orientation nanovg_texture_orientation_test.cpp)
+    cna_register_renderer_test(NAME NanoVg_TextureOrientation
+        COMMAND cna_test_nanovg_texture_orientation TIMEOUT 30 LABELS "NanoVg")
+
+    # Presentation-mode viewport math, coordinate transforms, custom Viewport, resize-without-Clear,
+    # RasterizerState-driven scissor, multi-instance coexistence, repeated construct/destroy cycling,
+    # and SwapInterval -- see that file's own top comment.
+    cna_nanovg_test(cna_test_nanovg_presentation_viewport_scissor
+        nanovg_presentation_viewport_scissor_test.cpp)
+    cna_register_renderer_test(NAME NanoVg_PresentationViewportScissor
+        COMMAND cna_test_nanovg_presentation_viewport_scissor TIMEOUT 30 LABELS "NanoVg")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

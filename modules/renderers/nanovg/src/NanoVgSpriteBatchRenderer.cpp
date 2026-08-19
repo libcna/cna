@@ -49,6 +49,7 @@ namespace CNA::Internal::Renderers::NanoVg
 
     void NanoVgSpriteBatchRenderer::End()
     {
+        owner_.MakeContextCurrentEXT();
         NVGcontext* ctx = owner_.GetNvgContextEXT();
         nvgEndFrame(ctx);
 
@@ -106,6 +107,8 @@ namespace CNA::Internal::Renderers::NanoVg
     {
         if (!begun_)
             throw std::runtime_error("NanoVgSpriteBatchRenderer::Draw called before Begin().");
+
+        owner_.MakeContextCurrentEXT();
 
         const auto* tex = dynamic_cast<const NanoVgTextureRenderer*>(&texture);
         if (!tex) return;

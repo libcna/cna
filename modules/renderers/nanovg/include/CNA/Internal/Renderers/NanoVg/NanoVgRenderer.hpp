@@ -48,7 +48,13 @@ namespace CNA::Internal::Renderers::NanoVg
      *
      * No single-live-context restriction: unlike ShivaVG (`shContext.c`'s process-global
      * `VGContext*`), NanoVG's `NVGcontext*` is an ordinary per-instance object with no hidden
-     * global singleton, so multiple `NanoVgRenderer` instances may coexist in one process.
+     * global singleton, so multiple `NanoVgRenderer` instances may coexist in one process --
+     * unlike a plain multi-window OpenGL app, the caller does not need to call
+     * `SDL_GL_MakeCurrent` itself between instances: every entry point that issues GL/NanoVG
+     * calls (directly, or indirectly through `NanoVgSpriteBatchRenderer`/`NanoVgTextureRenderer`,
+     * both of which hold a reference back to their owning `NanoVgRenderer`) calls
+     * `MakeContextCurrentEXT()` first, so instances may be freely interleaved from the same
+     * thread.
      */
     class NanoVgRenderer final : public IGraphicsRenderer
     {
@@ -152,6 +158,15 @@ namespace CNA::Internal::Renderers::NanoVg
         /// CNAEXT. The underlying `NVGcontext*`, for `NanoVgSpriteBatchRenderer`/
         /// `NanoVgTextureRenderer`.
         [[nodiscard]] NVGcontext* GetNvgContextEXT() const { return nvg_; }
+
+        /// CNAEXT. Makes this renderer's own GL context current on the calling thread. OpenGL
+        /// context state is global to the calling thread, not per-object -- with two or more live
+        /// `NanoVgRenderer` instances (each owning its own context, see this class's own doc
+        /// comment), whichever one's context was current LAST silently receives every subsequent
+        /// GL call, including ones issued through a completely different instance. Every entry
+        /// point that touches GL/NanoVG state calls this first so callers never have to manage
+        /// context switching themselves.
+        void MakeContextCurrentEXT() { platformContext_->MakeCurrent(); }
 
         /// CNAEXT. Current logical scissor rectangle + enable flag (RasterizerState.
         /// ScissorTestEnable-driven) -- applied by NanoVgSpriteBatchRenderer via `nvgScissor`,
