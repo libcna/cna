@@ -391,6 +391,10 @@ CNA_C_API CNA_Result cna_content_manager_register_builtin_loaders(CNA_Handle con
  *
  * A service provider is a Sharp Runtime object and never crosses the C boundary, so a manager
  * created through this API always reports `CNA_FALSE`; only the presence is observable.
+ *
+ * `CNA_FALSE` here is not evidence that a C-created manager is weaker than a native one. A game's
+ * own content manager reports `CNA_FALSE` too: CNA constructs it without a provider, and no CNA
+ * content path resolves a service through one, so the field is inert on both sides of the boundary.
  */
 CNA_C_API CNA_Result cna_content_manager_get_has_service_provider(
     CNA_Handle content_manager,

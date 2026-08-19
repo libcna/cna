@@ -706,6 +706,12 @@ CNA_C_API CNA_Result cna_effect_parameter_set_value_string(
  * @param texture_type Texture2D, Texture3D or TextureCube getter identity.
  * @param out_texture Receives the retained handle or invalid handle for null.
  * @return A CNA result code.
+ *
+ * There is deliberately no `cna_effect_parameter_get_graphics_device`. A parameter reached through
+ * a nested element or structure-member collection genuinely does not carry the owning device, but a
+ * caller that needs one does not have to ask the parameter: the handle this route returns is a
+ * graphics resource, so it answers `cna_graphics_resource_get_graphics_device` itself, under that
+ * route's own callback-scope rule.
  */
 CNA_C_API CNA_Result cna_effect_parameter_get_value_texture(
     CNA_EffectParameterHandle parameter,
