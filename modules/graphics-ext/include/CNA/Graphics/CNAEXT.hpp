@@ -73,6 +73,7 @@
 
 // ---- Shadows ---------------------------------------------------------------------------------
 #include "CNA/Graphics/CascadedShadowMap.hpp"
+#include "CNA/Graphics/ClusteredLightGrid.hpp"
 #include "CNA/Graphics/CubeShadowMap.hpp"
 #include "CNA/Graphics/DirectionalLightEXT.hpp"
 #include "CNA/Graphics/PointLightEXT.hpp"
