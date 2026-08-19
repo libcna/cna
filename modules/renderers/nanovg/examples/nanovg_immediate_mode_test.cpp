@@ -294,6 +294,49 @@ int main()
                           Describe(readPixel(122, 15)));
             }
 
+            // ---- Viewport MOVED at constant size, between two Immediate draws ----------------
+            // The narrowest case of the previous one, and the one a coarse "did the extent change"
+            // check misses entirely: same width/height, different origin. nvgBeginFrame needs no
+            // re-issue there, but the scissor mapping does -- GraphicsDevice.ScissorRectangle stays
+            // in the target's own logical space, so its viewport-local position moves with the
+            // viewport. A renderer that refreshes its cached projection only when it re-opens the
+            // frame clips the second sprite against the FIRST viewport's rectangle.
+            {
+                renderer.SetScissorRect(80, 10, 20, 30);
+                renderer.ApplyRasterizerState(/*cullMode*/0, /*fillMode*/0,
+                                              /*scissorTestEnable*/true, 0.0f, 0.0f);
+                clearTo(kGreen);
+                sprites->SetImmediateMode(true);
+
+                renderer.SetViewport(60, 10, 40, 30, 0.0f, 1.0f);
+                sprites->Begin();
+                // Viewport-local full rectangle. The scissor admits logical x 80..100, which is
+                // viewport-local x 20..40 here, so only the sprite's right half survives.
+                sprites->Draw(*red, Rectangle(0, 0, 40, 30), Rectangle(0, 0, 4, 4), Color::White,
+                              0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
+
+                // Same size, moved 20px right. The same scissor is now viewport-local x 0..20, so
+                // the blue sprite's LEFT half survives -- landing on the same physical 80..100.
+                renderer.SetViewport(80, 10, 40, 30, 0.0f, 1.0f);
+                sprites->Draw(*blue, Rectangle(0, 0, 40, 30), Rectangle(0, 0, 4, 4), Color::White,
+                              0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
+                sprites->End();
+
+                renderer.ApplyRasterizerState(0, 0, /*scissorTestEnable*/false, 0.0f, 0.0f);
+                renderer.SetViewport(0, 0, 160, 120, 0.0f, 1.0f);
+
+                Check(CloseTo(readPixel(90, 20), kBlue),
+                      "Immediate: after a same-size viewport MOVE the scissor is re-mapped, so the "
+                      "second sprite covers the scissored region -- expected " + Describe(kBlue) +
+                          ", got " + Describe(readPixel(90, 20)));
+                Check(CloseTo(readPixel(110, 20), kGreen),
+                      "Immediate: after a same-size viewport MOVE nothing is drawn where the STALE "
+                      "mapping would have put it -- expected " + Describe(kGreen) + ", got " +
+                          Describe(readPixel(110, 20)));
+                Check(CloseTo(readPixel(70, 20), kGreen),
+                      "Immediate: the scissor still rejects the first viewport's left half");
+            }
+
             // ---- The flag is per batch, not sticky ------------------------------------------
             sprites->SetImmediateMode(false);
             clearTo(kBlue);

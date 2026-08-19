@@ -192,6 +192,20 @@ scopes the draw). The scissor rectangle needs no equivalent — `Draw()` reads i
 every call already. `Deferred` deliberately keeps the batch snapshot every other CNA renderer
 establishes.
 
+Re-opening the frame is the narrower of the two: only the quantities `nvgBeginFrame` itself
+consumes (extent and device-pixel ratio) require it. The scissor mapping does **not** — it is
+consumed by this renderer's own CPU-side clipper — but it still has to be refreshed every draw,
+because a viewport that MOVES at constant size changes the mapping without changing anything
+`nvgBeginFrame` cares about. Refreshing it only alongside a re-open would clip such a sprite
+against the previous viewport's rectangle.
+
+Calling `nvgBeginFrame` inside an open batch is safe only because an Immediate draw has already
+flushed by then: `glnvg__renderFlush` zeroes the recorded vertex, path, call and uniform counts, so
+the reset `nvgBeginFrame` performs discards nothing. That is a dependency on the pinned NanoVG
+revision's behaviour rather than on anything its public API documents — upstream describes drawing
+as taking place between one `nvgBeginFrame` and one `nvgEndFrame` — and must be re-verified if the
+pin moves.
+
 ## The sprite coordinate space follows GraphicsDevice.Viewport
 
 XNA/FNA build the `SpriteBatch` projection from the active viewport
@@ -260,10 +274,10 @@ own `glnvg__renderViewport` builds an internal orthographic mapping from `[0,log
 anti-aliasing feather width, not the coordinate mapping, confirmed by reading `nanovg_gl.h`
 directly), so the two combine to map sprites correctly under every presentation mode.
 
-Unlike `OpenVgRenderer::SetScissorRect`, **no presentation-mode remapping is needed for the
-scissor rectangle**: `nvgScissor` is expressed in the same logical coordinate space `nvgRect`/
-`SpriteBatch` draws already use — NanoVG maps it internally the same way it maps path geometry —
-so `NanoVgRenderer::SetScissorRect` stores its argument verbatim.
+`NanoVgRenderer::SetScissorRect` stores its argument verbatim, in the render target's own logical
+space — exactly what `GraphicsDevice.ScissorRectangle` means. The remapping into whichever space
+sprites are currently addressed in happens per draw instead, because that space depends on the
+active `Viewport` and can change between two draws of one Immediate batch.
 
 ## Verified capability boundary
 
@@ -291,7 +305,7 @@ so `NanoVgRenderer::SetScissorRect` stores its argument verbatim.
 | `BlendState` using `Blend.SourceAlphaSaturation` as a **destination** factor | **Rejected** (throws) | GL accepts `GL_SRC_ALPHA_SATURATE` as a destination factor only from OpenGL 4.4; this renderer requests 2.1. Accepted as a source factor. Tested. |
 | `BlendState.ColorBlendFunction`/`AlphaBlendFunction` other than `Add` | **Rejected** (throws) | NanoVG's GL2 backend never calls `glBlendEquation`, so the equation is permanently `GL_FUNC_ADD`. Tested. |
 | `BlendState.ColorWriteChannels` | **Rejected when non-default** (throws) | `nanovg_gl.h`'s own `glnvg__renderFlush` calls `glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE)` at the top of **every** flush, before the first draw call it submits, so an externally-set write mask cannot survive to the draw that would need it — verified empirically (a mask wrapped around a whole `SpriteBatch` batch was silently undone). Rejecting is the honest choice; silently ignoring it would be a capability lie. Tested. |
-| `BlendState.MultiSampleMask` | Intentionally ignored (not honored, not rejected) | This renderer never creates a multisample-capable GL context (`GraphicsCapability.MultiSampleAntiAliasing` is `false`), so a coverage mask can never have any observable effect here. |
+| `BlendState.MultiSampleMask` | **Rejected when non-default** (throws) | This renderer never creates a multisample-capable GL context (`GraphicsCapability.MultiSampleAntiAliasing` is `false`), so no sample-coverage mask can be applied. Having no observable effect is an argument for silence, not for acceptance — it is refused like every other state this renderer cannot honour. Tested. |
 | `RasterizerState.CullMode` | Accepted for every value | 2D quads are never back-face culled by any CNA renderer regardless of value. |
 | `RasterizerState.FillMode.WireFrame` | **Rejected** (throws) | No unfilled-polygon draw path exists. `SupportsCapability(WireFrame)` reports `false`. |
 | `RasterizerState.DepthBias`/`SlopeScaleDepthBias` | **Rejected when non-zero** (throws) | No depth buffer exists for either to bias against. |
@@ -336,15 +350,15 @@ established split for GPU/window-creating tests — pure-function pieces live in
 |---|---|
 | `nanovg_smoke_test` | Vertical slice: Clear, SpriteBatch draw, readback. |
 | `nanovg_spritebatch_rotation_test` | Decisive rotation/origin geometry oracle (`NativeBackBuffer`). |
-| `nanovg_blend_test` | Every built-in `BlendState` and four custom ones, all four RGBA channels, against a CPU reference computed from the same factor ordinals `ApplyBlendState` receives; genuinely premultiplied source data for `AlphaBlend` and its straight twin for `NonPremultiplied`; translucent and alpha-zero sources under `Opaque`; six tint combinations; deterministic rejection of non-`Add` blend functions, constant-colour factors, `SourceAlphaSaturation` as a destination factor and a non-default `ColorWriteChannels` (34 checks). |
+| `nanovg_blend_test` | Every built-in `BlendState` and four custom ones, all four RGBA channels, against a CPU reference computed from the same factor ordinals `ApplyBlendState` receives; genuinely premultiplied source data for `AlphaBlend` and its straight twin for `NonPremultiplied`; translucent and alpha-zero sources under `Opaque`; six tint combinations; deterministic rejection of non-`Add` blend functions, constant-colour factors, `SourceAlphaSaturation` as a destination factor, a non-default `ColorWriteChannels` and a non-default `MultiSampleMask` (39 checks). |
 | `nanovg_unsupported_3d_behavior_test` | Throw/WarnAndStub policy across every inherently-3D entry point, `AdditiveBlending`/`Texture3D` capability honesty. |
 | `nanovg_texture_orientation_test` | Upload/`UpdatePixels` row orientation, partial-`sourceRectangle` `nvgImagePattern` box crop math (including a multi-texel span), tint, rotation, both `SpriteEffects` flips, out-of-bounds `Clamp` pixel-exactness (right edge and left/top simultaneously), real out-of-bounds `Wrap` tiling / `Mirror` reflection, and refusal of both a mip-mapped `Texture2D` and a level>0 upload (29 checks). |
 | `nanovg_sampler_state_test` | `PointClamp` vs `LinearClamp` at sample points where the two genuinely disagree, the four `Min*Mag*` filters, the inert mip component, the same texture drawn Point → Linear → Point across consecutive batches, two textures in one batch, `Clamp`/`Wrap`/`Mirror` on an out-of-bounds source rectangle, independent U/V address modes, and rejection of `Anisotropic` and of out-of-range ordinals (22 checks). |
-| `nanovg_immediate_mode_test` | `SpriteSortMode::Immediate` vs `Deferred` as an ordering guarantee: a `Clear()` between the `Draw()` and the `End()` must wipe the sprite under Immediate and be overdrawn by it under Deferred; ordering between two Immediate draws; a `BlendState` and a `Viewport` changed between two Immediate draws applying from that sprite onward; that the per-draw flush leaves the batch's own scissor/transform/blend state intact; and that the flag is per batch rather than sticky (14 checks). |
+| `nanovg_immediate_mode_test` | `SpriteSortMode::Immediate` vs `Deferred` as an ordering guarantee: a `Clear()` between the `Draw()` and the `End()` must wipe the sprite under Immediate and be overdrawn by it under Deferred; ordering between two Immediate draws; a `BlendState` and a `Viewport` changed between two Immediate draws applying from that sprite onward; a viewport MOVED at constant size re-mapping the scissor (the case a "did the extent change" check misses); that the per-draw flush leaves the batch's own scissor/transform/blend state intact; and that the flag is per batch rather than sticky (17 checks). |
 | `spritebatch_custom_viewport_test` (shared) | REMED-GFX-072's own contract: sprite clip space built from the active `GraphicsDevice.Viewport`, viewport-local placement, no squish, a transform composed in viewport-local space, and a full-target batch staying full-target afterwards (13 checks). |
 | `spritebatch_viewport_switch_test` (shared) | Two `SpriteBatch` batches with different viewports in one frame, each projected and rasterized by its own (6 checks). |
 | `nanovg_sprite_rasterization_test` | A whole-frame census requiring that no pixel is partially covered — for an axis-aligned integer quad (with its exact edge columns/rows and covered-pixel count), a ~23° rotation with a fractional origin, non-integer scale and a partial source rectangle, and two ~17° rotations with both `SpriteEffects` flips under a `SetTransformMatrix`; plus a translucent sprite whose edge column must composite exactly once (11 checks). |
-| `nanovg_presentation_viewport_scissor_test` | Every `CnaPresentationMode` (`Letterbox`/`Overscan`/`Stretch`/`FixedHeightDynamicWidth`/`NativeBackBuffer`), `TransformWindowToLogical`/`TransformLogicalToWindow` round-trips, a custom `Viewport`, resize-without-`Clear`, `RasterizerState`-driven scissor pixel-clipping under both `AlphaBlend` and `Opaque` (the latter over a background far from black, so a masked-but-still-written fragment cannot hide in the tolerance), two simultaneous `NanoVgRenderer` instances (construction, interleaved `Clear`/readback, and destroying one while the other stays live), 25 repeated construct/destroy cycles, `SetSwapInterval` (43 checks). |
+| `nanovg_presentation_viewport_scissor_test` | Every `CnaPresentationMode` (`Letterbox`/`Overscan`/`Stretch`/`FixedHeightDynamicWidth`/`NativeBackBuffer`), `TransformWindowToLogical`/`TransformLogicalToWindow` round-trips, a custom `Viewport`, resize-without-`Clear`, `RasterizerState`-driven scissor pixel-clipping under both `AlphaBlend` and `Opaque` (the latter over a background far from black, so a masked-but-still-written fragment cannot hide in the tolerance), `Stretch` presentation combined with a custom `Viewport` AND a scissor in one scene (the only configuration where the scissor's X and Y scale factors differ, so applying one to both is visible), two simultaneous `NanoVgRenderer` instances (construction, interleaved `Clear`/readback, and destroying one while the other stays live), 25 repeated construct/destroy cycles, `SetSwapInterval` (49 checks). |
 
 Plus `NanoVgBlendStateMapping.*` (`modules/renderers/nanovg/tests/`, the pure
 `BlendStateToNvgBlendFunc` mapping function, no window/GL context needed) — including the case
@@ -497,6 +511,14 @@ A third pass (NVG-20) found two more:
 - *"A `GraphicsDevice` operation issued between two Immediate `Draw()` calls."* True for ordering
   after NVG-19, but not yet for the device STATE that operation changes — the blend factors and the
   sprite projection were still the ones captured at `Begin()`.
+
+A fourth pass (NVG-21) closed the last one of that family, plus a consistency gap:
+
+- The NVG-20 re-read refreshed its cached projection only when it re-opened the frame, so a
+  viewport MOVED at constant size updated neither — leaving the previous viewport's origin in the
+  scissor mapping and clipping the next sprite against the wrong rectangle.
+- *"`BlendState.MultiSampleMask`: intentionally ignored (not honored, not rejected)."* The last
+  state this renderer neither implemented nor refused. Now refused.
 
 A follow-up review pass (NVG-19) found three more, all of the same shape — an accepted API whose
 behaviour quietly differed from its contract:

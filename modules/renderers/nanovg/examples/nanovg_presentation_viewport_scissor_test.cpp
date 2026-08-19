@@ -328,6 +328,58 @@ namespace
         SDL_DestroyWindow(window);
     }
 
+    // ---- Presentation scale x custom viewport x scissor, all three at once ----
+    // The three interact through one mapping and are otherwise only ever tested apart. Stretch is
+    // the mode that makes the interaction visible: window 200x100 with a 100x100 virtual
+    // resolution gives scaleX=2 and scaleY=1, so a renderer that carried the scissor rectangle
+    // into the sprite space with a single scale factor -- or with none -- lands the sprite
+    // somewhere else entirely.
+    //
+    //   logical scissor (30,40,20,20)
+    //     x2 / x1 presentation scale -> physical (60,40)-(100,60)
+    //     minus viewport origin (40,20) -> viewport-local (20,20)-(60,40)
+    //   viewport-local sprite (0,0,80,60) clipped to that -> physical (60,40)-(100,60)
+    void TestPresentationScaleWithCustomViewportAndScissor()
+    {
+        SDL_Window* window = MakeWindow(200, 100);
+        {
+        SdlTestGlContext glContext(window);
+        NanoVgRenderer renderer(SdlTestRendererArgs(
+            window, &glContext, nullptr, 100, 100, CnaPresentationMode::Stretch));
+        const Color kClear(8, 8, 8, 255);
+        const Color kSprite(255, 0, 255, 255);
+        auto tex = renderer.CreateTexture(SolidImage(4, 4, kSprite));
+        auto sb = renderer.CreateSpriteBatch();
+
+        constexpr int kCullCCW = 2, kFillSolid = 0;
+        renderer.SetViewport(40, 20, 80, 60, 0.0f, 1.0f);
+        renderer.SetScissorRect(30, 40, 20, 20);
+        renderer.ApplyRasterizerState(kCullCCW, kFillSolid, /*scissorTestEnable=*/true, 0.0f, 0.0f);
+        renderer.Clear(kClear.getRProperty() / 255.0f, kClear.getGProperty() / 255.0f,
+                       kClear.getBProperty() / 255.0f, 1.0f);
+        DrawFullCanvasSprite(renderer, *sb, *tex, Rectangle(0, 0, 80, 60));
+
+        Check(CloseTo(ReadPixel(renderer, 80, 50), kSprite),
+              "Stretch + custom viewport + scissor: the scissored region is drawn");
+        Check(CloseTo(ReadPixel(renderer, 62, 42), kSprite) &&
+                  CloseTo(ReadPixel(renderer, 98, 58), kSprite),
+              "Stretch + custom viewport + scissor: the region spans its full mapped extent, so "
+              "the X and Y scales were applied independently");
+        Check(CloseTo(ReadPixel(renderer, 50, 50), kClear),
+              "Stretch + custom viewport + scissor: nothing left of the mapped rectangle");
+        Check(CloseTo(ReadPixel(renderer, 110, 50), kClear),
+              "Stretch + custom viewport + scissor: nothing right of it");
+        Check(CloseTo(ReadPixel(renderer, 80, 30), kClear),
+              "Stretch + custom viewport + scissor: nothing above it -- a Y scale wrongly taken "
+              "from X would spill here");
+        Check(CloseTo(ReadPixel(renderer, 80, 70), kClear),
+              "Stretch + custom viewport + scissor: nothing below it");
+
+        renderer.ApplyRasterizerState(kCullCCW, kFillSolid, /*scissorTestEnable=*/false, 0.0f, 0.0f);
+        }
+        SDL_DestroyWindow(window);
+    }
+
     // ---- Scissor: RasterizerState-driven enable, independent rectangle updates ----
     void TestScissor()
     {
@@ -518,6 +570,7 @@ int main()
         TestViewport();
         TestResizeWithoutClear();
         TestScissor();
+        TestPresentationScaleWithCustomViewportAndScissor();
         TestMultiInstanceCoexistence();
         TestRepeatedConstructDestroyCycle();
         TestSwapInterval();

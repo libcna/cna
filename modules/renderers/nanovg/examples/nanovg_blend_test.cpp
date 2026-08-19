@@ -493,6 +493,41 @@ int main()
                       "a non-default ColorWriteChannels mask is rejected deterministically");
             }
 
+            // MultiSampleMask: refused rather than ignored. This renderer never creates a
+            // multisample-capable GL context, so a coverage mask has no sample to disable and no
+            // observable effect -- but that is an argument for silence, not for acceptance.
+            {
+                BlendWriteState halfCoverage;
+                halfCoverage.multiSampleMask = 0x0000FFFFu;
+                bool maskThrew = false;
+                std::string message;
+                try
+                {
+                    renderer.ApplyBlendState(kOne, kOne, kZero, kZero, kAdd, kAdd, halfCoverage);
+                }
+                catch (const std::runtime_error& ex) { maskThrew = true; message = ex.what(); }
+                Check(maskThrew && message.find("MultiSampleMask") != std::string::npos,
+                      "a non-default MultiSampleMask is rejected deterministically");
+
+                BlendWriteState zeroCoverage;
+                zeroCoverage.multiSampleMask = 0u;
+                bool zeroThrew = false;
+                try
+                {
+                    renderer.ApplyBlendState(kOne, kOne, kZero, kZero, kAdd, kAdd, zeroCoverage);
+                }
+                catch (const std::runtime_error&) { zeroThrew = true; }
+                Check(zeroThrew, "a MultiSampleMask of 0 is rejected too");
+
+                bool defaultThrew = false;
+                try
+                {
+                    renderer.ApplyBlendState(kOne, kOne, kZero, kZero, kAdd, kAdd, BlendWriteState{});
+                }
+                catch (const std::runtime_error&) { defaultThrew = true; }
+                Check(!defaultThrew, "the default MultiSampleMask (0xFFFFFFFF) is accepted");
+            }
+
             // A rejected state must not have disturbed the last accepted one: the very next draw
             // still has to composite correctly.
             harness.Expect("an accepted BlendState still works after a rejected one", kAlphaBlend,

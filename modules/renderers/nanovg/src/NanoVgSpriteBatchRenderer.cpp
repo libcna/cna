@@ -312,13 +312,25 @@ namespace CNA::Internal::Renderers::NanoVg
         if (immediate_)
         {
             const NanoVgRenderer::SpriteProjection projection = owner_.GetSpriteProjectionEXT();
-            if (projection.width != projection_.width || projection.height != projection_.height ||
-                projection.customViewport != projection_.customViewport)
+
+            // Only the three quantities nvgBeginFrame itself consumes can require re-opening the
+            // frame. The scissor mapping is NOT among them -- it is consumed by this file's own
+            // CPU-side geometric clipper -- so a viewport that MOVES without changing size (same
+            // width/height, different origin) needs no new frame but does need the refreshed
+            // mapping. Refreshing projection_ only inside the re-open branch would leave the
+            // previous viewport's scissorOffset in place and clip the sprite against the wrong
+            // rectangle.
+            const bool needsFrameReopen =
+                projection.width != projection_.width ||
+                projection.height != projection_.height ||
+                projection.devicePixelRatio != projection_.devicePixelRatio;
+            if (needsFrameReopen)
             {
                 BeginFrameForProjection(projection);
             }
             else
             {
+                projection_ = projection;
                 const NanoVgBlendFunc blend = owner_.GetBlendFuncEXT();
                 if (blend.srcRGB != appliedBlend_.srcRGB || blend.dstRGB != appliedBlend_.dstRGB ||
                     blend.srcAlpha != appliedBlend_.srcAlpha ||

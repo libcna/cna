@@ -9,8 +9,16 @@ namespace CNA::Internal::Renderers::NanoVg
 {
 
     /**
-     * @brief `SpriteBatch` renderer driven by `nvgImagePattern` + a filled rectangle path, one
-     * `NVGcontext` frame (`nvgBeginFrame`/`nvgEndFrame`) per `Begin()`/`End()` pair.
+     * @brief `SpriteBatch` renderer driven by `nvgImagePattern` + a filled rectangle path, wrapped
+     * in an `NVGcontext` frame opened at `Begin()` and submitted at `End()`.
+     *
+     * Normally that is exactly one `nvgBeginFrame`/`nvgEndFrame` pair per `Begin()`/`End()`. One
+     * case re-opens the frame mid-batch: an Immediate batch whose sprite coordinate space changes
+     * between two draws (a `GraphicsDevice.Viewport` resized under it). That is safe only because
+     * an Immediate draw has already flushed by then -- `glnvg__renderFlush` zeroes the recorded
+     * vertex/path/call/uniform counts -- so `nvgBeginFrame`'s own reset discards nothing. It is a
+     * documented dependency on the pinned NanoVG revision's behaviour rather than on anything its
+     * public API promises, and must be re-verified if that pin moves.
      *
      * NanoVG has no "draw image" primitive of its own -- every textured draw is a filled path
      * whose paint samples an image (`nvgImagePattern(ox,oy,ex,ey,angle,image,alpha)` describes

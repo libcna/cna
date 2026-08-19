@@ -468,15 +468,31 @@ namespace CNA::Internal::Renderers::NanoVg
                 "of every flush, so an externally-set write mask cannot survive a draw.");
         }
 
+        // BlendState.MultiSampleMask likewise has no implementation here. It could be argued away
+        // -- this renderer never creates a multisample-capable GL context, so a coverage mask has
+        // no sample to disable and no observable effect -- but "no observable effect" is an
+        // argument for silence, not for acceptance, and silence is what this renderer's whole
+        // capability boundary is built to avoid. Refused, like every other state it cannot honour.
+        if (writeState.multiSampleMask != 0xFFFFFFFFu)
+        {
+            throw std::runtime_error(
+                "NANOVG cannot honor BlendState.MultiSampleMask: this renderer never creates a "
+                "multisample-capable GL context (GraphicsCapability.MultiSampleAntiAliasing is "
+                "false), so no sample-coverage mask can be applied. Leave it at the default "
+                "0xFFFFFFFF.");
+        }
+
         lastBlendFunc_ = BlendStateToNvgBlendFunc(
             colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend, colorBlendFunc, alphaBlendFunc);
     }
 
     void NanoVgRenderer::SetScissorRect(int x, int y, int w, int h)
     {
-        // No presentation-mode remapping needed here (unlike OpenVgRenderer::SetScissorRect) --
-        // see this class's own doc comment: nvgScissor operates in the same logical space nvgRect
-        // does, and NanoVG maps that internally the same way it maps path geometry.
+        // Stored verbatim, in the render target's own logical space -- exactly what
+        // GraphicsDevice.ScissorRectangle means. Whatever remapping the current sprite coordinate
+        // space needs happens per draw, in NanoVgSpriteBatchRenderer, because that space depends on
+        // the active Viewport (see GetSpriteProjectionEXT) and can change between two draws of one
+        // Immediate batch.
         scissorX_ = x; scissorY_ = y; scissorW_ = w; scissorH_ = h;
     }
 

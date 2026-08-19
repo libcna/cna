@@ -67,11 +67,11 @@ namespace CNA::Internal::Renderers::NanoVg
      *
      * Unlike `OpenVgRenderer`, NanoVG's own coordinate system is already top-left-origin, Y-down
      * (matching HTML Canvas2D semantics) -- so no device-flip compensation is needed anywhere in
-     * this renderer family, and `nvgScissor`'s rectangle is expressed in the SAME logical
-     * coordinate space `nvgRect`/`SpriteBatch` draws use (NanoVG maps it internally, the same way
-     * it maps path geometry) -- unlike OpenVG's `VG_SCISSOR_RECTS`, which needed manual
-     * presentation-mode remapping into physical pixels. `SetScissorRect` therefore stores its
-     * argument verbatim.
+     * this renderer family. `SetScissorRect` stores its argument verbatim, in the render target's
+     * own logical space; `NanoVgSpriteBatchRenderer` maps it into whichever space sprites are
+     * currently addressed in and clips each quad against it geometrically (`nvgScissor` is
+     * deliberately unused -- it is a fragment-shader mask, not a rasterizer clip; see that class's
+     * own doc comment and docs/nanovg-renderer.md).
      *
      * Presentation model: `ComputeLogicalViewportEXT()` is the same algorithm every other CNA
      * renderer with real Letterbox/Overscan/Stretch support uses (ported directly from
@@ -236,10 +236,10 @@ namespace CNA::Internal::Renderers::NanoVg
         /// context switching themselves.
         void MakeContextCurrentEXT() { platformContext_->MakeCurrent(); }
 
-        /// CNAEXT. Current logical scissor rectangle + enable flag (RasterizerState.
-        /// ScissorTestEnable-driven) -- applied by NanoVgSpriteBatchRenderer via `nvgScissor`,
-        /// which (unlike OpenVG's `VG_SCISSOR_RECTS`) needs no presentation-mode remapping: it
-        /// already operates in the same logical space `nvgRect` does.
+        /// CNAEXT. Current scissor rectangle + enable flag (RasterizerState.ScissorTestEnable-
+        /// driven), in the render target's own logical space. `NanoVgSpriteBatchRenderer` carries
+        /// it into the current sprite coordinate space (see `GetSpriteProjectionEXT`) and clips
+        /// each quad against it geometrically.
         void GetScissorEXT(int& x, int& y, int& w, int& h, bool& enabled) const
         {
             x = scissorX_; y = scissorY_; w = scissorW_; h = scissorH_; enabled = scissorEnabled_;
