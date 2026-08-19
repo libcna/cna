@@ -5,7 +5,7 @@
 
 #include "CNA/Graphics/ClusteredLightAssignment.hpp"
 #include "CNA/Graphics/ClusteredLightGrid.hpp"
-#include "CNA/Graphics/PunctualLightSetEXT.hpp"
+#include "CNA/Graphics/ClusteredLightSetEXT.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
@@ -63,7 +63,7 @@ namespace CNA::Graphics {
 
     ClusteredLightBuffer::~ClusteredLightBuffer() = default;
 
-    void ClusteredLightBuffer::upload(const PunctualLightSetEXT& lights,
+    void ClusteredLightBuffer::upload(const ClusteredLightSetEXT& lights,
                                       const ClusteredLightGrid& grid,
                                       const ClusteredLightAssignment& assignment)
     {
@@ -91,7 +91,7 @@ namespace CNA::Graphics {
                                       Color(0, 0, 0, 0));
             for (int index = 0; index < lightCount_; ++index)
             {
-                const PunctualLightEXT& light = lights.getAt(index);
+                const ClusteredLightEXT& light = lights.getAt(index);
                 const Vector3 direction = Normalized(light.Direction, Vector3(0.0f, -1.0f, 0.0f));
                 // Intensity is folded into the colour here rather than carried separately: the
                 // shader only ever wants the product, and one fewer float is one fewer chance for
@@ -103,7 +103,7 @@ namespace CNA::Graphics {
                 const float values[kFloatsPerLight] = {
                     light.Position.X, light.Position.Y, light.Position.Z, light.Range,
                     emitted.X, emitted.Y, emitted.Z,
-                    light.Type == PunctualLightType::Spot ? 1.0f : 0.0f,
+                    light.Type == ClusteredLightType::Spot ? 1.0f : 0.0f,
                     direction.X, direction.Y, direction.Z,
                     std::cos(light.OuterAngle), std::cos(light.InnerAngle),
                     0.0f, 0.0f, 0.0f,
@@ -190,7 +190,7 @@ uniform float uCnaGridFar;
 const int kCnaFloatsPerLight = 16;
 const int kCnaTableWidth     = 256;
 
-struct CnaPunctualLight {
+struct CnaClusteredLight {
     vec3  position;
     float range;
     vec3  colour;      // the light's colour already multiplied by its intensity
@@ -211,8 +211,8 @@ uint cnaUnpackUint(vec4 texel) {
 
 float cnaUnpackFloat(vec4 texel) { return uintBitsToFloat(cnaUnpackUint(texel)); }
 
-CnaPunctualLight cnaLoadLight(int index) {
-    CnaPunctualLight light;
+CnaClusteredLight cnaLoadLight(int index) {
+    CnaClusteredLight light;
     light.position  = vec3(cnaUnpackFloat(texelFetch(uCnaLightData, ivec2(0, index), 0)),
                            cnaUnpackFloat(texelFetch(uCnaLightData, ivec2(1, index), 0)),
                            cnaUnpackFloat(texelFetch(uCnaLightData, ivec2(2, index), 0)));

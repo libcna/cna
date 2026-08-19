@@ -16,7 +16,7 @@ namespace CNA::Graphics {
 
     class ClusteredLightAssignment;
     class ClusteredLightGrid;
-    class PunctualLightSetEXT;
+    class ClusteredLightSetEXT;
 
 /** @addtogroup cnaext_engine
  *  @{
@@ -78,7 +78,7 @@ namespace CNA::Graphics {
          * @param assignment The result of that sorting.
          * @throws std::invalid_argument When the assignment does not match the set and the grid.
          */
-        void upload(const PunctualLightSetEXT& lights, const ClusteredLightGrid& grid,
+        void upload(const ClusteredLightSetEXT& lights, const ClusteredLightGrid& grid,
                     const ClusteredLightAssignment& assignment);
 
         /**
@@ -94,7 +94,7 @@ namespace CNA::Graphics {
          * @brief Returns the GLSL that reads what this class writes.
          *
          * Declares the three samplers and the size uniforms @ref bind sets, and defines
-         * `CnaPunctualLight`, `cnaLoadLight`, `cnaClusterFromNdc`, `cnaClusterLightCount` and
+         * `CnaClusteredLight`, `cnaLoadLight`, `cnaClusterFromNdc`, `cnaClusterLightCount` and
          * `cnaClusterLightIndex`. A shader includes it and never touches the layout itself.
          *
          * @return The GLSL source, with no `#version` line.

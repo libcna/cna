@@ -15,7 +15,7 @@
 #include "CNA/Graphics/ClusteredLightBuffer.hpp"
 #include "CNA/Graphics/ClusteredLightGrid.hpp"
 #include "CNA/Graphics/FullscreenPass.hpp"
-#include "CNA/Graphics/PunctualLightSetEXT.hpp"
+#include "CNA/Graphics/ClusteredLightSetEXT.hpp"
 #include "EngineTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -36,9 +36,9 @@ using CNA::Graphics::ClusteredLightAssignment;
 using CNA::Graphics::ClusteredLightBuffer;
 using CNA::Graphics::ClusteredLightGrid;
 using CNA::Graphics::FullscreenPass;
-using CNA::Graphics::PunctualLightEXT;
-using CNA::Graphics::PunctualLightSetEXT;
-using CNA::Graphics::PunctualLightType;
+using CNA::Graphics::ClusteredLightEXT;
+using CNA::Graphics::ClusteredLightSetEXT;
+using CNA::Graphics::ClusteredLightType;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector3;
@@ -60,19 +60,19 @@ ClusteredLightGrid MakeGrid()
     return grid;
 }
 
-PunctualLightEXT MakePoint(const Vector3& position, const float range)
+ClusteredLightEXT MakePoint(const Vector3& position, const float range)
 {
-    PunctualLightEXT light;
-    light.Type = PunctualLightType::Point;
+    ClusteredLightEXT light;
+    light.Type = ClusteredLightType::Point;
     light.Position = position;
     light.Range = range;
     return light;
 }
 
-PunctualLightEXT MakeSpot(const Vector3& position, const Vector3& direction)
+ClusteredLightEXT MakeSpot(const Vector3& position, const Vector3& direction)
 {
-    PunctualLightEXT light;
-    light.Type = PunctualLightType::Spot;
+    ClusteredLightEXT light;
+    light.Type = ClusteredLightType::Spot;
     light.Position = position;
     light.Direction = direction;
     light.Range = 12.0f;
@@ -118,7 +118,7 @@ bool cnaClose3(vec3 a, vec3 b) {
 }
 
 void main() {
-    CnaPunctualLight light = cnaLoadLight(uProbeIndex);
+    CnaClusteredLight light = cnaLoadLight(uProbeIndex);
     bool ok = cnaClose3(light.position, uProbePosition)
            && cnaClose(light.range, uProbeRange)
            && cnaClose3(light.colour, uProbeColour)
@@ -204,11 +204,11 @@ TEST(ClusteredLightBufferTest, AMismatchedTrioIsRefused)
     ClusteredLightBuffer buffer(gd);
     const ClusteredLightGrid grid = MakeGrid();
 
-    PunctualLightSetEXT twoLights;
+    ClusteredLightSetEXT twoLights;
     twoLights.add(MakePoint(Vector3(0.0f, 0.0f, -10.0f), 5.0f));
     twoLights.add(MakePoint(Vector3(3.0f, 0.0f, -10.0f), 5.0f));
 
-    PunctualLightSetEXT oneLight;
+    ClusteredLightSetEXT oneLight;
     oneLight.add(MakePoint(Vector3(0.0f, 0.0f, -10.0f), 5.0f));
 
     ClusteredLightAssignment assignment;
@@ -228,7 +228,7 @@ TEST(ClusteredLightBufferTest, TheCountsSurviveTheUpload)
     ClusteredLightBuffer buffer(gd);
     const ClusteredLightGrid grid = MakeGrid();
 
-    PunctualLightSetEXT lights;
+    ClusteredLightSetEXT lights;
     lights.add(MakePoint(Vector3(0.0f, 0.0f, -10.0f), 6.0f));
     lights.add(MakeSpot(Vector3(2.0f, 1.0f, -20.0f), Vector3(0.0f, 0.0f, -1.0f)));
 
@@ -250,7 +250,7 @@ TEST(ClusteredLightBufferTest, AnEmptySetUploadsWithoutAZeroSizedTexture)
     GraphicsDevice gd;
     ClusteredLightBuffer buffer(gd);
     const ClusteredLightGrid grid = MakeGrid();
-    const PunctualLightSetEXT lights;
+    const ClusteredLightSetEXT lights;
 
     ClusteredLightAssignment assignment;
     assignment.assign(grid, Matrix::getIdentityProperty(), lights.collectBounds());
@@ -272,16 +272,16 @@ TEST(ClusteredLightBufferTest, TheShaderReadsBackEveryFieldOfEveryLight)
     ASSERT_TRUE(effect.IsEffectValid()) << effect.GetCompileErrorEXT();
 
     const ClusteredLightGrid grid = MakeGrid();
-    PunctualLightSetEXT lights;
+    ClusteredLightSetEXT lights;
 
     // Values chosen to be awkward rather than round: negatives, a large magnitude, a small one,
     // and an intensity that has to be folded into the colour on the way in.
-    PunctualLightEXT first = MakePoint(Vector3(-3.25f, 1234.5f, -0.0009765625f), 17.5f);
+    ClusteredLightEXT first = MakePoint(Vector3(-3.25f, 1234.5f, -0.0009765625f), 17.5f);
     first.Color = Vector3(0.125f, 0.75f, 0.5f);
     first.Intensity = 2.5f;
     lights.add(first);
 
-    PunctualLightEXT second = MakeSpot(Vector3(7.5f, -2.25f, -30.0f), Vector3(0.0f, 0.0f, -1.0f));
+    ClusteredLightEXT second = MakeSpot(Vector3(7.5f, -2.25f, -30.0f), Vector3(0.0f, 0.0f, -1.0f));
     second.Color = Vector3(1.0f, 0.25f, 0.0625f);
     second.Intensity = 0.5f;
     lights.add(second);
@@ -293,7 +293,7 @@ TEST(ClusteredLightBufferTest, TheShaderReadsBackEveryFieldOfEveryLight)
 
     for (int index = 0; index < lights.getCount(); ++index)
     {
-        const PunctualLightEXT& light = lights.getAt(index);
+        const ClusteredLightEXT& light = lights.getAt(index);
         effect.Apply();
         effect.SetUniformInt("uProbeIndex", index);
         effect.SetUniformVec3("uProbePosition", light.Position.X, light.Position.Y,
@@ -302,7 +302,7 @@ TEST(ClusteredLightBufferTest, TheShaderReadsBackEveryFieldOfEveryLight)
         effect.SetUniformVec3("uProbeColour", light.Color.X * light.Intensity,
                               light.Color.Y * light.Intensity, light.Color.Z * light.Intensity);
         effect.SetUniformFloat("uProbeIsSpot",
-                               light.Type == PunctualLightType::Spot ? 1.0f : 0.0f);
+                               light.Type == ClusteredLightType::Spot ? 1.0f : 0.0f);
         effect.SetUniformVec3("uProbeDirection", light.Direction.X, light.Direction.Y,
                               light.Direction.Z);
         effect.SetUniformFloat("uProbeCosOuter", std::cos(light.OuterAngle));
@@ -327,7 +327,7 @@ TEST(ClusteredLightBufferTest, TheShaderDisagreesWhenItShould)
     ASSERT_TRUE(effect.IsEffectValid()) << effect.GetCompileErrorEXT();
 
     const ClusteredLightGrid grid = MakeGrid();
-    PunctualLightSetEXT lights;
+    ClusteredLightSetEXT lights;
     lights.add(MakePoint(Vector3(1.0f, 2.0f, -10.0f), 5.0f));
 
     ClusteredLightAssignment assignment;
@@ -360,7 +360,7 @@ TEST(ClusteredLightBufferTest, TheShaderWalksTheSameClusterListTheCpuBuilt)
     ASSERT_TRUE(effect.IsEffectValid()) << effect.GetCompileErrorEXT();
 
     const ClusteredLightGrid grid = MakeGrid();
-    PunctualLightSetEXT lights;
+    ClusteredLightSetEXT lights;
     for (int i = 0; i < 8; ++i)
         lights.add(MakePoint(Vector3(static_cast<float>(i) * 2.0f - 7.0f, 0.0f, -14.0f), 6.0f));
 

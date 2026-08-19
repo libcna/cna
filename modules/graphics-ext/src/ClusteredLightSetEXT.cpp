@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-#include "CNA/Graphics/PunctualLightSetEXT.hpp"
+#include "CNA/Graphics/ClusteredLightSetEXT.hpp"
 
 #ifdef CNA_CNAEXT
 
@@ -33,15 +33,15 @@ namespace CNA::Graphics {
 
     } // namespace
 
-    PunctualLightSetEXT::PunctualLightSetEXT() = default;
+    ClusteredLightSetEXT::ClusteredLightSetEXT() = default;
 
-    bool PunctualLightSetEXT::isUsable(const PunctualLightEXT& light)
+    bool ClusteredLightSetEXT::isUsable(const ClusteredLightEXT& light)
     {
         if (!IsFinite(light.Position) || !IsFinite(light.Color)) return false;
         if (!std::isfinite(light.Intensity) || light.Intensity < 0.0f) return false;
         if (!std::isfinite(light.Range) || !(light.Range > 0.0f)) return false;
 
-        if (light.Type != PunctualLightType::Spot) return true;
+        if (light.Type != ClusteredLightType::Spot) return true;
 
         if (!IsFinite(light.Direction)) return false;
         const float lengthSquared = light.Direction.X * light.Direction.X +
@@ -54,16 +54,16 @@ namespace CNA::Graphics {
         return true;
     }
 
-    int PunctualLightSetEXT::add(const PunctualLightEXT& light)
+    int ClusteredLightSetEXT::add(const ClusteredLightEXT& light)
     {
         if (static_cast<int>(lights_.size()) >= kMaxLights)
             throw std::length_error(
-                "CNA::Graphics::PunctualLightSetEXT::add: the set already holds its maximum of 256 "
+                "CNA::Graphics::ClusteredLightSetEXT::add: the set already holds its maximum of 256 "
                 "lights -- the uploaded buffer and the shader's index width are sized from that "
                 "bound, so it is refused rather than grown");
         if (!isUsable(light))
             throw std::invalid_argument(
-                "CNA::Graphics::PunctualLightSetEXT::add: the light is not usable -- a range must "
+                "CNA::Graphics::ClusteredLightSetEXT::add: the light is not usable -- a range must "
                 "be positive, an intensity non-negative, a spot's inner angle no wider than its "
                 "outer and its outer no wider than a hemisphere, and every number finite. Refused "
                 "here rather than skipped later, because a light that silently does nothing is "
@@ -73,10 +73,10 @@ namespace CNA::Graphics {
         return static_cast<int>(lights_.size()) - 1;
     }
 
-    int PunctualLightSetEXT::add(const PointLightEXT& light)
+    int ClusteredLightSetEXT::add(const PointLightEXT& light)
     {
-        PunctualLightEXT converted;
-        converted.Type         = PunctualLightType::Point;
+        ClusteredLightEXT converted;
+        converted.Type         = ClusteredLightType::Point;
         converted.Position     = light.Position;
         converted.Color        = light.Color;
         converted.Intensity    = light.Intensity;
@@ -85,10 +85,10 @@ namespace CNA::Graphics {
         return add(converted);
     }
 
-    int PunctualLightSetEXT::add(const SpotLightEXT& light)
+    int ClusteredLightSetEXT::add(const SpotLightEXT& light)
     {
-        PunctualLightEXT converted;
-        converted.Type         = PunctualLightType::Spot;
+        ClusteredLightEXT converted;
+        converted.Type         = ClusteredLightType::Spot;
         converted.Position     = light.Position;
         converted.Direction    = light.Direction;
         converted.Color        = light.Color;
@@ -100,44 +100,44 @@ namespace CNA::Graphics {
         return add(converted);
     }
 
-    void PunctualLightSetEXT::replaceAt(const int index, const PunctualLightEXT& light)
+    void ClusteredLightSetEXT::replaceAt(const int index, const ClusteredLightEXT& light)
     {
         if (index < 0 || index >= static_cast<int>(lights_.size()))
             throw std::out_of_range(
-                "CNA::Graphics::PunctualLightSetEXT::replaceAt: no light has that index");
+                "CNA::Graphics::ClusteredLightSetEXT::replaceAt: no light has that index");
         if (!isUsable(light))
             throw std::invalid_argument(
-                "CNA::Graphics::PunctualLightSetEXT::replaceAt: the light is not usable");
+                "CNA::Graphics::ClusteredLightSetEXT::replaceAt: the light is not usable");
         lights_[static_cast<std::size_t>(index)] = light;
     }
 
-    void PunctualLightSetEXT::removeAt(const int index)
+    void ClusteredLightSetEXT::removeAt(const int index)
     {
         if (index < 0 || index >= static_cast<int>(lights_.size()))
             throw std::out_of_range(
-                "CNA::Graphics::PunctualLightSetEXT::removeAt: no light has that index");
+                "CNA::Graphics::ClusteredLightSetEXT::removeAt: no light has that index");
         lights_.erase(lights_.begin() + index);
     }
 
-    void PunctualLightSetEXT::clear() { lights_.clear(); }
+    void ClusteredLightSetEXT::clear() { lights_.clear(); }
 
-    int  PunctualLightSetEXT::getCount() const { return static_cast<int>(lights_.size()); }
-    bool PunctualLightSetEXT::isEmpty()  const { return lights_.empty(); }
+    int  ClusteredLightSetEXT::getCount() const { return static_cast<int>(lights_.size()); }
+    bool ClusteredLightSetEXT::isEmpty()  const { return lights_.empty(); }
 
-    const PunctualLightEXT& PunctualLightSetEXT::getAt(const int index) const
+    const ClusteredLightEXT& ClusteredLightSetEXT::getAt(const int index) const
     {
         if (index < 0 || index >= static_cast<int>(lights_.size()))
             throw std::out_of_range(
-                "CNA::Graphics::PunctualLightSetEXT::getAt: no light has that index");
+                "CNA::Graphics::ClusteredLightSetEXT::getAt: no light has that index");
         return lights_[static_cast<std::size_t>(index)];
     }
 
-    const std::vector<PunctualLightEXT>& PunctualLightSetEXT::getLights() const { return lights_; }
+    const std::vector<ClusteredLightEXT>& ClusteredLightSetEXT::getLights() const { return lights_; }
 
-    BoundingSphere PunctualLightSetEXT::getBoundsAt(const int index) const
+    BoundingSphere ClusteredLightSetEXT::getBoundsAt(const int index) const
     {
-        const PunctualLightEXT& light = getAt(index);
-        if (light.Type != PunctualLightType::Spot)
+        const ClusteredLightEXT& light = getAt(index);
+        if (light.Type != ClusteredLightType::Spot)
             return BoundingSphere(light.Position, light.Range);
 
         const Vector3 axis = Normalized(light.Direction, Vector3(0.0f, -1.0f, 0.0f));
@@ -164,7 +164,7 @@ namespace CNA::Graphics {
                               radius);
     }
 
-    std::vector<BoundingSphere> PunctualLightSetEXT::collectBounds() const
+    std::vector<BoundingSphere> ClusteredLightSetEXT::collectBounds() const
     {
         std::vector<BoundingSphere> bounds;
         bounds.reserve(lights_.size());

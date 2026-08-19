@@ -3,7 +3,7 @@
 
 #ifdef CNA_CNAEXT
 
-#include "CNA/Graphics/PunctualLightEXT.hpp"
+#include "CNA/Graphics/ClusteredLightEXT.hpp"
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 
 #include <vector>
@@ -34,7 +34,7 @@ namespace CNA::Graphics {
      * a caller holding indices must re-read them. To switch a light off without renumbering, set
      * its intensity to zero, which is explicitly allowed and is why zero intensity is not refused.
      */
-    class PunctualLightSetEXT
+    class ClusteredLightSetEXT
     {
     public:
         /**
@@ -46,7 +46,7 @@ namespace CNA::Graphics {
         static constexpr int kMaxLights = 256;
 
         /** @brief Creates an empty set. */
-        PunctualLightSetEXT();
+        ClusteredLightSetEXT();
 
         /**
          * @brief Adds a point light.
@@ -76,7 +76,7 @@ namespace CNA::Graphics {
          * @throws std::invalid_argument When the light is not usable.
          * @throws std::length_error     When the set already holds @ref kMaxLights lights.
          */
-        int add(const PunctualLightEXT& light);
+        int add(const ClusteredLightEXT& light);
 
         /**
          * @brief Replaces one light in place, keeping its index.
@@ -86,7 +86,7 @@ namespace CNA::Graphics {
          * @throws std::out_of_range     When the index is not in the set.
          * @throws std::invalid_argument When the light is not usable.
          */
-        void replaceAt(int index, const PunctualLightEXT& light);
+        void replaceAt(int index, const ClusteredLightEXT& light);
 
         /**
          * @brief Removes one light, renumbering every light after it.
@@ -112,10 +112,10 @@ namespace CNA::Graphics {
          * @return The light.
          * @throws std::out_of_range When the index is not in the set.
          */
-        [[nodiscard]] const PunctualLightEXT& getAt(int index) const;
+        [[nodiscard]] const ClusteredLightEXT& getAt(int index) const;
 
         /** @brief Returns every light, in index order. */
-        [[nodiscard]] const std::vector<PunctualLightEXT>& getLights() const;
+        [[nodiscard]] const std::vector<ClusteredLightEXT>& getLights() const;
 
         /**
          * @brief Returns the volume a light can possibly reach, for the cluster assignment.
@@ -147,10 +147,10 @@ namespace CNA::Graphics {
          * @param light The light to inspect.
          * @return True when the light is usable.
          */
-        [[nodiscard]] static bool isUsable(const PunctualLightEXT& light);
+        [[nodiscard]] static bool isUsable(const ClusteredLightEXT& light);
 
     private:
-        std::vector<PunctualLightEXT> lights_;
+        std::vector<ClusteredLightEXT> lights_;
     };
 
 /** @} */

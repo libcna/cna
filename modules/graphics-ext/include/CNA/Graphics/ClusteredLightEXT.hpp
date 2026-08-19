@@ -3,7 +3,7 @@
 
 #ifdef CNA_CNAEXT
 
-#include "CNA/Graphics/PunctualLightType.hpp"
+#include "CNA/Graphics/ClusteredLightType.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
 namespace CNA::Graphics {
@@ -19,14 +19,21 @@ namespace CNA::Graphics {
      * light is described with. This is the *uniform* record: clustered shading gives every light
      * one index in one list, so the list cannot hold two different structures, and a light's type
      * has to be a field rather than a C++ type. Converting is the job of
-     * `PunctualLightSetEXT::add`, so a game keeps writing the specific type it means.
+     * `ClusteredLightSetEXT::add`, so a game keeps writing the specific type it means.
+     *
+     * **Not to be confused with `Microsoft::Xna::Framework::Graphics::PunctualLightEXT`**, which is
+     * the *one* punctual light a lit effect receives for a draw, shadow resources included. That
+     * one is a budget of one by deliberate design; this one is a member of a list of hundreds and
+     * carries no shadow at all. Two names for two different jobs, rather than one name meaning
+     * both -- the first draft of this file called itself `PunctualLightEXT` too, which would have
+     * left two types with the same name in two namespaces describing different things.
      *
      * A point light leaves @ref Direction, @ref InnerAngle and @ref OuterAngle unread.
      */
-    struct PunctualLightEXT
+    struct ClusteredLightEXT
     {
         /** @brief Which kind of light this is; decides whether the cone fields are read. */
-        PunctualLightType Type = PunctualLightType::Point;
+        ClusteredLightType Type = ClusteredLightType::Point;
 
         /** @brief World-space position of the light. */
         Microsoft::Xna::Framework::Vector3 Position{0.0f, 0.0f, 0.0f};

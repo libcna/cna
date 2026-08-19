@@ -10,7 +10,7 @@ namespace CNA::Graphics {
  */
 
     /**
-     * @brief Which kind of punctual light a `PunctualLightSetEXT` entry describes.
+     * @brief Which kind of punctual light a `ClusteredLightSetEXT` entry describes.
      *
      * "Punctual" is the glTF word for a light that is a point in space rather than a shape: it has
      * a position and no area, which is what makes its contribution a closed-form expression instead
@@ -18,7 +18,7 @@ namespace CNA::Graphics {
      *
      * The ordinals are stable, because a light set is uploaded to the GPU with this value in it.
      */
-    enum class PunctualLightType
+    enum class ClusteredLightType
     {
         /** @brief Light radiating equally in every direction from a point. */
         Point = 0,
