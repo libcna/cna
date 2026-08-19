@@ -141,6 +141,21 @@ const Color kFacingNormal{128, 128, 255, 255};
 /// (0, 0.7071, 0.7071): tilted 45 degrees, which reflects the view ray to (0, 1, 0) -- purely
 /// lateral in view space, so the march travels sideways at a constant distance.
 const Color kTiltedNormal{128, 218, 218, 255};
+/// (0, -0.7071, 0.7071): tilted the other way, so it faces the reflected ray head-on. The band
+/// wears this: an object standing in front of the floor, turned towards it.
+const Color kFacingTheRayNormal{128, 37, 218, 255};
+
+/// Normals for the whole scene: the floor tilted away, the band turned to face what reflects off it.
+///
+/// The band cannot share the floor's normal, and the reason is the rejection this scene now
+/// exercises. Two parallel surfaces mean the ray arrives at the *back* of the second one, and
+/// reflecting a back face puts the far side of an object into a mirror that cannot see it.
+std::unique_ptr<RenderTarget2D> MakeSceneNormals(GraphicsDevice& gd)
+{
+    return MakeRowImage(gd, [](const int row) {
+        return InBand(row) ? kFacingTheRayNormal : kTiltedNormal;
+    });
+}
 
 /// Colour: the band a steep vertical ramp, everything else black. Where in the band a reflection
 /// lands is then legible from the colour it comes back with, which is what makes the refinement
@@ -217,7 +232,7 @@ TEST(SsrPassTest, ATiltedSurfaceReflectsTheColourItsRayReaches)
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeTiltedPlaneDepth(gd);
-    auto normals = MakeUniformNormals(gd, kTiltedNormal);
+    auto normals = MakeSceneNormals(gd);
     auto source = MakeSourceWithBrightBand(gd);
     RenderTarget2D destination(gd, kSize, kSize);
 
@@ -245,7 +260,7 @@ TEST(SsrPassTest, ZeroIntensityReproducesTheSceneExactly)
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeTiltedPlaneDepth(gd);
-    auto normals = MakeUniformNormals(gd, kTiltedNormal);
+    auto normals = MakeSceneNormals(gd);
     auto source = MakeSourceWithBrightBand(gd);
     RenderTarget2D destination(gd, kSize, kSize);
 
@@ -343,7 +358,7 @@ TEST(SsrPassTest, TheDepthBiasIsWhatSeparatesASelfHitFromARealOne)
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeTiltedPlaneDepth(gd);
-    auto normals = MakeUniformNormals(gd, kTiltedNormal);
+    auto normals = MakeSceneNormals(gd);
     auto source = MakeSourceWithBrightBand(gd);
     RenderTarget2D destination(gd, kSize, kSize);
 
@@ -454,7 +469,7 @@ TEST(SsrPassTest, TheRefinementMakesTheAnswerIndependentOfTheStepCount)
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeTiltedPlaneDepth(gd);
-    auto normals = MakeUniformNormals(gd, kTiltedNormal);
+    auto normals = MakeSceneNormals(gd);
     auto source  = MakeSourceWithGradientBand(gd);
     RenderTarget2D destination(gd, kSize, kSize);
 
@@ -480,6 +495,103 @@ TEST(SsrPassTest, TheRefinementMakesTheAnswerIndependentOfTheStepCount)
     EXPECT_LE(std::abs(coarse - fine), 12)
         << "eight steps answered " << coarse << " and sixty-four answered " << fine
         << ": the reflection still lands where the step count puts it";
+}
+
+// ── The rejections (MOD-2002) ────────────────────────────────────────────────
+
+TEST(SsrPassTest, ABackFacingSurfaceIsNotReflected)
+{
+    // The same scene, with the band left parallel to the floor instead of turned to face it. The
+    // ray then arrives at the band's *back*, and reflecting the colour of a surface the mirror
+    // cannot see puts the far side of an object into the reflection -- a wrong image that looks
+    // entirely plausible, which is why it needs asserting rather than eyeballing.
+    GraphicsDevice gd;
+    SsrPass pass(gd);
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+
+    auto depth   = MakeTiltedPlaneDepth(gd);
+    auto normals = MakeUniformNormals(gd, kTiltedNormal);   // the band shares the floor's normal
+    auto source  = MakeSourceWithBrightBand(gd);
+    RenderTarget2D destination(gd, kSize, kSize);
+
+    pass.setMaxDistance(40.0f);
+    pass.setThickness(30.0f);
+
+    PostProcessContext context = MakeContext(SourceRef(source), destination);
+    context.sourceDepth   = depth.get();
+    context.sourceNormals = normals.get();
+    pass.apply(context);
+
+    const std::vector<Color> pixels = ReadTarget(destination);
+    EXPECT_LT(pixels[CentreIndex()].getRProperty(), 8)
+        << "the back of the band was reflected as though the mirror could see its front";
+}
+
+TEST(SsrPassTest, ARayPassingWellBehindASurfaceIsNotAHit)
+{
+    // The upper tolerance, and the counterpart of the depth-bias test. The depth image records
+    // where a surface is and nothing about how deep the object behind it goes; a thickness smaller
+    // than the gap means the ray flew well past the band rather than into it, and reflecting it
+    // would put a foreground object into a mirror that is looking somewhere else entirely.
+    GraphicsDevice gd;
+    SsrPass pass(gd);
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+
+    auto depth   = MakeTiltedPlaneDepth(gd);
+    auto normals = MakeSceneNormals(gd);
+    auto source  = MakeSourceWithBrightBand(gd);
+    RenderTarget2D destination(gd, kSize, kSize);
+
+    pass.setMaxDistance(40.0f);
+    pass.setThickness(2.0f);   // the band stands about 20 world units proud of the floor
+
+    PostProcessContext context = MakeContext(SourceRef(source), destination);
+    context.sourceDepth   = depth.get();
+    context.sourceNormals = normals.get();
+    pass.apply(context);
+
+    const std::vector<Color> pixels = ReadTarget(destination);
+    EXPECT_LT(pixels[CentreIndex()].getRProperty(), 8)
+        << "a ray that flew far behind the band still reflected it";
+}
+
+TEST(SsrPassTest, AReflectionEndingNearTheBorderFadesRatherThanStopping)
+{
+    // Nothing outside the viewport was ever drawn, so a reflection ending near the border is about
+    // to reflect information the frame does not have. Asserted as a comparison rather than an
+    // absolute: the same reflection, with the fade band wide enough to reach it, comes back
+    // measurably weaker than with the fade off. Without it the reflection stops along a hard line
+    // down the edge of the screen, which is the usual giveaway of the technique.
+    GraphicsDevice gd;
+    SsrPass pass(gd);
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+
+    auto depth   = MakeTiltedPlaneDepth(gd);
+    auto normals = MakeSceneNormals(gd);
+    auto source  = MakeSourceWithBrightBand(gd);
+    RenderTarget2D destination(gd, kSize, kSize);
+
+    const auto redWithFade = [&](const float fade) {
+        pass.setMaxDistance(40.0f);
+        pass.setThickness(30.0f);
+        pass.setEdgeFade(fade);
+        PostProcessContext context = MakeContext(SourceRef(source), destination);
+        context.sourceDepth   = depth.get();
+        context.sourceNormals = normals.get();
+        pass.apply(context);
+        return static_cast<int>(ReadTarget(destination)[CentreIndex()].getRProperty());
+    };
+
+    const int unfaded = redWithFade(0.0f);
+    const int faded   = redWithFade(0.5f);
+
+    ASSERT_GT(unfaded, 200) << "the unfaded reflection was not found, so nothing was compared";
+    EXPECT_LT(faded, unfaded - 30)
+        << "the fade band reached this reflection and did not weaken it: " << faded
+        << " against " << unfaded;
 }
 
 // ── The fallback ─────────────────────────────────────────────────────────────
@@ -558,6 +670,16 @@ TEST(SsrPassTest, TheSettingsRoundTripAndNonsenseIsIgnored)
     pass.setThickness(-1.0f);
     EXPECT_FLOAT_EQ(pass.getThickness(), 0.75f);
 
+    EXPECT_GE(pass.getEdgeFade(), 0.0f);
+    pass.setEdgeFade(0.25f);
+    EXPECT_FLOAT_EQ(pass.getEdgeFade(), 0.25f);
+    // Clamped rather than refused: a fade wider than half the frame has no meaning, and a settings
+    // bag restored from a file should not throw over it.
+    pass.setEdgeFade(5.0f);
+    EXPECT_FLOAT_EQ(pass.getEdgeFade(), 0.5f);
+    pass.setEdgeFade(-1.0f);
+    EXPECT_FLOAT_EQ(pass.getEdgeFade(), 0.0f);
+
     EXPECT_GT(pass.getDepthBias(), 0.0f);
     pass.setDepthBias(0.2f);
     EXPECT_FLOAT_EQ(pass.getDepthBias(), 0.2f);
@@ -576,7 +698,7 @@ TEST(SsrPassTest, AnAbsurdStepCountIsClampedOnUseRatherThanRejected)
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto depth   = MakeTiltedPlaneDepth(gd);
-    auto normals = MakeUniformNormals(gd, kTiltedNormal);
+    auto normals = MakeSceneNormals(gd);
     auto source = MakeSourceWithBrightBand(gd);
     RenderTarget2D destination(gd, kSize, kSize);
 

@@ -57,6 +57,7 @@ uniform float uMaxDistance;
 uniform float uDepthBias;
 uniform float uThickness;
 uniform float uIntensity;
+uniform float uEdgeFade;
 uniform int   uStepCount;
 
 // Point sampling, done here rather than through a sampler state.
@@ -167,8 +168,25 @@ void main() {
 
             vec4 hitClip = uCameraProjection * vec4(far * uFarPlaneScale, 1.0);
             vec2 hitUv = cnaSnapToTexel((hitClip.xy / hitClip.w) * 0.5 + 0.5, uDepthSize);
+
+            // The ray may have arrived at the *back* of what it hit. A surface whose normal points
+            // the same way the ray is travelling is one the ray came up behind, and reflecting its
+            // front-facing colour puts the far side of an object into a mirror that cannot see it.
+            vec3 rawHitNormal = texture(uNormalSampler, hitUv).xyz * 2.0 - 1.0;
+            vec3 hitNormal = length(rawHitNormal) > 1e-4 ? normalize(rawHitNormal) : vec3(0.0, 0.0, 1.0);
+            if (dot(reflected, hitNormal) > 0.0) break;
+
+            // Nothing outside the viewport was ever drawn, so a reflection that ends near the border
+            // is about to reflect information the frame does not have. Fading it out is the
+            // difference between a reflection that thins away and one that stops along a hard line
+            // down the edge of the screen -- the giveaway of the technique.
+            vec2 toEdge = min(hitUv, vec2(1.0) - hitUv);
+            float fade = uEdgeFade > 0.0
+                ? min(smoothstep(0.0, uEdgeFade, toEdge.x), smoothstep(0.0, uEdgeFade, toEdge.y))
+                : 1.0;
+
             hitColor = texture(texture1, hitUv).rgb;
-            hit = 1.0;
+            hit = fade;
             break;
         }
 
@@ -235,6 +253,7 @@ void main() {
         effect_->SetUniformFloat("uDepthBias", depthBias_ / far);
         effect_->SetUniformFloat("uThickness", thickness_ / far);
         effect_->SetUniformFloat("uIntensity", intensity_);
+        effect_->SetUniformFloat("uEdgeFade", edgeFade_);
         effect_->SetUniformInt("uStepCount",
                                std::clamp(stepCount_, kMinStepCount, kMaxStepCount));
 
@@ -272,6 +291,12 @@ void main() {
     void  SsrPass::setDepthBias(const float value)
     {
         if (value > 0.0f) depthBias_ = value;
+    }
+
+    float SsrPass::getEdgeFade() const { return edgeFade_; }
+    void  SsrPass::setEdgeFade(const float value)
+    {
+        edgeFade_ = std::clamp(value, 0.0f, 0.5f);
     }
 
     float SsrPass::getIntensity() const { return intensity_; }

@@ -119,6 +119,20 @@ namespace CNA::Graphics {
          */
         void setDepthBias(float value);
 
+        /** @brief Returns how wide the fade at the edge of the screen is, in screen fractions. */
+        [[nodiscard]] float getEdgeFade() const;
+        /**
+         * @brief Sets how wide the fade at the edge of the screen is, in screen fractions.
+         *
+         * Nothing outside the viewport was ever drawn, so a reflection ending near the border is
+         * about to reflect information the frame does not have. Fading it is the difference between
+         * a reflection that thins away and one that stops along a hard line down the edge of the
+         * screen, which is the usual giveaway of the technique. Zero disables the fade.
+         *
+         * @param value The width as a fraction of the frame, clamped to [0, 0.5].
+         */
+        void setEdgeFade(float value);
+
         /** @brief Returns how strongly the reflection is mixed over the source. */
         [[nodiscard]] float getIntensity() const;
         /**
@@ -141,6 +155,7 @@ namespace CNA::Graphics {
         int   stepCount_   = 32;
         float thickness_   = 0.5f;
         float depthBias_   = 0.05f;
+        float edgeFade_    = 0.1f;
         float intensity_   = 1.0f;
     };
 
