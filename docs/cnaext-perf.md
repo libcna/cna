@@ -287,6 +287,31 @@ grid, because every light is inside the frustum and the busiest cluster holds 69
 
 Source: `cna_test_cnaext_clustered_lights --benchmark`.
 
+### The material lobes, at 64 lights
+
+`MOD-2077`. Same program, same frame, 64 lights, each lobe switched on alone and then all four
+together:
+
+| Lobes on | Run 1 | Run 2 | Run 3 |
+|---|---|---|---|
+| none | 22.376 ms | 23.132 ms | 22.044 ms |
+| clearcoat | 23.123 ms | 21.132 ms | 22.758 ms |
+| sheen | 23.082 ms | 21.863 ms | 21.874 ms |
+| iridescence | 23.983 ms | 23.063 ms | 22.461 ms |
+| subsurface | 21.555 ms | 21.586 ms | 23.574 ms |
+| transmission | 21.001 ms | 22.228 ms | 21.875 ms |
+| all four | 23.797 ms | 22.644 ms | 22.447 ms |
+
+**The difference is below this machine's noise.** Every configuration lands between 21.0 ms and
+24.0 ms with no consistent ordering — several lobes read *faster* than the baseline in a given run,
+which is measurement scatter and not a speedup. With 69 lights in the busiest cluster the light loop
+dominates so completely that a per-fragment lobe does not register.
+
+That is the honest reading and it is also the limit of what a software rasteriser can say here. It
+is **not** evidence that these lobes are free on hardware: each is compiled into the shader whether
+or not its factor is zero, and a real GPU charges for the register pressure through occupancy, which
+nothing in this measurement can see.
+
 - **The GPU sort is flat and the CPU sort is not**, which is the whole shape of the result: the
   compute path costs about 2.4 ms whether it is sorting one light or two hundred and fifty-six,
   because every cluster is being visited either way and the light loop inside it is short. The two

@@ -1307,6 +1307,70 @@ The mapping, field for field (`MOD-1300`):
   otherwise identical, and that bound (≤ 1/255 on the base colour, exact everywhere else) is
   asserted rather than assumed.
 
+### Material extensions beyond glTF core
+
+`plan_modern.md` `MOD-2070`–`MOD-2077`. `PbrMaterial` describes what `PbrEffect` can render. The
+lobes past that — clearcoat, sheen, transmission with its volume, iridescence, and a subsurface
+approximation — are carried by a **separate** `PbrMaterialExtensions` and shaded by
+`ClusteredForwardEffect`.
+
+```cpp
+CNA::Graphics::PbrMaterialExtensions extensions;
+extensions.setClearcoatFactor(1.0f);          // 0 is off, and 0 is the default for every lobe
+extensions.setClearcoatRoughness(0.1f);
+extensions.setSheenColorFactor({0.5f, 0.4f, 0.4f});
+effect.setMaterialExtensions(extensions);
+
+// Straight from an imported glTF material, textures resolved by the loader:
+auto imported = CNA::Graphics::materialExtensionsFromGltfEXT(material, textures);
+```
+
+- **Why a separate type.** `PbrMaterial`'s defining property is that it is *lossless* against
+  `PbrEffect`: `applyMaterial` then `extractMaterial` returns an equal material, which is what the
+  whole of Phase 13 existed to establish. `PbrEffect` has no state for these lobes and cannot gain
+  shading without changing EasyGL's generated program — code compiled into every game whether
+  `CNA_CNAEXT` is on or off — so a field on `PbrMaterial` would be silently dropped by that round
+  trip and two materials would compare unequal for a reason nothing in the type explains.
+- **Every lobe is off when its own factor is zero**, which is its default, so a material that names
+  none of them is the material it was before.
+- **Clearcoat is a second specular lobe, not a brighter one**, with its own roughness, and it takes
+  from the base exactly what it reflects. A rough base under a smooth coat is what brushed metal
+  under lacquer looks like, and one roughness cannot describe it.
+- **Sheen's distribution is a different shape.** The Charlie lobe peaks where the half-vector is
+  *perpendicular* to the normal — the opposite of a specular lobe — which is why it appears as a rim
+  at grazing angles. glTF scales the base layer by the sheen's directional albedo from a table; that
+  table is not generated here, so a sheened surface is brighter than energy conservation allows by
+  that lobe's own small albedo.
+- **Transmission needs a copy of the opaque frame, and is refused without one.** It is not
+  transparency: the ray *refracts*, so what shows through is displaced. The copy is a real cost —
+  the opaque geometry has to be drawn, resolved and copied before any transmissive surface can be
+  drawn at all — and the layer does not make it, because only the application knows when its opaque
+  pass ended. The volume absorbs by Beer's law; an attenuation distance of 0 means glTF's infinity,
+  a medium that absorbs nothing.
+- **Iridescence replaces the Fresnel term rather than adding a lobe**: a thin film changes *which
+  wavelengths* a surface reflects, not how much. `ThinFilmIridescence` is Belcour and Barla's model,
+  written in C++ and GLSL that mirror each other and are compared on the GPU.
+- **Subsurface is a wrapped-diffuse approximation and says so.** Light wraps past the terminator and
+  a back-scatter term glows when the light is behind the surface. A thin object lit from behind
+  glows, and a thick one glows exactly as much, because nothing here knows how thick it is. Real
+  diffusion needs a diffuse-only buffer and a depth-aware blur over it, which needs MRT — the
+  capability this layer already had to build a fallback for.
+- **The maps are carried, not consumed.** `ClusteredForwardEffect` binds no material textures at
+  all: it has a base colour, a metallic and a roughness rather than a texture set. Every extension's
+  strength/roughness/normal *maps* exist on the extension set for the importer and the round trip,
+  and the factors are what shade.
+
+**What the lobes cost.** Each one is behind a dynamic branch on its own factor, so a fragment whose
+lobe is off pays a branch rather than the lobe — but the code is compiled into the shader either
+way, which costs registers and instruction cache and can reduce occupancy on a real GPU. Measured
+here at 64 lights per fragment, 256×256, Mesa llvmpipe (`cna_test_cnaext_clustered_lights
+--benchmark`), **the difference is below this machine's noise**: three runs put every configuration,
+including all four lobes at once, between 21.0 ms and 24.0 ms with no consistent ordering. That is a
+real finding rather than a missing one — with 69 lights in the busiest cluster the light loop
+dominates so completely that a per-fragment lobe does not register — and it is also the limit of
+what a software rasteriser can say. It is *not* evidence that these lobes are free on hardware,
+where the shader's register pressure is charged differently.
+
 ### Many objects: instancing, LOD and culling
 
 Three small classes that compose into one frame, none of which needs anything the XNA API did not

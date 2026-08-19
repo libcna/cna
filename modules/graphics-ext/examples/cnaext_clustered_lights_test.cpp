@@ -20,6 +20,7 @@
 #include "CNA/Graphics/ClusteredLightCompute.hpp"
 #include "CNA/Graphics/ClusteredLightGrid.hpp"
 #include "CNA/Graphics/ClusteredLightSetEXT.hpp"
+#include "CNA/Graphics/PbrMaterialExtensions.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -33,6 +34,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 
@@ -45,6 +47,7 @@
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -58,6 +61,7 @@ using CNA::Graphics::ClusteredLightEXT;
 using CNA::Graphics::ClusteredLightGrid;
 using CNA::Graphics::ClusteredLightSetEXT;
 using CNA::Graphics::ClusteredLightType;
+using CNA::Graphics::PbrMaterialExtensions;
 
 namespace
 {
@@ -266,6 +270,77 @@ protected:
                     std::printf("    %6d | %8.3f  |        -- | %8.3f  | %8.3f  ms\n", count,
                                 cpuSort, upload, shade);
             }
+        }
+
+        if (benchmark_)
+        {
+            // plan_modern.md MOD-2077: what each material lobe costs, measured rather than
+            // asserted. 64 lights, so the light loop is the thing the lobes are being added to.
+            std::printf("--- MOD-2077: material lobes at 64 lights, %dx%d, Mesa llvmpipe ---\n",
+                        kFrame, kFrame);
+            const ClusteredLightSetEXT lobeLights = MakeLights(64);
+            ClusteredLightAssignment lobeAssignment;
+            lobeAssignment.assign(grid, View(), lobeLights.collectBounds());
+            ClusteredLightBuffer lobeBuffer(device);
+            lobeBuffer.upload(lobeLights, grid, lobeAssignment);
+
+            Texture2D opaque(device, 4, 4);
+            const std::vector<Color> grey(16, Color(128, 128, 128, 255));
+            opaque.SetData(grey.data(), 16);
+            effect.setOpaqueFrame(&opaque);
+
+            PbrMaterialExtensions clearcoat;
+            clearcoat.setClearcoatFactor(1.0f);
+            clearcoat.setClearcoatRoughness(0.3f);
+            PbrMaterialExtensions sheen;
+            sheen.setSheenColorFactor(Vector3(1.0f, 1.0f, 1.0f));
+            sheen.setSheenRoughness(0.4f);
+            PbrMaterialExtensions iridescence;
+            iridescence.setIridescenceFactor(1.0f);
+            PbrMaterialExtensions subsurface;
+            subsurface.setSubsurfaceColor(Vector3(0.6f, 0.3f, 0.2f));
+            PbrMaterialExtensions transmission;
+            transmission.setTransmissionFactor(1.0f);
+            transmission.setThicknessFactor(1.0f);
+            transmission.setAttenuationDistance(2.0f);
+            PbrMaterialExtensions everything = clearcoat;
+            everything.setSheenColorFactor(Vector3(1.0f, 1.0f, 1.0f));
+            everything.setSheenRoughness(0.4f);
+            everything.setIridescenceFactor(1.0f);
+            everything.setSubsurfaceColor(Vector3(0.6f, 0.3f, 0.2f));
+
+            const std::pair<const char*, const PbrMaterialExtensions*> lobes[] = {
+                {"none", nullptr},
+                {"clearcoat", &clearcoat},
+                {"sheen", &sheen},
+                {"iridescence", &iridescence},
+                {"subsurface", &subsurface},
+                {"transmission", &transmission},
+                {"all four", &everything},
+            };
+
+            std::vector<Color> frame(static_cast<std::size_t>(kFrame) * kFrame, Color::Black);
+            for (const auto& [name, extensions] : lobes)
+            {
+                if (extensions != nullptr) effect.setMaterialExtensions(*extensions);
+                else effect.setMaterialExtensions(PbrMaterialExtensions());
+
+                for (int warm = 0; warm < 3; ++warm)
+                {
+                    DrawWall(device, effect, lobeBuffer);
+                    device.GetBackBufferData(frame.data(), static_cast<int>(frame.size()));
+                }
+                const double withSync = MillisecondsOf(8, [&] {
+                    DrawWall(device, effect, lobeBuffer);
+                    device.GetBackBufferData(frame.data(), static_cast<int>(frame.size()));
+                });
+                const double readBack = MillisecondsOf(8, [&] {
+                    device.GetBackBufferData(frame.data(), static_cast<int>(frame.size()));
+                });
+                std::printf("    %-13s %8.3f ms\n", name, withSync - readBack);
+            }
+            effect.setMaterialExtensions(PbrMaterialExtensions());
+            effect.setOpaqueFrame(nullptr);
         }
 
         std::printf("%d/%d checks passed\n", passCount_, checkCount_);
