@@ -109,6 +109,7 @@
 #include "CNA/Graphics/PbrMaterial.hpp"
 
 // ---- Post-process effects ------------------------------------------------------------------
+#include "CNA/Graphics/AreaLightBrdfTable.hpp"
 #include "CNA/Graphics/AsciiPass.hpp"
 #include "CNA/Graphics/AsciiPostProcessEffect.hpp"
 #include "CNA/Graphics/AsciiQuantizeMode.hpp"
