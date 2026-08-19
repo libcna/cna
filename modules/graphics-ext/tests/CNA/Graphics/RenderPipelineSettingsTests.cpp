@@ -38,6 +38,46 @@ TEST(RenderPipelineSettingsTest, DefaultsAreTheInertPipeline)
     EXPECT_FLOAT_EQ(settings.getGamma(), 2.2f);
 }
 
+TEST(RenderPipelineSettingsTest, TheSsrFieldsRoundTripAndAreValidated)
+{
+    // plan_modern.md MOD-2004. Every field the pass reads, and the two whose out-of-range case is a
+    // decision rather than an oversight: distances clamp at zero because a negative reflection
+    // distance has no meaning, and the edge fade clamps at half the frame because a fade wider than
+    // that would consume the whole image.
+    RenderPipelineSettings settings;
+
+    EXPECT_FALSE(settings.isSSREnabled()) << "SSR must be off by default";
+    settings.setSSREnabled(true);
+    EXPECT_TRUE(settings.isSSREnabled());
+
+    settings.setSSRMaxDistance(12.5f);
+    settings.setSSRStepCount(48);
+    settings.setSSRThickness(1.5f);
+    settings.setSSRDepthBias(0.2f);
+    settings.setSSREdgeFade(0.25f);
+    settings.setSSRIntensity(0.75f);
+    EXPECT_FLOAT_EQ(settings.getSSRMaxDistance(), 12.5f);
+    EXPECT_EQ(settings.getSSRStepCount(), 48);
+    EXPECT_FLOAT_EQ(settings.getSSRThickness(), 1.5f);
+    EXPECT_FLOAT_EQ(settings.getSSRDepthBias(), 0.2f);
+    EXPECT_FLOAT_EQ(settings.getSSREdgeFade(), 0.25f);
+    EXPECT_FLOAT_EQ(settings.getSSRIntensity(), 0.75f);
+
+    settings.setSSRMaxDistance(-1.0f);
+    settings.setSSRThickness(-1.0f);
+    settings.setSSRDepthBias(-1.0f);
+    settings.setSSRIntensity(-1.0f);
+    EXPECT_FLOAT_EQ(settings.getSSRMaxDistance(), 0.0f);
+    EXPECT_FLOAT_EQ(settings.getSSRThickness(), 0.0f);
+    EXPECT_FLOAT_EQ(settings.getSSRDepthBias(), 0.0f);
+    EXPECT_FLOAT_EQ(settings.getSSRIntensity(), 0.0f);
+
+    settings.setSSREdgeFade(5.0f);
+    EXPECT_FLOAT_EQ(settings.getSSREdgeFade(), 0.5f);
+    settings.setSSREdgeFade(-5.0f);
+    EXPECT_FLOAT_EQ(settings.getSSREdgeFade(), 0.0f);
+}
+
 TEST(RenderPipelineSettingsTest, TheNewPassFieldsHaveUsableDefaults)
 {
     const RenderPipelineSettings settings;

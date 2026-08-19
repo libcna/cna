@@ -117,6 +117,41 @@ namespace CNA::Graphics {
          */
         void setSSAOSampleCount(int value);
 
+        /** @brief Returns true if screen-space reflections are enabled. */
+        [[nodiscard]] bool isSSREnabled() const;
+        /** @brief Enables or disables the screen-space reflection pass. */
+        void setSSREnabled(bool value);
+
+        /** @brief Returns how far a reflected ray travels, in world units. */
+        [[nodiscard]] float getSSRMaxDistance() const;
+        /** @brief Sets how far a reflected ray travels, in world units. */
+        void setSSRMaxDistance(float value);
+
+        /** @brief Returns how many steps a reflected ray is marched in. */
+        [[nodiscard]] int getSSRStepCount() const;
+        /** @brief Sets how many steps a reflected ray is marched in. */
+        void setSSRStepCount(int value);
+
+        /** @brief Returns how far behind a surface a ray may pass and still count as a hit. */
+        [[nodiscard]] float getSSRThickness() const;
+        /** @brief Sets how far behind a surface a ray may pass and still count as a hit. */
+        void setSSRThickness(float value);
+
+        /** @brief Returns how far past a surface a ray must travel before a hit counts. */
+        [[nodiscard]] float getSSRDepthBias() const;
+        /** @brief Sets how far past a surface a ray must travel before a hit counts. */
+        void setSSRDepthBias(float value);
+
+        /** @brief Returns how wide the fade at the edge of the screen is, in screen fractions. */
+        [[nodiscard]] float getSSREdgeFade() const;
+        /** @brief Sets how wide the fade at the edge of the screen is, in screen fractions. */
+        void setSSREdgeFade(float value);
+
+        /** @brief Returns how strongly the reflection is mixed over the frame. */
+        [[nodiscard]] float getSSRIntensity() const;
+        /** @brief Sets how strongly the reflection is mixed over the frame. */
+        void setSSRIntensity(float value);
+
         // ── Anti-aliasing ────────────────────────────────────────────────────
 
         /** @brief Returns true if the FXAA post-process pass is enabled. */
@@ -230,6 +265,13 @@ namespace CNA::Graphics {
         float           ssaoRadius_      = 0.5f;
         float           ssaoIntensity_   = 1.0f;
         int             ssaoSampleCount_ = 16;
+        bool            ssrEnabled_      = false;
+        float           ssrMaxDistance_  = 8.0f;
+        int             ssrStepCount_    = 32;
+        float           ssrThickness_    = 0.5f;
+        float           ssrDepthBias_    = 0.05f;
+        float           ssrEdgeFade_     = 0.1f;
+        float           ssrIntensity_    = 1.0f;
         float           fxaaEdgeThreshold_ = 0.125f;
 
         bool            fxaaEnabled_     = false;

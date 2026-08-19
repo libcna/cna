@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include <algorithm>
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
 
 #ifdef CNA_CNAEXT
@@ -66,6 +67,27 @@ namespace CNA::Graphics {
 
     int             RenderPipelineSettings::getSSAOSampleCount()  const { return ssaoSampleCount_; }
     void            RenderPipelineSettings::setSSAOSampleCount(int v)   { ssaoSampleCount_ = v; }
+
+    bool            RenderPipelineSettings::isSSREnabled()        const { return ssrEnabled_; }
+    void            RenderPipelineSettings::setSSREnabled(bool v)       { ssrEnabled_ = v; }
+
+    float           RenderPipelineSettings::getSSRMaxDistance()   const { return ssrMaxDistance_; }
+    void            RenderPipelineSettings::setSSRMaxDistance(float v)  { ssrMaxDistance_ = AtLeast(v, 0.0f); }
+
+    int             RenderPipelineSettings::getSSRStepCount()     const { return ssrStepCount_; }
+    void            RenderPipelineSettings::setSSRStepCount(int v)      { ssrStepCount_ = v; }
+
+    float           RenderPipelineSettings::getSSRThickness()     const { return ssrThickness_; }
+    void            RenderPipelineSettings::setSSRThickness(float v)    { ssrThickness_ = AtLeast(v, 0.0f); }
+
+    float           RenderPipelineSettings::getSSRDepthBias()     const { return ssrDepthBias_; }
+    void            RenderPipelineSettings::setSSRDepthBias(float v)    { ssrDepthBias_ = AtLeast(v, 0.0f); }
+
+    float           RenderPipelineSettings::getSSREdgeFade()      const { return ssrEdgeFade_; }
+    void            RenderPipelineSettings::setSSREdgeFade(float v)     { ssrEdgeFade_ = std::clamp(v, 0.0f, 0.5f); }
+
+    float           RenderPipelineSettings::getSSRIntensity()     const { return ssrIntensity_; }
+    void            RenderPipelineSettings::setSSRIntensity(float v)    { ssrIntensity_ = AtLeast(v, 0.0f); }
 
     bool            RenderPipelineSettings::isFXAAEnabled()       const { return fxaaEnabled_; }
     void            RenderPipelineSettings::setFXAAEnabled(bool v)      { fxaaEnabled_ = v; }

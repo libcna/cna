@@ -340,6 +340,73 @@ TEST(RenderPipelineTest, TheFixedPassOrderIsSsaoThenBloomThenTonemapThenFxaa)
     EXPECT_EQ(user.applyCount, 1);
 }
 
+TEST(RenderPipelineTest, SsrSitsBetweenSsaoAndBloom)
+{
+    // plan_modern.md MOD-2005. Two decisions, each with a reason. SSR runs **after SSAO**, because
+    // what a mirror shows should be the shaded scene rather than the unshaded one; and **before the
+    // tonemapper**, for the reason bloom is -- a reflection carries scene-referred colour, and
+    // mixing it in after the range has been compressed makes a reflected highlight
+    // indistinguishable from a reflected white wall.
+    GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+
+    auto& settings = pipeline.getSettings();
+    settings.setSSAOEnabled(true);
+    settings.setSSREnabled(true);
+    settings.setBloomEnabled(true);
+    settings.setTonemappingMode(TonemappingMode::Aces);
+    settings.setFXAAEnabled(true);
+
+    pipeline.begin(Color::Black);
+    pipeline.end();
+
+    EXPECT_EQ(pipeline.getLastFramePassCount(), 5);   // ssao, ssr, bloom, tonemap, fxaa
+}
+
+TEST(RenderPipelineTest, SsrAloneIsEnoughToNeedASceneTarget)
+{
+    // A pass that reads the frame cannot run against the back buffer, so enabling it must take the
+    // pipeline out of its inert short circuit -- the same claim every other pass has.
+    GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+
+    pipeline.begin(Color::Black);
+    pipeline.end();
+    EXPECT_EQ(pipeline.getGpuMemoryEstimateBytes(), 0u) << "an inert pipeline allocated a target";
+
+    pipeline.getSettings().setSSREnabled(true);
+    pipeline.begin(Color::Black);
+    pipeline.end();
+    EXPECT_GT(pipeline.getGpuMemoryEstimateBytes(), 0u)
+        << "enabling SSR did not take the pipeline off the back buffer";
+}
+
+TEST(RenderPipelineTest, TheCameraIsValidatedAndReachesTheScreenSpacePasses)
+{
+    // The pipeline has never carried a camera before: the sky was told one, and no pass needed it.
+    // SSR does, and gets it from here. The range is validated at the setter rather than at the
+    // frame, because the failure it prevents -- reconstructing positions of NaN from a depth
+    // normalised by a zero far plane -- produces a frame that renders and is silently wrong.
+    GraphicsDevice gd;
+    RenderPipeline pipeline(gd);
+
+    const Matrix view = Matrix::CreateLookAt(Microsoft::Xna::Framework::Vector3::Zero,
+                             Microsoft::Xna::Framework::Vector3(0.0f, 0.0f, -1.0f),
+                             Microsoft::Xna::Framework::Vector3::Up);
+    const Matrix projection =
+        Matrix::CreatePerspectiveFieldOfView(0.7853982f, 1.0f, 1.0f, 100.0f);
+
+    EXPECT_THROW(pipeline.setCamera(view, projection, 0.0f, 100.0f), std::invalid_argument);
+    EXPECT_THROW(pipeline.setCamera(view, projection, -1.0f, 100.0f), std::invalid_argument);
+    EXPECT_THROW(pipeline.setCamera(view, projection, 10.0f, 10.0f), std::invalid_argument);
+    EXPECT_THROW(pipeline.setCamera(view, projection, 100.0f, 1.0f), std::invalid_argument);
+    EXPECT_NO_THROW(pipeline.setCamera(view, projection, 1.0f, 100.0f));
+}
+
 // =====================================================================================
 // Shadow integration (MOD-858)
 // =====================================================================================

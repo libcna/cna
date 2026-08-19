@@ -226,8 +226,12 @@ void main() {
 
     void SsrPass::apply(const PostProcessContext& context)
     {
-        const bool haveInputs =
-            context.sourceDepth != nullptr && context.sourceNormals != nullptr;
+        // A camera is as much an input as the two images: without a projection there is no view
+        // space to march in, and a pass that guessed one would reflect the scene through an
+        // invented lens. The pipeline supplies it from `setCamera`; a caller who never called that
+        // gets its frame back rather than a wrong reflection.
+        const bool haveInputs = context.sourceDepth != nullptr &&
+                                context.sourceNormals != nullptr && context.farPlane > 0.0f;
         if (effect_ == nullptr || !effect_->IsEffectValid() || !haveInputs)
         {
             fullscreen_->draw(context.source, context.destination, nullptr,
@@ -235,7 +239,17 @@ void main() {
             return;
         }
 
-        const float far = context.farPlane > 0.0f ? context.farPlane : 1.0f;
+        const float far = context.farPlane;
+
+        // The settings bag wins where one is supplied, matching every other pass: a pipeline that
+        // applied a quality preset must not be overruled by a pass-local default nobody set.
+        const RenderPipelineSettings* settings = context.settings;
+        const float maxDistance = settings != nullptr ? settings->getSSRMaxDistance() : maxDistance_;
+        const float thickness   = settings != nullptr ? settings->getSSRThickness()   : thickness_;
+        const float depthBias   = settings != nullptr ? settings->getSSRDepthBias()   : depthBias_;
+        const float edgeFade    = settings != nullptr ? settings->getSSREdgeFade()    : edgeFade_;
+        const float intensity   = settings != nullptr ? settings->getSSRIntensity()   : intensity_;
+        const int   stepCount   = settings != nullptr ? settings->getSSRStepCount()   : stepCount_;
 
         effect_->Apply();
         effect_->SetUniformMat4("uCameraProjection", &context.projection.M11);
@@ -249,13 +263,13 @@ void main() {
         effect_->SetUniformVec2("uDepthSize", static_cast<float>(context.width),
                                 static_cast<float>(context.height));
         effect_->SetUniformFloat("uFarPlaneScale", far);
-        effect_->SetUniformFloat("uMaxDistance", maxDistance_ / far);
-        effect_->SetUniformFloat("uDepthBias", depthBias_ / far);
-        effect_->SetUniformFloat("uThickness", thickness_ / far);
-        effect_->SetUniformFloat("uIntensity", intensity_);
-        effect_->SetUniformFloat("uEdgeFade", edgeFade_);
+        effect_->SetUniformFloat("uMaxDistance", maxDistance / far);
+        effect_->SetUniformFloat("uDepthBias", depthBias / far);
+        effect_->SetUniformFloat("uThickness", thickness / far);
+        effect_->SetUniformFloat("uIntensity", intensity);
+        effect_->SetUniformFloat("uEdgeFade", edgeFade);
         effect_->SetUniformInt("uStepCount",
-                               std::clamp(stepCount_, kMinStepCount, kMaxStepCount));
+                               std::clamp(stepCount, kMinStepCount, kMaxStepCount));
 
         fullscreen_->draw(context.source, context.destination, effect_.get(),
                           context.width, context.height);

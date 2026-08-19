@@ -39,6 +39,7 @@ namespace CNA::Graphics {
     class ShadowMap;
     class Skybox;
     class SsaoPass;
+    class SsrPass;
     class TonemapPass;
 
     /**
@@ -190,6 +191,28 @@ namespace CNA::Graphics {
         [[nodiscard]] Skybox* getSkybox() const;
 
         /**
+         * @brief Sets the camera the screen-space passes reason about.
+         *
+         * The pipeline has no camera of its own -- a game's view and projection live wherever the
+         * game keeps them. The sky has always needed one; since `MOD-2005` so do the passes that
+         * reconstruct a view-space position from the depth image, and those need the near and far
+         * planes as well because the prepass normalises its depth by the far plane.
+         *
+         * Calling this also sets the skybox camera, so a game that draws a sky and runs reflections
+         * supplies one camera rather than two that can drift apart. A pass that needs a camera and
+         * is not given one reports `isSupported() == false` and copies its input through, the same
+         * contract a missing depth image gets.
+         *
+         * @param view       The camera's view matrix.
+         * @param projection The camera's projection matrix.
+         * @param nearPlane  The near clip distance; must be positive.
+         * @param farPlane   The far clip distance; must be beyond the near plane.
+         */
+        void setCamera(const Microsoft::Xna::Framework::Matrix& view,
+                       const Microsoft::Xna::Framework::Matrix& projection,
+                       float nearPlane, float farPlane);
+
+        /**
          * @brief Sets the camera the skybox is drawn from.
          *
          * The pipeline has no camera of its own -- a game's view and projection live wherever the
@@ -336,9 +359,13 @@ namespace CNA::Graphics {
         std::unique_ptr<TonemapPass> tonemapPass_;
         std::unique_ptr<FxaaPass> fxaaPass_;
         std::unique_ptr<SsaoPass> ssaoPass_;
+        std::unique_ptr<SsrPass>  ssrPass_;
         Skybox* skybox_ = nullptr;
         Microsoft::Xna::Framework::Matrix skyboxView_{};
         Microsoft::Xna::Framework::Matrix skyboxProjection_{};
+        Microsoft::Xna::Framework::Matrix cameraInverseProjection_{};
+        float cameraNearPlane_ = 0.0f;
+        float cameraFarPlane_  = 0.0f;
         bool skyboxDrawn_ = false;
         ShadowMap* shadowMap_ = nullptr;
         DirectionalLightEXT shadowLight_{};

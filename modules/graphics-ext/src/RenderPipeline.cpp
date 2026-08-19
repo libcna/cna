@@ -8,6 +8,7 @@
 #include "CNA/Graphics/ShadowMap.hpp"
 #include "CNA/Graphics/Skybox.hpp"
 #include "CNA/Graphics/SsaoPass.hpp"
+#include "CNA/Graphics/SsrPass.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
 #include "CNA/Graphics/TonemapPass.hpp"
@@ -32,7 +33,8 @@ namespace CNA::Graphics {
         : device_(device), chain_(device), bloomPass_(std::make_unique<BloomPass>(device)),
           tonemapPass_(std::make_unique<TonemapPass>(device)),
           fxaaPass_(std::make_unique<FxaaPass>(device)),
-          ssaoPass_(std::make_unique<SsaoPass>(device))
+          ssaoPass_(std::make_unique<SsaoPass>(device)),
+          ssrPass_(std::make_unique<SsrPass>(device))
     {
         // plan_modern.md MOD-715. After a context loss every GPU object this pipeline holds names
         // storage the driver has already destroyed; rendering into one is undefined rather than
@@ -66,7 +68,8 @@ namespace CNA::Graphics {
             return true;
         if (settings_.getTonemappingMode() != TonemappingMode::None)
             return true;
-        if (settings_.isBloomEnabled() || settings_.isSSAOEnabled() || settings_.isFXAAEnabled())
+        if (settings_.isBloomEnabled() || settings_.isSSAOEnabled() || settings_.isFXAAEnabled() ||
+            settings_.isSSREnabled())
             return true;
         return !userPasses_.empty();
     }
@@ -178,6 +181,21 @@ namespace CNA::Graphics {
         skyboxProjection_ = projection;
     }
 
+    void RenderPipeline::setCamera(const Matrix& view, const Matrix& projection,
+                                   const float nearPlane, const float farPlane)
+    {
+        if (nearPlane <= 0.0f || farPlane <= nearPlane)
+            throw std::invalid_argument(
+                "CNA::Graphics::RenderPipeline::setCamera: the near plane must be positive and the "
+                "far plane beyond it -- the prepass normalises its depth by the far plane, so a "
+                "zero or inverted range reconstructs positions of NaN rather than a wrong image");
+
+        setSkyboxCamera(view, projection);
+        cameraInverseProjection_ = Matrix::Invert(projection);
+        cameraNearPlane_         = nearPlane;
+        cameraFarPlane_          = farPlane;
+    }
+
     bool RenderPipeline::didSkyboxDraw() const
     {
         return skyboxDrawn_;
@@ -213,6 +231,12 @@ namespace CNA::Graphics {
         // bloom's threshold above all -- should see the shaded result rather than the unshaded one.
         if (settings_.isSSAOEnabled())
             chain_.addPass(ssaoPass_.get());
+        // SSR next, and before the tonemapper for the same reason bloom is: a reflection carries
+        // scene-referred colour, and mixing it in after the range has been compressed away makes a
+        // reflected highlight indistinguishable from a reflected white wall. It comes after SSAO
+        // because what a mirror shows should be the shaded scene, not the unshaded one.
+        if (settings_.isSSREnabled())
+            chain_.addPass(ssrPass_.get());
         // Bloom reads scene-referred values -- its threshold separates genuinely bright pixels
         // from merely white ones -- so it runs before the tonemapper compresses that range away.
         if (settings_.isBloomEnabled())
@@ -235,6 +259,10 @@ namespace CNA::Graphics {
         context.settings      = &settings_;
         context.sourceDepth   = sceneDepth_;
         context.sourceNormals = sceneNormals_;
+        context.projection        = skyboxProjection_;
+        context.inverseProjection = cameraInverseProjection_;
+        context.nearPlane         = cameraNearPlane_;
+        context.farPlane          = cameraFarPlane_;
 
         chain_.apply(context);
         lastFramePassCount_ = static_cast<int>(chain_.getPassCount());
