@@ -6239,10 +6239,10 @@
       "kinds": [
         "method"
       ],
-      "mapping": "No C mapping: every one of these is a template over an arbitrary C++ type `T`, and C can neither name `T` nor receive a value of it. The C API instead exposes the fixed-value reads, the presence-only untyped read and the typed asset-load routes on the content manager",
+      "mapping": "No C mapping: every one of these is a template over an arbitrary C++ type `T`. The wording this row used to carry -- that C can neither name `T` nor receive a value of it -- is the wording `CBIND-069` found wanting elsewhere, because `CBIND-056` gave C a concrete type it can name in `ForeignContentObjectEXT`. The sharper reason is that naming a carrier type would not help here: a typed read dispatches to the reader registered for the type in the compiled stream, and C cannot register a reader for a compiled type -- that needs a `LooseFileContentTypeReader<T>` subclass instance rather than a callback -- so a carrier-typed read would find no reader to dispatch to. C gets the fixed-value reads, the presence-only untyped read, the typed asset-load routes on the content manager, and for its own types the `.cnj` loader registration and foreign load",
       "tests": "Doxygen declaration inventory; the non-template reads these back are covered by `ContentReaderSmoke.c`",
       "status": "not-applicable",
-      "task": "CBIND-036B2",
+      "task": "CBIND-073",
       "approved_symbols": [
         "CPP-5B698E896850",
         "CPP-685F4E9E38EB",
