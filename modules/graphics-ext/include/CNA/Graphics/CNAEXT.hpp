@@ -81,6 +81,7 @@
 #include "CNA/Graphics/ClusteredLightGrid.hpp"
 #include "CNA/Graphics/ClusteredLightSetEXT.hpp"
 #include "CNA/Graphics/ClusteredLightType.hpp"
+#include "CNA/Graphics/ClusteredShadowPolicyEXT.hpp"
 #include "CNA/Graphics/CubeShadowMap.hpp"
 #include "CNA/Graphics/DirectionalLightEXT.hpp"
 #include "CNA/Graphics/PointLightEXT.hpp"
