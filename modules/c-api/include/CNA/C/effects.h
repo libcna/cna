@@ -706,6 +706,12 @@ CNA_C_API CNA_Result cna_effect_parameter_set_value_string(
  * @param texture_type Texture2D, Texture3D or TextureCube getter identity.
  * @param out_texture Receives the retained handle or invalid handle for null.
  * @return A CNA result code.
+ *
+ * There is deliberately no `cna_effect_parameter_get_graphics_device`. A parameter reached through
+ * a nested element or structure-member collection genuinely does not carry the owning device, but a
+ * caller that needs one does not have to ask the parameter: the handle this route returns is a
+ * graphics resource, so it answers `cna_graphics_resource_get_graphics_device` itself, under that
+ * route's own callback-scope rule.
  */
 CNA_C_API CNA_Result cna_effect_parameter_get_value_texture(
     CNA_EffectParameterHandle parameter,
@@ -1180,12 +1186,56 @@ CNA_C_API CNA_Result cna_effect_create_empty(
     CNA_EffectHandle* out_effect);
 
 /**
- * @brief Attempts to create an Effect from compiled XNA `.fx` bytecode.
+ * @brief Creates an Effect from compiled XNA/FNA Effect Framework bytecode.
+ *
  * @param graphics_device Borrowed graphics-device handle from an active game callback.
- * @param effect_code Bytecode bytes copied during the call.
- * @param effect_code_count Number of bytes at @p effect_code.
- * @param out_effect Receives the owned effect handle on success.
- * @return `CNA_RESULT_NOT_SUPPORTED` while native CNA bytecode loading is unavailable.
+ * @param effect_code Bytecode bytes copied during the call; the caller keeps its buffer.
+ * @param effect_code_count Number of bytes at @p effect_code; must be positive.
+ * @param out_effect Receives the owned effect handle on success, destroyed with
+ *        `cna_effect_destroy`. Every failure leaves it `CNA_INVALID_HANDLE`.
+ * @return `CNA_RESULT_SUCCESS`, or one of the failures below.
+ *
+ * ### What this accepts
+ *
+ * The Direct3D 9 Effect Framework binary an XNA or FNA game ships as content -- a `.fxb`,
+ * including the extra wrapper the XNA 4 effect compiler prepends -- and the identical `Effect`
+ * payload carried inside an XNB asset. The reflected object graph is then reachable through
+ * `cna_effect_get_parameters`, `cna_effect_get_techniques` and their collections, and a pass
+ * applies and draws like any other effect.
+ *
+ * Three things are deliberately **not** accepted, each refused by name rather than guessed at:
+ * MonoGame's `MGFX`/`.mgfxo` container, which is a different format; HLSL `.fx` **source**, since
+ * this runtime embeds no HLSL compiler and the XNA/FNA toolchain must compile it first; and
+ * GLSL/SPIR-V/Metal source pairs, which are `cna_shader_effect_create`'s subject, a separate API
+ * behind a separate capability.
+ *
+ * ### Which builds accept it
+ *
+ * Support is a renderer property, not a property of this ABI, and
+ * `cna_graphics_device_supports_capability` with `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`
+ * answers it for the running build. It is true for the `FNA3D` renderer always, and for the
+ * `SDL_GPU`, `VULKAN` and EasyGL-family (`OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`,
+ * `WEBGL2`) renderers when their build option is on -- the effect runtime is a fetched dependency
+ * those families do not otherwise need, so the capability never claims more than the binary
+ * actually contains. Every other renderer identity reports false and refuses the bytecode rather
+ * than quietly drawing with a stock shader, because a silent fallback makes a porting bug look
+ * like an art bug. `docs/fx-compiled-effects.md` is the full matrix, including which limitations
+ * are renderer-wide and which are specific to compiled effects.
+ *
+ * ### Failures
+ *
+ * - `CNA_RESULT_INVALID_ARGUMENT` -- a null output, an empty buffer, a buffer whose pointer and
+ *   count disagree, or bytes without a structurally valid Effect Framework header. An argument is
+ *   judged before any renderer is consulted, so these hold in every build.
+ * - `CNA_RESULT_NOT_SUPPORTED` -- a recognized container this constructor does not accept (the
+ *   `MGFX` case above), or a renderer whose `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS` is false.
+ *   The message names which of the two it was.
+ * - `CNA_RESULT_INVALID_STATE`, `CNA_RESULT_OVERFLOW`, `CNA_RESULT_OUT_OF_MEMORY` -- a
+ *   structurally valid binary whose reflected graph is inconsistent, exceeds a documented bound
+ *   (the payload is capped at 64 MiB), or cannot be allocated.
+ *
+ * Treat a binary from outside the application as untrusted input: it is bounded and
+ * arithmetic-checked and has been fuzzed hard, which is a measured bound rather than a proof.
  */
 CNA_C_API CNA_Result cna_effect_create_compiled(
     CNA_Handle graphics_device,
@@ -1194,12 +1244,70 @@ CNA_C_API CNA_Result cna_effect_create_compiled(
     CNA_EffectHandle* out_effect);
 
 /**
+ * @brief Loads an Effect asset as an owned effect handle.
+ *
+ * @param content_manager Owned content-manager handle.
+ * @param asset_name UTF-8 logical asset name, with or without its extension.
+ * @param out_effect Receives an owned effect handle on success, destroyed with
+ *        `cna_effect_destroy`. Failure leaves it `CNA_INVALID_HANDLE`.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_IO` for a missing, malformed or wrongly-typed asset;
+ *         `CNA_RESULT_NOT_SUPPORTED` when the asset is compiled Effect Framework bytecode and the
+ *         active renderer's `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS` is false, or when it names a
+ *         shader the renderer cannot compile; or a documented argument/handle/thread failure.
+ *
+ * This maps the canonical `Load<Effect>` specialization, which is the route an XNA game's
+ * `ContentManager.Load<Effect>` takes, and it reads all three shapes CNA supports: a compiled
+ * `.xnb` Effect asset, a `.cnj` descriptor naming one of the stock effects, and a `.cnj` descriptor
+ * carrying custom shader source. What comes back is an ordinary effect handle -- parameters,
+ * techniques, passes and `cna_effect_apply` all behave as they do for an effect built by hand.
+ *
+ * Which of the three an asset is decides which failures are possible, so branch on the result
+ * rather than on the file name: only the compiled shape depends on the compiled-effect capability,
+ * and `cna_graphics_device_supports_capability` answers that in advance.
+ *
+ * The uncompilable-shader failure above is this route's and does **not** generalize to
+ * @ref cna_shader_effect_create just below, which succeeds for source no renderer can run. This
+ * route owns the compile; that one does not.
+ */
+CNA_C_API CNA_Result cna_content_manager_load_effect(
+    CNA_Handle content_manager,
+    CNA_StringView asset_name,
+    CNA_EffectHandle* out_effect);
+
+/**
  * @brief Creates a source-based ShaderEffect.
+ *
  * @param graphics_device Borrowed graphics-device handle from an active game callback.
  * @param vertex_source UTF-8 vertex-shader source copied by the call.
  * @param fragment_source UTF-8 fragment-shader source copied by the call.
  * @param out_effect Receives the owned effect handle.
- * @return A CNA result code; renderer availability is reported separately.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when both sources are empty or the
+ *         output is null, `CNA_RESULT_ENCODING` for source that is not valid UTF-8, or a documented
+ *         handle/thread failure.
+ *
+ * **Success means the effect object exists, not that the source compiled.** Read the failure list
+ * above literally: a shader the renderer rejects is not on it. Whether a renderer compiles at
+ * construction, and whether it inspects the source at all, is renderer-specific and this ABI does
+ * not normalize it -- doing so would mean parsing shader source here. Measured across two of CNA's
+ * renderers, the same nonsense text is accepted by both, and afterwards one reports it valid while
+ * the other reports it invalid.
+ *
+ * So ask @ref cna_shader_effect_is_valid after creating, and read its answer the way that route
+ * documents it. The one case this ABI does settle is both sources empty, which is refused
+ * identically everywhere rather than left to the renderer.
+ *
+ * **Do not carry the contract over from @ref cna_content_manager_load_effect.** It is the nearest
+ * route in this header and it makes the opposite promise about the same input: a shader the
+ * renderer cannot compile is among *its* documented failures. That route owns the whole load,
+ * including the compile, so it can answer for it; this one hands source to a renderer that decides
+ * for itself. Two adjacent routes, two different answers -- and reading the wrong one is a mistake
+ * a binding author has already made here, which is why it is called out rather than left to the
+ * failure lists to imply.
+ *
+ * `CNA_GRAPHICS_CAPABILITY_CUSTOM_EFFECTS` gates whether this route is usable at all, and is a
+ * different capability from `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`: a renderer can support
+ * source-based effects while refusing compiled `.xnb` ones, and the software renderer does exactly
+ * that. Testing the wrong one reports a game as blocked that is not.
  */
 CNA_C_API CNA_Result cna_shader_effect_create(
     CNA_Handle graphics_device,
@@ -1354,7 +1462,18 @@ CNA_C_API CNA_Result cna_effect_is_exact_stock_sprite_effect(
     CNA_EffectHandle effect,
     CNA_Bool* out_is_exact);
 
-/** @brief Reports whether a ShaderEffect has a valid compiled shader program. */
+/**
+ * @brief Reports what the active renderer concluded about a ShaderEffect's source.
+ *
+ * @param effect ShaderEffect handle.
+ * @param out_is_valid Receives the renderer's verdict.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * `CNA_TRUE` means *nothing rejected this source*, which is weaker than *this will draw*. A
+ * renderer that compiles the source reports a real verdict; a renderer that does not inspect source
+ * at all -- the software rasterizer accepts any non-empty text -- reports `CNA_TRUE` for text that
+ * cannot draw anything. `CNA_FALSE` is the strong answer: it means a renderer looked and refused.
+ */
 CNA_C_API CNA_Result cna_shader_effect_is_valid(
     CNA_EffectHandle effect,
     CNA_Bool* out_is_valid);
@@ -1399,6 +1518,32 @@ CNA_C_API CNA_Result cna_shader_effect_set_uniform_int32(
     CNA_EffectHandle effect,
     CNA_StringView name,
     int32_t value);
+
+/**
+ * @brief Declares the std140 uniform block this effect's parameters live in.
+ *
+ * @param effect Owned ShaderEffect handle.
+ * @param block_size_bytes Size of the whole block in bytes, std140-padded; must not be negative.
+ * @param names Array of @p count UTF-8 member names, copied by the call. May be null only when
+ *        @p count is zero.
+ * @param offsets Array of @p count byte offsets from the start of the block, one per name. May be
+ *        null only when @p count is zero.
+ * @param count Number of members; zero clears any previous declaration.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a malformed array pair, a name
+ *         that is not valid UTF-8, or a count above the canonical range, or a documented
+ *         handle/thread failure.
+ *
+ * Required on a renderer whose shading dialect has no loose (non-block) uniforms -- every SPIR-V
+ * target -- and harmlessly ignored everywhere else, so the same call can sit unconditionally
+ * beside the effect's construction. Ask `cna_graphics_device_get_shader_dialect_ext` which dialect
+ * the active renderer wants.
+ */
+CNA_C_API CNA_Result cna_shader_effect_declare_uniform_block_ext(
+    CNA_EffectHandle effect,
+    int32_t block_size_bytes,
+    const CNA_StringView* names,
+    const int32_t* offsets,
+    uint64_t count);
 
 /** @brief Sets a named array of scalar float shader uniforms. */
 CNA_C_API CNA_Result cna_shader_effect_set_uniform_float_array(
@@ -2284,6 +2429,32 @@ CNA_C_API CNA_Result cna_texture_transform_ext_equals(
     const CNA_TextureTransformEXT* left,
     const CNA_TextureTransformEXT* right,
     CNA_Bool* out_equal);
+
+/**
+ * @brief Reports whether the effect multiplies base colour by the vertex colour attribute.
+ *
+ * @param effect PbrEffect or SkinnedPbrEffect handle.
+ * @param out_enabled Receives `CNA_TRUE` when vertex colour is applied.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * False by default. A vertex layout carrying a colour slot fills it with opaque white when the
+ * primitive has none, so a renderer reading it regardless is still correct -- this states the
+ * intent rather than relying on that fill.
+ */
+CNA_C_API CNA_Result cna_pbr_effect_get_vertex_color_enabled_ext(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_enabled);
+
+/**
+ * @brief Sets whether the effect multiplies base colour by the vertex colour attribute.
+ *
+ * @param effect PbrEffect or SkinnedPbrEffect handle.
+ * @param enabled `CNA_TRUE` or `CNA_FALSE`; any other value is refused.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_pbr_effect_set_vertex_color_enabled_ext(
+    CNA_EffectHandle effect,
+    CNA_Bool enabled);
 
 /** @brief Gets `KHR_materials_ior`'s index of refraction; 1.5 by default. */
 CNA_C_API CNA_Result cna_pbr_effect_get_ior_ext(CNA_EffectHandle effect, float* out_value);

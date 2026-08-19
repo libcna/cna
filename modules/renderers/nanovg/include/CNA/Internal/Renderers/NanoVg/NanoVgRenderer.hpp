@@ -49,12 +49,11 @@ namespace CNA::Internal::Renderers::NanoVg
      * No single-live-context restriction: unlike ShivaVG (`shContext.c`'s process-global
      * `VGContext*`), NanoVG's `NVGcontext*` is an ordinary per-instance object with no hidden
      * global singleton, so multiple `NanoVgRenderer` instances may coexist in one process --
-     * unlike a plain multi-window OpenGL app, the caller does not need to call
-     * `SDL_GL_MakeCurrent` itself between instances: every entry point that issues GL/NanoVG
-     * calls (directly, or indirectly through `NanoVgSpriteBatchRenderer`/`NanoVgTextureRenderer`,
-     * both of which hold a reference back to their owning `NanoVgRenderer`) calls
-     * `MakeContextCurrentEXT()` first, so instances may be freely interleaved from the same
-     * thread.
+     * unlike a plain multi-window OpenGL app, the caller does not need to re-bind the current GL
+     * context itself between instances: every entry point that issues GL/NanoVG calls (directly,
+     * or indirectly through `NanoVgSpriteBatchRenderer`/`NanoVgTextureRenderer`, both of which
+     * hold a reference back to their owning `NanoVgRenderer`) calls `MakeContextCurrentEXT()`
+     * first, so instances may be freely interleaved from the same thread.
      */
     class NanoVgRenderer final : public IGraphicsRenderer
     {

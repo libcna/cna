@@ -8,12 +8,14 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameWindow.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "CNA/Platform/NativeWindowHandle.hpp"
 #include "Microsoft/Xna/Framework/LaunchParameters.hpp"
 #include "Microsoft/Xna/Framework/TitleContainer.hpp"
 #include "Microsoft/Xna/Framework/TitleLocation.hpp"
 #include "System/IO/Stream.hpp"
 #include "System/TimeSpan.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <mutex>
 #include <stdexcept>
@@ -26,6 +28,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
 
@@ -38,6 +41,34 @@ using Microsoft::Xna::Framework::TitleLocation;
 [[nodiscard]] CNA_Result InvalidInput(const char* const message)
 {
     return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
+}
+
+constexpr uint32_t NativeWindowHandleVersion = UINT32_C(1);
+
+[[nodiscard]] CNA_NativeWindowSystem MapNativeWindowSystem(
+    const CNA::Platform::NativeWindowSystem system) noexcept
+{
+    switch (system) {
+        case CNA::Platform::NativeWindowSystem::Win32:
+            return CNA_NATIVE_WINDOW_SYSTEM_WIN32;
+        case CNA::Platform::NativeWindowSystem::X11:
+            return CNA_NATIVE_WINDOW_SYSTEM_X11;
+        case CNA::Platform::NativeWindowSystem::Wayland:
+            return CNA_NATIVE_WINDOW_SYSTEM_WAYLAND;
+        case CNA::Platform::NativeWindowSystem::Cocoa:
+            return CNA_NATIVE_WINDOW_SYSTEM_COCOA;
+        case CNA::Platform::NativeWindowSystem::Android:
+            return CNA_NATIVE_WINDOW_SYSTEM_ANDROID;
+        case CNA::Platform::NativeWindowSystem::Web:
+            return CNA_NATIVE_WINDOW_SYSTEM_WEB;
+        case CNA::Platform::NativeWindowSystem::Headless:
+            return CNA_NATIVE_WINDOW_SYSTEM_HEADLESS;
+        case CNA::Platform::NativeWindowSystem::Terminal:
+            return CNA_NATIVE_WINDOW_SYSTEM_TERMINAL;
+        case CNA::Platform::NativeWindowSystem::Unknown:
+            break;
+    }
+    return CNA_NATIVE_WINDOW_SYSTEM_UNKNOWN;
 }
 
 [[nodiscard]] CNA_Result CopyText(
@@ -202,6 +233,10 @@ CNA_Result cna_game_get_is_mouse_visible(const CNA_Handle gameHandle, CNA_Bool* 
 CNA_Result cna_game_set_is_mouse_visible(const CNA_Handle gameHandle, const CNA_Bool visible)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(visible, "visible");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         Game* game = nullptr;
         if (const CNA_Result result = BorrowGame(gameHandle, &game);
             result != CNA_RESULT_SUCCESS) {
@@ -231,6 +266,10 @@ CNA_Result cna_game_get_is_fixed_time_step(const CNA_Handle gameHandle, CNA_Bool
 CNA_Result cna_game_set_is_fixed_time_step(const CNA_Handle gameHandle, const CNA_Bool fixed)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(fixed, "fixed");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         Game* game = nullptr;
         if (const CNA_Result result = BorrowGame(gameHandle, &game);
             result != CNA_RESULT_SUCCESS) {
@@ -382,6 +421,10 @@ CNA_Result cna_game_get_run_application_ext(const CNA_Handle gameHandle, CNA_Boo
 CNA_Result cna_game_set_run_application_ext(const CNA_Handle gameHandle, const CNA_Bool running)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(running, "running");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         Game* game = nullptr;
         if (const CNA_Result result = BorrowGame(gameHandle, &game);
             result != CNA_RESULT_SUCCESS) {
@@ -643,6 +686,87 @@ CNA_Result cna_game_launch_parameters_copy_value(
     });
 }
 
+namespace {
+
+/// The parameter names in the order the ABI publishes: by name, ordinal, ascending.
+///
+/// Rebuilt per call rather than cached. The canonical container is a hash map the game owns and
+/// anything may add to, so a cache would need an invalidation signal it does not offer; a command
+/// line holds a handful of entries, and recomputing a handful is cheaper than being wrong.
+[[nodiscard]] CNA_Result SortedLaunchParameterNames(
+    const CNA_Handle gameHandle,
+    std::vector<std::string>* const outNames)
+{
+    Game* game = nullptr;
+    if (const CNA_Result result = BorrowGame(gameHandle, &game);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& parameters = game->getLaunchParametersProperty();
+    outNames->clear();
+    outNames->reserve(parameters.size());
+    for (const auto& entry : parameters) {
+        outNames->push_back(entry.first);
+    }
+    std::sort(outNames->begin(), outNames->end());
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result FindLaunchParameterName(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    std::string* const outName)
+{
+    std::vector<std::string> names;
+    if (const CNA_Result result = SortedLaunchParameterNames(gameHandle, &names);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (index >= names.size()) {
+        return InvalidInput("The launch parameter index is outside the parameter count.");
+    }
+    *outName = names[static_cast<std::size_t>(index)];
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_game_launch_parameters_get_key_size(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The launch parameter name size output is null.");
+        }
+        std::string name;
+        if (const CNA_Result result = FindLaunchParameterName(gameHandle, index, &name);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = name.size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_launch_parameters_copy_key(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string name;
+        if (const CNA_Result result = FindLaunchParameterName(gameHandle, index, &name);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(name, destination, capacity, outBytes);
+    });
+}
+
 CNA_Result cna_game_launch_parameters_add(
     const CNA_Handle gameHandle,
     const CNA_StringView key,
@@ -876,6 +1000,10 @@ CNA_Result cna_game_window_set_allow_user_resizing(
     const CNA_Bool allowed)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(allowed, "allowed");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         Microsoft::Xna::Framework::GameWindow* window = nullptr;
         if (const CNA_Result result = BorrowWindow(gameHandle, &window);
             result != CNA_RESULT_SUCCESS) {
@@ -941,8 +1069,49 @@ CNA_Result cna_game_window_get_native_handle_ext(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        // The canonical property and the canonical native accessor answer the same pointer.
+        // XNA's `Handle` property, which is not the native window: CNA initializes it to zero and
+        // never writes a platform value into it. `cna_game_window_get_native_window_ext` is the
+        // route that asks the platform.
         *outHandle = static_cast<uint64_t>(window->getHandleProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_native_window_handle_init(CNA_NativeWindowHandle* const handle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (handle == nullptr) {
+            return InvalidInput("The native-window-handle structure is null.");
+        }
+        *handle = CNA_NativeWindowHandle{};
+        handle->struct_size = static_cast<uint32_t>(sizeof(CNA_NativeWindowHandle));
+        handle->struct_version = NativeWindowHandleVersion;
+        handle->system = CNA_NATIVE_WINDOW_SYSTEM_UNKNOWN;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_window_get_native_window_ext(
+    const CNA_Handle gameHandle,
+    CNA_NativeWindowHandle* const handle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (handle == nullptr ||
+            handle->struct_size < sizeof(CNA_NativeWindowHandle) ||
+            handle->struct_version != NativeWindowHandleVersion) {
+            return InvalidInput("The native-window-handle structure is invalid.");
+        }
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA::Platform::NativeWindowHandle native = window->GetNativeWindowHandleEXT();
+        handle->system = MapNativeWindowSystem(native.system);
+        handle->display = native.display;
+        handle->window = native.window;
+        handle->surface = native.surface;
+        handle->window_id = native.windowId;
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1036,6 +1205,10 @@ CNA_Result cna_game_window_set_is_borderless_ext(
     const CNA_Bool borderless)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(borderless, "borderless");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         Microsoft::Xna::Framework::GameWindow* window = nullptr;
         if (const CNA_Result result = BorrowWindow(gameHandle, &window);
             result != CNA_RESULT_SUCCESS) {
@@ -1074,6 +1247,10 @@ CNA_Result cna_game_window_begin_screen_device_change(
     const CNA_Bool willBeFullScreen)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(willBeFullScreen, "will_be_full_screen");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         Microsoft::Xna::Framework::GameWindow* window = nullptr;
         if (const CNA_Result result = BorrowWindow(gameHandle, &window);
             result != CNA_RESULT_SUCCESS) {

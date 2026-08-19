@@ -351,6 +351,61 @@ CNA_C_API CNA_Result cna_vertex_buffer_set_data_raw(
     uint32_t vertex_stride);
 
 /**
+ * @brief Uploads raw vertex bytes into a window of the buffer, leaving the rest alone.
+ *
+ * @param vertex_buffer Static or dynamic vertex-buffer handle.
+ * @param buffer_offset_in_bytes Byte offset into **the buffer**, a multiple of @p vertex_stride.
+ * @param data Source bytes; null is valid only for a zero-vertex upload.
+ * @param data_byte_count Accessible source byte count.
+ * @param vertex_count Number of vertices to write.
+ * @param vertex_stride Positive byte size of one source vertex.
+ * @return A CNA result code.
+ *
+ * The offset every other transfer route here carries indexes the **caller's array**; this one
+ * indexes the buffer, which is what XNA's `offsetInBytes` means and what a consumer needs to
+ * rewrite one slice of a large dynamic buffer per frame -- the pattern particle systems and
+ * streaming terrain are built on. Bytes outside the window keep whatever they held; bytes never
+ * written by any upload read as zero.
+ *
+ * **Documented deviation, about cost rather than about result.** The renderer contract underneath
+ * replaces a buffer's whole contents -- no renderer family here takes a destination offset -- so
+ * the window is composed on the CPU side and the whole buffer is re-uploaded. The bytes end up
+ * exactly where XNA puts them; what this does not buy is a smaller transfer.
+ */
+CNA_C_API CNA_Result cna_vertex_buffer_set_data_raw_at(
+    CNA_VertexBufferHandle vertex_buffer,
+    uint64_t buffer_offset_in_bytes,
+    const void* data,
+    uint64_t data_byte_count,
+    uint64_t vertex_count,
+    uint32_t vertex_stride);
+
+/**
+ * @brief Reads raw vertex bytes back from a window of the buffer.
+ *
+ * @param vertex_buffer Static or dynamic vertex-buffer handle created readable.
+ * @param buffer_offset_in_bytes Byte offset into **the buffer**.
+ * @param destination Destination bytes; null is valid only for a zero-vertex read.
+ * @param destination_byte_count Writable destination byte count.
+ * @param vertex_count Number of vertices to read.
+ * @param vertex_stride Positive byte size of one vertex.
+ * @return A CNA result code; `CNA_RESULT_NOT_SUPPORTED` for a write-only buffer, and insufficient
+ *         capacity performs no partial write.
+ *
+ * The counterpart of `cna_vertex_buffer_set_data_raw`, and the reason it exists: typed readback
+ * covers the built-in `CNA_VertexType` layouts, so a buffer *written* with a custom layout through
+ * the raw route could never be read back. That asymmetry had no reason behind it -- the bytes are
+ * held either way.
+ */
+CNA_C_API CNA_Result cna_vertex_buffer_get_data_raw(
+    CNA_VertexBufferHandle vertex_buffer,
+    uint64_t buffer_offset_in_bytes,
+    void* destination,
+    uint64_t destination_byte_count,
+    uint64_t vertex_count,
+    uint32_t vertex_stride);
+
+/**
  * @brief Subscribes to a dynamic vertex buffer's ContentLost event.
  *
  * CNA currently never raises ContentLost. The callback and context remain caller-owned until

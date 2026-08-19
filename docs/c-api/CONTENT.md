@@ -60,9 +60,11 @@ Renderer refusal and a successfully decoded non-Color Texture2D return
 `CNA_RESULT_NOT_SUPPORTED`. Argument, UTF-8, handle and thread failures retain their standard C API
 results. No native exception crosses the ABI.
 
-Songs, video, models, effects, fonts and 3D textures still have no typed C load route. They each
-require an explicit typed C load function and resource ownership contract in later coverage tasks,
-because C cannot name the C++ type the generic `Load<T>` is instantiated with.
+Songs, video, models and 3D textures still have no typed C load route. Each needs its own
+load function and ownership contract, because C cannot name the C++ type the generic `Load<T>` is
+instantiated with. Fonts are no longer on that list -- see `cna_content_manager_load_sprite_font`
+below -- and an asset of a type CNA does not know at all is reachable through
+`cna_content_manager_load_foreign_ext`, described under *Readers a caller supplies*.
 
 ## Typed loads beyond Texture2D
 
@@ -76,6 +78,29 @@ asset that cannot be decoded or does not exist returns `CNA_RESULT_IO`, and a ba
 storage returns `CNA_RESULT_NOT_SUPPORTED`, while the canonical sound loader reports a missing or
 unreadable audio file — and an absent audio device — as `CNA_RESULT_NOT_SUPPORTED`. Branch on the
 result, not on the renderer or on an assumed audio device.
+
+`cna_content_manager_load_sprite_font` maps `Load<SpriteFont>`, which reads both the `.xnb` font
+container and CNA's own `.cnj` font descriptor, so a consumer never has to parse either to obtain a
+font this ABI accepts. It is the one loader with **four** parameters: a SpriteFont is a font *and*
+the texture it draws from, and both have to be nameable — the font for measuring, layout and
+`cna_sprite_batch_draw_string`, the atlas for a consumer that places glyphs itself from
+`cna_sprite_font_copy_glyphs`. Both handles are owned, and the atlas refuses to be destroyed while
+the font lives, which is the same ordering rule `cna_sprite_font_create` already imposes.
+
+`cna_content_manager_load_effect` maps `Load<Effect>` -- the route an XNA game's
+`ContentManager.Load<Effect>` takes -- and reads all three shapes CNA supports: a compiled `.xnb`
+Effect asset, a `.cnj` descriptor naming one of the stock effects, and a `.cnj` descriptor carrying
+custom shader source. It is declared in `CNA/C/effects.h` rather than here, beside the rest of the
+effect surface, because that is where its `CNA_EffectHandle` return type lives. Which of the three
+shapes an asset is decides which failures are possible, so branch on the result rather than on the
+file name: only the compiled shape depends on
+`CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`.
+
+One failure is worth naming because it used to be reported wrongly: an `.xnb` whose root reader
+produces a **different type** than the loader wants answers `CNA_RESULT_IO` naming the mismatch.
+The canonical read reports that by failing an unbox, which is not a `runtime_error`, so it
+previously reached the exception barrier's catch-all and surfaced as `CNA_RESULT_INTERNAL` — an
+honest "this asset is not that type" reported as a fault inside CNA.
 
 ## Manifest and reader-usage snapshots
 
@@ -133,13 +158,11 @@ handle. `cna_content_type_reader_manager_clear_type_creators` empties the proces
 is genuinely destructive; `cna_content_register_known_unsupported_xnb_readers` restores the
 placeholder registrations.
 
-**The known-unsupported set is currently empty, and no C route puts a factory into the registry.**
-Its one entry was the general `EffectReader`, which the compiled Effect Framework work replaced
-with a reader that really decodes compiled effects — registered by an internal entry point that has
-no C form, because a factory is a callback returning a C++ reader and C cannot produce one (see the
-`AddTypeCreator` row in the coverage matrix). The published hook remains the registry's extension
-point and stays idempotent; today it registers nothing, so from C the registry starts empty and
-stays empty. A caller that needs a recognized-but-unsupported reader builds one directly with
+**The known-unsupported set is currently empty.** Its one entry was the general `EffectReader`,
+which the compiled Effect Framework work replaced with a reader that really decodes compiled
+effects, registered by an internal entry point with no C form. The published hook remains the
+registry's extension point and stays idempotent; today it registers nothing. A caller that needs a
+recognized-but-unsupported reader builds one directly with
 `cna_known_unsupported_content_type_reader_create`, which is unaffected.
 
 An owned `CNA_ContentTypeReaderHandle` exposes the target type name, the type version, both
@@ -156,7 +179,44 @@ lost: it always refuses, and its canonical diagnostic reaches the caller as `CNA
 
 Everything else in the pipeline is a C++-only extension point and has no C route at all: the typed
 `ReadObject<T>` / `ReadRawObject<T>` / `ReadSharedResource<T>` / `ReadAsset<T>` /
-`ReadExternalReference<T>` templates, `ContentTypeReader<T>`, `LooseFileContentTypeReader<T>`, and
-factory registration through `AddTypeCreator`. Each needs C to name an arbitrary C++ type or to
-produce a C++ object, so the C API adds a typed load route per asset type instead of an untyped
-registration hook.
+`ReadExternalReference<T>` templates, `ContentTypeReader<T>` and `LooseFileContentTypeReader<T>`.
+Each needs C to name an arbitrary C++ type, so the C API adds a typed load route per asset type
+rather than an untyped one.
+
+## Readers a caller supplies
+
+Registration is **not** on that list, though it reads as if it should be. A C caller cannot write a
+`ContentTypeReader<T>`, but it does not have to: `cna_content_type_reader_manager_register` takes a
+versioned callback table — a per-file instance factory, a read callback, an optional per-instance
+destructor — and an owned registration handle, and the adapter wraps that table in a canonical
+reader. Downstream, nothing can tell the difference.
+
+Three properties are worth knowing before using it.
+
+**The read callback returns `CNA_Result`**, unlike `CNA_GameComponentCallbacks`, which returns
+`void`. A component that fails has a next frame to recover in; a half-read asset does not. A
+refusing read fails the whole load, and the message carries the code the callback returned.
+
+**The `CNA_ContentReaderHandle` it receives is callback-scoped.** It answers every ordinary
+`cna_content_reader_*` route while the callback runs, is invalidated before the callback returns,
+and refuses `cna_content_reader_destroy` from inside — the reader belongs to the load in progress.
+
+**Registration refuses a name that is already taken**, where the canonical `AddTypeCreator`
+silently ignores a repeat. Silence is right for a built-in registering itself twice through two
+static-initialisation paths and wrong here: the caller would hold a live handle whose factory is
+never called, and would find out only from assets deserialising into the wrong type.
+`cna_content_type_reader_manager_unregister` frees the name again.
+
+What such a reader produces is an opaque `void*` — `CNA::Content::ForeignContentObjectEXT` on the
+C++ side — that this ABI never dereferences and never frees; the reader that made it owns it.
+`cna_content_manager_load_foreign_ext` is the route that reaches one, and the only one: the typed
+loaders each name a C++ type this ABI knows, and a custom content type is by definition not one of
+them. The asset's own type-reader table decides which reader runs, so the route needs no type
+argument.
+
+Two consequences of it being an ordinary load. It is **cached** by asset name like any other asset,
+so a second call answers the same pointer without re-reading the file and the object must outlive
+the manager's cache — `cna_content_manager_unload` drops it. And only **compiled `.xnb` assets**
+reach a registered reader: a loose file or a `.cnj` descriptor is dispatched by requested C++ type
+rather than by reader name, and there is no C++ type here to dispatch on, so such an asset fails
+with `CNA_RESULT_IO` rather than being read by the wrong reader.

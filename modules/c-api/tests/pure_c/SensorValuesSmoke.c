@@ -136,6 +136,20 @@ static int validate_gyroscope_reading(void)
         equal != CNA_FALSE) {
         return 0;
     }
+    /* CBIND-065: equal readings hash equally, and a null argument is refused -- the contract the
+       accelerometer reading already proved and the other three never did. */
+    {
+        CNA_GyroscopeReading same = reading;
+        uint64_t hash = UINT64_C(0);
+        uint64_t other_hash = UINT64_C(1);
+        if (cna_gyroscope_reading_get_hash_code(&reading, &hash) != CNA_RESULT_SUCCESS ||
+            cna_gyroscope_reading_get_hash_code(&same, &other_hash) != CNA_RESULT_SUCCESS ||
+            hash != other_hash ||
+            cna_gyroscope_reading_get_hash_code(0, &hash) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_gyroscope_reading_get_hash_code(&reading, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
+    }
     memset(text, 0, sizeof(text));
     if (cna_gyroscope_reading_get_string_size(&reading, &bytes) != CNA_RESULT_SUCCESS ||
         cna_gyroscope_reading_copy_string(&reading, text, (uint64_t)sizeof(text), &bytes) !=
@@ -186,6 +200,19 @@ static int validate_attitude_reading(void)
         equal != CNA_FALSE) {
         return 0;
     }
+    /* CBIND-065: equal readings hash equally, and a null argument is refused. */
+    {
+        CNA_AttitudeReading same = reading;
+        uint64_t hash = UINT64_C(0);
+        uint64_t other_hash = UINT64_C(1);
+        if (cna_attitude_reading_get_hash_code(&reading, &hash) != CNA_RESULT_SUCCESS ||
+            cna_attitude_reading_get_hash_code(&same, &other_hash) != CNA_RESULT_SUCCESS ||
+            hash != other_hash ||
+            cna_attitude_reading_get_hash_code(0, &hash) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_attitude_reading_get_hash_code(&reading, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
+    }
     memset(text, 0, sizeof(text));
     if (cna_attitude_reading_get_string_size(&reading, &bytes) != CNA_RESULT_SUCCESS ||
         cna_attitude_reading_copy_string(&reading, text, (uint64_t)sizeof(text), &bytes) !=
@@ -231,6 +258,19 @@ static int validate_compass_reading(void)
     if (cna_compass_reading_equals(&reading, &other, &equal) != CNA_RESULT_SUCCESS ||
         equal != CNA_FALSE) {
         return 0;
+    }
+    /* CBIND-065: equal readings hash equally, and a null argument is refused. */
+    {
+        CNA_CompassReading same = reading;
+        uint64_t hash = UINT64_C(0);
+        uint64_t other_hash = UINT64_C(1);
+        if (cna_compass_reading_get_hash_code(&reading, &hash) != CNA_RESULT_SUCCESS ||
+            cna_compass_reading_get_hash_code(&same, &other_hash) != CNA_RESULT_SUCCESS ||
+            hash != other_hash ||
+            cna_compass_reading_get_hash_code(0, &hash) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_compass_reading_get_hash_code(&reading, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
     }
     memset(text, 0, sizeof(text));
     if (cna_compass_reading_get_string_size(&reading, &bytes) != CNA_RESULT_SUCCESS ||
@@ -310,6 +350,19 @@ static int validate_motion_reading(void)
     if (cna_motion_reading_equals(&reading, &other, &equal) != CNA_RESULT_SUCCESS ||
         equal != CNA_FALSE) {
         return 0;
+    }
+    /* CBIND-065: equal readings hash equally, and a null argument is refused. */
+    {
+        CNA_MotionReading same = reading;
+        uint64_t hash = UINT64_C(0);
+        uint64_t other_hash = UINT64_C(1);
+        if (cna_motion_reading_get_hash_code(&reading, &hash) != CNA_RESULT_SUCCESS ||
+            cna_motion_reading_get_hash_code(&same, &other_hash) != CNA_RESULT_SUCCESS ||
+            hash != other_hash ||
+            cna_motion_reading_get_hash_code(0, &hash) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_motion_reading_get_hash_code(&reading, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
     }
     /* The canonical text carries only the device acceleration and the gravity vector, not the
        attitude or the rotation rate -- preserved rather than tidied. */

@@ -42,6 +42,7 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::SpriteFontResource;
 using CNA::C::Detail::Texture2DResource;
+using CNA::C::Detail::ValidateCanonicalBool;
 
 using Microsoft::Xna::Framework::PlayerIndex;
 using Microsoft::Xna::Framework::GamerServices::Gamer;
@@ -260,6 +261,10 @@ CNA_Result cna_guide_get_is_screen_saver_enabled(CNA_Bool* const outIsEnabled)
 CNA_Result cna_guide_set_is_screen_saver_enabled(const CNA_Bool isEnabled)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(isEnabled, "is_enabled");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         if (const CNA_Result result = ValidateBoolean(isEnabled, "The screen-saver flag is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -283,6 +288,10 @@ CNA_Result cna_guide_get_is_trial_mode(CNA_Bool* const outIsTrialMode)
 CNA_Result cna_guide_set_is_trial_mode(const CNA_Bool isTrialMode)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(isTrialMode, "is_trial_mode");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         if (const CNA_Result result = ValidateBoolean(isTrialMode, "The trial-mode flag is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -306,6 +315,10 @@ CNA_Result cna_guide_get_is_visible(CNA_Bool* const outIsVisible)
 CNA_Result cna_guide_set_is_visible(const CNA_Bool isVisible)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(isVisible, "is_visible");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         if (const CNA_Result result = ValidateBoolean(isVisible, "The guide-visibility flag is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -351,6 +364,10 @@ CNA_Result cna_guide_get_simulate_trial_mode(CNA_Bool* const outSimulate)
 CNA_Result cna_guide_set_simulate_trial_mode(const CNA_Bool simulate)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(simulate, "simulate");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         if (const CNA_Result result =
                 ValidateBoolean(simulate, "The simulate-trial-mode flag is invalid.");
             result != CNA_RESULT_SUCCESS) {
@@ -371,6 +388,10 @@ CNA_Result cna_guide_begin_show_keyboard_input(
     void* const context)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(usePasswordMode, "use_password_mode");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         PlayerIndex nativePlayer = PlayerIndex::One;
         if (const CNA_Result result = ValidatePlayer(player, &nativePlayer);
             result != CNA_RESULT_SUCCESS) {
@@ -960,6 +981,10 @@ CNA_Result cna_guide_show_players(const CNA_PlayerIndex player)
 CNA_Result cna_guide_show_sign_in(const int32_t paneCount, const CNA_Bool onlineOnly)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(onlineOnly, "online_only");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         if (const CNA_Result result = ValidateBoolean(onlineOnly, "The online-only flag is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;

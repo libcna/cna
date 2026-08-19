@@ -327,6 +327,27 @@ static int validate_renderer_selection(void)
         }
     }
 
+    /* CBIND-065: the reset this family publishes for exactly this situation. Nothing named it,
+       which left the one route whose whole purpose is "a suite may drive the selection more than
+       once" untested. It is safe here because this test creates no game: the selection has not
+       latched, so returning it to its initial state changes nothing anyone is holding. */
+    if (cna_graphics_renderer_reset_selection_for_tests_ext() != CNA_RESULT_SUCCESS ||
+        cna_graphics_renderer_reset_selection_for_tests_ext() != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    {
+        /* After a reset the selection is still answerable and still unlatched -- a reset that
+           left it unanswerable would be a worse state than the one it undoes. */
+        CNA_GraphicsRendererType after_reset = CNA_GRAPHICS_RENDERER_UNKNOWN;
+        CNA_Bool after_latched = UINT8_C(9);
+        if (cna_graphics_renderer_get_selected_ext(&after_reset) != CNA_RESULT_SUCCESS ||
+            after_reset == CNA_GRAPHICS_RENDERER_UNKNOWN ||
+            cna_graphics_renderer_get_is_latched_ext(&after_latched) != CNA_RESULT_SUCCESS ||
+            after_latched != CNA_FALSE) {
+            return 0;
+        }
+    }
+
     /* Selected is what will be tried; active is what survived, and asking for it before anything
        has been created is refused rather than guessed -- until the selection latches there is no
        honest answer to give, which is why the two are separate questions. */

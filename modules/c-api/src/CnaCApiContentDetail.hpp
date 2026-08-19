@@ -19,6 +19,9 @@ namespace CNA::C::Detail {
 struct BorrowedContentManager final {
     Microsoft::Xna::Framework::Content::ContentManager* value = nullptr;
     std::shared_ptr<void> owner;
+    /// The game the manager belongs to, so a resource loaded through it can be created as that
+    /// game's child from a translation unit that does not own the manager's own resource type.
+    CNA_Handle parentGame = CNA_INVALID_HANDLE;
 };
 
 [[nodiscard]] CNA_Result BorrowContentManager(

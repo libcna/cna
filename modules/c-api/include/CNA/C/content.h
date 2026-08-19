@@ -124,8 +124,18 @@ CNA_C_API CNA_Result cna_content_manager_load_texture2d(
  * This maps the canonical `ResourceContentManager`, which reads assets embedded in the
  * application rather than from loose files. It is created with a null service provider for the
  * same reason as `cna_content_manager_create`, and the resulting handle uses every other
- * `cna_content_manager_*` operation unchanged. The canonical embedded-resource stream is a
- * declared placeholder in CNA, so an embedded asset load fails rather than returning data.
+ * `cna_content_manager_*` operation unchanged.
+ *
+ * **Every load through it fails today, and that is inherited rather than introduced here.** The
+ * canonical embedded-resource stream is a declared placeholder in CNA: there is no .NET assembly
+ * for it to read resources out of, and nothing has yet decided what a native application's
+ * embedded-resource store should be. A load therefore returns `CNA_RESULT_IO` naming the
+ * placeholder, rather than returning empty data that a caller would mistake for an empty asset.
+ *
+ * The route is published anyway so the canonical type has a name in C and so this paragraph has
+ * somewhere to live -- a consumer reaching for it deserves to learn that here rather than from a
+ * failing load. A consumer that needs embedded assets today should implement that store itself,
+ * above this ABI, where its host platform already has one.
  */
 CNA_C_API CNA_Result cna_content_manager_create_resource(
     CNA_Handle graphics_device,
@@ -169,6 +179,128 @@ CNA_C_API CNA_Result cna_content_manager_load_texture_cube(
     CNA_Handle content_manager,
     CNA_StringView asset_name,
     CNA_Handle* out_texture);
+
+/**
+ * @brief Loads a SpriteFont asset, reporting both the font and its glyph atlas.
+ *
+ * @param content_manager Owned content-manager handle.
+ * @param asset_name UTF-8 logical asset name, with or without its extension.
+ * @param out_sprite_font Receives an **owned** SpriteFont handle on success, destroyed with
+ *        `cna_sprite_font_destroy`.
+ * @param out_texture Receives an **owned** Texture2D handle for the glyph atlas, destroyed with
+ *        `cna_texture2d_destroy`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` for a missing or undecodable asset, or a
+ *         documented argument/handle/thread failure. On any failure both outputs are left
+ *         `CNA_INVALID_HANDLE` and nothing is created.
+ *
+ * This maps the canonical `Load<SpriteFont>` specialization, which reads both the `.xnb` font
+ * container and CNA's own `.cnj` font descriptor. It removes the need for a consumer to parse
+ * either format itself in order to obtain a font this ABI will accept.
+ *
+ * **Two owned handles, one asset**, which is why this loader has a fourth parameter the other
+ * three do not. A SpriteFont is a font *and* the texture it draws from, and both have to be
+ * reachable: the font for measuring, layout and `cna_sprite_batch_draw_string`, the atlas for a
+ * consumer that places glyphs itself from `cna_sprite_font_copy_glyphs`. Handing back only the
+ * font would leave the atlas alive but unnameable.
+ *
+ * **Destroy the font first.** The atlas is retained for as long as a SpriteFont uses it, exactly
+ * as it is for a caller-built font, so `cna_texture2d_destroy` refuses with
+ * `CNA_RESULT_INVALID_STATE` while the font exists. That ordering rule is the same one
+ * `cna_sprite_font_create` already imposes, so a consumer needs no special case for a loaded font.
+ */
+CNA_C_API CNA_Result cna_content_manager_load_sprite_font(
+    CNA_Handle content_manager,
+    CNA_StringView asset_name,
+    CNA_Handle* out_sprite_font,
+    CNA_Handle* out_texture);
+
+/**
+ * @brief Loads a compiled asset whose root reader was registered by the caller.
+ *
+ * @param content_manager Owned content-manager handle.
+ * @param asset_name UTF-8 logical asset name, with or without its extension.
+ * @param out_object Receives the opaque object the caller's reader produced. This ABI does not
+ *        own it: it is neither dereferenced nor freed here, and its lifetime is whatever the
+ *        reader that made it says it is.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_IO` for a missing or malformed asset, for a file
+ *         naming a reader nothing is registered under, and for a reader that refused -- the
+ *         message carries the `CNA_Result` the callback returned; or a documented
+ *         argument/handle/thread failure.
+ *
+ * The counterpart of `cna_content_type_reader_manager_register`, and the only route that reaches
+ * a caller-supplied reader from outside: the typed loaders next to this one each name a C++ type
+ * this ABI knows, and a custom content type is by definition not one of them. The asset's own
+ * type-reader table decides which reader runs, so this route needs no type argument -- it needs
+ * only that the reader the file names has been registered.
+ *
+ * **Only compiled `.xnb` assets reach a registered reader.** A loose file or a `.cnj` descriptor
+ * is dispatched by the requested C++ type instead of by a reader name, and there is no C++ type
+ * here to dispatch on. Such an asset fails with `CNA_RESULT_IO` rather than being read by the
+ * wrong reader.
+ *
+ * The result is cached by asset name exactly as every other load is, so a second call for the
+ * same name returns the same pointer without re-reading the file -- which is the caching XNA
+ * guarantees for a reference type, and means the caller must not free the object while the
+ * content manager that produced it can still hand it out. `cna_content_manager_unload` drops the
+ * cache.
+ */
+CNA_C_API CNA_Result cna_content_manager_load_foreign_ext(
+    CNA_Handle content_manager,
+    CNA_StringView asset_name,
+    void** out_object);
+
+/**
+ * @brief Builds one caller-owned object from a `.cnj` descriptor's raw JSON.
+ *
+ * @param context The context supplied at registration.
+ * @param cnj_json The descriptor's whole text, borrowed for the duration of the call and **not**
+ *        NUL-terminated -- read exactly `byte_length` bytes.
+ * @param out_object Receives the caller's opaque object. This ABI never dereferences, copies or
+ *        frees it.
+ * @return `CNA_RESULT_SUCCESS`, or any documented result code to fail the load that asked for it.
+ */
+typedef CNA_Result (*CNA_CnjLoaderCallback)(
+    void* context,
+    CNA_StringView cnj_json,
+    void** out_object);
+
+/**
+ * @brief Registers a loader for one `"type"` value in a `.cnj` descriptor.
+ *
+ * @param content_manager Owned content-manager handle.
+ * @param type_name The descriptor's `"type"` string this loader handles, copied during the call.
+ *        Must not be empty.
+ * @param callback Non-null loader.
+ * @param context Caller-owned context passed back to @p callback; it must outlive the content
+ *        manager, which is what owns this registration.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_ARGUMENT` for a null callback or an empty or
+ *         non-UTF-8 type name; `CNA_RESULT_INVALID_STATE` when that type name is already
+ *         registered on this manager; or a documented handle/thread failure.
+ *
+ * The `.cnj` counterpart of `cna_content_type_reader_manager_register`, and the piece that made
+ * `cna_content_manager_load_foreign_ext` reach more than compiled assets: a registered reader
+ * answers for an `.xnb`, and this answers for a `.cnj`. Load the result through that same route --
+ * it needs no type argument and does not care which of the two produced the object.
+ *
+ * **Registration is per manager and lives as long as it.** There is no unregister, because the
+ * canonical surface has none: the table belongs to the content manager and goes with it. That is
+ * the one way this differs from the reader registry, which is process-wide and hands back a
+ * handle to release.
+ *
+ * A descriptor whose `"type"` names nothing registered fails the load rather than falling back,
+ * for the same reason a compiled asset naming an unregistered reader does.
+ */
+CNA_C_API CNA_Result cna_content_manager_register_cnj_loader_ext(
+    CNA_Handle content_manager,
+    CNA_StringView type_name,
+    CNA_CnjLoaderCallback callback,
+    void* context);
+
+/*
+ * The Effect loader, `cna_content_manager_load_effect`, is declared in `CNA/C/effects.h` beside
+ * the rest of the effect surface, because that is where its `CNA_EffectHandle` return type lives.
+ * It maps the canonical `Load<Effect>` specialization and belongs to this same family of loaders.
+ */
 
 /**
  * @brief Gets the UTF-8 byte count of the resolved filesystem path for an asset name.
@@ -259,6 +391,10 @@ CNA_C_API CNA_Result cna_content_manager_register_builtin_loaders(CNA_Handle con
  *
  * A service provider is a Sharp Runtime object and never crosses the C boundary, so a manager
  * created through this API always reports `CNA_FALSE`; only the presence is observable.
+ *
+ * `CNA_FALSE` here is not evidence that a C-created manager is weaker than a native one. A game's
+ * own content manager reports `CNA_FALSE` too: CNA constructs it without a provider, and no CNA
+ * content path resolves a service through one, so the field is inert on both sides of the boundary.
  */
 CNA_C_API CNA_Result cna_content_manager_get_has_service_provider(
     CNA_Handle content_manager,

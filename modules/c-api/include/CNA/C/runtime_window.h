@@ -73,16 +73,26 @@ CNA_C_API CNA_Result cna_game_window_get_current_orientation(
     CNA_DisplayOrientation* out_orientation);
 
 /**
- * @brief Returns the platform handle of the native window.
+ * @brief Returns the canonical `Handle` property of the game window.
  *
  * @param game Active owned or callback-borrowed game handle.
- * @param out_handle Receives the native handle as an integer, or zero when there is no native
- *        window.
+ * @param out_handle Receives the platform's round-trip window token, or zero when the renderer
+ *        never creates a window.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * The canonical property and the canonical native-window accessor answer the **same pointer**, so
- * this ABI has one route for both. It is an opaque platform value: passing it to a windowing library
- * is the only thing a caller can do with it, and this ABI neither validates nor owns it.
+ * **This is not the native window.** The header used to claim this property and the canonical
+ * native-window accessor answer the same pointer; they do not. This one maps XNA's integer `Handle`
+ * property, whose value is the platform's own round-trip token -- under SDL3 the platform window
+ * pointer widened to an integer -- and the platform layer that mints it says outright that new
+ * interop code should not use it. It is meaningful only to the platform instance that created it,
+ * and its one documented use is the round trip: handing it back through
+ * `PresentationParameters.DeviceWindowHandle` to adopt an existing window.
+ *
+ * Zero here means *this renderer never creates a window* -- headless, software and stub renderers
+ * all report it -- rather than *this call failed*.
+ *
+ * For interop, use @ref cna_game_window_get_native_window_ext, which answers the actual native
+ * window and says which windowing system it belongs to.
  */
 CNA_C_API CNA_Result cna_game_window_get_native_handle_ext(CNA_Handle game, uint64_t* out_handle);
 
@@ -264,6 +274,104 @@ CNA_C_API CNA_Result cna_game_window_subscribe(
     CNA_GameEventCallback callback,
     void* context,
     CNA_GameEventRegistrationHandle* out_registration);
+
+/** @brief Fixed-width identity of the windowing system a native window belongs to. */
+typedef uint32_t CNA_NativeWindowSystem;
+
+/** @brief No native window, or a window whose system could not be determined. */
+#define CNA_NATIVE_WINDOW_SYSTEM_UNKNOWN UINT32_C(0)
+/** @brief Microsoft Windows; @ref CNA_NativeWindowHandle::window is an `HWND`. */
+#define CNA_NATIVE_WINDOW_SYSTEM_WIN32 UINT32_C(1)
+/** @brief X11; carries a `Display*` plus an integer `Window` XID. */
+#define CNA_NATIVE_WINDOW_SYSTEM_X11 UINT32_C(2)
+/** @brief Wayland; carries a `wl_display*` plus a `wl_surface*`. */
+#define CNA_NATIVE_WINDOW_SYSTEM_WAYLAND UINT32_C(3)
+/** @brief macOS; @ref CNA_NativeWindowHandle::window is an `NSWindow*`. */
+#define CNA_NATIVE_WINDOW_SYSTEM_COCOA UINT32_C(4)
+/** @brief Android; @ref CNA_NativeWindowHandle::window is an `ANativeWindow*`. */
+#define CNA_NATIVE_WINDOW_SYSTEM_ANDROID UINT32_C(5)
+/** @brief Web/Emscripten; the drawing target is a canvas chosen by the host page, not a pointer. */
+#define CNA_NATIVE_WINDOW_SYSTEM_WEB UINT32_C(6)
+/** @brief A platform that renders with no native window at all; every pointer is null. */
+#define CNA_NATIVE_WINDOW_SYSTEM_HEADLESS UINT32_C(7)
+/** @brief A character-cell terminal with no native window; every pointer is null. */
+#define CNA_NATIVE_WINDOW_SYSTEM_TERMINAL UINT32_C(8)
+/** @brief Highest defined native windowing-system identity. */
+#define CNA_NATIVE_WINDOW_SYSTEM_MAXIMUM CNA_NATIVE_WINDOW_SYSTEM_TERMINAL
+
+/**
+ * @brief Describes the game's native window well enough to hand it to another library.
+ *
+ * This is the one place the ABI publishes a backend detail on purpose. A binding that hosts a CNA
+ * window inside another toolkit, attaches a native input method, or passes the surface to another
+ * graphics API has no portable way to do it, and CNA's own C++ surface already publishes the same
+ * accessor as an extension. What is kept out of a consumer's program is the *platform layer* -- no
+ * SDL type appears here -- not the window's identity.
+ *
+ * @ref system says which of the other fields carry anything; **never read one without checking it
+ * first**, because a field that does not apply to the reported system is null or zero rather than
+ * absent, and a null `wl_display*` is indistinguishable from an `HWND` that happens to be null.
+ *
+ * Every pointer here is **borrowed and owned by the platform**. It is valid only while the game's
+ * window is alive, this ABI neither validates nor frees any of it, and storing one past the game's
+ * destruction is a use-after-free in the consumer's program rather than a failure this ABI can
+ * report.
+ */
+typedef struct CNA_NativeWindowHandle {
+    /** @brief Size of this structure in bytes; set by @ref cna_native_window_handle_init. */
+    uint32_t struct_size;
+
+    /** @brief Structure version; set by @ref cna_native_window_handle_init. */
+    uint32_t struct_version;
+
+    /** @brief One `CNA_NATIVE_WINDOW_SYSTEM_*` identity; decides which fields below mean anything. */
+    CNA_NativeWindowSystem system;
+
+    /** @brief X11 `Display*` or Wayland `wl_display*`; null on every other system. Borrowed. */
+    void* display;
+
+    /** @brief Win32 `HWND`, Cocoa `NSWindow*` or Android `ANativeWindow*`; null elsewhere. Borrowed. */
+    void* window;
+
+    /** @brief Wayland `wl_surface*`; null on every other system. Borrowed. */
+    void* surface;
+
+    /**
+     * @brief X11 `Window` XID; zero on every other system.
+     *
+     * An XID is a server-side integer resource identifier, not an address, which is why it has its
+     * own field and why @ref window stays null under X11.
+     */
+    uint64_t window_id;
+} CNA_NativeWindowHandle;
+
+/**
+ * @brief Initializes a native-window-handle structure to the empty, no-native-window state.
+ *
+ * @param handle Structure to initialize.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` when @p handle is null.
+ *
+ * Produces @ref CNA_NATIVE_WINDOW_SYSTEM_UNKNOWN with every pointer null and the XID zero, which is
+ * also what a query against a platform with no native window answers.
+ */
+CNA_C_API CNA_Result cna_native_window_handle_init(CNA_NativeWindowHandle* handle);
+
+/**
+ * @brief Describes the game's native window.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param handle Structure initialized by @ref cna_native_window_handle_init, receiving the
+ *        description. Its pointers are borrowed; see @ref CNA_NativeWindowHandle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when @p handle is null or was not
+ *         initialized for this ABI version, or a documented handle/thread failure.
+ *
+ * A platform with no native window -- headless, or a terminal -- is not a failure here: the call
+ * succeeds and reports its own system identity with null pointers, so a caller can tell *this
+ * platform has no window* apart from *this call did not work*.
+ */
+CNA_C_API CNA_Result cna_game_window_get_native_window_ext(
+    CNA_Handle game,
+    CNA_NativeWindowHandle* handle);
 
 #ifdef __cplusplus
 }

@@ -6080,6 +6080,95 @@ CNA_Result cna_morph_target_data_ext_copy_tangent_deltas(
     });
 }
 
+CNA_Result cna_morph_target_data_ext_get_recompute_flat_normals_ext(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    CNA_Bool* const outRecompute)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRecompute == nullptr) {
+            return InvalidArgument(
+                "The MorphTargetDataEXT flat-normal output is null.");
+        }
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outRecompute = data->value->RecomputeFlatNormalsEXT ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_set_recompute_flat_normals_ext(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    const CNA_Bool recompute)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (recompute != CNA_FALSE && recompute != CNA_TRUE) {
+            return InvalidArgument(
+                "The MorphTargetDataEXT flat-normal value is not a canonical C boolean.");
+        }
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        data->value->RecomputeFlatNormalsEXT = recompute == CNA_TRUE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_copy_triangle_indices_ext(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    uint32_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outIndexCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyOutputValues(
+            data->value->TriangleIndicesEXT,
+            destination, capacity, outIndexCount,
+            [](const std::uint32_t value) { return static_cast<uint32_t>(value); },
+            "The MorphTargetDataEXT triangle-index output is invalid.",
+            "The destination cannot hold all morph triangle indices.");
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_set_triangle_indices_ext(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    const uint32_t* const indices,
+    const uint64_t indexCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (indices == nullptr && indexCount != 0U) {
+            return InvalidArgument("The morph triangle-index array is null.");
+        }
+        // Three indices per face: a count that is not a multiple of three describes no triangle
+        // list at all, and the recomputation would read past the last complete face.
+        if ((indexCount % 3U) != 0U) {
+            return InvalidArgument(
+                "The morph triangle-index count must be a multiple of three.");
+        }
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<std::uint32_t>& target = data->value->TriangleIndicesEXT;
+        target.clear();
+        target.reserve(static_cast<std::size_t>(indexCount));
+        for (uint64_t index = 0U; index < indexCount; ++index) {
+            target.push_back(static_cast<std::uint32_t>(indices[index]));
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_morph_target_data_ext_set_tangent_deltas(
     const CNA_MorphTargetDataEXTHandle dataHandle,
     const uint64_t targetIndex,

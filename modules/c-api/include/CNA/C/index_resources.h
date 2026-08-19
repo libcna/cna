@@ -163,6 +163,33 @@ CNA_C_API CNA_Result cna_index_buffer_set_data(
     uint64_t capacity);
 
 /**
+ * @brief Uploads indices into a window of the buffer, leaving the rest alone.
+ *
+ * @param index_buffer Static or dynamic index-buffer handle.
+ * @param buffer_offset_in_bytes Byte offset into **the buffer**, a multiple of its element size.
+ * @param transfer Versioned width, option and source-window descriptor; `start_index` continues to
+ *        index the caller's array, as it does everywhere else in this ABI.
+ * @param data Typed source array.
+ * @param capacity Source capacity measured in selected index elements.
+ * @return A CNA result code.
+ *
+ * `cna_index_buffer_set_data` replaces the buffer's whole contents, which is what XNA's
+ * `SetData(T[], int, int)` does; this adds the `offsetInBytes` overload beside it, so one slice of
+ * a large dynamic index buffer can be rewritten per frame. Indices outside the window keep
+ * whatever they held; indices never written by any upload read as zero.
+ *
+ * **Documented deviation, about cost rather than about result.** The renderer contract underneath
+ * replaces whole-buffer contents, so the window is composed on the CPU side and the whole buffer is
+ * re-uploaded. The indices end up exactly where XNA puts them; the transfer is not smaller.
+ */
+CNA_C_API CNA_Result cna_index_buffer_set_data_at(
+    CNA_IndexBufferHandle index_buffer,
+    uint64_t buffer_offset_in_bytes,
+    const CNA_IndexBufferTransfer* transfer,
+    const void* data,
+    uint64_t capacity);
+
+/**
  * @brief Reads 16-bit or 32-bit indices into a caller-array window atomically.
  *
  * Native readback begins at index zero and writes into `transfer->start_index` in the caller's

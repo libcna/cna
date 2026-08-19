@@ -7,6 +7,11 @@
 
 typedef struct GameSmokeState {
     int validated;
+    /* CBIND-063: the delivered lifecycle order, one letter per event. Counting calls is what every
+       assertion here used to do, and counting cannot see an ordering defect at all -- which is how
+       initialize and load_content ran in the wrong order for as long as they did. */
+    char order[32];
+    int order_length;
     int initialize_calls;
     int begin_run_calls;
     int end_run_calls;
@@ -19,6 +24,14 @@ typedef struct GameSmokeState {
 typedef struct EventState {
     int calls;
 } EventState;
+
+static void record(GameSmokeState* const state, const char event)
+{
+    if (state->order_length + 1 < (int)sizeof(state->order)) {
+        state->order[state->order_length++] = event;
+        state->order[state->order_length] = '\0';
+    }
+}
 
 static CNA_StringView view(const char* const text)
 {
@@ -43,6 +56,20 @@ static CNA_Result on_initialize(
     (void)game_time;
     (void)out_error;
     ++((GameSmokeState*)context)->initialize_calls;
+    record((GameSmokeState*)context, 'i');
+    return CNA_RESULT_SUCCESS;
+}
+
+static CNA_Result on_load_content(
+    const CNA_Handle game,
+    const CNA_GameTime* const game_time,
+    void* const context,
+    CNA_CallbackError* const out_error)
+{
+    (void)game;
+    (void)game_time;
+    (void)out_error;
+    record((GameSmokeState*)context, 'l');
     return CNA_RESULT_SUCCESS;
 }
 
@@ -248,11 +275,64 @@ static int validate_launch_parameters(const CNA_Handle game)
         count != UINT64_C(3)) {
         return 0;
     }
+    /* CBIND-054: the keys are enumerable, which is what turns three keyed accessors into a map a
+       caller can actually materialize. The order is by name ascending and deliberately not the
+       canonical hash map's own, so "depth" comes first here however the map happens to be laid
+       out; a single insertion may rehash and reorder that container, and an index into it would
+       mean nothing between calls. */
+    /* The copy routes write no terminator, so each name is read into a freshly cleared buffer --
+       otherwise a shorter name would inherit the tail of the longer one before it. */
+    memset(text, 0, sizeof(text));
+    if (cna_game_launch_parameters_get_key_size(game, UINT64_C(0), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        bytes != (uint64_t)strlen("depth") ||
+        cna_game_launch_parameters_copy_key(
+            game, UINT64_C(0), text, (uint64_t)sizeof(text), &bytes) != CNA_RESULT_SUCCESS ||
+        strcmp(text, "depth") != 0) {
+        return 0;
+    }
+    memset(text, 0, sizeof(text));
+    if (cna_game_launch_parameters_copy_key(
+            game, UINT64_C(1), text, (uint64_t)sizeof(text), &bytes) != CNA_RESULT_SUCCESS ||
+        strcmp(text, "height") != 0) {
+        return 0;
+    }
+    memset(text, 0, sizeof(text));
+    if (cna_game_launch_parameters_copy_key(
+            game, UINT64_C(2), text, (uint64_t)sizeof(text), &bytes) != CNA_RESULT_SUCCESS ||
+        strcmp(text, "width") != 0) {
+        return 0;
+    }
+    /* Every name the enumeration answers resolves through the keyed accessor, which is the only
+       property that makes the pair usable together. */
+    if (cna_game_launch_parameters_contains_key(game, view(text), &present) !=
+            CNA_RESULT_SUCCESS ||
+        present != CNA_TRUE) {
+        return 0;
+    }
+    /* An index at or above the count is refused, the two-call size/copy contract holds, and a
+       null output is refused before anything is read. */
+    if (cna_game_launch_parameters_get_key_size(game, UINT64_C(3), &bytes) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_game_launch_parameters_copy_key(
+            game, UINT64_C(3), text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_game_launch_parameters_get_key_size(game, UINT64_C(0), 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_game_launch_parameters_copy_key(game, UINT64_C(0), text, UINT64_C(2), &bytes) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        bytes != (uint64_t)strlen("depth")) {
+        return 0;
+    }
+
     /* An empty argument list leaves the game with no parameters rather than re-reading the command
        line, which is what makes this route usable at all in a test. */
     return cna_game_launch_parameters_parse_ext(game, 0, UINT64_C(0)) == CNA_RESULT_SUCCESS &&
         cna_game_launch_parameters_get_count(game, &count) == CNA_RESULT_SUCCESS &&
         count == UINT64_C(0) &&
+        /* With no parameters at all, index zero is out of range rather than empty. */
+        cna_game_launch_parameters_get_key_size(game, UINT64_C(0), &bytes) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
         cna_game_launch_parameters_parse_ext(game, 0, UINT64_C(1)) == CNA_RESULT_INVALID_ARGUMENT;
 }
 
@@ -378,6 +458,8 @@ static int validate_window(const CNA_Handle game)
     CNA_Bool flag = UINT8_C(9);
     uint64_t bytes = UINT64_C(9);
     uint64_t native = UINT64_C(1);
+    CNA_NativeWindowHandle native_window;
+    CNA_NativeWindowHandle uninitialized;
     char text[256];
     char device_name[256];
 
@@ -396,6 +478,73 @@ static int validate_window(const CNA_Handle game)
         cna_game_window_get_current_orientation(game, &display_orientation) != CNA_RESULT_SUCCESS ||
         cna_game_window_get_native_handle_ext(game, &native) != CNA_RESULT_SUCCESS) {
         return 0;
+    }
+    /* The structure must be initialized for this ABI version; an uninitialized one is refused
+       rather than filled in, so a consumer built against a later header cannot be handed fields it
+       does not know how to read. */
+    memset(&uninitialized, 0, sizeof(uninitialized));
+    if (cna_game_window_get_native_window_ext(game, &uninitialized) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_game_window_get_native_window_ext(game, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_native_window_handle_init(0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_native_window_handle_init(&native_window) != CNA_RESULT_SUCCESS ||
+        native_window.system != CNA_NATIVE_WINDOW_SYSTEM_UNKNOWN ||
+        native_window.display != 0 || native_window.window != 0 ||
+        native_window.surface != 0 || native_window.window_id != UINT64_C(0)) {
+        return 0;
+    }
+    /* No native window is an answer, not a failure, so every platform this runs on succeeds here
+       and the system identity is what separates the cases. */
+    if (cna_game_window_get_native_window_ext(game, &native_window) != CNA_RESULT_SUCCESS ||
+        native_window.system > CNA_NATIVE_WINDOW_SYSTEM_MAXIMUM) {
+        return 0;
+    }
+    /* CBIND-072. The two routes answer different things -- the header claimed they answered the
+       same pointer, and they do not -- but they are not unrelated: both come from the platform
+       window, so a reported native windowing system implies the round-trip token exists. The
+       converse does not hold, and deliberately is not asserted: a driver with no native window
+       system still creates a platform window, which is exactly the case a dummy video driver
+       produces. */
+    if (native_window.system != CNA_NATIVE_WINDOW_SYSTEM_UNKNOWN &&
+        native_window.system != CNA_NATIVE_WINDOW_SYSTEM_HEADLESS &&
+        native_window.system != CNA_NATIVE_WINDOW_SYSTEM_TERMINAL &&
+        native == UINT64_C(0)) {
+        return 0;
+    }
+
+    /* Which fields carry anything is decided by the system identity, and a caller that reads one
+       without checking gets a null it cannot distinguish from a real value. These are the same
+       per-system invariants the canonical accessors enforce. */
+    switch (native_window.system) {
+        case CNA_NATIVE_WINDOW_SYSTEM_X11:
+            /* An XID is an integer resource id, so it lives in its own field and `window` stays
+               null even though the window is perfectly real. */
+            if (native_window.display == 0 || native_window.window != 0 ||
+                native_window.surface != 0 || native_window.window_id == UINT64_C(0)) {
+                return 0;
+            }
+            break;
+        case CNA_NATIVE_WINDOW_SYSTEM_WAYLAND:
+            if (native_window.display == 0 || native_window.surface == 0 ||
+                native_window.window_id != UINT64_C(0)) {
+                return 0;
+            }
+            break;
+        case CNA_NATIVE_WINDOW_SYSTEM_UNKNOWN:
+        case CNA_NATIVE_WINDOW_SYSTEM_HEADLESS:
+        case CNA_NATIVE_WINDOW_SYSTEM_TERMINAL:
+            if (native_window.display != 0 || native_window.window != 0 ||
+                native_window.surface != 0 || native_window.window_id != UINT64_C(0)) {
+                return 0;
+            }
+            break;
+        default:
+            /* Win32, Cocoa and Android all answer through `window`; Web answers through none of
+               them, because its target is a canvas the host page selects. */
+            if (native_window.window_id != UINT64_C(0)) {
+                return 0;
+            }
+            break;
     }
     /* The title round-trips through the route this ABI has had since its first release. */
     memset(text, 0, sizeof(text));
@@ -540,6 +689,7 @@ static CNA_Result on_update(
     (void)out_error;
     GameSmokeState* const state = (GameSmokeState*)context;
     EventState exiting = {0};
+    record(state, 'u');
     if (game_time == 0 || !validate_properties(game) || !validate_launch_parameters(game) ||
         !validate_title(game) || !validate_events(game, &exiting) || !validate_window(game) ||
         !validate_content_manager(game)) {
@@ -563,6 +713,7 @@ int main(void)
     callbacks.struct_version = UINT32_C(1);
     callbacks.update = on_update;
     callbacks.draw = on_draw;
+    callbacks.load_content = on_load_content;
     callbacks.context = &smoke_state;
 
     memset(&hooks, 0, sizeof(hooks));
@@ -602,6 +753,14 @@ int main(void)
     /* The frame hooks the grown callback table adds all ran, and drawing happened between them. */
     if (smoke_state.initialize_calls != 1 || smoke_state.begin_draw_calls < 1 ||
         smoke_state.end_draw_calls < 1 || smoke_state.draw_calls < 1) {
+        return 2;
+    }
+    /* CBIND-063: and they ran in the documented ORDER, which counting them cannot see.
+       `initialize` is documented as running "while the game initializes, before content loads";
+       the canonical Game::Initialize() ends by calling LoadContent(), so a hook invoked after the
+       base delivered the two backwards. Most ported games touch fields in LoadContent that
+       Initialize set, so the reversal breaks them at the first frame. */
+    if (strncmp(smoke_state.order, "ilu", 3U) != 0) {
         return 2;
     }
     /* Suppressing the draw skips exactly one frame's drawing. */

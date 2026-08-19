@@ -80,16 +80,42 @@ typedef uint32_t CNA_GraphicsDeviceManagerEvent;
  * @param information The candidate configuration, borrowed for the duration of the call.
  * @param context The caller context supplied at subscription time.
  *
- * **This is an observation, not a veto, and that is a canonical limitation rather than a choice made
- * here.** In XNA this event is how an application overrides the settings before the device is
- * created; in this runtime the event-handler collection delivers its argument as a `const`
- * reference, so a C++ subscriber cannot reach the argument type's mutable accessor either. This ABI
- * reports what a subscriber can actually do rather than inventing a power the canonical event does
- * not grant. Change the settings through the manager's own preference routes and
- * `cna_graphics_device_manager_apply_changes` instead.
+ * **This handler observes; it cannot change the settings.** That is this callback's shape, not a
+ * limit of the event: subscribe with `cna_graphics_device_manager_subscribe_preparing_device_settings_ext`
+ * instead to receive the same settings mutably, which is what XNA's event is for. This one stays
+ * exactly as it is so a consumer that only reads keeps compiling unchanged.
  */
 typedef void (*CNA_PreparingDeviceSettingsCallback)(
     const CNA_GraphicsDeviceInformation* information,
+    void* context);
+
+/**
+ * @brief Handler invoked while device settings are being prepared, with the power to change them.
+ *
+ * @param information The candidate configuration, borrowed and **mutable** for the duration of the
+ *        call. Writes to it are kept and are what the device is then created from. It is a
+ *        caller-initialized versioned structure like any other in this ABI, already filled in with
+ *        the settings the manager proposes; leaving it untouched changes nothing.
+ * @param context The caller context supplied at subscription time.
+ *
+ * In XNA this event is *the* way an application overrides settings before the device exists --
+ * requesting multisampling, choosing a back-buffer format, picking an adapter -- and doing it here
+ * is different from doing it through the manager's preference routes, because this runs inside
+ * device preparation, after the manager has computed its proposal and before anything is created.
+ *
+ * The canonical event previously could not do this in CNA at all: the handler collection delivers
+ * its argument as a `const` reference, so no subscriber, in C++ or in C, could reach the argument
+ * type's mutable accessor. That was reported here as a canonical limitation, and it was one. It is
+ * now fixed at the source rather than worked around: the argument holds the settings by pointer, so
+ * `PreparingDeviceSettingsEventArgs::getGraphicsDeviceInformationEXT()` hands back a mutable
+ * reference from a const argument with no cast, and this route forwards it.
+ *
+ * Returning `void` is deliberate. A handler that cannot decide what to change simply changes
+ * nothing, and there is no failure for it to report that device preparation could act on -- an
+ * error channel here would be a value nothing reads.
+ */
+typedef void (*CNA_PreparingDeviceSettingsMutatorEXT)(
+    CNA_GraphicsDeviceInformation* information,
     void* context);
 
 /**
@@ -532,9 +558,8 @@ CNA_C_API CNA_Result cna_graphics_device_manager_subscribe(
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null handler, or a documented
  *         handle/thread failure.
  *
- * This is the one manager event that carries data. See @ref CNA_PreparingDeviceSettingsCallback for
- * why the data is read-only: the canonical event delivers a `const` reference, so no subscriber in
- * this runtime can change the settings through it.
+ * This is the one manager event that carries data, and this route delivers that data read-only.
+ * Use `cna_graphics_device_manager_subscribe_preparing_device_settings_ext` to change it.
  */
 CNA_C_API CNA_Result cna_graphics_device_manager_subscribe_preparing_device_settings(
     CNA_GraphicsDeviceManagerHandle manager,
@@ -555,6 +580,36 @@ CNA_C_API CNA_Result cna_graphics_device_manager_subscribe_preparing_device_sett
  * next frame. A disposed manager still answers that cached pointer correctly, because disposal does
  * not touch the game-owned device it points at. The handle is invalid immediately either way.
  */
+/**
+ * @brief Subscribes to the manager's device-settings event with the power to change the settings.
+ *
+ * @param manager Owned manager handle.
+ * @param callback Handler invoked with the candidate configuration, mutable for the call.
+ * @param context Caller context passed back to @p callback.
+ * @param out_registration Receives an owned registration handle, released with
+ *        `cna_game_unsubscribe` like every other registration in this ABI.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null handler or output, or a
+ *         documented handle/thread failure.
+ *
+ * The canonical `PreparingDeviceSettings` contract: this runs during device preparation, and what
+ * the handler writes into the configuration is what the device is created from. Adapter selection,
+ * back-buffer format and size, depth-stencil format, multisample count and presentation interval
+ * all take effect from here.
+ *
+ * **Writes are validated, and an invalid structure is ignored rather than obeyed.** A handler that
+ * corrupts `struct_size`/`struct_version`, or writes an undefined identity into a field, leaves the
+ * settings as they were; a C handler cannot half-apply a configuration that would then fail device
+ * creation for a reason with no obvious connection to what it wrote.
+ *
+ * The `_ext` suffix marks the shape, not the behavior: the canonical event is exactly this, and the
+ * observation-only sibling exists only because it was published first.
+ */
+CNA_C_API CNA_Result cna_graphics_device_manager_subscribe_preparing_device_settings_ext(
+    CNA_GraphicsDeviceManagerHandle manager,
+    CNA_PreparingDeviceSettingsMutatorEXT callback,
+    void* context,
+    CNA_GameEventRegistrationHandle* out_registration);
+
 CNA_C_API CNA_Result cna_graphics_device_manager_destroy(CNA_GraphicsDeviceManagerHandle manager);
 
 #ifdef __cplusplus

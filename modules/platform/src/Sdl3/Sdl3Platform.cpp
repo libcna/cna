@@ -40,6 +40,34 @@ namespace CNA::Platform::Sdl3 {
             return error != nullptr ? std::string(error) : std::string();
         }
 
+        /// The video drivers this SDL was compiled with, in SDL's own preference order.
+        ///
+        /// Both calls read a static table and are valid before the video subsystem initializes,
+        /// which is the only moment this matters. SDL refuses a driver it was built without with
+        /// nothing but "<name> not available", and that sentence cannot distinguish "this session
+        /// is not running <name>" from "this SDL has no <name> backend compiled in" -- an SDL
+        /// configured on a machine without the backend's development packages silently drops it.
+        /// The list is what separates the two.
+        std::string CompiledVideoDrivers()
+        {
+            std::string drivers;
+            const int count = SDL_GetNumVideoDrivers();
+            for (int index = 0; index < count; ++index)
+            {
+                const char* name = SDL_GetVideoDriver(index);
+                if (name == nullptr)
+                {
+                    continue;
+                }
+                if (!drivers.empty())
+                {
+                    drivers += ", ";
+                }
+                drivers += name;
+            }
+            return drivers;
+        }
+
         void RequireSdlSuccess(const bool succeeded, const std::string& operation)
         {
             if (!succeeded)
@@ -186,7 +214,15 @@ namespace CNA::Platform::Sdl3 {
         std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
         if (!SDL_InitSubSystem(ToSdlFlag(subsystem)))
         {
-            throw PlatformException("AcquireSubsystem(" + ToString(subsystem) + ")", LastSdlError());
+            std::string detail = LastSdlError();
+            if (subsystem == PlatformSubsystem::Video)
+            {
+                const std::string drivers = CompiledVideoDrivers();
+                detail += drivers.empty()
+                    ? "; this SDL build contains no video driver at all"
+                    : "; this SDL build contains these video drivers: " + drivers;
+            }
+            throw PlatformException("AcquireSubsystem(" + ToString(subsystem) + ")", detail);
         }
         ++ownedRefCounts_[subsystem];
     }

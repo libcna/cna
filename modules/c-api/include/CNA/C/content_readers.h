@@ -360,6 +360,126 @@ CNA_C_API CNA_Result cna_content_type_reader_manager_create_reader(
     CNA_ContentTypeReaderHandle* out_type_reader);
 
 /**
+ * @brief Constructs one instance of a caller-supplied content type reader.
+ *
+ * @param context The context supplied at registration.
+ * @param out_reader_context Receives a per-instance context this ABI passes back to every other
+ *        callback in the table, and finally to @ref CNA_ContentTypeReaderDestroyCallback. May be
+ *        left as the registration context when the reader is stateless.
+ * @return `CNA_RESULT_SUCCESS`, or any documented result code to fail the load that asked for it.
+ *
+ * Called once per compiled asset file that names this reader, so each file gets a fresh,
+ * unshared instance -- the same rule the built-in readers follow.
+ */
+typedef CNA_Result (*CNA_ContentTypeReaderCreateCallback)(
+    void* context,
+    void** out_reader_context);
+
+/**
+ * @brief Deserializes one object with a caller-supplied content type reader.
+ *
+ * @param reader_context The per-instance context from @ref CNA_ContentTypeReaderCreateCallback.
+ * @param input **Callback-scoped borrowed** ContentReader handle, positioned at this object's
+ *        serialized data. It is invalidated before this callback returns and has no destroy
+ *        operation; caching it and using it later fails with `CNA_RESULT_INVALID_HANDLE`.
+ * @param existing_object The object to deserialize into, or null for a fresh one. Non-null only
+ *        when the table set `can_deserialize_into_existing_object`.
+ * @param out_object Receives the caller's opaque object. This ABI never dereferences, copies or
+ *        frees it; it is returned to whoever asked for the asset, and its lifetime is the
+ *        caller's own business.
+ * @return `CNA_RESULT_SUCCESS`, or any documented result code. **A failure fails the load** and
+ *         is reported to the caller of `cna_content_manager_load_foreign_ext` -- which is why
+ *         this callback returns a result where `CNA_GameComponentCallbacks` returns `void`: a
+ *         component that fails has a next frame to recover in, and a half-read asset does not.
+ */
+typedef CNA_Result (*CNA_ContentTypeReaderReadCallback)(
+    void* reader_context,
+    CNA_ContentReaderHandle input,
+    void* existing_object,
+    void** out_object);
+
+/**
+ * @brief Releases one reader instance created by @ref CNA_ContentTypeReaderCreateCallback.
+ *
+ * @param reader_context The per-instance context to release.
+ *
+ * Called when the instance is finished with, whether its read succeeded or failed. It returns
+ * `void` deliberately: nothing can act on a failure to clean up. Objects the reader *produced*
+ * are not released here -- they belong to whoever received them.
+ */
+typedef void (*CNA_ContentTypeReaderDestroyCallback)(void* reader_context);
+
+/** @brief The behavior of one caller-supplied content type reader. */
+typedef struct CNA_ContentTypeReaderCallbacks {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this caller-provided structure; currently one. */
+    uint32_t struct_version;
+    /** @brief Canonical target type name this reader produces; copied during registration. */
+    CNA_StringView target_type_name;
+    /** @brief The reader's `TypeVersion`, matched against the version each file declares. */
+    int32_t type_version;
+    /** @brief Whether @ref read accepts a non-null `existing_object`. */
+    CNA_Bool can_deserialize_into_existing_object;
+    /** @brief Reserved; must be zero. */
+    uint8_t reserved[3];
+    /** @brief Required per-file instance factory. */
+    CNA_ContentTypeReaderCreateCallback create;
+    /** @brief Required deserialization callback. */
+    CNA_ContentTypeReaderReadCallback read;
+    /** @brief Optional per-instance cleanup; may be null. */
+    CNA_ContentTypeReaderDestroyCallback destroy;
+    /** @brief Caller-owned context passed to @ref create; may be null. */
+    void* context;
+} CNA_ContentTypeReaderCallbacks;
+
+/**
+ * @brief Registers a caller-supplied reader factory under a canonical reader name.
+ *
+ * @param canonical_name UTF-8 canonical reader name exactly as compiled assets spell it, copied
+ *        during the call.
+ * @param callbacks Versioned behavior table; every pointer in it is copied, and @ref
+ *        CNA_ContentTypeReaderCallbacks::context stays caller-owned and must outlive the
+ *        registration.
+ * @param out_registration Receives an **owned** registration handle, released with
+ *        `cna_content_type_reader_manager_unregister`. Releasing it withdraws the factory.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_ARGUMENT` for a null output, a malformed
+ *         table, a missing `create` or `read`, or a name that is empty or not valid UTF-8;
+ *         `CNA_RESULT_INVALID_STATE` when a factory is already registered under that name; or a
+ *         documented thread/memory failure.
+ *
+ * This is the registry's extension point for a type CNA does not know. Without it the only
+ * readers a compiled asset can name are the ones this library was built with, which makes the
+ * canonical content pipeline extensible in name only.
+ *
+ * **Refusing a duplicate is a deliberate deviation.** The canonical `AddTypeCreator` silently
+ * ignores a repeat registration of the same key, which is right for built-in readers registering
+ * themselves twice through two static-initialization paths and wrong here: a caller who registers
+ * a name someone else already owns would otherwise receive a live handle whose factory is never
+ * called, and would learn about it only from assets that deserialize into the wrong type.
+ *
+ * The registry is process-wide, so a registration outlives any one game and is not tied to one.
+ * Every callback in the table runs on the thread performing the load.
+ */
+CNA_C_API CNA_Result cna_content_type_reader_manager_register(
+    CNA_StringView canonical_name,
+    const CNA_ContentTypeReaderCallbacks* callbacks,
+    CNA_Handle* out_registration);
+
+/**
+ * @brief Withdraws a caller-supplied reader factory and destroys its registration handle.
+ *
+ * @param registration Owned registration handle from `cna_content_type_reader_manager_register`.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure. A second unregistration
+ *         returns `CNA_RESULT_INVALID_HANDLE`.
+ *
+ * Reader instances already constructed for an in-flight load are unaffected; what this changes is
+ * what a **later** load finds. After it returns, the name is free for another registration, and
+ * `cna_content_type_reader_manager_get_is_registered` answers false for it.
+ */
+CNA_C_API CNA_Result cna_content_type_reader_manager_unregister(CNA_Handle registration);
+
+/**
  * @brief Registers the placeholder readers for recognized but unsupported compiled asset types.
  *
  * @return `CNA_RESULT_SUCCESS` or a documented native failure. The registration is idempotent.

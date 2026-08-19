@@ -50,6 +50,7 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateActiveGameHandle;
+using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
 
@@ -913,6 +914,14 @@ CNA_Result cna_vibrate_controller_set_test_backend_ext(
     const CNA_StringView deviceName)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(installed, "installed");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(supported, "supported");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1370,6 +1379,10 @@ CNA_Result cna_message_box_set_test_backend_ext(
     const int32_t chosenButton)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(installed, "installed");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1453,6 +1466,10 @@ CNA_Result cna_file_dialog_show_open_file_ext(
     const CNA_Bool allowMultiple)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(allowMultiple, "allow_multiple");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         if (onResult == nullptr) {
             return InvalidInput("The file dialog result handler is null.");
         }
@@ -1531,6 +1548,10 @@ CNA_Result cna_file_dialog_show_open_folder_ext(
     const CNA_Bool allowMultiple)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(allowMultiple, "allow_multiple");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         if (onResult == nullptr) {
             return InvalidInput("The file dialog result handler is null.");
         }
@@ -1563,6 +1584,10 @@ CNA_Result cna_file_dialog_set_test_backend_ext(
     const uint64_t resultCount)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(installed, "installed");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1725,6 +1750,18 @@ CNA_Result cna_system_tray_add_entry(
         if (outIndex == nullptr) {
             return InvalidInput("The tray entry index output is null.");
         }
+        if (const CNA_Result result = ValidateCanonicalBool(checkable, "checkable");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(initiallyChecked, "initially_checked");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(initiallyEnabled, "initially_enabled");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<SystemTrayResource> resource;
         if (const CNA_Result result = BorrowTray(tray, &resource);
             result != CNA_RESULT_SUCCESS) {
@@ -1778,6 +1815,10 @@ CNA_Result cna_system_tray_set_entry_checked(
     const CNA_Bool checked)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(checked, "checked");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<SystemTrayResource> resource;
         if (const CNA_Result result = BorrowTray(tray, &resource);
             result != CNA_RESULT_SUCCESS) {
@@ -1815,6 +1856,10 @@ CNA_Result cna_system_tray_set_entry_enabled(
     const CNA_Bool enabled)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(enabled, "enabled");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<SystemTrayResource> resource;
         if (const CNA_Result result = BorrowTray(tray, &resource);
             result != CNA_RESULT_SUCCESS) {

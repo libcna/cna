@@ -193,6 +193,20 @@ static int exercise_pbr_material_ext(const CNA_EffectHandle effect)
             cna_pbr_effect_get_encode_output_to_srgb_ext(effect, &boolean) ==
                 CNA_RESULT_SUCCESS && boolean == CNA_TRUE);
 
+    /* CBIND-078. False by default: a layout with a colour slot fills it with opaque white when the
+       primitive has none, so the flag states the intent rather than describing the fill. */
+    REQUIRE(cna_pbr_effect_get_vertex_color_enabled_ext(effect, &boolean) == CNA_RESULT_SUCCESS &&
+            boolean == CNA_FALSE);
+    REQUIRE(cna_pbr_effect_set_vertex_color_enabled_ext(effect, CNA_TRUE) == CNA_RESULT_SUCCESS &&
+            cna_pbr_effect_get_vertex_color_enabled_ext(effect, &boolean) == CNA_RESULT_SUCCESS &&
+            boolean == CNA_TRUE);
+    REQUIRE(cna_pbr_effect_set_vertex_color_enabled_ext(effect, CNA_FALSE) == CNA_RESULT_SUCCESS &&
+            cna_pbr_effect_get_vertex_color_enabled_ext(effect, &boolean) == CNA_RESULT_SUCCESS &&
+            boolean == CNA_FALSE);
+    REQUIRE(cna_pbr_effect_set_vertex_color_enabled_ext(effect, UINT8_C(2)) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_pbr_effect_get_vertex_color_enabled_ext(effect, 0) == CNA_RESULT_INVALID_ARGUMENT);
+
     /* Round-trip every scalar, including values the canonical API does not clamp. */
     REQUIRE(cna_pbr_effect_set_ior_ext(effect, -2.5F) == CNA_RESULT_SUCCESS &&
             cna_pbr_effect_get_ior_ext(effect, &scalar) == CNA_RESULT_SUCCESS &&
@@ -525,6 +539,20 @@ static int exercise_common_pbr(
 
 static int validate_skinned_pbr(const CNA_EffectHandle effect)
 {
+    /* CBIND-078. One route pair serves both effect types, so the skinned one must answer too --
+       which is the half a per-type binding would be most likely to miss. */
+    {
+        CNA_Bool vertex_colour = UINT8_C(9);
+        REQUIRE(cna_pbr_effect_get_vertex_color_enabled_ext(effect, &vertex_colour) ==
+                    CNA_RESULT_SUCCESS && vertex_colour == CNA_FALSE);
+        REQUIRE(cna_pbr_effect_set_vertex_color_enabled_ext(effect, CNA_TRUE) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_pbr_effect_get_vertex_color_enabled_ext(effect, &vertex_colour) ==
+                    CNA_RESULT_SUCCESS && vertex_colour == CNA_TRUE);
+        REQUIRE(cna_pbr_effect_set_vertex_color_enabled_ext(effect, CNA_FALSE) ==
+                    CNA_RESULT_SUCCESS);
+    }
+
     CNA_Matrix identity = {0};
     CNA_Matrix bones[CNA_SKINNED_PBR_EFFECT_MAX_BONES];
     CNA_Matrix copied[2];

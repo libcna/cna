@@ -1,3 +1,14 @@
+# The ELF symbol-version node for the whole C ABI.
+#
+# CBIND-063: this name is NOT the ABI version and must not be bumped with it. It read
+# `CNA_C_API_0.1` when the ABI was 0.1.0 and still reads it at 0.2.0, which looks like drift and is
+# not: a version node is the name every already-linked consumer records in its own DT_NEEDED
+# versioning, so renaming it turns every additive release into a hard break -- exactly the failure
+# this file exists to prevent. It changes only for a *major* ABI break, alongside a new node that
+# keeps the old one for compatibility.
+#
+# One node, one rule: everything named `cna_*` is public and everything else is local, so the
+# canonical C++ implementation and Sharp Runtime never become anybody's ABI.
 CNA_C_API_0.1 {
     global:
         cna_*;

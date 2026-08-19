@@ -5,6 +5,7 @@
 // validated, an empty upload is a true no-op: it must not reach pointer arithmetic, packing,
 // shadow copies, or a graphics renderer, and must not replace the most recent real upload.
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <string>
@@ -732,3 +733,140 @@ TEST_F(VertexBufferEmptyDataTest, WebGpuNativeScopesCoverEmptyOddAndAlignedUploa
     PopAndExpectClean(*graphicsRenderer);
 }
 #endif
+
+// ---------------------------------------------------------------------------------------------
+// CBIND-059: the windowed raw upload and the raw readback.
+//
+// Every other transfer route replaces the whole buffer, and typed readback names one of the
+// built-in layouts. Between them, a buffer written with a custom layout could be filled and never
+// read, and one slice of a large dynamic buffer could not be rewritten without rewriting all of it.
+// ---------------------------------------------------------------------------------------------
+
+TEST_F(VertexBufferEmptyDataTest, RawReadbackAnswersExactlyWhatTheRawUploadWrote)
+{
+    RequireVertexBuffers();
+
+    const std::array<std::uint8_t, 26> source{
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+        13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25};
+    VertexBuffer buffer(device, OddStrideDeclaration(), 2, BufferUsage::None);
+    buffer.SetDataRaw(source.data(), 2, 13);
+
+    std::array<std::uint8_t, 26> readBack{};
+    EXPECT_NO_THROW(buffer.GetDataRawEXT(0, readBack.data(), 2, 13));
+    EXPECT_EQ(source, readBack);
+
+    // A window of the readback, from a buffer-side offset.
+    std::array<std::uint8_t, 13> second{};
+    EXPECT_NO_THROW(buffer.GetDataRawEXT(13, second.data(), 1, 13));
+    EXPECT_TRUE(std::equal(second.begin(), second.end(), source.begin() + 13));
+
+    EXPECT_THROW(buffer.GetDataRawEXT(0, readBack.data(), 3, 13),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(buffer.GetDataRawEXT(0, readBack.data(), 1, 0), System::ArgumentException);
+    EXPECT_THROW(buffer.GetDataRawEXT(-1, readBack.data(), 1, 13),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_NO_THROW(buffer.GetDataRawEXT(0, nullptr, 0, 13));
+}
+
+TEST_F(VertexBufferEmptyDataTest, WindowedRawUploadLeavesTheRestOfTheBufferAlone)
+{
+    RequireVertexBuffers();
+
+    const std::array<std::uint8_t, 26> source{
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+        13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25};
+    const std::array<std::uint8_t, 13> replacement{
+        90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102};
+    VertexBuffer buffer(device, OddStrideDeclaration(), 2, BufferUsage::None);
+    buffer.SetDataRaw(source.data(), 2, 13);
+
+    EXPECT_NO_THROW(buffer.SetDataRawAtEXT(13, replacement.data(), 1, 13));
+
+    std::array<std::uint8_t, 26> readBack{};
+    ASSERT_NO_THROW(buffer.GetDataRawEXT(0, readBack.data(), 2, 13));
+    EXPECT_TRUE(std::equal(source.begin(), source.begin() + 13, readBack.begin()));
+    EXPECT_TRUE(std::equal(replacement.begin(), replacement.end(), readBack.begin() + 13));
+    // The whole buffer is still what the renderer holds, not just the window.
+    EXPECT_EQ(2, buffer.GetRenderer().GetVertexCount());
+}
+
+TEST_F(VertexBufferEmptyDataTest, WindowedRawUploadIntoNeverWrittenBytesReadsZeroElsewhere)
+{
+    RequireVertexBuffers();
+
+    // Nothing has been uploaded at all, so the shadow starts empty: the window still lands where
+    // it was asked to, and everything it did not name reads as zero rather than as absent.
+    const std::array<std::uint8_t, 13> window{
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13};
+    VertexBuffer buffer(device, OddStrideDeclaration(), 2, BufferUsage::None);
+
+    EXPECT_NO_THROW(buffer.SetDataRawAtEXT(13, window.data(), 1, 13));
+
+    std::array<std::uint8_t, 26> readBack{};
+    std::fill(readBack.begin(), readBack.end(), std::uint8_t{0xEE});
+    ASSERT_NO_THROW(buffer.GetDataRawEXT(0, readBack.data(), 2, 13));
+    EXPECT_TRUE(std::all_of(readBack.begin(), readBack.begin() + 13,
+                            [](std::uint8_t value) { return value == 0; }));
+    EXPECT_TRUE(std::equal(window.begin(), window.end(), readBack.begin() + 13));
+}
+
+TEST_F(VertexBufferEmptyDataTest, WindowedRawUploadRejectsAnUnusableWindow)
+{
+    RequireVertexBuffers();
+
+    const std::array<std::uint8_t, 13> window{
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13};
+    VertexBuffer buffer(device, OddStrideDeclaration(), 2, BufferUsage::None);
+
+    EXPECT_THROW(buffer.SetDataRawAtEXT(26, window.data(), 1, 13),
+                 System::ArgumentOutOfRangeException);
+    // Not on a vertex boundary.
+    EXPECT_THROW(buffer.SetDataRawAtEXT(5, window.data(), 1, 13), System::ArgumentException);
+    // Not this buffer's declared stride.
+    EXPECT_THROW(buffer.SetDataRawAtEXT(0, window.data(), 1, 16), System::ArgumentException);
+    EXPECT_THROW(buffer.SetDataRawAtEXT(-1, window.data(), 1, 13),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(buffer.SetDataRawAtEXT(0, nullptr, 1, 13), System::ArgumentNullException);
+    // Zero vertices is a no-op wherever a zero-length transfer is.
+    EXPECT_NO_THROW(buffer.SetDataRawAtEXT(0, nullptr, 0, 13));
+}
+
+TEST_F(VertexBufferEmptyDataTest, WindowedIndexUploadLeavesTheRestOfTheBufferAlone)
+{
+    RequireVertexBuffers();
+
+    const std::array<std::uint16_t, 3> source{11, 22, 33};
+    const std::array<std::uint16_t, 1> replacement{77};
+    IndexBuffer buffer(device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    buffer.SetData(source.data(), 3);
+
+    EXPECT_NO_THROW(buffer.SetDataAtEXT(2, replacement.data(), 0, 1));
+
+    std::array<std::uint16_t, 3> readBack{};
+    ASSERT_NO_THROW(buffer.GetData(readBack.data(), 0, 3));
+    EXPECT_EQ(source[0], readBack[0]);
+    EXPECT_EQ(replacement[0], readBack[1]);
+    EXPECT_EQ(source[2], readBack[2]);
+}
+
+TEST_F(VertexBufferEmptyDataTest, WindowedIndexUploadRejectsAnUnusableWindow)
+{
+    RequireVertexBuffers();
+
+    const std::array<std::uint16_t, 1> window{77};
+    const std::array<std::uint32_t, 1> wideWindow{77};
+    IndexBuffer buffer(device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+
+    EXPECT_THROW(buffer.SetDataAtEXT(6, window.data(), 0, 1),
+                 System::ArgumentOutOfRangeException);
+    // Not on an index boundary.
+    EXPECT_THROW(buffer.SetDataAtEXT(1, window.data(), 0, 1), System::ArgumentException);
+    // Not this buffer's element width.
+    EXPECT_THROW(buffer.SetDataAtEXT(0, wideWindow.data(), 0, 1), System::ArgumentException);
+    EXPECT_THROW(buffer.SetDataAtEXT(-1, window.data(), 0, 1),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(buffer.SetDataAtEXT(0, static_cast<const std::uint16_t*>(nullptr), 0, 1),
+                 System::ArgumentNullException);
+    EXPECT_NO_THROW(buffer.SetDataAtEXT(0, static_cast<const std::uint16_t*>(nullptr), 0, 0));
+}

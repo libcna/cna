@@ -439,11 +439,19 @@ CNA_C_API CNA_Result cna_graphics_device_get_display_mode(
     CNA_DisplayMode* out_mode);
 
 /**
- * @brief Reports the native-window-handle mapping as unavailable at the stable C boundary.
+ * @brief Reports that a graphics device does not answer for the native window.
  *
  * @param graphics_device Callback-scoped graphics-device handle.
  * @param out_value Receives zero.
  * @return `CNA_RESULT_NOT_SUPPORTED` after validating the device context.
+ *
+ * The refusal is about *where* the question is asked, not about whether the ABI can answer it. Read
+ * on its own this route says the native window is unavailable at the stable C boundary, which was
+ * true when it was written and stopped being true in `CBIND-072`:
+ * `cna_game_window_get_native_window_ext` answers it from the game window, which is what owns the
+ * window in the first place. This route keeps refusing rather than forwarding, because a device may
+ * outlive or precede the window it presents to and answering here would invent an ownership
+ * relationship the canonical layer does not have.
  */
 CNA_C_API CNA_Result cna_graphics_device_get_native_window_handle(
     CNA_Handle graphics_device,

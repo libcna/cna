@@ -35,6 +35,14 @@ Static buffers accept only `CNA_SET_DATA_NONE`. Dynamic buffers accept `None`, `
 `NoOverwrite` for both index widths. The descriptor width must match the buffer's creation width;
 there is no implicit narrowing or widening.
 
+`cna_index_buffer_set_data_at` is the one route whose offset indexes **the buffer** rather than the
+caller's array -- XNA's `offsetInBytes` overload -- so one slice of a large dynamic index buffer can
+be rewritten per frame while the rest keeps whatever it held. The descriptor's `start_index` still
+indexes the caller's array, as it does everywhere else. Two deviations, both deliberate: it accepts
+no `SetDataOptions` other than `None`, because a windowed upload promises to keep the rest of the
+buffer and `Discard` promises the opposite; and it costs a whole-buffer re-upload, because no
+renderer contract here takes a destination offset. Indices no upload has ever written read as zero.
+
 ## Events, disposal and evidence
 
 `cna_index_buffer_subscribe_content_lost` retains a callback/context registration for a dynamic

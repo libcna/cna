@@ -494,7 +494,26 @@ CNA_C_API CNA_Result cna_wave_bank_create(
  * @param offset Byte offset of the bank inside the file.
  * @param packet_size Streaming packet size in sectors.
  * @param out_wave_bank Receives an owned wave-bank handle, or `CNA_INVALID_HANDLE` on failure.
- * @return The same answers as @ref cna_wave_bank_create.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output or a path that is
+ *         not valid UTF-8, or a documented handle/thread failure.
+ *
+ * **This does *not* answer the same way as `cna_wave_bank_create`, and the difference is
+ * deliberate rather than an oversight.** That one reports a missing file as `CNA_RESULT_IO`,
+ * because the canonical non-streaming constructor reads it the way XNA does -- through the title
+ * container, which throws when the file is absent. The streaming constructor never goes through
+ * the title container at all; it hands the path to the native audio layer, exactly as FNA's
+ * streaming path does, and a missing file does not throw there either. So this route answers
+ * `CNA_RESULT_SUCCESS` and hands back a live but **empty** wave bank for a file that does not
+ * exist, and that is FNA's behaviour reproduced rather than a failure lost.
+ *
+ * The practical consequence is the same either way: **do not read success here as "the file was
+ * there"**. Ask the bank whether it has content. The same applies to a file that exists but is
+ * malformed, in *both* constructors -- a parse failure leaves an empty bank rather than raising,
+ * because the canonical path never checks the native return code.
+ *
+ * This header claimed the two answered alike until `CBIND-065`, which found it by writing the
+ * first test that called this route. `XactSmoke.c` now pins the behaviour, so a canonical change
+ * becomes visible instead of silent.
  */
 CNA_C_API CNA_Result cna_wave_bank_create_streaming(
     CNA_Handle engine,

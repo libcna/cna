@@ -432,6 +432,50 @@ static CNA_Result create_font(
         measured.x != 12.0f || measured.y != 12.0f) {
         return CNA_RESULT_INVALID_STATE;
     }
+    /* CBIND-055: the glyph table reads back exactly as it went in, which is what lets a caller
+       hold one font instead of a native one it can measure and a private copy it can draw from.
+       Measuring answers the size of a whole string; placing a glyph needs its atlas rectangle,
+       its cropping offset and its three kerning values, and none of those were reachable. */
+    CNA_SpriteFontGlyph read_back[3];
+    uint64_t glyph_count = 0U;
+    memset(read_back, 0, sizeof(read_back));
+    if (cna_sprite_font_copy_glyphs(state->sprite_font, read_back, 2U, &glyph_count) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        glyph_count != 3U ||
+        cna_sprite_font_copy_glyphs(state->sprite_font, 0, 0U, &glyph_count) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        glyph_count != 3U ||
+        cna_sprite_font_copy_glyphs(state->sprite_font, read_back, 3U, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_sprite_font_copy_glyphs(state->sprite_font, read_back, 3U, &glyph_count) !=
+            CNA_RESULT_SUCCESS ||
+        glyph_count != 3U) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    for (uint64_t index = 0U; index < glyph_count; ++index) {
+        const CNA_SpriteFontGlyph* const source = &glyphs[index];
+        const CNA_SpriteFontGlyph* const copy = &read_back[index];
+        if (copy->struct_size != (uint32_t)sizeof(CNA_SpriteFontGlyph) ||
+            copy->struct_version != UINT32_C(1) || copy->reserved != 0U ||
+            copy->character != source->character ||
+            copy->glyph_bounds.x != source->glyph_bounds.x ||
+            copy->glyph_bounds.y != source->glyph_bounds.y ||
+            copy->glyph_bounds.width != source->glyph_bounds.width ||
+            copy->glyph_bounds.height != source->glyph_bounds.height ||
+            copy->cropping.x != source->cropping.x ||
+            copy->cropping.y != source->cropping.y ||
+            copy->cropping.width != source->cropping.width ||
+            copy->cropping.height != source->cropping.height ||
+            copy->kerning.x != source->kerning.x || copy->kerning.y != source->kerning.y ||
+            copy->kerning.z != source->kerning.z) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+        /* Glyph i describes character i, which is the ordering both routes promise. */
+        if (copy->character != characters[index]) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+    }
+
     const char invalid_utf8[] = {(char)0xC3, '('};
     if (cna_sprite_font_measure_utf8(
             state->sprite_font,
@@ -524,6 +568,39 @@ static CNA_Result create_render_targets(
                    graphics_device, &binding_count) != CNA_RESULT_SUCCESS ||
                binding_count != 0U) {
         return CNA_RESULT_INVALID_STATE;
+    }
+
+    /* CBIND-070: the array slice and the cube face, which nothing asserted at all. Both refusals
+       are decided before a renderer is consulted, so they hold whether or not one is available --
+       which is what makes them assertable here rather than only in a 3D tree.
+
+       The two results differ on purpose. A nonzero slice on a 2D target is what the canonical
+       SetRenderTargets itself refuses, with NotSupportedException, so it answers NOT_SUPPORTED.
+       A face on a 2D binding is an ordinary bad argument: the field means nothing there. */
+    {
+        CNA_RenderTargetBinding sliced = {
+            sizeof(CNA_RenderTargetBinding), UINT32_C(1), state->render_target_2d,
+            1, CNA_CUBE_MAP_FACE_POSITIVE_X
+        };
+        CNA_RenderTargetBinding faced = {
+            sizeof(CNA_RenderTargetBinding), UINT32_C(1), state->render_target_2d,
+            0, CNA_CUBE_MAP_FACE_NEGATIVE_Z
+        };
+        CNA_RenderTargetBinding cube_sliced = {
+            sizeof(CNA_RenderTargetBinding), UINT32_C(1), state->render_target_cube,
+            1, CNA_CUBE_MAP_FACE_POSITIVE_X
+        };
+        if (cna_graphics_device_set_render_targets(graphics_device, &sliced, 1U) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_graphics_device_set_render_targets(graphics_device, &faced, 1U) !=
+                CNA_RESULT_INVALID_ARGUMENT ||
+            /* A cube binding has no slice either -- the face selects the subresource -- and that
+               is an invalid argument rather than an unsupported one, because the canonical cube
+               path never reads the field at all. */
+            cna_graphics_device_set_render_targets(graphics_device, &cube_sliced, 1U) !=
+                CNA_RESULT_INVALID_ARGUMENT) {
+            return CNA_RESULT_INVALID_STATE;
+        }
     }
 
     const CNA_Result set_cube = cna_graphics_device_set_render_target_cube(

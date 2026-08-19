@@ -23,6 +23,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
 
@@ -492,6 +493,10 @@ CNA_Result cna_graphics_device_manager_set_is_full_screen(
     const CNA_Bool fullScreen)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(fullScreen, "full_screen");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
             result != CNA_RESULT_SUCCESS) {
@@ -525,6 +530,10 @@ CNA_Result cna_graphics_device_manager_set_prefer_multi_sampling(
     const CNA_Bool prefer)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(prefer, "prefer");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
             result != CNA_RESULT_SUCCESS) {
@@ -703,6 +712,10 @@ CNA_Result cna_graphics_device_manager_set_synchronize_with_vertical_retrace(
     const CNA_Bool synchronize)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(synchronize, "synchronize");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
             result != CNA_RESULT_SUCCESS) {
@@ -979,6 +992,56 @@ CNA_Result cna_graphics_device_manager_subscribe_preparing_device_settings(
                 CNA_GraphicsDeviceInformation mapped = {};
                 ToCDeviceInformation(args.getGraphicsDeviceInformationProperty(), &mapped);
                 callback(&mapped, context);
+            });
+        return PublishRegistration(
+            std::make_shared<ManagerRegistration<PreparingDeviceSettingsEventArgs>>(
+                resource, source, token),
+            outRegistration);
+    });
+}
+
+CNA_Result cna_graphics_device_manager_subscribe_preparing_device_settings_ext(
+    const CNA_GraphicsDeviceManagerHandle manager,
+    const CNA_PreparingDeviceSettingsMutatorEXT callback,
+    void* const context,
+    CNA_GameEventRegistrationHandle* const outRegistration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRegistration == nullptr) {
+            return InvalidInput("The manager registration output is null.");
+        }
+        *outRegistration = CNA_INVALID_HANDLE;
+        if (callback == nullptr) {
+            return InvalidInput("The device settings callback is null.");
+        }
+        std::shared_ptr<ManagerResource> resource;
+        if (const CNA_Result result = BorrowManager(manager, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto* const source = &resource->value->PreparingDeviceSettings;
+        const auto token = source->Add(
+            [callback, context](System::Object*, const PreparingDeviceSettingsEventArgs& args) {
+                // The settings are held by pointer, so the const argument the handler collection
+                // delivers never made them const. This accessor is what lets the canonical event
+                // do in this runtime what it does in XNA.
+                GraphicsDeviceInformation& canonical = args.getGraphicsDeviceInformationEXT();
+                CNA_GraphicsDeviceInformation mapped = {};
+                ToCDeviceInformation(canonical, &mapped);
+                callback(&mapped, context);
+                if (!IsDeviceInformation(&mapped)) {
+                    // A handler that corrupted the structure or wrote an undefined identity is
+                    // ignored rather than obeyed: half-applying it would fail device creation
+                    // later, for a reason with no visible connection to what was written.
+                    return;
+                }
+                canonical.setAdapterProperty(AdapterAt(mapped.adapter_index));
+                canonical.setGraphicsProfileProperty(
+                    static_cast<GraphicsProfile>(mapped.graphics_profile));
+                PresentationParameters parameters =
+                    canonical.getPresentationParametersProperty();
+                ApplyPresentationParameters(mapped.presentation_parameters, &parameters);
+                canonical.setPresentationParametersProperty(parameters);
             });
         return PublishRegistration(
             std::make_shared<ManagerRegistration<PreparingDeviceSettingsEventArgs>>(

@@ -117,6 +117,29 @@ static int validate_base_effect(const CNA_Handle device)
                     CNA_RESULT_INVALID_ARGUMENT && refused == CNA_INVALID_HANDLE);
         REQUIRE(cna_effect_create_compiled(device, garbage, (uint64_t)sizeof(garbage), 0) ==
                     CNA_RESULT_INVALID_ARGUMENT);
+        /* CBIND-058: and the capability decides what a *renderer* answers, which is the half the
+           three refusals above deliberately do not depend on. A build without the capability must
+           refuse valid-looking bytecode for that reason and no other; a build with it must not
+           refuse for that reason. Neither branch needs a fixture, because both are about the
+           refusal, and the accepting path is proved by the shared compiled-effect conformance
+           suite in the trees that advertise the capability. */
+        if (compiled_effects == CNA_FALSE) {
+            CNA_Bool three_d = CNA_FALSE;
+            REQUIRE(cna_graphics_device_supports_capability(
+                        device, CNA_GRAPHICS_CAPABILITY_THREE_D, &three_d) == CNA_RESULT_SUCCESS);
+        }
+    }
+    {
+        /* The dialect a custom ShaderEffect's sources must use. Every renderer answers, and an
+           undeclared one answers UNKNOWN rather than guessing. */
+        CNA_ShaderDialect dialect = UINT32_MAX;
+        REQUIRE(cna_graphics_device_get_shader_dialect_ext(device, &dialect) ==
+                    CNA_RESULT_SUCCESS &&
+                dialect <= CNA_SHADER_DIALECT_MAXIMUM &&
+                cna_graphics_device_get_shader_dialect_ext(device, 0) ==
+                    CNA_RESULT_INVALID_ARGUMENT &&
+                cna_graphics_device_get_shader_dialect_ext(CNA_INVALID_HANDLE, &dialect) ==
+                    CNA_RESULT_INVALID_HANDLE);
     }
     REQUIRE(cna_effect_get_graphics_device(effect, &owner) == CNA_RESULT_SUCCESS &&
             owner == device);
@@ -395,6 +418,31 @@ static int validate_shader_effect(const CNA_Handle device)
             shader_has_renderer == base_has_renderer &&
             (is_valid == CNA_FALSE || shader_has_renderer == CNA_TRUE));
 
+    /* CBIND-075. Creating succeeds for source no renderer could run, and that is the documented
+       contract: success means the object exists, not that anything compiled. What the renderers
+       then say about it differs -- one accepts any non-empty text and calls it valid, another
+       compiles and calls it invalid -- so the verdict is read as a canonical boolean rather than
+       pinned to one value. The refusal that IS uniform is source-less creation: it used to be an
+       INTERNAL from one renderer's exception, blaming CNA for the caller's input, and a plain
+       success from another. */
+    {
+        CNA_EffectHandle junk = CNA_INVALID_HANDLE;
+        CNA_EffectHandle empty = CNA_INVALID_HANDLE;
+        CNA_Bool junk_valid = UINT8_C(9);
+
+        REQUIRE(cna_shader_effect_create(
+                    device, string_view("this is not a shader"),
+                    string_view("neither is this"), &junk) == CNA_RESULT_SUCCESS);
+        REQUIRE(junk != CNA_INVALID_HANDLE);
+        REQUIRE(cna_shader_effect_is_valid(junk, &junk_valid) == CNA_RESULT_SUCCESS &&
+                (junk_valid == CNA_FALSE || junk_valid == CNA_TRUE));
+        REQUIRE(cna_effect_destroy(junk) == CNA_RESULT_SUCCESS);
+
+        REQUIRE(cna_shader_effect_create(
+                    device, string_view(""), string_view(""), &empty) ==
+                CNA_RESULT_INVALID_ARGUMENT);
+        REQUIRE(empty == CNA_INVALID_HANDLE);
+    }
     REQUIRE(cna_shader_effect_get_world(shader, &value) == CNA_RESULT_SUCCESS &&
             memcmp(&value, &identity, sizeof(value)) == 0);
     value.m41 = 7.0F;
@@ -433,6 +481,24 @@ static int validate_shader_effect(const CNA_Handle device)
                 shader, string_view("Empty"), 0, 0U) == CNA_RESULT_SUCCESS &&
             cna_shader_effect_set_uniform_vector2_array(
                 shader, string_view("V2A"), vectors, 2U) == CNA_RESULT_SUCCESS);
+
+    /* CBIND-058: the std140 block declaration a SPIR-V target needs and every other dialect
+       ignores, so the same call sits unconditionally beside the effect's construction. */
+    {
+        const CNA_StringView block_names[2] = {string_view("Tint"), string_view("Scale")};
+        const int32_t block_offsets[2] = {0, 16};
+        REQUIRE(cna_shader_effect_declare_uniform_block_ext(
+                    shader, 32, block_names, block_offsets, 2U) == CNA_RESULT_SUCCESS &&
+                /* Zero members clears a previous declaration and accepts null arrays. */
+                cna_shader_effect_declare_uniform_block_ext(shader, 0, 0, 0, 0U) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_shader_effect_declare_uniform_block_ext(
+                    shader, -1, block_names, block_offsets, 2U) == CNA_RESULT_INVALID_ARGUMENT &&
+                cna_shader_effect_declare_uniform_block_ext(
+                    shader, 32, 0, block_offsets, 2U) == CNA_RESULT_INVALID_ARGUMENT &&
+                cna_shader_effect_declare_uniform_block_ext(
+                    shader, 32, block_names, 0, 2U) == CNA_RESULT_INVALID_ARGUMENT);
+    }
 
     REQUIRE(cna_texture2d_create(device, &texture_info, &texture2d) == CNA_RESULT_SUCCESS &&
             cna_texturecube_create(device, &cube_info, &cube) == CNA_RESULT_SUCCESS);

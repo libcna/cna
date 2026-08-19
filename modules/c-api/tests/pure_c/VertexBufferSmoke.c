@@ -323,8 +323,69 @@ static int validate_default_and_raw(const CNA_Handle device)
         cna_vertex_buffer_set_data_raw(raw, bytes, 31U, 2U, 16U) !=
             CNA_RESULT_INVALID_ARGUMENT ||
         cna_vertex_buffer_set_data_raw(raw, bytes, sizeof(bytes), 2U, 12U) !=
-            CNA_RESULT_INVALID_ARGUMENT ||
-        cna_vertex_buffer_destroy(raw) != CNA_RESULT_SUCCESS) {
+            CNA_RESULT_INVALID_ARGUMENT) {
+        (void)cna_vertex_buffer_destroy(raw);
+        return 0;
+    }
+
+    /* CBIND-059: raw readback, and a windowed upload that indexes the BUFFER rather than the
+       caller's array. Typed readback names one of the built-in layouts, so a buffer written with a
+       custom layout could be filled and never read; and every other transfer route replaces the
+       whole buffer, so rewriting one slice of a large dynamic buffer was impossible. */
+    {
+        unsigned char read_back[32];
+        const CNA_VertexPositionColor replacement = {{20.0f, 21.0f, 22.0f}, {23U, 24U, 25U, 26U}};
+        unsigned char window[16];
+        CNA_VertexPositionColor after[2] = {0};
+
+        memset(read_back, 0, sizeof(read_back));
+        if (cna_vertex_buffer_get_data_raw(raw, 0U, read_back, sizeof(read_back), 2U, 16U) !=
+                CNA_RESULT_SUCCESS ||
+            memcmp(read_back, bytes, sizeof(read_back)) != 0) {
+            (void)cna_vertex_buffer_destroy(raw);
+            return 0;
+        }
+        /* Reading only the second vertex, from a buffer-side offset. */
+        memset(read_back, 0, sizeof(read_back));
+        if (cna_vertex_buffer_get_data_raw(raw, 16U, read_back, sizeof(read_back), 1U, 16U) !=
+                CNA_RESULT_SUCCESS ||
+            memcmp(read_back, bytes + 16, 16U) != 0 ||
+            cna_vertex_buffer_get_data_raw(raw, 0U, read_back, 15U, 1U, 16U) !=
+                CNA_RESULT_INVALID_ARGUMENT ||
+            cna_vertex_buffer_get_data_raw(raw, 0U, read_back, sizeof(read_back), 1U, 0U) !=
+                CNA_RESULT_INVALID_ARGUMENT) {
+            (void)cna_vertex_buffer_destroy(raw);
+            return 0;
+        }
+
+        /* Writing only the second vertex leaves the first exactly as it was, which is the whole
+           point of the route and what a full re-upload would destroy. */
+        memcpy(window, &replacement, sizeof(window));
+        if (cna_vertex_buffer_set_data_raw_at(raw, 16U, window, sizeof(window), 1U, 16U) !=
+                CNA_RESULT_SUCCESS ||
+            cna_vertex_buffer_get_data(raw, &transfer, after, 2U, &required) !=
+                CNA_RESULT_SUCCESS ||
+            required != 2U ||
+            memcmp(&after[0], &expected[0], sizeof(after[0])) != 0 ||
+            memcmp(&after[1], &replacement, sizeof(after[1])) != 0) {
+            (void)cna_vertex_buffer_destroy(raw);
+            return 0;
+        }
+        /* A window that leaves the buffer, an unaligned offset and a zero stride are refused. */
+        if (cna_vertex_buffer_set_data_raw_at(raw, 32U, window, sizeof(window), 1U, 16U) ==
+                CNA_RESULT_SUCCESS ||
+            cna_vertex_buffer_set_data_raw_at(raw, 8U, window, sizeof(window), 1U, 16U) ==
+                CNA_RESULT_SUCCESS ||
+            cna_vertex_buffer_set_data_raw_at(raw, 0U, window, sizeof(window), 1U, 0U) !=
+                CNA_RESULT_INVALID_ARGUMENT ||
+            /* Zero vertices is a legal no-op wherever a zero-length transfer is. */
+            cna_vertex_buffer_set_data_raw_at(raw, 0U, 0, 0U, 0U, 16U) != CNA_RESULT_SUCCESS) {
+            (void)cna_vertex_buffer_destroy(raw);
+            return 0;
+        }
+    }
+
+    if (cna_vertex_buffer_destroy(raw) != CNA_RESULT_SUCCESS) {
         return 0;
     }
     return 1;

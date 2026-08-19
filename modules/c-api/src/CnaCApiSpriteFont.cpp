@@ -239,6 +239,65 @@ CNA_Result cna_sprite_font_copy_characters(
     });
 }
 
+CNA_Result cna_sprite_font_copy_glyphs(
+    const CNA_Handle spriteFontHandle,
+    CNA_SpriteFontGlyph* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() {
+        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The SpriteFont glyph output buffer is invalid.");
+        }
+        std::shared_ptr<SpriteFontResource> spriteFont;
+        if (const CNA_Result result = GetSpriteFont(spriteFontHandle, &spriteFont);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const SpriteFont& font = *spriteFont->value;
+        const std::vector<SharpRuntime::charcs>& characters = font.getCharactersProperty();
+        const std::vector<Rectangle>& bounds = font.getGlyphBoundsEXT();
+        const std::vector<Rectangle>& cropping = font.getCroppingEXT();
+        const std::vector<Vector3>& kerning = font.getKerningEXT();
+        *outCount = characters.size();
+        // The constructor enforces one entry per character in all four tables, so disagreement
+        // here would mean the font was built by something that bypassed it. Refusing beats
+        // reading past the shorter table.
+        if (bounds.size() != characters.size() || cropping.size() != characters.size() ||
+            kerning.size() != characters.size()) {
+            return Fail(
+                CNA_RESULT_INTERNAL,
+                CNA_ERROR_CATEGORY_INTERNAL,
+                "The SpriteFont glyph tables disagree on their length.");
+        }
+        if (capacity < characters.size()) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The SpriteFont glyph output buffer is too small.");
+        }
+        for (std::size_t index = 0U; index < characters.size(); ++index) {
+            CNA_SpriteFontGlyph& glyph = destination[index];
+            glyph.struct_size = static_cast<uint32_t>(sizeof(CNA_SpriteFontGlyph));
+            glyph.struct_version = StructureVersion;
+            glyph.glyph_bounds.x = bounds[index].X;
+            glyph.glyph_bounds.y = bounds[index].Y;
+            glyph.glyph_bounds.width = bounds[index].Width;
+            glyph.glyph_bounds.height = bounds[index].Height;
+            glyph.cropping.x = cropping[index].X;
+            glyph.cropping.y = cropping[index].Y;
+            glyph.cropping.width = cropping[index].Width;
+            glyph.cropping.height = cropping[index].Height;
+            glyph.character = static_cast<CNA_Char16>(characters[index]);
+            glyph.reserved = UINT16_C(0);
+            glyph.kerning.x = kerning[index].X;
+            glyph.kerning.y = kerning[index].Y;
+            glyph.kerning.z = kerning[index].Z;
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_sprite_font_set_default_character(
     const CNA_Handle spriteFontHandle,
     const CNA_Bool hasValue,

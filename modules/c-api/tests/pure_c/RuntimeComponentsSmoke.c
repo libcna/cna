@@ -497,7 +497,16 @@ static CNA_Result on_update(
 {
     (void)out_error;
     ComponentsSmokeState* const state = (ComponentsSmokeState*)context;
-    if (game_time == 0 || !validate_identities() || !validate_component_behavior(game) ||
+    if (game_time == 0) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    /* CBIND-068: this suite runs more than one frame now, and the validators below are a
+       one-shot -- they remove services and destroy components, so a second pass would fail on the
+       state the first one deliberately left behind. */
+    if (state->validated != 0) {
+        return CNA_RESULT_SUCCESS;
+    }
+    if (!validate_identities() || !validate_component_behavior(game) ||
         !validate_collection(game) || !validate_services(game)) {
         return CNA_RESULT_INVALID_STATE;
     }
@@ -526,5 +535,80 @@ int main(void)
         smoke_state.validated != 1) {
         return 1;
     }
+
+    /* CBIND-068: a component in the game's collection actually ticks, once per frame.
+     *
+     * Every assertion above this one drives a component **directly** -- cna_game_component_update
+     * with a time the test supplies -- which proves the callback table is wired and says nothing
+     * about whether the game ever calls it. It did not: CGame::Update and CGame::Draw were the
+     * only overrides in that class that never chained to the base, and Game::Update is what walks
+     * the updateable components and then runs FrameworkDispatcher::Update(). A component added
+     * through cna_game_components_add was constructed, initialized by the add path, and then never
+     * ticked again.
+     *
+     * This has to run from outside a lifecycle callback, because the base pass happens *after* the
+     * consumer's update handler returns -- an assertion made inside that handler would read the
+     * counts of the frame before it. Reported from the C#/.NET binding, which saw a component
+     * report initialized=true and updated 0 times across six frames.
+     */
+    {
+        BehaviorState ticker = {0, 0, 0, 0, 0, 0, 0};
+        CNA_GameComponentCallbacks ticker_callbacks;
+        CNA_GameComponentHandle component = CNA_INVALID_HANDLE;
+        int frame = 0;
+        int updates_after_first = 0;
+        int draws_after_first = 0;
+
+        if (cna_game_component_callbacks_init(&ticker_callbacks) != CNA_RESULT_SUCCESS) {
+            return 3;
+        }
+        fill_callbacks(&ticker_callbacks, &ticker);
+        if (cna_drawable_game_component_create(game, &ticker_callbacks, &component) !=
+                CNA_RESULT_SUCCESS ||
+            cna_game_components_add(game, component) != CNA_RESULT_SUCCESS) {
+            return 3;
+        }
+        /* Adding initializes it, which is the canonical add path and not the frame loop. */
+        if (ticker.initialize_calls != 1 || ticker.update_calls != 0) {
+            return 4;
+        }
+        if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS) {
+            return 5;
+        }
+        updates_after_first = ticker.update_calls;
+        draws_after_first = ticker.draw_calls;
+        if (updates_after_first < 1) {
+            return 6;
+        }
+        for (frame = 0; frame < 3; ++frame) {
+            if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS) {
+                return 7;
+            }
+        }
+        /* One update per frame, exactly -- a fixed-timestep frame runs Update once. */
+        if (ticker.update_calls != updates_after_first + 3) {
+            return 8;
+        }
+        /* And drawing reaches it too, which is Game::Draw's own pass over visible components. A
+           frame may legitimately suppress its draw, so this asserts growth rather than a count. */
+        if (ticker.draw_calls <= draws_after_first - 1 || ticker.draw_calls < 1) {
+            return 9;
+        }
+        /* Disabling it stops the ticks without removing it, which is what Enabled is for. */
+        if (cna_game_component_set_enabled(component, CNA_FALSE) != CNA_RESULT_SUCCESS) {
+            return 10;
+        }
+        {
+            const int before = ticker.update_calls;
+            if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
+                ticker.update_calls != before) {
+                return 11;
+            }
+        }
+        if (cna_game_component_destroy(component) != CNA_RESULT_SUCCESS) {
+            return 12;
+        }
+    }
+
     return cna_game_destroy(game) == CNA_RESULT_SUCCESS ? 0 : 2;
 }

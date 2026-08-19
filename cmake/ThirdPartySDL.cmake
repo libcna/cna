@@ -51,6 +51,73 @@ endif()
 set(CNA_SDL_PREBUILT_ROOT "${_cna_sdl_prebuilt_default}"
     CACHE PATH "Persistent SDL3 install root (survives cmake --clean and build-tree deletion)")
 
+# ---------------------------------------------------------------------------
+# Report which video drivers the vendored SDL actually ended up with.
+#
+# SDL's per-backend options (SDL_WAYLAND, SDL_X11, ...) default ON and are *requests*: when the
+# backend's development packages are missing, SDL turns the backend off and finishes the configure
+# successfully. Nothing downstream notices, because SDL then picks a backend that did build -- on a
+# Wayland session that means x11 over Xwayland, which works well enough that the loss stays
+# invisible until somebody asks for the missing driver by name and gets "wayland not available"
+# from a library that was never built with it.
+#
+# The generated build config is the only honest record of what was compiled in, so read it and say
+# so. This never fails the configure: an X11-only SDL is a perfectly good SDL, and a machine that
+# is on Wayland right now is the one case where the degradation is worth raising a voice over.
+# ---------------------------------------------------------------------------
+function(_cna_report_sdl_video_drivers)
+    if(EMSCRIPTEN OR ANDROID OR APPLE OR WIN32)
+        return()
+    endif()
+
+    file(GLOB _sdl_build_configs
+        "${CNA_SDL_PREBUILT_ROOT}/SDL/build/include-config-*/build_config/SDL_build_config.h")
+    if(NOT _sdl_build_configs)
+        # A prefix supplied from outside, or an install whose build tree was removed. Nothing to
+        # read, and guessing would be worse than staying quiet.
+        return()
+    endif()
+    list(GET _sdl_build_configs 0 _sdl_build_config)
+    file(READ "${_sdl_build_config}" _sdl_build_config_text)
+
+    set(_sdl_present "")
+    set(_sdl_has_wayland OFF)
+    foreach(_driver IN ITEMS X11 WAYLAND KMSDRM OFFSCREEN DUMMY)
+        if(_sdl_build_config_text MATCHES "#define[ \t]+SDL_VIDEO_DRIVER_${_driver}[ \t]+1")
+            string(TOLOWER "${_driver}" _driver_name)
+            list(APPEND _sdl_present "${_driver_name}")
+            if(_driver STREQUAL "WAYLAND")
+                set(_sdl_has_wayland ON)
+            endif()
+        endif()
+    endforeach()
+    string(REPLACE ";" ", " _sdl_present_text "${_sdl_present}")
+    message(STATUS "CNA: vendored SDL3 video drivers: ${_sdl_present_text}")
+
+    if(_sdl_has_wayland)
+        return()
+    endif()
+
+    # One string, not a joined list: a semicolon inside a CMake list element is a separator, and
+    # rejoining the pieces silently swallows it.
+    set(_wayland_advice
+"The vendored SDL3 in ${CNA_SDL_PREBUILT_ROOT} was built WITHOUT the Wayland video driver, because \
+its development packages were not installed when SDL was configured. SDL_VIDEODRIVER=wayland \
+therefore fails with 'wayland not available', and with no SDL_VIDEODRIVER set SDL falls back to \
+x11, so a Wayland session runs the game through Xwayland instead. For a native Wayland client, \
+install the packages and rebuild SDL -- the cache is rebuilt only when it is absent:
+  sudo apt-get install -y libwayland-dev wayland-protocols libxkbcommon-dev libdecor-0-dev
+  rm -rf ${CNA_SDL_PREBUILT_ROOT}
+then reconfigure.")
+
+    if(DEFINED ENV{WAYLAND_DISPLAY})
+        # This machine is on Wayland now, so the fallback is being taken on every run here.
+        message(WARNING "${_wayland_advice}")
+    else()
+        message(STATUS "CNA: ${_wayland_advice}")
+    endif()
+endfunction()
+
 function(cna_configure_vendored_sdl)
     if(TARGET SDL3::SDL3 AND TARGET SDL3_image::SDL3_image AND TARGET SDL3_mixer::SDL3_mixer)
         return()
@@ -208,6 +275,8 @@ function(cna_configure_vendored_sdl)
                 -DSDLMIXER_FLAC_LIBFLAC=OFF
         )
     endif()
+
+    _cna_report_sdl_video_drivers()
 
     # SDL is now installed — let find_package set up the targets properly.
     set(SDL3_DIR       "${_sdl3_cmake_dir}"      CACHE PATH "" FORCE)

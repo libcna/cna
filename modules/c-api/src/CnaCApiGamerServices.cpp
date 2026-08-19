@@ -27,6 +27,7 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ValidateCanonicalBool;
 using Microsoft::Xna::Framework::PlayerIndex;
 using Microsoft::Xna::Framework::GamerServices::AvatarAnimationPreset;
 using Microsoft::Xna::Framework::GamerServices::AvatarBodyType;
@@ -197,6 +198,13 @@ CNA_Result cna_invite_accepted_event_info_init(
             outInfo->struct_version != UINT32_C(1)) {
             return InvalidArgument("The event description structure is invalid.");
         }
+        // CBIND-065: the flag is validated before it is stored, unlike a plain setter, because
+        // this structure is what an invite-accepted *subscriber* reads. A byte outside
+        // {CNA_FALSE, CNA_TRUE} accepted here would hand a reader a Boolean that is neither, and
+        // docs/c-api/ABI_VERSIONING.md declares those the only valid values.
+        if (isCurrentSession != CNA_FALSE && isCurrentSession != CNA_TRUE) {
+            return InvalidArgument("The current-session flag is not a canonical CNA_Bool.");
+        }
         if (gamer != CNA_INVALID_HANDLE) {
             std::shared_ptr<SignedInGamerResource> resource;
             if (const CNA_Result result = GetSignedInGamer(gamer, &resource);
@@ -223,6 +231,14 @@ CNA_Result cna_signed_in_gamer_create_ext(
             return InvalidArgument("The SignedInGamer output handle is null.");
         }
         *outGamer = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = ValidateCanonicalBool(isSignedInToLive, "is_signed_in_to_live");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(isGuest, "is_guest");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         if (playerIndex > CNA_PLAYER_INDEX_FOUR) {
             return InvalidArgument("The requested player is not a canonical PlayerIndex identity.");
         }

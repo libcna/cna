@@ -76,7 +76,7 @@
 
 [window-close-requested]
   before: IsActive=true RunApplication=true ClientBoundsChanged=false WheelDelta=0
-  after:  IsActive=true RunApplication=true ClientBoundsChanged=false WheelDelta=0
+  after:  IsActive=true RunApplication=false ClientBoundsChanged=false WheelDelta=0
 
 [debug-hotkey-f9]
   before: IsActive=true RunApplication=true ClientBoundsChanged=false WheelDelta=0

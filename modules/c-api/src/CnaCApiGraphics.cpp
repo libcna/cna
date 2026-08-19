@@ -6,6 +6,18 @@
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "CNA/GraphicsCapability.hpp"
+// The renderer contract is an internal header written for the graphics module's own warning
+// settings, not for this library's `-Wall -Wextra -Werror` (CBIND-052A). It is included only for
+// the ShaderDialectEXT enumerators the dialect route names, so the one diagnostic its defaulted
+// interface methods trip is suppressed for the include alone rather than for this file.
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#endif
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -111,6 +123,27 @@ struct ResolvedSpriteCommand final {
         default:
             return false;
     }
+}
+
+/// The C identity for a renderer's declared shading dialect.
+///
+/// An exhaustive switch with no `default`, so `-Werror=switch` catches a dialect appended to the
+/// canonical enumeration that nothing here answers -- the failure mode CBIND-052A found in the
+/// renderer identity table and fixed the same way.
+[[nodiscard]] CNA_ShaderDialect MapShaderDialect(
+    const CNA::Internal::Renderers::ShaderDialectEXT dialect) noexcept
+{
+    using CNA::Internal::Renderers::ShaderDialectEXT;
+    switch (dialect) {
+        case ShaderDialectEXT::Unknown:     return CNA_SHADER_DIALECT_UNKNOWN;
+        case ShaderDialectEXT::GlslDesktop: return CNA_SHADER_DIALECT_GLSL_DESKTOP;
+        case ShaderDialectEXT::GlslEs:      return CNA_SHADER_DIALECT_GLSL_ES;
+        case ShaderDialectEXT::GlslVulkan:  return CNA_SHADER_DIALECT_GLSL_VULKAN;
+        case ShaderDialectEXT::Hlsl:        return CNA_SHADER_DIALECT_HLSL;
+        case ShaderDialectEXT::Msl:         return CNA_SHADER_DIALECT_MSL;
+        case ShaderDialectEXT::Wgsl:        return CNA_SHADER_DIALECT_WGSL;
+    }
+    return CNA_SHADER_DIALECT_UNKNOWN;
 }
 
 [[nodiscard]] bool TryMapGraphicsCapability(
@@ -589,6 +622,29 @@ CNA_Result cna_graphics_device_supports_capability(
         *outSupported = graphicsDevice->value->SupportsCapability(nativeCapability)
             ? CNA_TRUE
             : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_shader_dialect_ext(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_ShaderDialect* const outDialect)
+{
+    return CallWithExceptionBarrier([&]() {
+        if (outDialect == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The shader-dialect output is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle,
+                &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outDialect = MapShaderDialect(graphicsDevice->value->GetShaderDialectEXT());
         return CNA_RESULT_SUCCESS;
     });
 }

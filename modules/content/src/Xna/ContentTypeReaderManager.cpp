@@ -24,6 +24,11 @@ namespace Microsoft::Xna::Framework::Content
         TypeCreators().clear();
     }
 
+    bool ContentTypeReaderManager::RemoveTypeCreatorEXT(const std::string& canonicalName)
+    {
+        return TypeCreators().erase(canonicalName) != 0U;
+    }
+
     std::unique_ptr<ContentTypeReaderBase> ContentTypeReaderManager::CreateReader(const std::string& canonicalName)
     {
         const auto& creators = TypeCreators();

@@ -147,7 +147,19 @@ typedef uint32_t CNA_GraphicsCapability;
 /** @brief Indicates support for real occlusion queries. */
 #define CNA_GRAPHICS_CAPABILITY_OCCLUSION_QUERY UINT32_C(6)
 
-/** @brief Indicates support for custom effects in sprite batches. */
+/**
+ * @brief Indicates support for custom effects in sprite batches.
+ *
+ * This gates `cna_shader_effect_create` -- an effect built from shader **source**. It is a separate
+ * capability from `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`, which gates a compiled `.xnb` effect
+ * asset, and the two genuinely differ: the software renderer reports this one true and that one
+ * false. Deciding whether a game can supply its own shaders by testing the compiled capability
+ * reports it blocked when it is not.
+ *
+ * True promises the route works and returns an effect. It does not promise the renderer validates
+ * the source; see `cna_shader_effect_create` and `cna_shader_effect_is_valid` for what a caller can
+ * conclude afterwards.
+ */
 #define CNA_GRAPHICS_CAPABILITY_CUSTOM_EFFECTS UINT32_C(7)
 
 /** @brief Indicates support for real three-dimensional texture storage. */
@@ -181,6 +193,31 @@ typedef uint32_t CNA_GraphicsCapability;
  * every capability without naming each one. Every value above it is refused.
  */
 #define CNA_GRAPHICS_CAPABILITY_MAXIMUM CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS
+
+/** @brief Fixed-width identity of the shading dialect a custom effect's sources must use. */
+typedef uint32_t CNA_ShaderDialect;
+
+/** @brief The active renderer has not declared a dialect; do not guess one. */
+#define CNA_SHADER_DIALECT_UNKNOWN UINT32_C(0)
+/** @brief Desktop OpenGL GLSL (`#version 3xx core` / `4xx core`). */
+#define CNA_SHADER_DIALECT_GLSL_DESKTOP UINT32_C(1)
+/** @brief OpenGL ES / WebGL GLSL (`#version 100` / `300 es`). */
+#define CNA_SHADER_DIALECT_GLSL_ES UINT32_C(2)
+/** @brief GLSL compiled to SPIR-V, where `location`/`set`/`binding` are mandatory. */
+#define CNA_SHADER_DIALECT_GLSL_VULKAN UINT32_C(3)
+/** @brief Direct3D High Level Shader Language. */
+#define CNA_SHADER_DIALECT_HLSL UINT32_C(4)
+/** @brief Metal Shading Language. */
+#define CNA_SHADER_DIALECT_MSL UINT32_C(5)
+/** @brief WebGPU Shading Language. */
+#define CNA_SHADER_DIALECT_WGSL UINT32_C(6)
+/**
+ * @brief Largest defined shading-dialect identity.
+ *
+ * The identities occupy the closed range @ref CNA_SHADER_DIALECT_UNKNOWN through this value with
+ * no gaps, so a caller can enumerate them without naming each one.
+ */
+#define CNA_SHADER_DIALECT_MAXIMUM CNA_SHADER_DIALECT_WGSL
 
 /** @brief Fixed-width bit set containing zero or more graphics capabilities. */
 typedef uint64_t CNA_GraphicsCapabilityFlags;
@@ -604,6 +641,26 @@ CNA_C_API CNA_Result cna_graphics_device_supports_capability(
     CNA_Handle graphics_device,
     CNA_GraphicsCapability capability,
     CNA_Bool* out_supported);
+
+/**
+ * @brief Gets the shading dialect a custom effect's sources must be written in.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_dialect Receives one `CNA_SHADER_DIALECT_*` identity.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * A source-based effect (`cna_shader_effect_create`) is renderer-specific text, and the renderer
+ * identity is not a safe way to infer which text to supply: it is wrong in a build carrying
+ * several renderers, and meaningless for a renderer that picks its native API per process. Ask
+ * here instead.
+ *
+ * `CNA_SHADER_DIALECT_UNKNOWN` means the active renderer has not declared one. Read that as "do
+ * not guess", not as "no shaders": it is the answer a caller should refuse to build sources from,
+ * rather than one to fall back on.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_shader_dialect_ext(
+    CNA_Handle graphics_device,
+    CNA_ShaderDialect* out_dialect);
 
 /**
  * @brief Gets the logical backbuffer dimensions and surface format.

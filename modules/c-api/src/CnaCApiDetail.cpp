@@ -106,6 +106,19 @@ CNA_Result Fail(
     return result;
 }
 
+CNA_Result ValidateCanonicalBool(const CNA_Bool value, const std::string_view name) noexcept
+{
+    if (IsCanonicalBool(value)) {
+        return CNA_RESULT_SUCCESS;
+    }
+    // The name is in the message because a route may take more than one flag, and "a flag is not a
+    // Boolean" is not something a caller can act on without knowing which.
+    std::string message;
+    message.reserve(name.size() + 48U);
+    message.append("The '").append(name).append("' flag must be CNA_FALSE or CNA_TRUE.");
+    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
+}
+
 CNA_Result ValidateStringView(
     const CNA_StringView value,
     const bool rejectEmbeddedNul) noexcept

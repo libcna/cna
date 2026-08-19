@@ -174,10 +174,21 @@ std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> active
         }
 
         if (kind == ObjectKind::RenderTarget2D) {
-            if (binding.array_slice != 0 ||
-                binding.cube_map_face != CNA_CUBE_MAP_FACE_POSITIVE_X) {
+            // CBIND-070: the two used to share one refusal and one result code, and they are not
+            // the same kind of failure. A nonzero slice is what the canonical SetRenderTargets
+            // itself refuses, with NotSupportedException -- so it answers NOT_SUPPORTED here, the
+            // code that exception maps to everywhere else in this ABI. A face on a 2D binding is
+            // an ordinary bad argument: the field means nothing for this target kind.
+            if (binding.array_slice != 0) {
+                return Fail(
+                    CNA_RESULT_NOT_SUPPORTED,
+                    CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+                    "RenderTarget2D array slices are not supported; the array slice must be 0.");
+            }
+            if (binding.cube_map_face != CNA_CUBE_MAP_FACE_POSITIVE_X) {
                 return InvalidArgument(
-                    "A RenderTarget2D binding must use array slice zero and positive-X face.");
+                    "A RenderTarget2D binding must name the positive-X face, which is the value "
+                    "the field carries when it has no meaning.");
             }
             std::shared_ptr<Texture2DResource> resource;
             if (const CNA_Result result = GetRenderTarget2D(binding.render_target, &resource);
@@ -193,8 +204,17 @@ std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> active
             const auto target = std::static_pointer_cast<RenderTarget2D>(resource->value);
             outNative->emplace_back(target.get(), binding.array_slice);
         } else if (kind == ObjectKind::RenderTargetCube) {
-            if (binding.array_slice != 0 || !IsCubeFace(binding.cube_map_face)) {
-                return InvalidArgument("A RenderTargetCube binding has an invalid face or slice.");
+            // The canonical cube path reads the face and never the slice, so a nonzero one is
+            // meaningless rather than unsupported. Refused anyway, and separately: a caller who
+            // set it believed it meant something, and silently dropping it would leave that
+            // belief intact.
+            if (binding.array_slice != 0) {
+                return InvalidArgument(
+                    "A RenderTargetCube binding has no array slice; the face selects the "
+                    "subresource, so the array slice must be 0.");
+            }
+            if (!IsCubeFace(binding.cube_map_face)) {
+                return InvalidArgument("A RenderTargetCube binding has an invalid face.");
             }
             std::shared_ptr<RenderTargetCubeResource> resource;
             if (const CNA_Result result = GetRenderTargetCube(binding.render_target, &resource);

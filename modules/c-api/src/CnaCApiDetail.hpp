@@ -177,6 +177,7 @@ enum class ObjectKind : uint32_t {
     AvatarAnimation = 119,
     AvatarRenderer = 120,
     ModelAnimationsEXT = 121,
+    ContentTypeReaderRegistration = 122,
     Test = UINT32_MAX
 };
 
@@ -323,6 +324,33 @@ template<typename TCallable>
             "An unknown native failure occurred.");
     }
 }
+
+/**
+ * @brief Reports whether a caller-supplied `CNA_Bool` is one of the two values the ABI defines.
+ *
+ * CBIND-067: `docs/c-api/ABI_VERSIONING.md` has always said only `CNA_FALSE` and `CNA_TRUE` are
+ * valid, and the library enforced that in 24 routes out of 94. The other 66 accepted any byte and
+ * then disagreed about what it meant -- read as `!= CNA_FALSE` in some places and `== CNA_TRUE` in
+ * others, so a `9` was true here and false there. This is the single spelling they now share.
+ */
+[[nodiscard]] inline bool IsCanonicalBool(const CNA_Bool value) noexcept
+{
+    return value == CNA_FALSE || value == CNA_TRUE;
+}
+
+/**
+ * @brief Refuses a `CNA_Bool` that is neither `CNA_FALSE` nor `CNA_TRUE`.
+ *
+ * @param value The caller-supplied flag.
+ * @param name The parameter's name as the public header spells it, for the diagnostic.
+ * @return `CNA_RESULT_SUCCESS` when the value is canonical, `CNA_RESULT_INVALID_ARGUMENT`
+ *         otherwise.
+ *
+ * Call it **after** a route has cleared its `out_` handle, not before: this ABI promises a refused
+ * creation leaves its output invalid, and a guard placed ahead of that clearing returns before the
+ * promise is kept. `EffectSmoke.c` asserts exactly that pairing.
+ */
+[[nodiscard]] CNA_Result ValidateCanonicalBool(CNA_Bool value, std::string_view name) noexcept;
 
 [[nodiscard]] CNA_Result ValidateStringView(
     CNA_StringView value,

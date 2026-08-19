@@ -603,6 +603,42 @@ int main(void)
          wave_bank == CNA_INVALID_HANDLE)) {
         status = 11;
     }
+    /* CBIND-065: the streaming constructor, which nothing named. The fixture bank is a whole
+       in-memory bank rather than a streaming one, so what is asserted is the same contract its
+       non-streaming twin has -- a missing file is IO and leaves the output invalid, and the
+       offset/packet arguments reach the canonical call rather than being dropped. Opening the
+       fixture as a streaming bank is allowed to fail, because whether a given .xwb can be
+       streamed is the format's answer and not this ABI's. */
+    {
+        CNA_Handle streaming = UINT64_C(9);
+        const CNA_Result streamed =
+            cna_wave_bank_create_streaming(engine, view(WaveBankPath), 0, 64U, &streaming);
+        CNA_Handle absent = UINT64_C(9);
+        /* CBIND-065, and this is the finding rather than the coverage. The header promised "the
+           same answers as cna_wave_bank_create", and it is not so: the streaming constructor never
+           reads through the title container, so a missing file yields a live, empty bank and
+           SUCCESS where the non-streaming twin answers IO. That is FNA's own streaming behaviour
+           reproduced, not a failure lost -- see WaveBank.cpp Init's note. The header now says so;
+           this pins it, so the day the canonical side changes, this test says so instead of
+           nobody noticing. */
+        if (status == 0 &&
+            (cna_wave_bank_create_streaming(
+                 engine, view("cna_c_api_xact_missing.xwb"), 0, 64U, &absent) !=
+                 CNA_RESULT_SUCCESS ||
+             absent == CNA_INVALID_HANDLE ||
+             cna_wave_bank_destroy(absent) != CNA_RESULT_SUCCESS ||
+             cna_wave_bank_create_streaming(engine, view(WaveBankPath), 0, 64U, 0) !=
+                 CNA_RESULT_INVALID_ARGUMENT)) {
+            status = 30;
+        }
+        if (status == 0 && streamed == CNA_RESULT_SUCCESS) {
+            if (cna_wave_bank_destroy(streaming) != CNA_RESULT_SUCCESS) {
+                status = 31;
+            }
+        } else if (status == 0 && streaming != CNA_INVALID_HANDLE) {
+            status = 32;
+        }
+    }
     if (status == 0 &&
         (cna_wave_bank_get_is_disposed(wave_bank, &flag) != CNA_RESULT_SUCCESS ||
          flag != CNA_FALSE ||
@@ -676,8 +712,49 @@ int main(void)
     if (status == 0 && cna_audio_unsubscribe_ext(registration) != CNA_RESULT_SUCCESS) {
         status = 21;
     }
-    if (status == 0 && cna_wave_bank_destroy(wave_bank) != CNA_RESULT_SUCCESS) {
-        status = 22;
+    /* CBIND-065: the other three disposal subscriptions in this family. Only the sound bank's was
+       ever driven, while the coverage matrix recorded all four against this file -- the wave
+       bank's and the engine's fire here, and the cue's is asserted on its refusal because a cue
+       belongs to a sound bank that is already gone by this point. */
+    {
+        int wave_disposals = 0;
+        CNA_Handle wave_registration = CNA_INVALID_HANDLE;
+        CNA_Handle refused = UINT64_C(9);
+        if (status == 0 &&
+            (cna_wave_bank_subscribe_disposing_ext(
+                 wave_bank, &on_disposing, &wave_disposals, &wave_registration) !=
+                 CNA_RESULT_SUCCESS ||
+             cna_wave_bank_subscribe_disposing_ext(wave_bank, 0, &wave_disposals, &refused) !=
+                 CNA_RESULT_INVALID_ARGUMENT ||
+             refused != CNA_INVALID_HANDLE ||
+             cna_cue_subscribe_disposing_ext(
+                 CNA_INVALID_HANDLE, &on_disposing, &wave_disposals, &refused) !=
+                 CNA_RESULT_INVALID_HANDLE)) {
+            status = 25;
+        }
+        if (status == 0 && cna_wave_bank_destroy(wave_bank) != CNA_RESULT_SUCCESS) {
+            status = 22;
+        }
+        if (status == 0 && wave_disposals != 1) {
+            status = 26;
+        }
+        if (status == 0 && cna_audio_unsubscribe_ext(wave_registration) != CNA_RESULT_SUCCESS) {
+            status = 27;
+        }
+    }
+    {
+        int engine_disposals = 0;
+        CNA_Handle engine_registration = CNA_INVALID_HANDLE;
+        if (status == 0 &&
+            cna_audio_engine_subscribe_disposing_ext(
+                engine, &on_disposing, &engine_disposals, &engine_registration) !=
+                CNA_RESULT_SUCCESS) {
+            status = 28;
+        }
+        if (status == 0 && cna_audio_unsubscribe_ext(engine_registration) !=
+            CNA_RESULT_SUCCESS) {
+            status = 29;
+        }
     }
     if (status == 0 &&
         (cna_audio_engine_destroy(engine) != CNA_RESULT_SUCCESS ||

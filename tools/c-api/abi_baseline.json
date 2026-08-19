@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 256,
+  "encoded": 1792,
   "major": 0,
-  "minor": 1,
+  "minor": 7,
   "patch": 0,
-  "runtime": 256
+  "runtime": 1792
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -1282,11 +1282,15 @@
   "cna_content_manager_get_root_directory_size",
   "cna_content_manager_get_xnb_reader_usage",
   "cna_content_manager_get_xnb_reader_usage_count",
+  "cna_content_manager_load_effect",
+  "cna_content_manager_load_foreign_ext",
   "cna_content_manager_load_sound_effect",
+  "cna_content_manager_load_sprite_font",
   "cna_content_manager_load_texture2d",
   "cna_content_manager_load_texture_cube",
   "cna_content_manager_refresh_content_manifest",
   "cna_content_manager_register_builtin_loaders",
+  "cna_content_manager_register_cnj_loader_ext",
   "cna_content_manager_set_graphics_device",
   "cna_content_manager_set_root_directory",
   "cna_content_manager_unload",
@@ -1320,6 +1324,8 @@
   "cna_content_type_reader_manager_clear_type_creators",
   "cna_content_type_reader_manager_create_reader",
   "cna_content_type_reader_manager_get_is_registered",
+  "cna_content_type_reader_manager_register",
+  "cna_content_type_reader_manager_unregister",
   "cna_content_type_reader_read_untyped",
   "cna_content_type_reader_supports_version",
   "cna_crt_effect_create",
@@ -1645,8 +1651,10 @@
   "cna_game_get_type_name_size",
   "cna_game_launch_parameters_add",
   "cna_game_launch_parameters_contains_key",
+  "cna_game_launch_parameters_copy_key",
   "cna_game_launch_parameters_copy_value",
   "cna_game_launch_parameters_get_count",
+  "cna_game_launch_parameters_get_key_size",
   "cna_game_launch_parameters_get_value_size",
   "cna_game_launch_parameters_parse_ext",
   "cna_game_request_exit",
@@ -1678,6 +1686,7 @@
   "cna_game_window_get_current_orientation",
   "cna_game_window_get_is_borderless_ext",
   "cna_game_window_get_native_handle_ext",
+  "cna_game_window_get_native_window_ext",
   "cna_game_window_get_screen_device_name_size",
   "cna_game_window_get_title_size",
   "cna_game_window_get_type_name_size",
@@ -1889,6 +1898,7 @@
   "cna_graphics_device_get_renderer_name_size",
   "cna_graphics_device_get_sampler_state",
   "cna_graphics_device_get_scissor_rectangle",
+  "cna_graphics_device_get_shader_dialect_ext",
   "cna_graphics_device_get_status",
   "cna_graphics_device_get_texture",
   "cna_graphics_device_get_tracked_resource_count",
@@ -1933,6 +1943,7 @@
   "cna_graphics_device_manager_set_synchronize_with_vertical_retrace",
   "cna_graphics_device_manager_subscribe",
   "cna_graphics_device_manager_subscribe_preparing_device_settings",
+  "cna_graphics_device_manager_subscribe_preparing_device_settings_ext",
   "cna_graphics_device_manager_toggle_full_screen",
   "cna_graphics_device_present",
   "cna_graphics_device_recreate_renderer_for_multi_sample_count_ext",
@@ -2133,6 +2144,7 @@
   "cna_index_buffer_get_info",
   "cna_index_buffer_get_type_name_byte_count",
   "cna_index_buffer_set_data",
+  "cna_index_buffer_set_data_at",
   "cna_index_buffer_subscribe_content_lost",
   "cna_index_buffer_unsubscribe_content_lost",
   "cna_input_device_info_equals",
@@ -2576,17 +2588,21 @@
   "cna_morph_target_data_ext_copy_normal_deltas",
   "cna_morph_target_data_ext_copy_position_deltas",
   "cna_morph_target_data_ext_copy_tangent_deltas",
+  "cna_morph_target_data_ext_copy_triangle_indices_ext",
   "cna_morph_target_data_ext_copy_type_name",
   "cna_morph_target_data_ext_copy_weight_keyframe",
   "cna_morph_target_data_ext_copy_weights",
   "cna_morph_target_data_ext_create",
   "cna_morph_target_data_ext_destroy",
   "cna_morph_target_data_ext_get_base_vertex_byte_count",
+  "cna_morph_target_data_ext_get_recompute_flat_normals_ext",
   "cna_morph_target_data_ext_get_stride",
   "cna_morph_target_data_ext_get_target_count",
   "cna_morph_target_data_ext_get_type_name_byte_count",
   "cna_morph_target_data_ext_get_weight_track_info",
+  "cna_morph_target_data_ext_set_recompute_flat_normals_ext",
   "cna_morph_target_data_ext_set_tangent_deltas",
+  "cna_morph_target_data_ext_set_triangle_indices_ext",
   "cna_morph_target_data_ext_set_weight_track",
   "cna_morph_target_data_ext_set_weights",
   "cna_morph_weight_track_ext_evaluate",
@@ -2644,6 +2660,7 @@
   "cna_mouse_subscribe_clicked_ext",
   "cna_mouse_unsubscribe_clicked_ext",
   "cna_mouse_warp_global_ext",
+  "cna_native_window_handle_init",
   "cna_net_get_last_join_error",
   "cna_network_gamer_copy_machine",
   "cna_network_gamer_create",
@@ -2815,6 +2832,7 @@
   "cna_pbr_effect_get_texture_coordinate_set_ext",
   "cna_pbr_effect_get_texture_is_srgb_ext",
   "cna_pbr_effect_get_texture_transform_ext",
+  "cna_pbr_effect_get_vertex_color_enabled_ext",
   "cna_pbr_effect_set_alpha",
   "cna_pbr_effect_set_alpha_cutoff_ext",
   "cna_pbr_effect_set_alpha_mode_ext",
@@ -2833,6 +2851,7 @@
   "cna_pbr_effect_set_texture_coordinate_set_ext",
   "cna_pbr_effect_set_texture_is_srgb_ext",
   "cna_pbr_effect_set_texture_transform_ext",
+  "cna_pbr_effect_set_vertex_color_enabled_ext",
   "cna_pbr_material_init",
   "cna_picture_album_collection_copy_type_name",
   "cna_picture_album_collection_destroy",
@@ -3055,6 +3074,7 @@
   "cna_sensors_get_last_error_id_ext",
   "cna_sensors_get_name_size_at",
   "cna_shader_effect_create",
+  "cna_shader_effect_declare_uniform_block_ext",
   "cna_shader_effect_get_projection",
   "cna_shader_effect_get_view",
   "cna_shader_effect_get_world",
@@ -3267,6 +3287,7 @@
   "cna_sprite_batch_submit_scaled_many",
   "cna_sprite_effect_create",
   "cna_sprite_font_copy_characters",
+  "cna_sprite_font_copy_glyphs",
   "cna_sprite_font_create",
   "cna_sprite_font_destroy",
   "cna_sprite_font_get_info",
@@ -3592,10 +3613,12 @@
   "cna_vertex_buffer_create",
   "cna_vertex_buffer_destroy",
   "cna_vertex_buffer_get_data",
+  "cna_vertex_buffer_get_data_raw",
   "cna_vertex_buffer_get_info",
   "cna_vertex_buffer_get_type_name_byte_count",
   "cna_vertex_buffer_set_data",
   "cna_vertex_buffer_set_data_raw",
+  "cna_vertex_buffer_set_data_raw_at",
   "cna_vertex_buffer_subscribe_content_lost",
   "cna_vertex_buffer_unsubscribe_content_lost",
   "cna_vertex_declaration_copy_elements",
@@ -3695,9 +3718,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 256,
+  "CNA_ABI_VERSION": 1792,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 1,
+  "CNA_ABI_VERSION_MINOR": 7,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
@@ -4588,6 +4611,16 @@
   "CNA_MOUSE_CURSOR_STOCK_SIZE_WE": 9,
   "CNA_MOUSE_CURSOR_STOCK_WAIT": 10,
   "CNA_MOUSE_CURSOR_STOCK_WAIT_ARROW": 11,
+  "CNA_NATIVE_WINDOW_SYSTEM_ANDROID": 5,
+  "CNA_NATIVE_WINDOW_SYSTEM_COCOA": 4,
+  "CNA_NATIVE_WINDOW_SYSTEM_HEADLESS": 7,
+  "CNA_NATIVE_WINDOW_SYSTEM_MAXIMUM": 8,
+  "CNA_NATIVE_WINDOW_SYSTEM_TERMINAL": 8,
+  "CNA_NATIVE_WINDOW_SYSTEM_UNKNOWN": 0,
+  "CNA_NATIVE_WINDOW_SYSTEM_WAYLAND": 3,
+  "CNA_NATIVE_WINDOW_SYSTEM_WEB": 6,
+  "CNA_NATIVE_WINDOW_SYSTEM_WIN32": 1,
+  "CNA_NATIVE_WINDOW_SYSTEM_X11": 2,
   "CNA_NETWORK_EVENT_TYPE_GAMER_JOIN": 1,
   "CNA_NETWORK_EVENT_TYPE_GAMER_LEAVE": 2,
   "CNA_NETWORK_EVENT_TYPE_HOST_CHANGE": 3,
@@ -4758,6 +4791,14 @@
   "CNA_SET_DATA_DISCARD": 1,
   "CNA_SET_DATA_NONE": 0,
   "CNA_SET_DATA_NO_OVERWRITE": 2,
+  "CNA_SHADER_DIALECT_GLSL_DESKTOP": 1,
+  "CNA_SHADER_DIALECT_GLSL_ES": 2,
+  "CNA_SHADER_DIALECT_GLSL_VULKAN": 3,
+  "CNA_SHADER_DIALECT_HLSL": 4,
+  "CNA_SHADER_DIALECT_MAXIMUM": 6,
+  "CNA_SHADER_DIALECT_MSL": 5,
+  "CNA_SHADER_DIALECT_UNKNOWN": 0,
+  "CNA_SHADER_DIALECT_WGSL": 6,
   "CNA_SHADER_STAGE_PIXEL": 0,
   "CNA_SHADER_STAGE_VERTEX": 1,
   "CNA_SHADOW_QUALITY_DISABLED": 0,
@@ -5575,6 +5616,10 @@
    8,
    8
   ],
+  "CNA_NativeWindowSystem": [
+   4,
+   4
+  ],
   "CNA_NetworkEventType": [
    4,
    4
@@ -5820,6 +5865,10 @@
    4
   ],
   "CNA_SetDataOptions": [
+   4,
+   4
+  ],
+  "CNA_ShaderDialect": [
    4,
    4
   ],
@@ -6845,6 +6894,52 @@
     ]
    },
    "size": 24
+  },
+  "CNA_ContentTypeReaderCallbacks": {
+   "align": 8,
+   "fields": {
+    "can_deserialize_into_existing_object": [
+     28,
+     1
+    ],
+    "context": [
+     56,
+     8
+    ],
+    "create": [
+     32,
+     8
+    ],
+    "destroy": [
+     48,
+     8
+    ],
+    "read": [
+     40,
+     8
+    ],
+    "reserved": [
+     29,
+     3
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "target_type_name": [
+     8,
+     16
+    ],
+    "type_version": [
+     24,
+     4
+    ]
+   },
+   "size": 64
   },
   "CNA_CueInfo": {
    "align": 4,
@@ -9283,6 +9378,40 @@
     ]
    },
    "size": 40
+  },
+  "CNA_NativeWindowHandle": {
+   "align": 8,
+   "fields": {
+    "display": [
+     16,
+     8
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "surface": [
+     32,
+     8
+    ],
+    "system": [
+     8,
+     4
+    ],
+    "window": [
+     24,
+     8
+    ],
+    "window_id": [
+     40,
+     8
+    ]
+   },
+   "size": 48
   },
   "CNA_NetworkEventInfo": {
    "align": 8,

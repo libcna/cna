@@ -121,3 +121,61 @@ TEST_F(ContentTypeReaderManagerTest, RegisterEffectXnbReaderIsIdempotent)
     auto reader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.EffectReader");
     ASSERT_NE(reader, nullptr);
 }
+
+// -----------------------------------------------------------------------
+// RemoveTypeCreatorEXT (CNAEXT)
+//
+// The registry could previously only be emptied wholesale, which is no help to a registration
+// that belongs to something with a lifetime -- withdrawing one caller's reader must not take the
+// built-in readers with it.
+// -----------------------------------------------------------------------
+
+TEST_F(ContentTypeReaderManagerTest, RemoveTypeCreatorWithdrawsOneRegistration)
+{
+    ContentTypeReaderManager::AddTypeCreator(
+        "CNA.Test.Int32Reader", [] { return std::make_unique<TestOnlyInt32Reader>(); });
+    ASSERT_TRUE(ContentTypeReaderManager::IsRegistered("CNA.Test.Int32Reader"));
+
+    EXPECT_TRUE(ContentTypeReaderManager::RemoveTypeCreatorEXT("CNA.Test.Int32Reader"));
+
+    EXPECT_FALSE(ContentTypeReaderManager::IsRegistered("CNA.Test.Int32Reader"));
+    EXPECT_EQ(ContentTypeReaderManager::CreateReader("CNA.Test.Int32Reader"), nullptr);
+}
+
+TEST_F(ContentTypeReaderManagerTest, RemoveTypeCreatorLeavesEveryOtherRegistrationAlone)
+{
+    RegisterEffectXnbReader();
+    ContentTypeReaderManager::AddTypeCreator(
+        "CNA.Test.Int32Reader", [] { return std::make_unique<TestOnlyInt32Reader>(); });
+
+    EXPECT_TRUE(ContentTypeReaderManager::RemoveTypeCreatorEXT("CNA.Test.Int32Reader"));
+
+    EXPECT_TRUE(ContentTypeReaderManager::IsRegistered(
+        "Microsoft.Xna.Framework.Content.EffectReader"));
+}
+
+TEST_F(ContentTypeReaderManagerTest, RemoveTypeCreatorReportsFalseForAnUnregisteredName)
+{
+    EXPECT_FALSE(ContentTypeReaderManager::RemoveTypeCreatorEXT("CNA.Test.NeverRegistered"));
+}
+
+TEST_F(ContentTypeReaderManagerTest, RemoveTypeCreatorFreesTheNameForANewRegistration)
+{
+    ContentTypeReaderManager::AddTypeCreator(
+        "CNA.Test.Int32Reader", [] { return std::make_unique<TestOnlyInt32Reader>(); });
+    ASSERT_TRUE(ContentTypeReaderManager::RemoveTypeCreatorEXT("CNA.Test.Int32Reader"));
+
+    // AddTypeCreator ignores a repeat registration of a live name, so the only way a second
+    // factory can take the name at all is if the first was really removed rather than shadowed.
+    bool secondFactoryRan = false;
+    ContentTypeReaderManager::AddTypeCreator(
+        "CNA.Test.Int32Reader",
+        [&secondFactoryRan]
+        {
+            secondFactoryRan = true;
+            return std::make_unique<TestOnlyInt32Reader>();
+        });
+
+    EXPECT_NE(ContentTypeReaderManager::CreateReader("CNA.Test.Int32Reader"), nullptr);
+    EXPECT_TRUE(secondFactoryRan);
+}

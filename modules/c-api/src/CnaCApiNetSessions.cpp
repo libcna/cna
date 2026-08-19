@@ -50,6 +50,7 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ValidateCanonicalBool;
 using Microsoft::Xna::Framework::Net::AvailableNetworkSession;
 using Microsoft::Xna::Framework::Net::GameEndedEventArgs;
 using Microsoft::Xna::Framework::Net::GamerJoinedEventArgs;
@@ -1038,6 +1039,10 @@ CNA_Result cna_network_session_set_allow_host_migration(
     const CNA_Bool value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(value, "value");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         return NetworkSessionCommand(sessionHandle, [value](NetworkSession& session) {
             session.setAllowHostMigrationProperty(value != CNA_FALSE);
         });
@@ -1064,6 +1069,10 @@ CNA_Result cna_network_session_set_allow_join_in_progress(
     const CNA_Bool value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(value, "value");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         return NetworkSessionCommand(sessionHandle, [value](NetworkSession& session) {
             session.setAllowJoinInProgressProperty(value != CNA_FALSE);
         });
@@ -2724,6 +2733,10 @@ CNA_Result cna_local_network_gamer_enable_send_voice(
     const CNA_Bool enable)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(enable, "enable");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         LocalNetworkGamer* gamer = nullptr;
         if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
             result != CNA_RESULT_SUCCESS) {

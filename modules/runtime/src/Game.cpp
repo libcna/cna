@@ -1123,6 +1123,18 @@ namespace Microsoft::Xna::Framework
                         GraphicsDevice_.UpdateViewportFromWindow();
                         GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(platformEvent.window);
                         break;
+                    case CNA::Platform::WindowEventKind::CloseRequested:
+                        // FNA acts only on the quit event and relies on the windowing layer to
+                        // synthesize one when the last window closes. That synthesis is
+                        // conditional in every backend that offers it -- skipped while a tray is
+                        // active, for a window that is not topmost, and whenever the backend's
+                        // own opt-out is set -- so relying on it alone leaves a game whose close
+                        // button silently does nothing. XNA's close button always ends the game,
+                        // so act on the request itself. Exit() is idempotent, which is what makes
+                        // the usual case, where a synthesized quit arrives in this same batch,
+                        // cost nothing.
+                        Exit();
+                        break;
                     case CNA::Platform::WindowEventKind::FocusLost:
                         setIsActiveProperty(false);
                         break;

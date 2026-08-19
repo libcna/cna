@@ -214,6 +214,48 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_limitations.py" --check)
 
+        # plan_binding.md CBIND-064: the export count that appears in PROSE, which no gate read.
+        #
+        # `abi_baseline.json` measures how many `cna_*` symbols the library exports, and
+        # CApiAbiBaseline fails when that changes without review. Four sentences repeat the number
+        # -- in ABI_VERSIONING.md, CONSUMING.md, LIMITATIONS.md and RELEASE_GATE.md -- and nothing
+        # checked them: they said 2,720 for months against a measured 2,838, were corrected by hand
+        # on 2026-08-17, and went stale again at the very next slice that added exports. The plan
+        # recorded that as "nothing prevents it happening again".
+        #
+        # Verified to catch it by reinstating the historical 2,720 in CONSUMING.md, which turns
+        # this from pass to a failure naming the file, the line and both numbers. Build-free: it
+        # reads the baseline and the documents.
+        add_test(NAME CApiDocExportCounts
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_doc_export_counts.py" --check)
+
+        # plan_binding.md CBIND-065: does anything actually CALL each route?
+        #
+        # The coverage matrix answers a different question -- it maps every public C++ symbol to a
+        # C route and to a *rule's* test description, so a rule covering twenty symbols credits its
+        # test to all twenty even where the test exercises twelve. That is how 78 exported routes
+        # came to have no caller at all while their matrix rows read implemented with evidence:
+        # the whole gyroscope acquisition surface, 49 media-library routes, and the streaming
+        # wave-bank constructor whose header made a promise no test had ever checked (it was
+        # wrong -- see xact.h).
+        #
+        # This gate asks the mechanical question instead and ratchets the answer. It stands at 0
+        # uncovered, so a route arriving without a caller fails the build rather than waiting for
+        # someone to notice. Build-free, like the gates above.
+        add_test(NAME CApiRouteTestCoverage
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_route_test_coverage.py" --check)
+
+        # plan_binding.md CBIND-067: the generated CNA_Bool contract test must not go stale.
+        #
+        # The test itself compiles and runs beside the other smoke tests; this checks that the
+        # checked-in file still matches what the headers say, so a route declared with a new flag
+        # parameter cannot sit uncovered behind a generator nobody re-ran. Build-free.
+        add_test(NAME CApiBoolContractCurrent
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_bool_contract_test.py" --check)
+
         # plan_binding.md CBIND-042B: the experimental release gate.
         #
         # A release gate written as prose is a list of things somebody once believed. This one is a
@@ -262,6 +304,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                     --library $<TARGET_FILE:cna_c_api>
                     --compiler "${CMAKE_C_COMPILER}"
                     ${_abi_baseline_flags})
+        endif()
+
+        # CBIND-076: the baseline above compares the export list with a recorded baseline, so export
+        # drift is caught -- but a header declaring a route the library never exports leaves both
+        # halves self-consistent while a consumer written against the header fails at its call site.
+        # A count cannot see that; the set difference can. Reported by the C# binding, which runs
+        # the same comparison on its own side.
+        if(TARGET cna_c_api AND UNIX AND NOT APPLE)
+            add_test(NAME CApiDeclaredExports
+                COMMAND Python3::Interpreter
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_declared_exports.py"
+                    --library $<TARGET_FILE:cna_c_api>)
         endif()
 
         # plan_runtimerenderer.md RTR-P1-6/P3-17/P12-15: renderer-specific production

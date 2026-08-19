@@ -27,6 +27,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
 
@@ -403,6 +404,10 @@ CNA_Result cna_logger_log(
     const CNA_Bool condition)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(condition, "condition");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         CNA::LogLevel nativeLevel = CNA::LogLevel::INFO;
         if (const CNA_Result result = MapLogLevel(level, &nativeLevel);
             result != CNA_RESULT_SUCCESS) {
@@ -474,6 +479,10 @@ CNA_Result cna_logger_experiment(const CNA_StringView message, const CNA_LogCate
 CNA_Result cna_logger_fatal_if(const CNA_StringView message, const CNA_Bool condition)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(condition, "condition");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         return LogWithCondition(&CNA::Logger::FatalIf, message, condition);
     });
 }
@@ -481,6 +490,10 @@ CNA_Result cna_logger_fatal_if(const CNA_StringView message, const CNA_Bool cond
 CNA_Result cna_logger_error_if(const CNA_StringView message, const CNA_Bool condition)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(condition, "condition");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         return LogWithCondition(&CNA::Logger::ErrorIf, message, condition);
     });
 }
@@ -488,6 +501,10 @@ CNA_Result cna_logger_error_if(const CNA_StringView message, const CNA_Bool cond
 CNA_Result cna_logger_warn_if(const CNA_StringView message, const CNA_Bool condition)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(condition, "condition");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         return LogWithCondition(&CNA::Logger::WarnIf, message, condition);
     });
 }
@@ -495,6 +512,10 @@ CNA_Result cna_logger_warn_if(const CNA_StringView message, const CNA_Bool condi
 CNA_Result cna_logger_info_if(const CNA_StringView message, const CNA_Bool condition)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(condition, "condition");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         return LogWithCondition(&CNA::Logger::InfoIf, message, condition);
     });
 }
@@ -502,6 +523,10 @@ CNA_Result cna_logger_info_if(const CNA_StringView message, const CNA_Bool condi
 CNA_Result cna_logger_debug_if(const CNA_StringView message, const CNA_Bool condition)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(condition, "condition");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         return LogWithCondition(&CNA::Logger::DebugIf, message, condition);
     });
 }
@@ -509,6 +534,10 @@ CNA_Result cna_logger_debug_if(const CNA_StringView message, const CNA_Bool cond
 CNA_Result cna_logger_trace_if(const CNA_StringView message, const CNA_Bool condition)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(condition, "condition");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         return LogWithCondition(&CNA::Logger::TraceIf, message, condition);
     });
 }
@@ -516,6 +545,10 @@ CNA_Result cna_logger_trace_if(const CNA_StringView message, const CNA_Bool cond
 CNA_Result cna_logger_experiment_if(const CNA_StringView message, const CNA_Bool condition)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(condition, "condition");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         return LogWithCondition(&CNA::Logger::ExperimentIf, message, condition);
     });
 }
@@ -1020,6 +1053,10 @@ CNA_Result cna_graphics_renderer_set_fallback_chain_ext(
 CNA_Result cna_graphics_renderer_set_automatic_fallback_ext(const CNA_Bool enabled)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(enabled, "enabled");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         CNA::GraphicsRendererSelection::EnableAutomaticFallback(enabled != CNA_FALSE);
         return CNA_RESULT_SUCCESS;
     });

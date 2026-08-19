@@ -39,6 +39,26 @@ Non-None options on a static buffer or one of the three CNA extension vertex typ
 `CNA_RESULT_NOT_SUPPORTED`. Raw upload takes an explicit byte capacity, vertex count and positive
 stride; a nonempty declaration requires the native stride to match.
 
+## Windowing the buffer itself
+
+`start_index` above indexes the **caller's array**, so every route named so far replaces the
+buffer's whole contents. `cna_vertex_buffer_set_data_raw_at` is the one that does not: its
+`buffer_offset_in_bytes` indexes **the buffer**, which is what XNA's `offsetInBytes` overload
+means and what a particle system or a streaming terrain needs -- rewrite one slice per frame,
+leave the rest as it was. The offset must fall on a vertex boundary, the window must fit inside
+the buffer's capacity, and bytes no upload has ever written read as zero.
+
+**The deviation is about cost, not about result.** No renderer contract in this project takes a
+destination offset -- `SetData(data, count, stride)` replaces whole-buffer contents in every
+renderer family -- so the window is composed on the CPU shadow and the whole buffer is
+re-uploaded. The bytes end up exactly where XNA puts them; the transfer is not smaller.
+
+`cna_vertex_buffer_get_data_raw` is the readback counterpart, and closes an asymmetry: typed
+readback names one of the seven built-in layouts, so a buffer *written* with a custom layout
+through `cna_vertex_buffer_set_data_raw` could be filled and never read, though the shadow held
+the bytes either way. It reads a window at a buffer-side byte offset and refuses a WriteOnly
+buffer exactly as the typed routes do.
+
 ## Events, disposal and evidence
 
 `cna_vertex_buffer_subscribe_content_lost` retains a callback/context registration for a dynamic

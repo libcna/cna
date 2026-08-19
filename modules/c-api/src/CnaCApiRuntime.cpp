@@ -200,12 +200,31 @@ protected:
     {
         const CNA_GameTime cGameTime = MakeCGameTime(gameTime);
         Invoke(callbacks_.update, &cGameTime);
+        // The base pass is not optional and was missing: `Game::Update` is what walks the
+        // updateable components and then runs `FrameworkDispatcher::Update()`. Without it a
+        // component added through `cna_game_components_add` was constructed, initialized by the
+        // add path, and then never ticked again -- and the dispatcher that refills
+        // DynamicSoundEffectInstance buffers and raises MediaPlayer's song transitions never ran
+        // at all. The hook goes first, then the base, which is the canonical shape: a derived
+        // Update does its own work and *then* calls base.Update(gameTime).
+        //
+        // Skipped once a callback has failed, because that failure has already called Exit() and
+        // every other route here stops doing work at that point -- Invoke() and BeginDraw() both
+        // guard on the same flag rather than driving a game that is on its way out.
+        if (callbackFailure_ == CNA_RESULT_SUCCESS) {
+            Game::Update(gameTime);
+        }
     }
 
     void Draw(const GameTime& gameTime) override
     {
         const CNA_GameTime cGameTime = MakeCGameTime(gameTime);
         Invoke(callbacks_.draw, &cGameTime);
+        // Same omission and same ordering: `Game::Draw` draws the visible drawable components,
+        // and drawing them after the consumer's own draw is what the canonical template does.
+        if (callbackFailure_ == CNA_RESULT_SUCCESS) {
+            Game::Draw(gameTime);
+        }
     }
 
     void OnExiting(System::Object* sender, const System::EventArgs& args) override
@@ -216,8 +235,15 @@ protected:
 
     void Initialize() override
     {
-        Game::Initialize();
+        // The hook runs BEFORE the base, and the order is the whole point. `Game::Initialize()`
+        // ends by calling `LoadContent()`, exactly as XNA's does, so invoking the hook after it
+        // delivered load_content first and initialize second -- the reverse of what this ABI's own
+        // header promises ("invoked once while the game initializes, before content loads") and of
+        // what a ported game expects, since most touch fields in LoadContent that Initialize set.
+        // This mirrors the canonical C++ shape, where a subclass does its own work and *then* calls
+        // base.Initialize().
         Invoke(frameHooks_.initialize, nullptr, frameHooks_.context);
+        Game::Initialize();
     }
 
     void BeginRun() override

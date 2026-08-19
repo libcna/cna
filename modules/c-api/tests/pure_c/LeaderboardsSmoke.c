@@ -183,6 +183,14 @@ static int validate_reader(const CNA_SignedInGamerHandle gamer)
     /* Paging is refused when there is no page to move to, which is a state failure. */
     if (ok && info.can_page_down == CNA_FALSE) {
         ok = cna_leaderboard_reader_page_down(reader) == CNA_RESULT_INVALID_STATE;
+        /* CBIND-065: the callback form of the same refusal. Its page-up twin was asserted below
+           and this one never was, while the matrix credited both to this file. A refused begin
+           must not run the callback -- an asynchronous route that reports failure *and* completes
+           would have a caller handling the same operation twice. */
+        completions = 0;
+        ok = ok && cna_leaderboard_reader_begin_page_down(reader, &on_complete, &completions) ==
+                       CNA_RESULT_INVALID_STATE &&
+            completions == 0;
     }
     if (ok && info.can_page_up == CNA_FALSE) {
         ok = cna_leaderboard_reader_page_up(reader) == CNA_RESULT_INVALID_STATE;

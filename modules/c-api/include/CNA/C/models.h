@@ -2129,6 +2129,68 @@ CNA_C_API CNA_Result cna_morph_target_data_ext_copy_tangent_deltas(
     uint64_t* out_delta_count);
 
 /**
+ * @brief Reports whether the blend recomputes flat normals from the morphed positions.
+ *
+ * @param data Morph-target-data handle.
+ * @param out_recompute Receives `CNA_TRUE` when flat normals are recomputed.
+ * @return A CNA result code.
+ *
+ * A primitive whose base mesh specifies no normals needs them calculated per face for each target,
+ * because a position delta can rotate a face and a normal baked at rest is only right at weight
+ * zero. False by default.
+ */
+CNA_C_API CNA_Result cna_morph_target_data_ext_get_recompute_flat_normals_ext(
+    CNA_MorphTargetDataEXTHandle data,
+    CNA_Bool* out_recompute);
+
+/**
+ * @brief Sets whether the blend recomputes flat normals from the morphed positions.
+ *
+ * @param data Morph-target-data handle.
+ * @param recompute `CNA_TRUE` or `CNA_FALSE`; any other value is refused.
+ * @return A CNA result code.
+ *
+ * Enabling this without supplying triangle indices leaves the blend nothing to recompute from; set
+ * them with `cna_morph_target_data_ext_set_triangle_indices_ext`.
+ */
+CNA_C_API CNA_Result cna_morph_target_data_ext_set_recompute_flat_normals_ext(
+    CNA_MorphTargetDataEXTHandle data,
+    CNA_Bool recompute);
+
+/**
+ * @brief Copies the triangle list the flat-normal recomputation reads, three indices per face.
+ *
+ * @param data Morph-target-data handle.
+ * @param destination Destination indices, or null only for zero capacity.
+ * @param capacity Destination capacity in indices.
+ * @param out_index_count Receives the required index count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ *
+ * Empty unless flat-normal recomputation is enabled, so an ordinary morph target costs nothing for
+ * it. Held here rather than read back from the part's index buffer because index readback is not
+ * something every renderer can offer.
+ */
+CNA_C_API CNA_Result cna_morph_target_data_ext_copy_triangle_indices_ext(
+    CNA_MorphTargetDataEXTHandle data,
+    uint32_t* destination,
+    uint64_t capacity,
+    uint64_t* out_index_count);
+
+/**
+ * @brief Replaces the triangle list from a copied array.
+ *
+ * @param data Morph-target-data handle.
+ * @param indices Caller-owned indices, or null only for a zero count.
+ * @param index_count Number of indices; must be a multiple of three.
+ * @return A CNA result code; a count that is not a multiple of three is
+ *         `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_morph_target_data_ext_set_triangle_indices_ext(
+    CNA_MorphTargetDataEXTHandle data,
+    const uint32_t* indices,
+    uint64_t index_count);
+
+/**
  * @brief Replaces one target's tangent deltas from a copied array.
  *
  * A separate route rather than a field on the creation descriptor, for the same reason as the

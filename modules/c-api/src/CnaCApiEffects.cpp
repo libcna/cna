@@ -2,10 +2,13 @@
 
 #include "CNA/C/effects.h"
 #include "CNA/C/graphics_ext.h"
+#include "CnaCApiContentDetail.hpp"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectAnnotation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectAnnotationCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
@@ -41,6 +44,7 @@
 
 #include <algorithm>
 #include <array>
+#include <any>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -3423,6 +3427,56 @@ CNA_Result cna_effect_create_compiled(
     });
 }
 
+CNA_Result cna_content_manager_load_effect(
+    const CNA_Handle contentManagerHandle,
+    const CNA_StringView assetName,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return InvalidArgument("The loaded Effect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::string assetNameCopy;
+        if (const CNA_Result result = CopyStringView(assetName, true, &assetNameCopy);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The content asset name is not valid UTF-8.");
+        }
+        if (assetNameCopy.empty()) {
+            return InvalidArgument("The content asset name must not be empty.");
+        }
+        CNA::C::Detail::BorrowedContentManager contentManager;
+        if (const CNA_Result result = CNA::C::Detail::BorrowContentManager(
+                contentManagerHandle, &contentManager);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        try {
+            std::shared_ptr<Effect> loaded =
+                contentManager.value->Load<std::shared_ptr<Effect>>(assetNameCopy);
+            if (loaded == nullptr) {
+                return Fail(
+                    CNA_RESULT_IO,
+                    CNA_ERROR_CATEGORY_IO,
+                    "The Effect asset loaded as a null effect.");
+            }
+            return CreateEffectHandle(
+                std::move(loaded), contentManager.parentGame, outEffect);
+        } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
+            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+        } catch (const std::bad_any_cast&) {
+            // The asset's root reader produced something that is not an Effect. Reporting the
+            // mismatch beats the exception barrier's catch-all calling it an internal fault.
+            return Fail(
+                CNA_RESULT_IO,
+                CNA_ERROR_CATEGORY_IO,
+                "The asset's root type reader did not produce an Effect.");
+        }
+    });
+}
+
 CNA_Result cna_shader_effect_create(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_StringView vertexSource,
@@ -3447,6 +3501,14 @@ CNA_Result cna_shader_effect_create(
             return Fail(
                 result, ErrorCategoryForResult(result),
                 "The ShaderEffect fragment source is not valid UTF-8 text.");
+        }
+        // CBIND-075: an effect with no source at all is the caller's mistake, and renderers
+        // disagreed about it -- one threw, which the barrier reported as CNA_RESULT_INTERNAL and so
+        // blamed CNA for the caller's input, and another accepted it and handed back an effect that
+        // could never draw. Refused here so the answer is the same whichever renderer is active.
+        if (vertex.empty() && fragment.empty()) {
+            return InvalidArgument(
+                "A ShaderEffect needs source: the vertex and fragment sources are both empty.");
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result = GetBorrowedGraphicsDevice(
@@ -4037,6 +4099,73 @@ CNA_Result cna_shader_effect_set_uniform_int32(
             return result;
         }
         shader->SetUniformInt(copiedName.c_str(), value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_declare_uniform_block_ext(
+    const CNA_EffectHandle effectHandle,
+    const int32_t blockSizeBytes,
+    const CNA_StringView* const names,
+    const int32_t* const offsets,
+    const uint64_t count)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (blockSizeBytes < 0) {
+            return InvalidArgument("The uniform block size must not be negative.");
+        }
+        std::size_t nameBytes = 0U;
+        if (const CNA_Result result = CheckedElementByteCount(
+                names, count, sizeof(CNA_StringView), &nameBytes);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The uniform block member-name array is invalid.");
+        }
+        std::size_t offsetBytes = 0U;
+        if (const CNA_Result result = CheckedElementByteCount(
+                offsets, count, sizeof(int32_t), &offsetBytes);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The uniform block member-offset array is invalid.");
+        }
+        int nativeCount = 0;
+        if (const CNA_Result result = RequestedCountToInt(count, &nativeCount);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // The canonical signature takes `const char* const*`, so the views must become owned
+        // NUL-terminated strings first -- a CNA_StringView carries a length, not a terminator, and
+        // may point into the middle of a larger buffer.
+        std::vector<std::string> copiedNames;
+        std::vector<const char*> namePointers;
+        std::vector<int> nativeOffsets;
+        copiedNames.reserve(static_cast<std::size_t>(nativeCount));
+        namePointers.reserve(static_cast<std::size_t>(nativeCount));
+        nativeOffsets.reserve(static_cast<std::size_t>(nativeCount));
+        for (int index = 0; index < nativeCount; ++index) {
+            std::string copied;
+            if (const CNA_Result result = CopyUniformName(names[index], &copied);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            copiedNames.push_back(std::move(copied));
+            nativeOffsets.push_back(static_cast<int>(offsets[index]));
+        }
+        for (const std::string& name : copiedNames) {
+            namePointers.push_back(name.c_str());
+        }
+        shader->DeclareUniformBlockEXT(
+            static_cast<int>(blockSizeBytes),
+            nativeCount == 0 ? nullptr : namePointers.data(),
+            nativeCount == 0 ? nullptr : nativeOffsets.data(),
+            nativeCount);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -6952,6 +7081,49 @@ CNA_Result cna_pbr_effect_get_ior_ext(
         *outValue = view.pbr != nullptr
             ? view.pbr->getIorEXTProperty()
             : view.skinned->getIorEXTProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_vertex_color_enabled_ext(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outEnabled)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEnabled == nullptr) {
+            return InvalidArgument("The vertex-colour-enabled output is null.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const bool enabled = view.pbr != nullptr
+            ? view.pbr->VertexColorEnabledEXT
+            : view.skinned->VertexColorEnabledEXT;
+        *outEnabled = enabled ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_vertex_color_enabled_ext(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Bool enabled)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsBool(enabled)) {
+            return InvalidArgument("The vertex-colour-enabled value is not a CNA_Bool.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (view.pbr != nullptr) {
+            view.pbr->VertexColorEnabledEXT = enabled == CNA_TRUE;
+        } else {
+            view.skinned->VertexColorEnabledEXT = enabled == CNA_TRUE;
+        }
         return CNA_RESULT_SUCCESS;
     });
 }

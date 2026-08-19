@@ -220,6 +220,55 @@ static int validate_data(const CNA_MorphTargetDataEXTHandle data)
                 cna_morph_target_data_ext_set_tangent_deltas(data, 0U, tangents, 2U) ==
                     CNA_RESULT_INVALID_ARGUMENT);
     }
+
+    /* CBIND-078. A primitive whose base mesh has no normals needs them recomputed per face for
+       every target, because a position delta can rotate a face and a normal baked at rest is only
+       right at weight zero. Off by default, and the face list it reads is empty until supplied. */
+    {
+        const uint32_t triangle[3] = {0U, 1U, 2U};
+        uint32_t indices_readback[3] = {9U, 9U, 9U};
+        uint64_t index_count = UINT64_MAX;
+        CNA_Bool recompute = UINT8_C(9);
+
+        REQUIRE(cna_morph_target_data_ext_get_recompute_flat_normals_ext(data, &recompute) ==
+                    CNA_RESULT_SUCCESS && recompute == CNA_FALSE);
+        REQUIRE(cna_morph_target_data_ext_copy_triangle_indices_ext(
+                    data, 0, 0U, &index_count) == CNA_RESULT_SUCCESS && index_count == 0U);
+
+        REQUIRE(cna_morph_target_data_ext_set_recompute_flat_normals_ext(data, CNA_TRUE) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_morph_target_data_ext_get_recompute_flat_normals_ext(data, &recompute) ==
+                    CNA_RESULT_SUCCESS && recompute == CNA_TRUE);
+        REQUIRE(cna_morph_target_data_ext_set_triangle_indices_ext(data, triangle, 3U) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_morph_target_data_ext_copy_triangle_indices_ext(
+                    data, indices_readback, 3U, &index_count) == CNA_RESULT_SUCCESS &&
+                index_count == 3U && indices_readback[0] == 0U && indices_readback[2] == 2U);
+
+        /* Insufficient capacity performs no partial write, as everywhere else in this ABI. */
+        indices_readback[0] = 9U;
+        REQUIRE(cna_morph_target_data_ext_copy_triangle_indices_ext(
+                    data, indices_readback, 2U, &index_count) == CNA_RESULT_BUFFER_TOO_SMALL &&
+                index_count == 3U && indices_readback[0] == 9U);
+
+        /* Three indices per face: any other count describes no triangle list at all. */
+        REQUIRE(cna_morph_target_data_ext_set_triangle_indices_ext(data, triangle, 2U) ==
+                    CNA_RESULT_INVALID_ARGUMENT &&
+                cna_morph_target_data_ext_set_triangle_indices_ext(data, 0, 3U) ==
+                    CNA_RESULT_INVALID_ARGUMENT &&
+                cna_morph_target_data_ext_set_recompute_flat_normals_ext(data, UINT8_C(2)) ==
+                    CNA_RESULT_INVALID_ARGUMENT &&
+                cna_morph_target_data_ext_get_recompute_flat_normals_ext(data, 0) ==
+                    CNA_RESULT_INVALID_ARGUMENT);
+
+        REQUIRE(cna_morph_target_data_ext_set_triangle_indices_ext(data, 0, 0U) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_morph_target_data_ext_copy_triangle_indices_ext(
+                    data, indices_readback, 3U, &index_count) == CNA_RESULT_SUCCESS &&
+                index_count == 0U);
+        REQUIRE(cna_morph_target_data_ext_set_recompute_flat_normals_ext(data, CNA_FALSE) ==
+                    CNA_RESULT_SUCCESS);
+    }
     return 1;
 }
 
