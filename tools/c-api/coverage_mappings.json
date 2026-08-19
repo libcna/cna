@@ -14255,6 +14255,38 @@
       "approved_symbols": [
         "CPP-39044E370C4E"
       ]
+    },
+    {
+      "id": "pbr-effect-vertex-color",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(PbrEffect|SkinnedPbrEffect)::VertexColorEnabledEXT$",
+      "kinds": [
+        "field",
+        "variable"
+      ],
+      "mapping": "`cna_pbr_effect_get_vertex_color_enabled_ext` and `_set_vertex_color_enabled_ext`, one pair for both effect types as every other PBR route here does, because the resolved view carries whichever of the two the handle named",
+      "tests": "`PbrEffectSmoke.c` round-trips the flag on both effect types and refuses a non-canonical boolean",
+      "status": "implemented",
+      "task": "CBIND-078",
+      "approved_symbols": [
+        "CPP-A4199D147DAB",
+        "CPP-A4D44601446C"
+      ]
+    },
+    {
+      "id": "morph-target-flat-normals",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::MorphTargetDataEXT::(RecomputeFlatNormalsEXT|TriangleIndicesEXT)$",
+      "kinds": [
+        "field",
+        "variable"
+      ],
+      "mapping": "`cna_morph_target_data_ext_get_recompute_flat_normals_ext`/`_set_recompute_flat_normals_ext` for the flag, and `_copy_triangle_indices_ext`/`_set_triangle_indices_ext` for the face list it reads, following the same copy-with-capacity shape as the delta arrays beside them",
+      "tests": "`MorphTargetSmoke.c` round-trips the flag and the index list, and refuses an index count that is not a multiple of three",
+      "status": "implemented",
+      "task": "CBIND-078",
+      "approved_symbols": [
+        "CPP-F1056D5D6B71",
+        "CPP-F79ACE9EA67C"
+      ]
     }
   ]
 }

@@ -2430,6 +2430,32 @@ CNA_C_API CNA_Result cna_texture_transform_ext_equals(
     const CNA_TextureTransformEXT* right,
     CNA_Bool* out_equal);
 
+/**
+ * @brief Reports whether the effect multiplies base colour by the vertex colour attribute.
+ *
+ * @param effect PbrEffect or SkinnedPbrEffect handle.
+ * @param out_enabled Receives `CNA_TRUE` when vertex colour is applied.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * False by default. A vertex layout carrying a colour slot fills it with opaque white when the
+ * primitive has none, so a renderer reading it regardless is still correct -- this states the
+ * intent rather than relying on that fill.
+ */
+CNA_C_API CNA_Result cna_pbr_effect_get_vertex_color_enabled_ext(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_enabled);
+
+/**
+ * @brief Sets whether the effect multiplies base colour by the vertex colour attribute.
+ *
+ * @param effect PbrEffect or SkinnedPbrEffect handle.
+ * @param enabled `CNA_TRUE` or `CNA_FALSE`; any other value is refused.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_pbr_effect_set_vertex_color_enabled_ext(
+    CNA_EffectHandle effect,
+    CNA_Bool enabled);
+
 /** @brief Gets `KHR_materials_ior`'s index of refraction; 1.5 by default. */
 CNA_C_API CNA_Result cna_pbr_effect_get_ior_ext(CNA_EffectHandle effect, float* out_value);
 

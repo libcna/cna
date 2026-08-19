@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 1536,
+  "encoded": 1792,
   "major": 0,
-  "minor": 6,
+  "minor": 7,
   "patch": 0,
-  "runtime": 1536
+  "runtime": 1792
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -2588,17 +2588,21 @@
   "cna_morph_target_data_ext_copy_normal_deltas",
   "cna_morph_target_data_ext_copy_position_deltas",
   "cna_morph_target_data_ext_copy_tangent_deltas",
+  "cna_morph_target_data_ext_copy_triangle_indices_ext",
   "cna_morph_target_data_ext_copy_type_name",
   "cna_morph_target_data_ext_copy_weight_keyframe",
   "cna_morph_target_data_ext_copy_weights",
   "cna_morph_target_data_ext_create",
   "cna_morph_target_data_ext_destroy",
   "cna_morph_target_data_ext_get_base_vertex_byte_count",
+  "cna_morph_target_data_ext_get_recompute_flat_normals_ext",
   "cna_morph_target_data_ext_get_stride",
   "cna_morph_target_data_ext_get_target_count",
   "cna_morph_target_data_ext_get_type_name_byte_count",
   "cna_morph_target_data_ext_get_weight_track_info",
+  "cna_morph_target_data_ext_set_recompute_flat_normals_ext",
   "cna_morph_target_data_ext_set_tangent_deltas",
+  "cna_morph_target_data_ext_set_triangle_indices_ext",
   "cna_morph_target_data_ext_set_weight_track",
   "cna_morph_target_data_ext_set_weights",
   "cna_morph_weight_track_ext_evaluate",
@@ -2828,6 +2832,7 @@
   "cna_pbr_effect_get_texture_coordinate_set_ext",
   "cna_pbr_effect_get_texture_is_srgb_ext",
   "cna_pbr_effect_get_texture_transform_ext",
+  "cna_pbr_effect_get_vertex_color_enabled_ext",
   "cna_pbr_effect_set_alpha",
   "cna_pbr_effect_set_alpha_cutoff_ext",
   "cna_pbr_effect_set_alpha_mode_ext",
@@ -2846,6 +2851,7 @@
   "cna_pbr_effect_set_texture_coordinate_set_ext",
   "cna_pbr_effect_set_texture_is_srgb_ext",
   "cna_pbr_effect_set_texture_transform_ext",
+  "cna_pbr_effect_set_vertex_color_enabled_ext",
   "cna_pbr_material_init",
   "cna_picture_album_collection_copy_type_name",
   "cna_picture_album_collection_destroy",
@@ -3712,9 +3718,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 1536,
+  "CNA_ABI_VERSION": 1792,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 6,
+  "CNA_ABI_VERSION_MINOR": 7,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,

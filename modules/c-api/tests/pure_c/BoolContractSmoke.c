@@ -525,6 +525,13 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
+    result = cna_morph_target_data_ext_set_recompute_flat_normals_ext(0, UINT8_C(9));
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_morph_target_data_ext_set_recompute_flat_normals_ext\n",
+               (unsigned)result);
+        ++accepted;
+    }
     result = cna_motion_set_test_backend_ext(0, UINT8_C(9), UINT8_C(9), UINT8_C(9));
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
@@ -599,6 +606,13 @@ int main(void)
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
         printf("accepted a non-canonical CNA_Bool (%u): cna_pbr_effect_set_texture_is_srgb_ext\n",
+               (unsigned)result);
+        ++accepted;
+    }
+    result = cna_pbr_effect_set_vertex_color_enabled_ext(0, UINT8_C(9));
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_pbr_effect_set_vertex_color_enabled_ext\n",
                (unsigned)result);
         ++accepted;
     }
@@ -722,6 +736,6 @@ int main(void)
         ++accepted;
     }
 
-    printf("%d of 94 routes accepted a CNA_Bool of 9\n", accepted);
+    printf("%d of 96 routes accepted a CNA_Bool of 9\n", accepted);
     return accepted == 0 ? 0 : 1;
 }
