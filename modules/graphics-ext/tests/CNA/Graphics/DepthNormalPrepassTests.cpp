@@ -143,14 +143,22 @@ TEST(DepthNormalPrepassTest, ItValidatesItsSizeAndItsCameraRange)
     EXPECT_THROW(prepass.begin(0, View(), Projection(), 10.0f, 1.0f), std::invalid_argument);
 }
 
-TEST(DepthNormalPrepassTest, ThePassCountFollowsTheRenderersMrtSupport)
+TEST(DepthNormalPrepassTest, ThePassCountFollowsWhatTheRendererWillActuallyBind)
 {
+    // plan_modern.md MOD-1623. This used to compare against the MultipleRenderTargets *capability*,
+    // and WebGPU is the renderer that proved the difference: it reports the capability and then
+    // throws from SetRenderTargets. The prepass now probes the bind once at construction and falls
+    // back to two passes, so what this must check is the *binding*, not the promise -- and checking
+    // the promise would fail on exactly the renderer the fallback exists for.
     GraphicsDevice gd;
     const DepthNormalPrepass prepass(gd, kSize, kSize);
-    const bool mrt = gd.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets);
-    EXPECT_EQ(prepass.isUsingMultipleRenderTargets(), mrt);
-    EXPECT_EQ(prepass.getPassCount(), mrt ? 1 : 2)
+
+    const bool claimed = gd.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets);
+    const bool used    = prepass.isUsingMultipleRenderTargets();
+    EXPECT_EQ(prepass.getPassCount(), used ? 1 : 2)
         << "the loop an app writes must match what the renderer can do in one pass";
+    if (used)
+        EXPECT_TRUE(claimed) << "the prepass bound an MRT set the renderer does not even claim";
 }
 
 TEST(DepthNormalPrepassTest, BothTexturesExistWhateverTheRenderer)

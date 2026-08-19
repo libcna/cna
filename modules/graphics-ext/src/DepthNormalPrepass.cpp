@@ -189,6 +189,31 @@ void main() {
         supported_ = effect_->IsEffectValid() && device.ExecutesShaderEffectSourceEXT();
 
         allocateTargets();
+
+        // plan_modern.md MOD-1623, and the MOD-1699 lesson in a fourth guise: the
+        // MultipleRenderTargets *capability* is a promise, and WebGPU is a renderer that makes it
+        // and does not keep it -- SetRenderTargets throws "multiple simultaneous render targets are
+        // not implemented on this renderer yet". Trusting the capability meant begin() threw where
+        // the two-pass path would have worked perfectly. So the answer is probed by doing, once,
+        // here: bind the pair this class will actually bind, and fall back to two passes if the
+        // renderer refuses. One bind at construction is cheap; a throw on every frame is not.
+        if (useMrt_)
+        {
+            try
+            {
+                const std::vector<RenderTargetBinding> bindings = {
+                    RenderTargetBinding(depthTarget_.get()),
+                    RenderTargetBinding(normalTarget_.get()),
+                };
+                device_.SetRenderTargets(bindings);
+                device_.SetRenderTarget(nullptr);
+            }
+            catch (...)
+            {
+                useMrt_ = false;
+                try { device_.SetRenderTarget(nullptr); } catch (...) { /* best-effort cleanup */ }
+            }
+        }
     }
 
     DepthNormalPrepass::~DepthNormalPrepass() = default;

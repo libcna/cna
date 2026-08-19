@@ -750,7 +750,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1600 | Vulkan | 🟨 | **Measured, not implemented.** A real Vulkan build now exists in this environment (`cmake-build-vulkan`, Mesa lavapipe reporting Vulkan 1.4), and the renderer's own capability dump says `SurfaceFormat: Color only (Task 176)` — so float render targets are genuinely absent rather than untested, and `RenderTarget2D` refuses the format instead of substituting `Color`, which is the documented fallback working. Implementing `VK_FORMAT_R16G16B16A16_SFLOAT` attachments is still the open work. |
 | MOD-1601 | SdlGpu | 🟨 | **Measured, not implemented.** A real SDL_GPU build now exists here (`cmake-build-sdlgpu`, needs `libshaderc-dev`), and `cna_test_cnaext_caps` on it reports `FloatRenderTargets: no`, `HalfFloatRenderTargets: no` — so the base class's false-by-default answer stands and `RenderTarget2D` refuses the format rather than substituting `Color`, which is the documented fallback working. Implementing float attachments on `SDL_GPUTextureFormat_R16G16B16A16_FLOAT` is the open work. |
 | MOD-1602 | Bgfx | ⬜ | |
-| MOD-1603 | WebGPU | ⬜ | `rgba16float` is core in WebGPU; likely the easiest after EasyGL. |
+| MOD-1603 | WebGPU | 🟨 | **Measured, not implemented.** The native `wgpu-native` build runs here (Vulkan on lavapipe) and reports `FloatRenderTargets: no`, `HalfFloatRenderTargets: no`; the refusal path runs. `rgba16float` is core in WebGPU, so the row's own note still holds — this is the easiest one left, not a boundary. |
 | MOD-1604 | D3D11 | ⬜ | GPU-verifiable via Wine+DXVK per the existing precedent. |
 | MOD-1605 | D3D12 | ⬜ | Compile-verified on Windows only, per precedent. |
 | MOD-1606 | D3D9 | ⬜ | `D3DFMT_A16B16G16R16F`; document the no-blending caveat on old hardware. |
@@ -773,7 +773,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1620 | Vulkan | 🟨 | **Measured; blocked by a concrete mismatch.** The Vulkan renderer reports `CustomEffects` true, but `VulkanEffectRenderer::CompileProgram` takes **SPIR-V bytecode**, while every engine-layer pass hands it GLSL source — so all of them fail to compile with `SPIR-V size must be a multiple of 4 bytes` and the chain copies through. The frame is still correct (`cnaext_bloom_test` asserts the inert path pixel for pixel), and the example now SKIPs with that reason instead of reporting four failures. Unblocking this needs either GLSL→SPIR-V compilation in that renderer or a shader-language question the passes can ask. |
 | MOD-1621 | SdlGpu | 🟨 | **Measured, and it found an engine-layer bug.** SDL_GPU reports `CustomEffects: yes` but `ExecutesShaderSourceEXT: no`, so every shader-based pass correctly reports `isSupported() == false` and copies through — 0 failures across the whole engine-layer suite there. What it *did* catch is `InstancedRendererEXT`: SDL_GPU answers `Instancing: yes` (the base class's `default: return true`) while `DrawInstancedPrimitives` is the base class's refusal and `MultiStreamVertexInput` is `no`. `isInstancingSupported()` asked only the first capability, so `draw()` threw where it should have taken the per-instance fallback. Fixed by asking **both** — the instanced path binds the transforms as a *second* vertex stream, so it needs multi-stream input as much as it needs instancing. `TrianglePart.OneDrawCallForEveryInstanceOrAnExplicitRefusal` now passes on both renderers. **Renderer-level finding, not fixed here:** SDL_GPU's `Instancing` answer is a promise it does not keep, and correcting it belongs to `plan_sdlgpu.md` rather than to an engine-layer commit. |
 | MOD-1622 | Bgfx | ⬜ | Needs `shaderc` regeneration — see CLAUDE.md's bgfx note. |
-| MOD-1623 | WebGPU | ⬜ | Depends on `WEBGPU-76` (`ShaderEffect` custom WGSL), which is still open. |
+| MOD-1623 | WebGPU | 🟨 | **Measured, and it found two engine-layer bugs — the most productive renderer in this sweep.** WebGPU answers `CustomEffects: yes` / `ExecutesShaderSourceEXT: no` (as expected while `WEBGPU-76` is open), and the suites end at **405 pass · 86 skip · 0 fail** *after* both fixes. **(1) `DepthNormalPrepass` trusted the `MultipleRenderTargets` capability** — the `MOD-1699` lesson in a fourth guise. WebGPU reports that capability and then throws `"multiple simultaneous render targets are not implemented on this renderer yet"` from `SetRenderTargets`, so `begin()` threw where the class's own two-pass fallback would have worked. It now **probes the bind once at construction** and falls back; its test compares against what was bound rather than what was claimed, because comparing against the claim fails on exactly the renderer the fallback exists for. **(2) `EffectPassTest.AnAdaptedEffectRunsInsideAChain` gated on `CustomEffects` alone** and hit `"custom SpriteBatch effects are not implemented yet"`; it now asks the two-part question. |
 | MOD-1624 | D3D11 | ⬜ | |
 | MOD-1625 | D3D12 | ⬜ | |
 | MOD-1626 | D3D9 | ⬜ | SM3 limits — document any pass that cannot fit. |
@@ -796,7 +796,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1640 | Vulkan | 🟨 | **Measured; same blocker as `MOD-1620`.** The caster's shader is a `ShaderEffect`, so it cannot compile on the Vulkan renderer today. Before `MOD-1699` this did not merely fail: the example crashed mid-draw, because the effect silently failed to compile and the draw went ahead anyway. It now SKIPs with the reason. The lit shaders' sampling side is unimplemented and correctly reports `SupportsShadowSamplingEXT() == false`. |
 | MOD-1641 | SdlGpu | 🟨 | **Measured.** `ShadowSamplingEXT: no`, so all four shadow casters report `isSupported() == false` and the shadow suites SKIP rather than fail — the `MOD-1699` two-part question doing its job on a third renderer. 32 `ShadowVisibilityTest`, 14 `PunctualShadowVisibilityTest` and 14 `CascadedShadowVisibilityTest` cases skip; none fail. |
 | MOD-1642 | Bgfx | ⬜ | |
-| MOD-1643 | WebGPU | ⬜ | Unskinned first (no skinning path yet, per CNAEXT.md §3.1). |
+| MOD-1643 | WebGPU | 🟨 | **Measured:** `SupportsShadowSamplingEXT: no`; all four casters report `isSupported() == false` and the shadow suites skip rather than fail. |
 | MOD-1644 | D3D11 | ⬜ | |
 | MOD-1645 | D3D12 | ⬜ | |
 | MOD-1646 | D3D9 | ⬜ | |
@@ -818,7 +818,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1660 | Vulkan | 🟨 | **Measured; the precompute already works, the shading does not.** `EnvironmentProcessor` is CPU-side (`MOD-1200`), so irradiance, prefiltered specular and the BRDF LUT are produced correctly on Vulkan today. What is missing is the shading half: the Vulkan PBR shader ignores the IBL group, which it now says with `SupportsImageBasedLightingEXT() == false`, and `cnaext_ibl_test` SKIPs rather than reporting five failures. |
 | MOD-1661 | SdlGpu | 🟨 | **Measured.** `ImageBasedLightingEXT: no` and `CustomEffects` without shader-source execution, so `Skybox::isSupported()` and the IBL consumption path both report false and skip; `EnvironmentProcessor`'s precompute is CPU-side and works here as it does on Vulkan. |
 | MOD-1662 | Bgfx | ⬜ | |
-| MOD-1663 | WebGPU | ⬜ | |
+| MOD-1663 | WebGPU | 🟨 | **Measured:** `SupportsImageBasedLightingEXT: no`; the CPU-side precompute works, the shading half does not. |
 | MOD-1664 | D3D11 | ⬜ | |
 | MOD-1665 | D3D12 | ⬜ | |
 | MOD-1666 | D3D9 | ⬜ | Cube-mip prefiltering on SM3 — verify feasibility first. |
@@ -838,7 +838,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1680 | Vulkan | 🟨 | **Measured.** The Vulkan renderer implements none of `CreateComputeShader`/`CreateStorageBuffer`/`DispatchCompute`, so `SupportsComputeShadersEXT()` is false and both wrappers refuse by name — verified by running `cnaext_compute_particles_test` against the real Vulkan device, which SKIPs. Native compute queues are the open work. |
 | MOD-1681 | D3D11 | ⬜ | CS 5.0 + UAV. |
 | MOD-1682 | D3D12 | ⬜ | |
-| MOD-1683 | WebGPU | ⬜ | Compute is core in WebGPU; gated on the backend's own maturity. |
+| MOD-1683 | WebGPU | 🟨 | **Measured:** `SupportsCapability(ComputeShaders): no`, so `ComputeShader`/`StorageBuffer` refuse by name and the compute suites skip. Compute is core in WebGPU, so this remains gated on the backend's maturity rather than on the API. |
 | MOD-1684 | Metal | ⬜ | |
 | MOD-1685 | Diligent | 🟨 | **Measured:** `SupportsCapability(ComputeShaders): no`, so `ComputeShader`/`StorageBuffer` refuse by name. Its Vulkan device has compute, so this is implementable rather than a boundary. |
 | MOD-1686 | OpenGL4 | 🟨 | **Measured:** `SupportsCapability(ComputeShaders): no`, so `ComputeShader` and `StorageBuffer` refuse by name and the compute suites skip. GL 4.3 has compute shaders, so this is implementable rather than a boundary. |
