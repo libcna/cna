@@ -494,7 +494,19 @@ CNA_C_API CNA_Result cna_wave_bank_create(
  * @param offset Byte offset of the bank inside the file.
  * @param packet_size Streaming packet size in sectors.
  * @param out_wave_bank Receives an owned wave-bank handle, or `CNA_INVALID_HANDLE` on failure.
- * @return The same answers as @ref cna_wave_bank_create.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output or a path that is
+ *         not valid UTF-8, or a documented handle/thread failure.
+ *
+ * **This does *not* answer the same way as `cna_wave_bank_create`, and the difference matters.**
+ * That one reports a missing or malformed `.xwb` as `CNA_RESULT_IO`. The canonical *streaming*
+ * constructor swallows every parse failure -- it logs and returns -- so this route answers
+ * `CNA_RESULT_SUCCESS` and hands back a live but **empty** wave bank for a file that does not
+ * exist at all. A caller that needs to know whether the bank has content must ask it, rather than
+ * reading success as "the file was there".
+ *
+ * This header claimed the opposite until `CBIND-065`, which found it by writing the first test
+ * that called this route. The behaviour is canonical rather than introduced by this ABI, and
+ * `XactSmoke.c` now pins it, so a canonical change becomes visible instead of silent.
  */
 CNA_C_API CNA_Result cna_wave_bank_create_streaming(
     CNA_Handle engine,

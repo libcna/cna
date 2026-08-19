@@ -197,6 +197,13 @@ CNA_Result cna_invite_accepted_event_info_init(
             outInfo->struct_version != UINT32_C(1)) {
             return InvalidArgument("The event description structure is invalid.");
         }
+        // CBIND-065: the flag is validated before it is stored, unlike a plain setter, because
+        // this structure is what an invite-accepted *subscriber* reads. A byte outside
+        // {CNA_FALSE, CNA_TRUE} accepted here would hand a reader a Boolean that is neither, and
+        // docs/c-api/ABI_VERSIONING.md declares those the only valid values.
+        if (isCurrentSession != CNA_FALSE && isCurrentSession != CNA_TRUE) {
+            return InvalidArgument("The current-session flag is not a canonical CNA_Bool.");
+        }
         if (gamer != CNA_INVALID_HANDLE) {
             std::shared_ptr<SignedInGamerResource> resource;
             if (const CNA_Result result = GetSignedInGamer(gamer, &resource);
