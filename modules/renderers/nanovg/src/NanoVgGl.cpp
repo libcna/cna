@@ -20,6 +20,9 @@
 #include "CNA/Internal/Renderers/NanoVg/NanoVgGlLoader.hpp"
 #include "CNA/Internal/Renderers/Common/PlatformGlRendererState.hpp"
 
+#include <stdexcept>
+#include <string>
+
 #if defined(__APPLE__)
 #include <OpenGL/gl.h>
 #include <OpenGL/glext.h>
@@ -75,9 +78,19 @@ namespace CNA::Internal::Renderers::NanoVg
 {
     void LoadNanoVgGlFunctions()
     {
-#define CNA_NVG_LOAD_GL(name) \
+        // Every entry point that resolves to nullptr here would be called unchecked by
+        // nvgCreateGL2() moments later -- nanovg_gl.h assumes its includer already has them, so a
+        // driver or platform loader that cannot supply one produces a null call rather than an
+        // error. Each load is therefore recorded and the first missing name is reported, which is
+        // the difference between a diagnosable "this GL context has no glCreateShader" and a crash
+        // inside third-party code.
+        const char* firstMissing = nullptr;
+#define CNA_NVG_LOAD_GL_OPTIONAL(name) \
         cna_nvg_##name = reinterpret_cast<decltype(cna_nvg_##name)>( \
             CNA::Internal::Renderers::LoadPlatformGlProcAddress(#name))
+#define CNA_NVG_LOAD_GL(name) \
+        CNA_NVG_LOAD_GL_OPTIONAL(name); \
+        if (cna_nvg_##name == nullptr && firstMissing == nullptr) firstMissing = #name
         CNA_NVG_LOAD_GL(glActiveTexture);
         CNA_NVG_LOAD_GL(glAttachShader);
         CNA_NVG_LOAD_GL(glBindAttribLocation);
@@ -93,7 +106,11 @@ namespace CNA::Internal::Renderers::NanoVg
         CNA_NVG_LOAD_GL(glDisableVertexAttribArray);
         CNA_NVG_LOAD_GL(glEnableVertexAttribArray);
         CNA_NVG_LOAD_GL(glGenBuffers);
-        CNA_NVG_LOAD_GL(glGenerateMipmap);
+        // The one optional entry point: nanovg_gl.h guards its only call site with
+        // `#if !defined(NANOVG_GL2)`, so the GL2 backend compiled here never reaches it. Loaded
+        // anyway to keep the shim list identical to the declaration list, but a context that
+        // cannot supply it still runs this renderer perfectly well, so a miss is not recorded.
+        CNA_NVG_LOAD_GL_OPTIONAL(glGenerateMipmap);
         CNA_NVG_LOAD_GL(glGetProgramInfoLog);
         CNA_NVG_LOAD_GL(glGetProgramiv);
         CNA_NVG_LOAD_GL(glGetShaderInfoLog);
@@ -108,6 +125,15 @@ namespace CNA::Internal::Renderers::NanoVg
         CNA_NVG_LOAD_GL(glUseProgram);
         CNA_NVG_LOAD_GL(glVertexAttribPointer);
 #undef CNA_NVG_LOAD_GL
+#undef CNA_NVG_LOAD_GL_OPTIONAL
+
+        if (firstMissing != nullptr)
+        {
+            throw std::runtime_error(
+                std::string("NANOVG: the platform GL loader could not resolve '") + firstMissing +
+                "', which NanoVG's GL2 backend calls unconditionally. This context does not "
+                "provide the OpenGL 2.x entry points this renderer requires.");
+        }
     }
 }
 

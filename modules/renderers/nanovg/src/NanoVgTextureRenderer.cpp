@@ -61,6 +61,20 @@ namespace CNA::Internal::Renderers::NanoVg
                 "texture with mipMap=false.");
         }
 
+        // GL will not allocate beyond GL_MAX_TEXTURE_SIZE, and nvgCreateImageRGBA neither asks nor
+        // checks -- an oversized glTexImage2D fails silently and leaves a texture object with no
+        // storage, which samples as garbage instead of reporting anything. Refused here so the
+        // failure is named at the call that caused it. This is a real device limit, distinct from
+        // the GraphicsProfile ceiling Texture2D validates separately.
+        const int maxEdge = owner_.GetMaxGlTextureSizeEXT();
+        if (maxEdge > 0 && (width_ > maxEdge || height_ > maxEdge))
+        {
+            throw System::NotSupportedException(
+                "NANOVG cannot create a " + std::to_string(width_) + "x" + std::to_string(height_) +
+                " texture: this OpenGL implementation's GL_MAX_TEXTURE_SIZE is " +
+                std::to_string(maxEdge) + ".");
+        }
+
         const int stride = width_ * 4;
         if (!data.pixels.empty() &&
             static_cast<std::size_t>(stride) * static_cast<std::size_t>(height_) > data.pixels.size())

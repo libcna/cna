@@ -50,9 +50,9 @@ using CNA::Examples::SdlTestRendererArgs;
 namespace
 {
     int pass = 0, fail = 0;
-    void Check(bool ok, const char* label)
+    void Check(bool ok, const std::string& label)
     {
-        std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
+        std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label.c_str());
         if (ok) ++pass; else ++fail;
     }
 
@@ -277,6 +277,41 @@ int main()
             try { tex->UpdatePixelsLevel(0, img.pixels.data(), 3, 2); }
             catch (const System::NotSupportedException&) { levelZeroThrew = true; }
             Check(!levelZeroThrew, "UpdatePixelsLevel(0, ...) is an ordinary full-surface update");
+        }
+
+        // 9c) A texture larger than GL_MAX_TEXTURE_SIZE is refused. nvgCreateImageRGBA does not
+        //     check glGetError, so an oversized glTexImage2D would otherwise leave a texture
+        //     object with no storage and sample as garbage.
+        {
+            const int maxEdge = renderer.GetMaxGlTextureSizeEXT();
+            Check(maxEdge > 0, "GL_MAX_TEXTURE_SIZE is queried and non-zero (got " +
+                                   std::to_string(maxEdge) + ")");
+            ImageData oversized;
+            oversized.width = maxEdge + 1;
+            oversized.height = 4;
+            // Left empty on purpose: the size guard must reject before any pixel buffer is looked
+            // at, so this must not need maxEdge+1 texels of host memory to exercise.
+            bool oversizedThrew = false;
+            std::string oversizedMessage;
+            try { (void)renderer.CreateTexture(oversized); }
+            catch (const System::NotSupportedException& ex)
+            { oversizedThrew = true; oversizedMessage = ex.what(); }
+            Check(oversizedThrew &&
+                      oversizedMessage.find("GL_MAX_TEXTURE_SIZE") != std::string::npos,
+                  "a texture wider than GL_MAX_TEXTURE_SIZE is refused, naming the limit");
+
+            // The boundary itself stays legal -- the guard must not be off by one against a size
+            // the device genuinely supports.
+            bool atLimitThrew = false;
+            try
+            {
+                ImageData atLimit;
+                atLimit.width = maxEdge;
+                atLimit.height = 1;
+                (void)renderer.CreateTexture(atLimit);
+            }
+            catch (const System::NotSupportedException&) { atLimitThrew = true; }
+            Check(!atLimitThrew, "a texture exactly at GL_MAX_TEXTURE_SIZE is still accepted");
         }
 
         // 10) Out-of-bounds Wrap and Mirror. Same geometry as case 8, so the five destination

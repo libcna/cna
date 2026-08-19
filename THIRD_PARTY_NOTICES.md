@@ -239,3 +239,36 @@ the reason this section is required rather than merely courteous:
 This section, together with `docs/tinygl-renderer.md` and `plan_tinygl.md`, is that acknowledgment.
 A build configured with any other `CNA_GRAPHICS_RENDERER` value does not fetch, build or link
 TinyGL at all.
+
+## NanoVG (NANOVG renderer dependency)
+
+The `NANOVG` graphics renderer uses [memononen/nanovg](https://github.com/memononen/nanovg) by
+Mikko Mononen. CNA's CMake integration (`cmake/ThirdPartyNanoVG.cmake`) fetches an unmodified
+upstream checkout at a pinned commit (`ce3bf745eb2d2dbc14a50bf2446783f691ac4353`) at configure time
+and compiles its backend-agnostic core into CNA's own `cna_thirdparty_nanovg` target; the GL2 render
+backend header is included by `modules/renderers/nanovg/src/NanoVgGl.cpp`. No NanoVG source is
+copied into the CNA source tree, and no upstream file is modified. See `LICENSE.txt` in the fetched
+upstream checkout for the complete license text.
+
+NanoVG is distributed under the zlib license:
+
+> Copyright (c) 2013 Mikko Mononen memon@inside.org
+>
+> This software is provided 'as-is', without any express or implied warranty. In no event will the
+> authors be held liable for any damages arising from the use of this software.
+>
+> Permission is granted to anyone to use this software for any purpose, including commercial
+> applications, and to alter it and redistribute it freely, subject to the following restrictions:
+>
+> 1. The origin of this software must not be misrepresented; you must not claim that you wrote the
+>    original software. If you use this software in a product, an acknowledgment in the product
+>    documentation would be appreciated but is not required.
+> 2. Altered source versions must be plainly marked as such, and must not be misrepresented as
+>    being the original software.
+> 3. This notice may not be removed or altered from any source distribution.
+
+NanoVG itself bundles `fontstash.h`, `stb_image.h` and `stb_truetype.h`, which CNA compiles as part
+of `nanovg.c`; those carry their own permissive notices in the same upstream checkout.
+
+A build configured with any other `CNA_GRAPHICS_RENDERER` value does not fetch, build or link
+NanoVG at all.

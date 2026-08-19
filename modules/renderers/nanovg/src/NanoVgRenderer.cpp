@@ -156,6 +156,13 @@ namespace CNA::Internal::Renderers::NanoVg
             if (!nvg_)
                 throw std::runtime_error("NANOVG: CreateNanoVgGL2Context (nvgCreateGL2) failed.");
 
+            // Queried once, with this renderer's context current. NanoVG never asks GL what it
+            // can allocate, and nvgCreateImageRGBA does not check glGetError, so without this an
+            // oversized texture becomes a silently empty GL texture object rather than an error.
+            GLint maxTextureSize = 0;
+            glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+            maxGlTextureSize_ = maxTextureSize > 0 ? static_cast<int>(maxTextureSize) : 0;
+
             int physW = 0, physH = 0;
             surface_.GetDrawableSize(physW, physH);
             if (physW <= 0) physW = 1;

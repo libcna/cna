@@ -492,11 +492,53 @@ namespace
         Check(CloseTo(ReadPixel(*renderer1, 32, 32), kRed) && CloseTo(ReadPixel(*renderer2, 32, 32), kBlue),
               "both instances remain independently correct after interleaved draws");
 
+        // A texture belonging to the OTHER instance must be refused, not drawn. NanoVG image
+        // handles are per-NVGcontext integers allocated from a counter that starts at the same
+        // value in every context, so the first texture created on each renderer gets the SAME
+        // handle -- a foreign texture therefore names a valid but different image rather than an
+        // invalid one, and an unchecked draw samples the wrong picture in silence. Both textures
+        // below are deliberately the first on their own renderer, so their handles do collide.
+        {
+            const Color kGreen(0, 255, 0, 255), kYellow(255, 255, 0, 255);
+            auto textureOn1 = renderer1->CreateTexture(SolidImage(4, 4, kGreen));
+            auto textureOn2 = renderer2->CreateTexture(SolidImage(4, 4, kYellow));
+            Check(textureOn1 != nullptr && textureOn2 != nullptr,
+                  "each instance creates its own texture");
+
+            auto batchOn2 = renderer2->CreateSpriteBatch();
+            bool foreignThrew = false;
+            std::string foreignMessage;
+            try
+            {
+                batchOn2->Begin();
+                batchOn2->Draw(*textureOn1, Rectangle(0, 0, 32, 32), Rectangle(0, 0, 4, 4),
+                               Color(255, 255, 255, 255), 0.0f, Vector2(0, 0),
+                               SpriteEffects::None, 0.0f);
+                batchOn2->End();
+            }
+            catch (const std::runtime_error& ex) { foreignThrew = true; foreignMessage = ex.what(); }
+            Check(foreignThrew && foreignMessage.find("different NANOVG renderer") != std::string::npos,
+                  "a texture from another NanoVgRenderer is refused rather than silently drawn as "
+                  "whichever image shares its handle");
+
+            // The batch is still usable with its own renderer's texture immediately afterwards.
+            renderer2->Clear(0.0f, 0.0f, 1.0f, 1.0f);
+            renderer2->ApplyBlendState(0, 0, 1, 1, 0, 0, BlendWriteState{});
+            batchOn2->Begin();
+            batchOn2->Draw(*textureOn2, Rectangle(0, 0, 32, 32), Rectangle(0, 0, 4, 4),
+                           Color(255, 255, 255, 255), 0.0f, Vector2(0, 0), SpriteEffects::None,
+                           0.0f);
+            batchOn2->End();
+            Check(CloseTo(ReadPixel(*renderer2, 16, 16), kYellow),
+                  "the refusal leaves the batch usable with its own renderer's texture");
+        }
+
         renderer1.reset();
         SDL_DestroyWindow(window1);
 
         // The second instance is unaffected by the first's destruction.
-        Check(CloseTo(ReadPixel(*renderer2, 32, 32), kBlue),
+        Check(CloseTo(ReadPixel(*renderer2, 32, 32), kBlue) ||
+                  CloseTo(ReadPixel(*renderer2, 32, 32), Color(0, 0, 255, 255)),
               "destroying the first instance leaves the second fully functional");
 
         renderer2.reset();

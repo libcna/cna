@@ -58,6 +58,15 @@ namespace CNA::Internal::Renderers::NanoVg
         /// draws through `nvgImagePattern`.
         [[nodiscard]] int GetImageHandle() const { return image_; }
 
+        /// CNAEXT. The renderer whose `NVGcontext` `GetImageHandle()` is valid in.
+        ///
+        /// Image handles are small per-context integers that every `NVGcontext` allocates from its
+        /// own counter starting at the same value, so a handle from one context is very likely to
+        /// be a VALID but DIFFERENT image in another. Drawing a texture through a foreign
+        /// `SpriteBatch` would therefore silently sample the wrong picture rather than fail, which
+        /// is why `NanoVgSpriteBatchRenderer::Draw` compares this against its own owner.
+        [[nodiscard]] const NanoVgRenderer* GetOwnerEXT() const { return &owner_; }
+
     private:
         NanoVgRenderer& owner_;
         int image_ = 0;

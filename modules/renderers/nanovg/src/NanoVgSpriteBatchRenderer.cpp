@@ -300,6 +300,20 @@ namespace CNA::Internal::Renderers::NanoVg
         const auto* tex = dynamic_cast<const NanoVgTextureRenderer*>(&texture);
         if (!tex) return;
 
+        // A NanoVG image handle is a small integer scoped to ONE NVGcontext, and every context
+        // allocates from its own counter starting at the same value -- so a texture created on a
+        // second NanoVgRenderer does not produce an invalid handle here, it produces a valid handle
+        // naming a DIFFERENT image. Left unchecked this draws the wrong picture in silence, and
+        // also writes this batch's sampler state onto the wrong GL texture object.
+        if (tex->GetOwnerEXT() != &owner_)
+        {
+            throw std::runtime_error(
+                "NANOVG SpriteBatch: this Texture2D belongs to a different NANOVG renderer "
+                "instance. NanoVG image handles are per-NVGcontext integers, so the handle would "
+                "silently name a different image in this renderer's own context. Create the "
+                "texture on the same GraphicsDevice the SpriteBatch draws through.");
+        }
+
         // SpriteSortMode::Immediate promises that device state changed BETWEEN two Draw() calls is
         // reflected per sprite (ISpriteBatchRenderer::SetImmediateMode's own contract), so the
         // state captured at Begin() has to be re-read here. Deferred keeps the batch-snapshot

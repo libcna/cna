@@ -223,6 +223,22 @@ namespace CNA::Internal::Renderers::NanoVg
         /// Clear() first.
         void EnsureSurfaceSizeEXT();
 
+        /**
+         * @brief CNAEXT. The largest texture edge this GL implementation will actually allocate
+         * (`GL_MAX_TEXTURE_SIZE`, queried once at construction).
+         *
+         * Deliberately NOT surfaced through `GetMaxTextureSizeForProfileEXT()`: that hook is
+         * documented as a `GraphicsProfile` CEILING rather than a hardware query, and reporting a
+         * device limit there would make `Reach`/`HiDef` mean something different on this renderer
+         * than on every other. It is enforced by `NanoVgTextureRenderer`'s own constructor instead,
+         * because `nvgCreateImageRGBA` does not check `glGetError`: an oversized `glTexImage2D`
+         * fails silently and leaves a texture object with no storage, which then samples as garbage
+         * rather than reporting anything.
+         *
+         * @return The maximum edge length in texels, or 0 if the query failed.
+         */
+        [[nodiscard]] int GetMaxGlTextureSizeEXT() const { return maxGlTextureSize_; }
+
         /// CNAEXT. The underlying `NVGcontext*`, for `NanoVgSpriteBatchRenderer`/
         /// `NanoVgTextureRenderer`.
         [[nodiscard]] NVGcontext* GetNvgContextEXT() const { return nvg_; }
@@ -275,6 +291,8 @@ namespace CNA::Internal::Renderers::NanoVg
                                        /*NVG_ONE*/ 1 << 1, /*NVG_ONE_MINUS_SRC_ALPHA*/ 1 << 7};
         int swapInterval_ = 1;
         int lastPhysW_ = 0, lastPhysH_ = 0;
+        /// GL_MAX_TEXTURE_SIZE, queried once with the context current.
+        int maxGlTextureSize_ = 0;
 
         int viewportX_ = 0, viewportY_ = 0, viewportW_ = 0, viewportH_ = 0;
         float viewportMinDepth_ = 0.0f, viewportMaxDepth_ = 1.0f;

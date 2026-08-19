@@ -1,0 +1,131 @@
+# plan_nanovg.md NVG-22: the NANOVG renderer's test suite had never run in CI -- no workflow in this
+# directory mentioned "nanovg", so every result in docs/nanovg-renderer.md came from one developer
+# sandbox. This job builds the renderer and its eleven pixel/contract executables and runs the whole
+# NanoVg-labelled suite.
+#
+# Linux only, deliberately. NanoVG's GL2 backend needs a real desktop OpenGL 2.x context, which on a
+# hosted runner means Mesa's llvmpipe under Xvfb -- exactly the configuration
+# docs/nanovg-renderer.md already names as the one this renderer has actually been validated on.
+# Windows and macOS remain declared-but-unvalidated platforms there; adding them here would need a
+# working GL context on those runners first, and claiming CI coverage without it would be the same
+# kind of overstatement this renderer's audit spent four passes removing.
+#
+# The pure BlendState -> NVGblendFactor mapping tests (NanoVgBlendStateMapping.*) live in CnaTests
+# rather than in these focused executables, so they are not covered here -- building the whole
+# gtest corpus for four assertions is not worth the CI minutes. They need no GL context and run in
+# any ordinary local build.
+name: nanovg-ci
+
+on:
+  push:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [develop, master]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+concurrency:
+  group: nanovg-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  nanovg-build-and-test:
+    name: NANOVG pixel + contract suite (GCC, Linux x86_64, Mesa/Xvfb)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CMAKE_GENERATOR: Ninja
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout CNA
+        uses: actions/checkout@v4
+        with:
+          path: cna
+          submodules: true
+
+      - name: Checkout pinned sharp-runtime sibling
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/sharp-runtime
+          ref: f23ded28c7b94a745cf82f8804b5b7104ca5780e
+          path: sharp-runtime
+
+      # Pinned here as well as in cmake/ThirdPartyNanoVG.cmake so the configure step never reaches
+      # the network, and so a CI failure can never be caused by upstream moving under the job.
+      - name: Checkout pinned NanoVG
+        uses: actions/checkout@v4
+        with:
+          repository: memononen/nanovg
+          ref: ce3bf745eb2d2dbc14a50bf2446783f691ac4353
+          path: nanovg
+
+      - name: Install build and headless-GL dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build pkg-config \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+            libasound2-dev libpulse-dev libudev-dev libdbus-1-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
+            libxfixes-dev libxss-dev libxtst-dev libwayland-dev \
+            wayland-protocols libxkbcommon-dev \
+            libgl1-mesa-dev libglx-dev libgl1-mesa-dri xvfb
+
+      - name: Configure NANOVG
+        working-directory: cna
+        run: |
+          cmake -S . -B build-nanovg -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCNA_GRAPHICS_RENDERER=NANOVG \
+            -DCNA_BUILD_TESTS=ON \
+            -DCNA_BUILD_EXAMPLES=OFF \
+            -DCNA_ENABLE_NET=OFF \
+            -DCNA_USE_CCACHE=OFF \
+            -DCNA_MAX_VENDORED_BUILD_JOBS=2 \
+            -DFETCHCONTENT_SOURCE_DIR_NANOVG="${GITHUB_WORKSPACE}/nanovg"
+
+      - name: Build the renderer and its focused test executables
+        working-directory: cna
+        run: |
+          cmake --build build-nanovg --parallel 2 --target \
+            cna_renderer_nanovg \
+            cna_test_nanovg_smoke \
+            cna_test_nanovg_spritebatch_rotation \
+            cna_test_nanovg_unsupported_3d_behavior \
+            cna_test_nanovg_blend \
+            cna_test_nanovg_texture_orientation \
+            cna_test_nanovg_sampler_state \
+            cna_test_nanovg_immediate_mode \
+            cna_test_nanovg_sprite_rasterization \
+            cna_test_nanovg_spritebatch_custom_viewport \
+            cna_test_nanovg_spritebatch_viewport_switch \
+            cna_test_nanovg_presentation_viewport_scissor
+
+      # Serial on purpose: every one of these creates its own GL window, and llvmpipe under a single
+      # Xvfb display is the environment this renderer's results were established on.
+      - name: Run the NanoVg-labelled suite under Xvfb
+        working-directory: cna
+        run: |
+          xvfb-run -a --server-args="-screen 0 1280x1024x24 -nolisten tcp" \
+            ctest --test-dir build-nanovg -L NanoVg --output-on-failure
+
+      - name: Verify the renderer registry still agrees with itself
+        working-directory: cna
+        run: python3 scripts/check_renderer_identities.py
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanovg-linux-diagnostics
+          path: |
+            cna/build-nanovg/Testing/Temporary/**
+            cna/build-nanovg/CMakeFiles/CMakeConfigureLog.yaml
+          if-no-files-found: warn

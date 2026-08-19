@@ -288,6 +288,8 @@ active `Viewport` and can change between two draws of one Immediate batch.
 | Custom `Viewport` | Real `glViewport`, **plus a sprite projection sized to the active viewport** | XNA builds the `SpriteBatch` ortho from `Viewport.Width`/`Height`, so a custom viewport makes sprite coordinates viewport-local — see "The sprite coordinate space follows GraphicsDevice.Viewport" below. Verified by the shared `spritebatch_custom_viewport_test` / `spritebatch_viewport_switch_test`, not by a renderer-local substitute. |
 | `ScissorRectangle` / `RasterizerState.ScissorTestEnable` | **Geometric clip of each sprite quad**, not `nvgScissor` | Exact for every `BlendState` (including `Opaque`) and for rotated quads, with a hard edge — see "The scissor rectangle is clipped geometrically" above. Enable and rectangle stay independent, matching `OPENVG`. Pixel-tested under both `AlphaBlend` and `Opaque`. |
 | `SpriteSortMode.Immediate` | **Real per-draw flush** (`nvgInternalParams(ctx)->renderFlush`) **plus a per-draw device-state re-read** | Covers both halves of the contract: a `GraphicsDevice` operation issued between two `Draw()` calls is ordered between them, AND a `BlendState`/`Viewport` changed between them applies from that sprite onward. `Deferred` keeps the batch snapshot (all of its draws run from `End()` under one device state). Pixel-tested against each other (`nanovg_immediate_mode_test`). |
+| A `Texture2D` created on a DIFFERENT `NANOVG` renderer instance | **Rejected** (throws) | NanoVG image handles are small per-`NVGcontext` integers allocated from a counter that starts at the same value in every context, so a foreign handle names a valid but *different* image rather than an invalid one — an unchecked draw would sample the wrong picture in silence and write the batch's sampler onto the wrong GL texture. Tested with two live renderers whose first textures share a handle. |
+| A texture larger than `GL_MAX_TEXTURE_SIZE` | **Rejected** (throws) | `nvgCreateImageRGBA` never asks GL what it can allocate and does not check `glGetError`, so an oversized `glTexImage2D` fails silently and leaves a texture object with no storage. The limit is queried once at renderer construction. Deliberately *not* reported through `GetMaxTextureSizeForProfileEXT()`, which is a `GraphicsProfile` ceiling rather than a hardware query. Tested, including that the exact limit still succeeds. |
 | Mip-mapped `Texture2D` (`mipMap: true`), and `Texture2D.SetData(level > 0, ...)` | **Rejected** (throws) | NanoVG images are single-level with no per-level upload or LOD-sampling API. Refused at construction and at `UpdatePixelsLevel`, rather than accepted with storage that does not exist. Tested. |
 | `Texture2D` create/update | Real `nvgCreateImageRGBA`/`nvgUpdateImage` | Straight (non-premultiplied) RGBA8, top-row-first, tightly packed (NanoVG's own API has no stride parameter — `NanoVgTextureRenderer` repacks when the caller's stride differs). No row flip anywhere: NanoVG's Y-down image space already matches `ImageData`'s own convention. |
 | `SpriteBatch` draw (all 3 overloads, rotation, origin, source rectangle, tint, `SpriteEffects` flip) | Real `nvgImagePattern` + a filled rectangle path (`nvgBeginPath`/`nvgRect`/`nvgFillPaint`/`nvgFill`) | NanoVG has no "draw image" primitive; a partial `sourceRectangle` needs no CPU-side sub-image copy (unlike `OPENVG`'s `vgCopyImage` workaround) — the pattern box is positioned purely algebraically, all inside the already-`nvgScale`d coordinate system. Verified by `nanovg_spritebatch_rotation_test`. |
@@ -316,6 +318,29 @@ active `Viewport` and can change between two draws of one Immediate batch.
 | `GraphicsCapability.ThreeD`, `DepthStencilBuffer`, `MultipleRenderTargets`, `OcclusionQuery`, `CustomEffects`, `CompiledEffects`, `Texture3D`, `MultiSampleAntiAliasing`, `AnisotropicFiltering`, `WireFrame`, `Instancing`, `MultiStreamVertexInput`, `StencilBuffer` | All report `false` | See `NanoVgRenderer::SupportsCapability`'s own comment. |
 | `GraphicsCapability.AdditiveBlending` | Reports **`true`** | The one genuine capability edge over `OPENVG` — see above. |
 | Swap interval | Real `SDL_GL_SetSwapInterval`, with a fallback chain (requested -> 1 -> 0) | |
+
+## Failure modes that are named rather than left to GL
+
+Three conditions would otherwise produce wrong pixels or a crash inside third-party code instead of
+an error, because neither NanoVG nor GL reports them on its own:
+
+- **A GL entry point the platform loader cannot resolve.** `nanovg_gl.h` is not a loader — it calls
+  `gl*` names unqualified and assumes the includer has them — so an unresolved pointer becomes a
+  null call inside `nvgCreateGL2()`. `LoadNanoVgGlFunctions()` records every miss and throws naming
+  the first one. `glGenerateMipmap` is the single exemption: its only call site is behind
+  `#if !defined(NANOVG_GL2)`, so the backend compiled here never reaches it and requiring it would
+  refuse contexts that run this renderer perfectly well.
+- **A texture larger than the device can allocate.** `GL_MAX_TEXTURE_SIZE` is queried once at
+  construction and enforced by `NanoVgTextureRenderer`.
+- **A texture from another renderer instance.** Handles collide across contexts; see the capability
+  table above.
+
+Not covered by an explicit check: the *granted* GL context attributes. The renderer requests a 2.1
+compatibility context with an 8-bit stencil plane, and if the platform grants less, `nvgCreateGL2()`
+fails its own shader compilation and this renderer throws
+`"CreateNanoVgGL2Context (nvgCreateGL2) failed"`. That is already a loud, specific failure, and
+`CNA::Platform::GlContextDescription` has no granted-attribute readback that would let the renderer
+say more without widening a shared platform interface every GL family uses.
 
 ## Dependency and build
 
@@ -352,13 +377,13 @@ established split for GPU/window-creating tests — pure-function pieces live in
 | `nanovg_spritebatch_rotation_test` | Decisive rotation/origin geometry oracle (`NativeBackBuffer`). |
 | `nanovg_blend_test` | Every built-in `BlendState` and four custom ones, all four RGBA channels, against a CPU reference computed from the same factor ordinals `ApplyBlendState` receives; genuinely premultiplied source data for `AlphaBlend` and its straight twin for `NonPremultiplied`; translucent and alpha-zero sources under `Opaque`; six tint combinations; deterministic rejection of non-`Add` blend functions, constant-colour factors, `SourceAlphaSaturation` as a destination factor, a non-default `ColorWriteChannels` on each of the four render-target slots, and a non-default `MultiSampleMask` (42 checks). |
 | `nanovg_unsupported_3d_behavior_test` | Throw/WarnAndStub policy across every inherently-3D entry point, `AdditiveBlending`/`Texture3D` capability honesty. |
-| `nanovg_texture_orientation_test` | Upload/`UpdatePixels` row orientation, partial-`sourceRectangle` `nvgImagePattern` box crop math (including a multi-texel span), tint, rotation, both `SpriteEffects` flips, out-of-bounds `Clamp` pixel-exactness (right edge and left/top simultaneously), real out-of-bounds `Wrap` tiling / `Mirror` reflection, and refusal of both a mip-mapped `Texture2D` and a level>0 upload (29 checks). |
+| `nanovg_texture_orientation_test` | Upload/`UpdatePixels` row orientation, partial-`sourceRectangle` `nvgImagePattern` box crop math (including a multi-texel span), tint, rotation, both `SpriteEffects` flips, out-of-bounds `Clamp` pixel-exactness (right edge and left/top simultaneously), real out-of-bounds `Wrap` tiling / `Mirror` reflection, refusal of both a mip-mapped `Texture2D` and a level>0 upload, and the `GL_MAX_TEXTURE_SIZE` bound (including that the exact limit still succeeds) (32 checks). |
 | `nanovg_sampler_state_test` | `PointClamp` vs `LinearClamp` at sample points where the two genuinely disagree, the four `Min*Mag*` filters, the inert mip component, the same texture drawn Point → Linear → Point across consecutive batches, two textures in one batch, `Clamp`/`Wrap`/`Mirror` on an out-of-bounds source rectangle, independent U/V address modes, and rejection of `Anisotropic` and of out-of-range ordinals (22 checks). |
 | `nanovg_immediate_mode_test` | `SpriteSortMode::Immediate` vs `Deferred` as an ordering guarantee: a `Clear()` between the `Draw()` and the `End()` must wipe the sprite under Immediate and be overdrawn by it under Deferred; ordering between two Immediate draws; a `BlendState` and a `Viewport` changed between two Immediate draws applying from that sprite onward; a viewport MOVED at constant size re-mapping the scissor (the case a "did the extent change" check misses); that the per-draw flush leaves the batch's own scissor/transform/blend state intact; and that the flag is per batch rather than sticky (17 checks). |
 | `spritebatch_custom_viewport_test` (shared) | REMED-GFX-072's own contract: sprite clip space built from the active `GraphicsDevice.Viewport`, viewport-local placement, no squish, a transform composed in viewport-local space, and a full-target batch staying full-target afterwards (13 checks). |
 | `spritebatch_viewport_switch_test` (shared) | Two `SpriteBatch` batches with different viewports in one frame, each projected and rasterized by its own (6 checks). |
 | `nanovg_sprite_rasterization_test` | A whole-frame census requiring that no pixel is partially covered — for an axis-aligned integer quad (with its exact edge columns/rows and covered-pixel count), a ~23° rotation with a fractional origin, non-integer scale and a partial source rectangle, and two ~17° rotations with both `SpriteEffects` flips under a `SetTransformMatrix`; plus a translucent sprite whose edge column must composite exactly once (11 checks). |
-| `nanovg_presentation_viewport_scissor_test` | Every `CnaPresentationMode` (`Letterbox`/`Overscan`/`Stretch`/`FixedHeightDynamicWidth`/`NativeBackBuffer`), `TransformWindowToLogical`/`TransformLogicalToWindow` round-trips, a custom `Viewport`, resize-without-`Clear`, `RasterizerState`-driven scissor pixel-clipping under both `AlphaBlend` and `Opaque` (the latter over a background far from black, so a masked-but-still-written fragment cannot hide in the tolerance), `Stretch` presentation combined with a custom `Viewport` AND a scissor in one scene (the only configuration where the scissor's X and Y scale factors differ, so applying one to both is visible), two simultaneous `NanoVgRenderer` instances (construction, interleaved `Clear`/readback, and destroying one while the other stays live), 25 repeated construct/destroy cycles, `SetSwapInterval` (49 checks). |
+| `nanovg_presentation_viewport_scissor_test` | Every `CnaPresentationMode` (`Letterbox`/`Overscan`/`Stretch`/`FixedHeightDynamicWidth`/`NativeBackBuffer`), `TransformWindowToLogical`/`TransformLogicalToWindow` round-trips, a custom `Viewport`, resize-without-`Clear`, `RasterizerState`-driven scissor pixel-clipping under both `AlphaBlend` and `Opaque` (the latter over a background far from black, so a masked-but-still-written fragment cannot hide in the tolerance), `Stretch` presentation combined with a custom `Viewport` AND a scissor in one scene (the only configuration where the scissor's X and Y scale factors differ, so applying one to both is visible), two simultaneous `NanoVgRenderer` instances (construction, interleaved `Clear`/readback, refusal of a texture belonging to the other instance whose handle collides with its own, and destroying one while the other stays live), 25 repeated construct/destroy cycles, `SetSwapInterval` (52 checks). |
 
 Plus `NanoVgBlendStateMapping.*` (`modules/renderers/nanovg/tests/`, the pure
 `BlendStateToNvgBlendFunc` mapping function, no window/GL context needed) — including the case
@@ -374,6 +399,12 @@ tint and background inside `nanovg_blend_test`. The rest of that test compares a
 reference derived from `BlendState`'s own factor ordinals rather than against another renderer's
 output, which is a stronger oracle than a differential: it cannot agree with a second
 implementation that is wrong in the same way.
+
+**Continuous integration.** `.github/workflows/nanovg-ci.yml` builds the renderer and all eleven
+executables above and runs the whole `NanoVg`-labelled suite on `ubuntu-24.04` under Mesa/llvmpipe
+in `xvfb-run` — the same configuration the results below were established on. Linux only: Windows
+and macOS remain declared-but-unvalidated (see "Supported platforms"), and a green CI badge for a
+platform with no working GL context on the runner would be worth nothing.
 
 **Exact commands run** (this environment): `Xvfb :64 -screen 0 1280x1024x24 -nolisten tcp &`, then
 `DISPLAY=:64 ctest --test-dir cmake-build-nanovg -R NanoVg --output-on-failure` (21/21 pass) and

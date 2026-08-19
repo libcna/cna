@@ -50,11 +50,13 @@ different, unbuilt NanoVG backend, so this identity does not claim them).
    see `nanovg-spike/README.md` for the proof this mechanism actually works, and
    `NanoVgGlLoader.hpp` for the CNA-integrated version.
 3. **Presentation model reused verbatim from `OpenVgRenderer`.** `ComputeLogicalViewportEXT()`,
-   `EnsureSurfaceSizeEXT()`, the `GL_PROJECTION`-adjacent ortho (expressed as NanoVG's own
-   `nvgBeginFrame` device-pixel-ratio + a device-flip transform, since NanoVG has no separate
-   projection matrix concept of its own — it always renders in a Y-down, top-left-origin logical
-   space already, unlike OpenVG's Y-up image space) and the window<->logical transforms are the
-   same algorithm, ported to `NanoVgRenderer`. No new presentation math is invented.
+   `EnsureSurfaceSizeEXT()`, the `GL_PROJECTION`-adjacent ortho (expressed as the extent handed to
+   `nvgBeginFrame`, since NanoVG has no separate projection matrix concept of its own) and the
+   window<->logical transforms are the same algorithm, ported to `NanoVgRenderer`. No new
+   presentation math is invented, and — unlike `OpenVgRenderer` — **no device-flip transform is
+   involved anywhere**: NanoVG already renders in a Y-down, top-left-origin space, matching XNA,
+   while OpenVG's image space is Y-up. (NVG-20 later replaced the logical extent with the active
+   `GraphicsDevice.Viewport`'s own — see that task's row.)
 4. **`SpriteBatch` draws via `nvgImagePattern` + a filled rect path**, not a hypothetical
    "draw image" primitive (NanoVG has none) — `nvgBeginPath`/`nvgRect`/`nvgFillPaint`/`nvgFill`
    with a paint built from `nvgImagePattern(ox,oy,ex,ey,angle,image,alpha)`, matching the pattern
@@ -111,13 +113,16 @@ different, unbuilt NanoVG backend, so this identity does not claim them).
 
 | NVG-21 | Fourth review pass. One correctness bug plus the consistency cleanup it exposed. (1) NVG-20's per-draw Immediate re-read assigned its cached `SpriteProjection` only inside the re-open branch, but re-opening is required only when `nvgBeginFrame`'s own inputs (extent, device-pixel ratio) change -- so a viewport MOVED at constant size refreshed nothing, leaving the previous viewport's origin in `scissorOffsetX/Y` and clipping the next sprite against the old rectangle (viewport `(60,10,40,30)` -> `(80,10,40,30)` with scissor `(80,10,20,30)` put the second sprite at physical x 100..120 instead of 80..100). Split into a narrow `needsFrameReopen` test -- which now also covers `devicePixelRatio`, previously unchecked -- with the projection refreshed unconditionally. (2) `BlendState.MultiSampleMask` was the last state this renderer neither implemented nor refused; a coverage mask has no observable effect without a multisample framebuffer, but that argues for silence rather than acceptance, so it is now rejected. Also added the `Stretch` + custom `Viewport` + scissor scene -- the only configuration where the scissor's X and Y scale factors differ, so NVG-20's mapping is exercised rather than merely believed -- and corrected three stale comments that still described `nvgScissor` as the sprite clip and the frame as strictly one per `Begin()`/`End()`. A closing review found the last wording gap: only `colorWriteChannels[0]` was checked while the documentation claimed the whole property was refused, so all four per-render-target slots are now checked and each names its own slot. | DONE |
 
+| NVG-22 | External review pass (Linux scope only; Windows/macOS validation explicitly deferred by the owner). Three defensive gaps, none of them a wrong-pixel bug in ordinary single-device drawing: (1) `Draw()` accepted a `Texture2D` created on a DIFFERENT `NanoVgRenderer` after only a `dynamic_cast` -- NanoVG image handles are per-`NVGcontext` integers from a counter that starts at the same value in every context, so a foreign texture names a valid but different image and would have been drawn silently as the wrong picture (proven with two live renderers whose first textures share a handle); now refused. (2) `LoadNanoVgGlFunctions()` stored loader results without checking them, so an unresolvable entry point became a null call inside `nvgCreateGL2()`; every required symbol is now verified and the first missing one named, with `glGenerateMipmap` exempt because its only call site is compiled out of the GL2 backend. (3) `nvgCreateImageRGBA` never asks GL what it can allocate and does not check `glGetError`, so a texture past `GL_MAX_TEXTURE_SIZE` became a storage-less texture object sampling as garbage; the limit is queried once at construction and enforced in `NanoVgTextureRenderer`. Deliberately NOT routed through `GetMaxTextureSizeForProfileEXT()`, whose own contract is a `GraphicsProfile` ceiling rather than a hardware query. Also added `.github/workflows/nanovg-ci.yml` (Linux/Mesa/Xvfb, the one configuration this renderer is validated on), a `THIRD_PARTY_NOTICES.md` entry for NanoVG's zlib license, and removed design decision 3's stale "device-flip transform" wording -- this renderer has never used one. | DONE |
+
 ## Status
 
-**Complete**, including five adversarial audit passes: NVG-17 (geometry, presentation, multi-instance
+**Complete**, including six adversarial audit passes: NVG-17 (geometry, presentation, multi-instance
 coexistence), NVG-18 (blend, sampler and rasterization semantics), NVG-19 (Immediate-mode
 submission ordering, mip-level refusal, geometric scissor clipping) and NVG-20 (custom-viewport
 sprite projection, Immediate-mode live device state) and NVG-21 (constant-size viewport moves,
-`MultiSampleMask` refusal). See
+`MultiSampleMask` refusal) and NVG-22 (cross-instance texture refusal, GL loader and texture-size
+validation, Linux CI). See
 `docs/nanovg-renderer.md` for the delivered capability boundary and test status, and
 `nanovg-spike/README.md` for the existence-gate proof that predates the CNA integration.
 
