@@ -142,9 +142,18 @@ typedef struct CNA_RenderTargetBinding {
     uint32_t struct_version;
     /** @brief Owned 2D or cube render-target handle. */
     CNA_Handle render_target;
-    /** @brief Array slice for a 2D target; version one supports only zero. */
+    /**
+     * @brief Array slice for a 2D target; must be zero.
+     *
+     * Not a limit of this structure's version, which is what the wording here used to imply: the
+     * canonical `SetRenderTargets` refuses a nonzero slice for a `RenderTarget2D` outright, so a
+     * binding carrying one is refused with `CNA_RESULT_NOT_SUPPORTED` -- the same answer the
+     * canonical refusal maps to. For a cube target the field means nothing at all, because the
+     * face selects the subresource; it is still required to be zero rather than ignored, so a
+     * caller who set it believing otherwise is told.
+     */
     int32_t array_slice;
-    /** @brief Face for a cube target; ignored for a 2D target and must then be positive X. */
+    /** @brief Face for a cube target; meaningless for a 2D target and must then be positive X. */
     CNA_CubeMapFace cube_map_face;
 } CNA_RenderTargetBinding;
 

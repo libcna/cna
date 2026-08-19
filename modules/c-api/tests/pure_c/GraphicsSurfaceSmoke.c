@@ -570,6 +570,39 @@ static CNA_Result create_render_targets(
         return CNA_RESULT_INVALID_STATE;
     }
 
+    /* CBIND-070: the array slice and the cube face, which nothing asserted at all. Both refusals
+       are decided before a renderer is consulted, so they hold whether or not one is available --
+       which is what makes them assertable here rather than only in a 3D tree.
+
+       The two results differ on purpose. A nonzero slice on a 2D target is what the canonical
+       SetRenderTargets itself refuses, with NotSupportedException, so it answers NOT_SUPPORTED.
+       A face on a 2D binding is an ordinary bad argument: the field means nothing there. */
+    {
+        CNA_RenderTargetBinding sliced = {
+            sizeof(CNA_RenderTargetBinding), UINT32_C(1), state->render_target_2d,
+            1, CNA_CUBE_MAP_FACE_POSITIVE_X
+        };
+        CNA_RenderTargetBinding faced = {
+            sizeof(CNA_RenderTargetBinding), UINT32_C(1), state->render_target_2d,
+            0, CNA_CUBE_MAP_FACE_NEGATIVE_Z
+        };
+        CNA_RenderTargetBinding cube_sliced = {
+            sizeof(CNA_RenderTargetBinding), UINT32_C(1), state->render_target_cube,
+            1, CNA_CUBE_MAP_FACE_POSITIVE_X
+        };
+        if (cna_graphics_device_set_render_targets(graphics_device, &sliced, 1U) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_graphics_device_set_render_targets(graphics_device, &faced, 1U) !=
+                CNA_RESULT_INVALID_ARGUMENT ||
+            /* A cube binding has no slice either -- the face selects the subresource -- and that
+               is an invalid argument rather than an unsupported one, because the canonical cube
+               path never reads the field at all. */
+            cna_graphics_device_set_render_targets(graphics_device, &cube_sliced, 1U) !=
+                CNA_RESULT_INVALID_ARGUMENT) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+    }
+
     const CNA_Result set_cube = cna_graphics_device_set_render_target_cube(
         graphics_device, state->render_target_cube, CNA_CUBE_MAP_FACE_NEGATIVE_Z);
     if (info_cube.renderer_available == CNA_TRUE) {
