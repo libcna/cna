@@ -214,6 +214,22 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_limitations.py" --check)
 
+        # plan_binding.md CBIND-064: the export count that appears in PROSE, which no gate read.
+        #
+        # `abi_baseline.json` measures how many `cna_*` symbols the library exports, and
+        # CApiAbiBaseline fails when that changes without review. Four sentences repeat the number
+        # -- in ABI_VERSIONING.md, CONSUMING.md, LIMITATIONS.md and RELEASE_GATE.md -- and nothing
+        # checked them: they said 2,720 for months against a measured 2,838, were corrected by hand
+        # on 2026-08-17, and went stale again at the very next slice that added exports. The plan
+        # recorded that as "nothing prevents it happening again".
+        #
+        # Verified to catch it by reinstating the historical 2,720 in CONSUMING.md, which turns
+        # this from pass to a failure naming the file, the line and both numbers. Build-free: it
+        # reads the baseline and the documents.
+        add_test(NAME CApiDocExportCounts
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_doc_export_counts.py" --check)
+
         # plan_binding.md CBIND-042B: the experimental release gate.
         #
         # A release gate written as prose is a list of things somebody once believed. This one is a
