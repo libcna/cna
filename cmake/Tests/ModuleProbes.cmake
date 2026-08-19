@@ -230,6 +230,23 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_doc_export_counts.py" --check)
 
+        # plan_binding.md CBIND-065: does anything actually CALL each route?
+        #
+        # The coverage matrix answers a different question -- it maps every public C++ symbol to a
+        # C route and to a *rule's* test description, so a rule covering twenty symbols credits its
+        # test to all twenty even where the test exercises twelve. That is how 78 exported routes
+        # came to have no caller at all while their matrix rows read implemented with evidence:
+        # the whole gyroscope acquisition surface, 49 media-library routes, and the streaming
+        # wave-bank constructor whose header made a promise no test had ever checked (it was
+        # wrong -- see xact.h).
+        #
+        # This gate asks the mechanical question instead and ratchets the answer. It stands at 0
+        # uncovered, so a route arriving without a caller fails the build rather than waiting for
+        # someone to notice. Build-free, like the gates above.
+        add_test(NAME CApiRouteTestCoverage
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_route_test_coverage.py" --check)
+
         # plan_binding.md CBIND-042B: the experimental release gate.
         #
         # A release gate written as prose is a list of things somebody once believed. This one is a
