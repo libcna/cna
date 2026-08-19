@@ -8,11 +8,16 @@ do not reconstruct the layer's state from the general `NEXT.md`.
 
 ## 1. Where the work stands
 
-**Phases 0–15 and 17–19 are complete; Phase 16 is measured rather than implemented** (2026-08-19).
+**`plan_modern.md` has no open row left** (2026-08-19): every one of `MOD-1`–`MOD-1924` carries a
+verdict — ✅ done, 🟨 done-but-bounded with the bound stated, or ⛔ refused with the reason. Phases
+0–15 and 17–19 are complete; **Phase 16 is measured rather than implemented**, which is the honest
+description of what a per-renderer rollout turned into once every renderer was actually run.
+
 The whole orchestration layer exists and is verified on EasyGL: `RenderPipeline`, the post-process
 chain, all four shadow types, skybox and IBL, materials, instancing/LOD/culling, compute and
-auto-exposure. See `docs/cnaext-engine-layer.md` for the capability boundary per subsystem and per
-renderer, and §3 below for the measured baselines.
+auto-exposure. Final sweep: **7944 ran · 7880 pass · 64 skip · 0 fail**. See
+`docs/cnaext-engine-layer.md` for the capability boundary per subsystem and per renderer, and §3
+below for the measured baselines including the twenty-renderer table (`MOD-1906`).
 
 *(This paragraph said "Phase 0 — in progress, nothing of the orchestration layer exists yet" for
 long after that stopped being true, while the table immediately below it listed fifteen completed
@@ -308,7 +313,8 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-18 | `cmake-build-cnaext`, after Phase 19's API review and renames (`MOD-1900`, `MOD-1902`, `MOD-1742`) | Xvfb :99 | 7942 ran · 7878 pass · 64 skip · **0 fail** |
 | 2026-08-19 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`**, re-verified after the whole Phase 16 sweep and the shared-test-file changes it needed | Xvfb :99 | 7557 ran · 7495 pass · 62 skip · **0 fail** |
 | 2026-08-19 | **`cmake-build-d3d11`** — MinGW-w64 cross-build, run under Wine on a real D3D11 device (`MOD-1624`) | Xvfb :99 + Wine 9.0 | 488 ran · 402 pass · 86 skip · **0 fail** |
-| 2026-08-19 | `cmake-build-cnaext` (EasyGL) — the final regression sweep (`MOD-1906`) | Xvfb :99 | 7944 ran · 7879 pass · 64 skip · **1 fail, load-induced** — see below |
+| 2026-08-19 | **`cmake-build-d3d12`** — MinGW-w64 cross-build, run under Wine on a real D3D12 device (`MOD-1625`) | Xvfb :99 + Wine 9.0 | 426 selected · 323 pass · 86 skip · **0 fail**, 17 crash the process — see below |
+| 2026-08-19 | `cmake-build-cnaext` (EasyGL) — **the final regression sweep** (`MOD-1906`), foreground | Xvfb :99 | **7944 ran · 7880 pass · 64 skip · 0 fail** |
 
 The `CNA_CNAEXT=OFF` row is the one that answers "can this break what already works". It configures,
 builds and passes with the whole engine layer compiled out. Its lower test count is expected and not
@@ -405,17 +411,76 @@ Xvfb also dies periodically in this container. A wrapper that checks `xdpyinfo` 
 before running is worth having; without one, a test run fails with "x11 not available" and looks
 like a regression.
 
-### The one failure in the final sweep, and why it is not a regression
+### The final sweep (`MOD-1906`), and the two failures that were the harness
+
+The last full run on the reference renderer is **7944 ran · 7880 pass · 64 skip · 0 fail**, exit
+code 0. Two failures were seen on the way there and neither was a regression; both are recorded
+because the next person to see them should not have to rediscover why.
 
 `DynamicSoundEffectInstanceTest.StressSubmitFloatBufferEXTAgainstRepeatedPlayCyclesNeverCorruptsLiveStream`
 failed once, in a run made while a Wine D3D9 test run and a MinGW build were also using the machine.
 It is a race-window test, and it failed on its own **anti-vacuity** assertion — `callsThrown > 0`,
 whose message says that zero *"would mean this test never actually exercised the guard it exists to
-verify"*. Under a three-way load the threads did not interleave and the window never opened.
+verify"*. Under a three-way load the threads did not interleave and the window never opened. Re-run
+alone: **3/3 pass**. `modules/audio` has no diff on this branch at all.
 
-Re-run alone: **3/3 pass**. `modules/audio` has no diff on this branch at all, so nothing here
-touched it. Recorded rather than quietly re-run, because a test that can fail for want of CPU is a
-real property of the suite, and the next person to see it should not have to rediscover that.
+`TerminalRestoration.SighupGivesTheTerminalBack` failed in the first final-sweep run and passed
+alone, which is the shape of a flake and is not one. The run had been started with `nohup`, and
+**`nohup` sets SIGHUP to `SIG_IGN`** — a disposition `fork` preserves. The child that the test
+sends SIGHUP to therefore ignores it, exits 0 rather than dying from the signal, and the test's
+`WIFSIGNALED`/`WTERMSIG` assertions fail exactly as they should. Confirmed by running that one test
+under `nohup`: it fails every time, and passes every time without it. **Do not run this suite under
+`nohup`**; use a foreground run, or `setsid`, when a long run has to survive the shell.
+
+### `MOD-1906`: every renderer the layer could be measured on, in one table
+
+Same engine-layer filter throughout. Pass and skip counts differ between renderers because the
+capability gates skip what a renderer cannot do — a *high skip count is the layer working*, not a
+gap in the run.
+
+| Renderer | Ran | Pass | Skip | Fail | Executes shader source |
+|---|---|---|---|---|---|
+| EasyGL (`OPENGLES3`) — reference | 7944 (full suite) | 7880 | 64 | **0** | **yes** |
+| `OPENGL4` | 491 | 406 | 85 | 0 | no |
+| `OPENGL2` | 491 | 406 | 85 | 0 | no |
+| `OPENGL1` | 491 | 402 | 89 | 0 | no |
+| `MAGNUM` | 498 | 410 | 88 | 0 | no |
+| `SOKOL` | 491 | 403 | 88 | 0 | no |
+| `BGFX` | 491 | 402 | 89 | 0 | no |
+| `WEBGPU` | 491 | 405 | 86 | 0 | no |
+| `SDL_GPU` | 964 | 834 | 130 | 0 | no |
+| `LLGL` | 488 | 399 | 89 | 0 | no |
+| `DILIGENT` | 491 | 399 | 92 | 0 | no (accepts none) |
+| `DIRECTX11` | 488 | 402 | 86 | 0 | no |
+| `DIRECTX10` | 476 | 375 | 101 | 0 | no |
+| `DIRECTX9` | 489 | 401 | 87 | 0 engine-layer | no |
+| `DIRECTX12` | 426 | 323 | 86 | 0, **17 crash the process** | no |
+| `SDL_RENDERER` | 491 | 380 | 111 | 0 | no (2D only) |
+| `BLEND2D` | 491 | 380 | 111 | 0 | no (2D only) |
+| `TINYGL` | 491 | 348 | 143 | 0 | no |
+| `PORTABLEGL` | 491 | 348 | 143 | 0 | no |
+| `OPENVG` | 491 | 334 | 157 | 0 | no (supports nothing) |
+| `HEADLESS` / `SOFTWARE` / `STUB` | whole suite | — | — | 0 | no |
+
+D3D12 is the one entry whose "0 fail" needs its qualifier read: it **segfaults on the copy-through
+path** — a `FullscreenPass` draw into a `RenderTarget2D`, the fallback every unsupported pass takes
+— so 17 tests kill the process rather than failing. Measuring the other 409 needed a driver that
+resumes past each crash with the remaining tests as its filter. The defect is `plan_dx.md`'s;
+`MOD-1625` carries the detail.
+
+Also verified on the reference renderer: **`CNA_CNAEXT=OFF`** (7557 ran · 7495 pass · 62 skip ·
+**0 fail**) and **Release** (7940 · 7876 · 64 · **0 fail**, identical to Debug including the skip
+list).
+
+Not measurable in this container, each with its reason in its own row: `IGL` (its own
+dangling-context assert kills the process), `FNA3D` (no driver can create a device), `METAL` (macOS
+only), `WICKED` (needs an external clone), `OPENGLES1` (no ES 1.x context from this GLX), `SKIA`
+(pinned artifact), `DIRECT2D`/`GDI`/`GLIDE`/`FREEDIRECT` (Windows or a sibling repo), and the four
+web DOM identities (they build, but need a browser to run).
+
+**Perf.** `docs/cnaext-perf.md` carries every recorded measurement, all of them on EasyGL. No other
+renderer can be timed against it: on all of them the passes report `isSupported() == false` and copy
+through, so a timing would measure the copy rather than the pass.
 
 ### Phase 16, as a whole: what measuring fifteen renderers actually bought
 
