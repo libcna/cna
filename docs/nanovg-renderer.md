@@ -304,7 +304,7 @@ active `Viewport` and can change between two draws of one Immediate batch.
 | `BlendState` using `Blend.BlendFactor`/`InverseBlendFactor` | **Rejected** (throws) | `NVGblendFactor` has no constant-colour factor, so `GraphicsDevice.BlendFactor` can never reach the blend stage. Tested. |
 | `BlendState` using `Blend.SourceAlphaSaturation` as a **destination** factor | **Rejected** (throws) | GL accepts `GL_SRC_ALPHA_SATURATE` as a destination factor only from OpenGL 4.4; this renderer requests 2.1. Accepted as a source factor. Tested. |
 | `BlendState.ColorBlendFunction`/`AlphaBlendFunction` other than `Add` | **Rejected** (throws) | NanoVG's GL2 backend never calls `glBlendEquation`, so the equation is permanently `GL_FUNC_ADD`. Tested. |
-| `BlendState.ColorWriteChannels` | **Rejected when non-default** (throws) | `nanovg_gl.h`'s own `glnvg__renderFlush` calls `glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE)` at the top of **every** flush, before the first draw call it submits, so an externally-set write mask cannot survive to the draw that would need it — verified empirically (a mask wrapped around a whole `SpriteBatch` batch was silently undone). Rejecting is the honest choice; silently ignoring it would be a capability lie. Tested. |
+| `BlendState.ColorWriteChannels`, and `ColorWriteChannels1`/`2`/`3` | **Rejected when non-default** (throws, naming the offending slot) | `nanovg_gl.h`'s own `glnvg__renderFlush` calls `glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE)` at the top of **every** flush, before the first draw call it submits, so an externally-set write mask cannot survive to the draw that would need it — verified empirically (a mask wrapped around a whole `SpriteBatch` batch was silently undone). Slots 1–3 additionally address MRT outputs this renderer has no storage for; setting one changes no pixel it can produce, which is exactly the argument that would have excused ignoring them, so they are named instead. All four tested. |
 | `BlendState.MultiSampleMask` | **Rejected when non-default** (throws) | This renderer never creates a multisample-capable GL context (`GraphicsCapability.MultiSampleAntiAliasing` is `false`), so no sample-coverage mask can be applied. Having no observable effect is an argument for silence, not for acceptance — it is refused like every other state this renderer cannot honour. Tested. |
 | `RasterizerState.CullMode` | Accepted for every value | 2D quads are never back-face culled by any CNA renderer regardless of value. |
 | `RasterizerState.FillMode.WireFrame` | **Rejected** (throws) | No unfilled-polygon draw path exists. `SupportsCapability(WireFrame)` reports `false`. |
@@ -350,7 +350,7 @@ established split for GPU/window-creating tests — pure-function pieces live in
 |---|---|
 | `nanovg_smoke_test` | Vertical slice: Clear, SpriteBatch draw, readback. |
 | `nanovg_spritebatch_rotation_test` | Decisive rotation/origin geometry oracle (`NativeBackBuffer`). |
-| `nanovg_blend_test` | Every built-in `BlendState` and four custom ones, all four RGBA channels, against a CPU reference computed from the same factor ordinals `ApplyBlendState` receives; genuinely premultiplied source data for `AlphaBlend` and its straight twin for `NonPremultiplied`; translucent and alpha-zero sources under `Opaque`; six tint combinations; deterministic rejection of non-`Add` blend functions, constant-colour factors, `SourceAlphaSaturation` as a destination factor, a non-default `ColorWriteChannels` and a non-default `MultiSampleMask` (39 checks). |
+| `nanovg_blend_test` | Every built-in `BlendState` and four custom ones, all four RGBA channels, against a CPU reference computed from the same factor ordinals `ApplyBlendState` receives; genuinely premultiplied source data for `AlphaBlend` and its straight twin for `NonPremultiplied`; translucent and alpha-zero sources under `Opaque`; six tint combinations; deterministic rejection of non-`Add` blend functions, constant-colour factors, `SourceAlphaSaturation` as a destination factor, a non-default `ColorWriteChannels` on each of the four render-target slots, and a non-default `MultiSampleMask` (42 checks). |
 | `nanovg_unsupported_3d_behavior_test` | Throw/WarnAndStub policy across every inherently-3D entry point, `AdditiveBlending`/`Texture3D` capability honesty. |
 | `nanovg_texture_orientation_test` | Upload/`UpdatePixels` row orientation, partial-`sourceRectangle` `nvgImagePattern` box crop math (including a multi-texel span), tint, rotation, both `SpriteEffects` flips, out-of-bounds `Clamp` pixel-exactness (right edge and left/top simultaneously), real out-of-bounds `Wrap` tiling / `Mirror` reflection, and refusal of both a mip-mapped `Texture2D` and a level>0 upload (29 checks). |
 | `nanovg_sampler_state_test` | `PointClamp` vs `LinearClamp` at sample points where the two genuinely disagree, the four `Min*Mag*` filters, the inert mip component, the same texture drawn Point → Linear → Point across consecutive batches, two textures in one batch, `Clamp`/`Wrap`/`Mirror` on an out-of-bounds source rectangle, independent U/V address modes, and rejection of `Anisotropic` and of out-of-range ordinals (22 checks). |
@@ -451,10 +451,12 @@ assumed every renderer provides 3D/render-target/cube-texture storage:
   `Subtract`/`ReverseSubtract`/`Min`/`Max` are rejected rather than approximated.
 - **`Blend.SourceAlphaSaturation` is a source factor only.** GL accepts `GL_SRC_ALPHA_SATURATE` as
   a destination factor only from OpenGL 4.4 onwards, and this renderer requests a 2.1 context.
-- **`BlendState.ColorWriteChannels` cannot be honored at all and is rejected when non-default.**
-  `nanovg_gl.h`'s own `glnvg__renderFlush` unconditionally resets `glColorMask` to
-  all-channels-enabled before the first draw of every flush — verified empirically, not a CNA
-  design choice.
+- **`BlendState.ColorWriteChannels` cannot be honored at all and is rejected when non-default**,
+  for all four per-render-target slots. `nanovg_gl.h`'s own `glnvg__renderFlush` unconditionally
+  resets `glColorMask` to all-channels-enabled before the first draw of every flush — verified
+  empirically, not a CNA design choice. Slots 1–3 have no MRT output here to write to either.
+- **`BlendState.MultiSampleMask` is rejected when non-default.** No multisample-capable GL context
+  is ever created, so no sample-coverage mask can be applied.
 - **A partial `sourceRectangle`'s internal seam with its own neighboring texel bleeds under linear
   filtering, with no flat margin.** There is no CPU-side sub-image copy (see "How it differs from
   OPENVG" above) — cropping is purely a `nvgImagePattern` box-position trick over the SAME

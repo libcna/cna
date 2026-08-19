@@ -491,6 +491,29 @@ int main()
                 catch (const std::runtime_error& ex) { writeMaskThrew = true; message = ex.what(); }
                 Check(writeMaskThrew && message.find("ColorWriteChannels") != std::string::npos,
                       "a non-default ColorWriteChannels mask is rejected deterministically");
+
+                // Slots 1-3 address MRT outputs this renderer has no storage for, so setting one
+                // changes no pixel it can produce -- which is precisely the argument that would
+                // have excused ignoring them. Named rather than ignored, like every other state
+                // here.
+                for (int target = 1; target < 4; ++target)
+                {
+                    BlendWriteState perTarget;
+                    perTarget.colorWriteChannels[target] = 0x6;
+                    bool slotThrew = false;
+                    std::string slotMessage;
+                    try
+                    {
+                        renderer.ApplyBlendState(kOne, kOne, kZero, kZero, kAdd, kAdd, perTarget);
+                    }
+                    catch (const std::runtime_error& ex) { slotThrew = true; slotMessage = ex.what(); }
+                    Check(slotThrew &&
+                              slotMessage.find("ColorWriteChannels" + std::to_string(target)) !=
+                                  std::string::npos,
+                          "a non-default ColorWriteChannels" + std::to_string(target) +
+                              " is rejected and names its own slot" +
+                              (slotThrew ? (": \"" + slotMessage + "\"") : ""));
+                }
             }
 
             // MultiSampleMask: refused rather than ignored. This renderer never creates a

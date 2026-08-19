@@ -459,13 +459,26 @@ namespace CNA::Internal::Renderers::NanoVg
         // silently undone). Rejecting a non-default mask is honest; silently ignoring it would be
         // exactly the "capability lie" this project's own docs warn against. Validated BEFORE the
         // factors are stored, so a rejected state leaves the last accepted one untouched.
-        const int cwc = writeState.colorWriteChannels[0];
-        if (cwc != 15) // 15 = R|G|B|A, the default
+        //
+        // All FOUR per-render-target slots are checked, not just slot 0. Slots 1-3 address MRT
+        // outputs this renderer has no storage for, so setting one changes no pixel it can produce
+        // -- but "changes no pixel" is the same argument that would have excused ignoring
+        // MultiSampleMask, and the point of this boundary is that a state is either honoured or
+        // named. BLEND2D and SKIA refuse them for the same reason.
+        for (int target = 0; target < 4; ++target)
         {
+            if (writeState.colorWriteChannels[target] == 15) // 15 = R|G|B|A, the default
+                continue;
             throw std::runtime_error(
-                "NANOVG cannot honor BlendState.ColorWriteChannels: NanoVG's own glnvg__renderFlush "
-                "unconditionally resets glColorMask to all-channels-enabled before the first draw "
-                "of every flush, so an externally-set write mask cannot survive a draw.");
+                "NANOVG cannot honor BlendState.ColorWriteChannels" +
+                (target == 0 ? std::string() : std::to_string(target)) +
+                ": NanoVG's own glnvg__renderFlush unconditionally resets glColorMask to "
+                "all-channels-enabled before the first draw of every flush, so an externally-set "
+                "write mask cannot survive a draw" +
+                (target == 0
+                     ? std::string(".")
+                     : std::string(" -- and this renderer has no multiple-render-target output for "
+                                   "slot ") + std::to_string(target) + " to write to in any case."));
         }
 
         // BlendState.MultiSampleMask likewise has no implementation here. It could be argued away
