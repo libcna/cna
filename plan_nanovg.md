@@ -62,20 +62,19 @@ different, unbuilt NanoVG backend, so this identity does not claim them).
    `nvgSave`/`nvgTranslate`/`nvgRotate`/`nvgScale`/`nvgRestore` around the pattern + fill, composed
    in the same translate→rotate→scale→flip order `OpenVgSpriteBatchRenderer`/`CanvasSpriteBatchRenderer`
    already establish.
-5. **Real `BlendState.Additive` support — a genuine capability edge over `OPENVG`.** NanoVG's own
-   fragment shader always premultiplies an RGBA image's sampled colour by its own alpha before any
-   blend stage runs (`nanovg_gl.h`: `if (texType == 1) color = vec4(color.xyz*color.w, color.w)`,
-   true for every non-`NVG_IMAGE_PREMULTIPLIED` image, which is every `NanoVgTextureRenderer`).
-   That is *why* `NVG_LIGHTER` (`GL_ONE, GL_ONE`, `nanovg.c`'s own `nvg__compositeOperationState`)
-   exactly reproduces real XNA `BlendState.Additive` (`SourceAlpha, One`,
-   `modules/graphics/src/Xna/BlendState.cpp`) — the shader's own premultiply already applies the
-   `SourceAlpha` factor — unlike ShivaVG, which declares `VG_BLEND_ADDITIVE` but never implements
-   it. The same premultiply is why `NVG_SOURCE_OVER` (`GL_ONE, GL_ONE_MINUS_SRC_ALPHA`) exactly
-   reproduces both `AlphaBlend` and `NonPremultiplied`. It is also why `NVG_COPY` (Opaque,
-   `GL_ONE, GL_ZERO`) has one real, permanent, documented deviation: no compensating blend factor
-   exists for "copy", so a translucent (not fully-opaque) source shows alpha-attenuated colour
-   instead of the full un-multiplied source colour — see `docs/nanovg-renderer.md`'s own section on
-   this. `GraphicsCapability::AdditiveBlending` reports **true**.
+5. **Blending is expressed as real blend factors, not as NanoVG composite presets.** *(Corrected
+   by NVG-18; the original decision routed through `nvgGlobalCompositeOperation` and is described
+   in that task's row below.)* `nvgGlobalCompositeBlendFuncSeparate(ctx, srcRGB, dstRGB, srcAlpha,
+   dstAlpha)` reaches a genuine `glBlendFuncSeparate`, which is a 1:1 fit for `BlendState`'s own
+   four factors — so `Opaque`/`AlphaBlend`/`NonPremultiplied`/`Additive` and every custom state
+   built from representable factors are honoured exactly, with the colour and alpha channels
+   independent. For that to be correct the fragment stage must emit XNA's own `texel * tint`, so
+   every image is created with `NVG_IMAGE_PREMULTIPLIED` (which selects the shader branch that
+   leaves the sampled texel alone — it is not a claim about the uploaded bytes, which stay straight
+   RGBA8) and the tint is pre-divided by its own alpha to survive NanoVG's `glnvg__premulColor`.
+   `GraphicsCapability::AdditiveBlending` reports **true**; `Blend.BlendFactor`/
+   `InverseBlendFactor`, non-`Add` `BlendFunction`s and `SourceAlphaSaturation` as a destination
+   factor are refused by name.
 6. **No render targets, no 3D, no custom Effects** — NanoVG has no off-screen-image-as-draw-target
    concept usable as a `RenderTarget2D` (its `NVGLUframebuffer` helper in `nanovg_gl_utils.h` is
    explicitly excluded from this renderer's scope; `CreateRenderTarget2D` keeps the shared
@@ -96,7 +95,7 @@ different, unbuilt NanoVG backend, so this identity does not claim them).
 | NVG-7 | `NanoVgGlLoader.hpp`/`NanoVgGl.cpp`: the ~28-entry GL function-pointer loader + `#define` shim, and the one translation unit that `#include`s `nanovg_gl.h` with `NANOVG_GL2_IMPLEMENTATION`. | DONE |
 | NVG-8 | `NanoVgTextureRenderer`: `nvgCreateImageRGBA`/`nvgUpdateImage`-backed texture, straight (non-premultiplied) RGBA8, top-row-first (NanoVG images are already top-left-origin — no row flip needed, unlike OpenVG). | DONE |
 | NVG-9 | `NanoVgRenderer`: construction/destruction (real GL context via `PlatformGlContextOwner`, `nvgCreateGL2`/`nvgDeleteGL2` reached through `NanoVgGl.cpp`'s own `CreateNanoVgGL2Context`/`DeleteNanoVgGL2Context` wrappers — see NVG-7's own note on why), `Clear`/`Present`, presentation-mode viewport math ported from `OpenVgRenderer`, `SetScissorRect`/`SetViewport`, `ApplyBlendState` (real `nvgGlobalCompositeOperation`), `ApplyRasterizerState`/`ApplyDepthStencilState` (2D-only rejection shape), `Ensure3DSupported` + every inherently-3D override, `ReadBackbuffer`. | DONE |
-| NVG-10 | `NanoVgSpriteBatchRenderer`: `nvgImagePattern` + filled-rect-path draw, translate/rotate/scale/flip composition, tint via overwriting the pattern paint's `innerColor`/`outerColor`, sampler address mode (NanoVG images are always clamped — `Wrap`/`Mirror` rejected, matching `OPENVG`'s own out-of-bounds behavior; `SetSamplerFilter` is a documented no-op — see docs/nanovg-renderer.md). | DONE |
+| NVG-10 | `NanoVgSpriteBatchRenderer`: `nvgImagePattern` + filled-rect-path draw, translate/rotate/scale/flip composition, tint via overwriting the pattern paint's `innerColor`/`outerColor`, sampler state (see NVG-18 for its corrected per-batch handling). | DONE |
 | NVG-11 | `NanoVgRendererDescriptor.cpp`: pre-construction contract (`RendererWindowKind::OpenGL`, `needsGlContext=true`, `AlwaysAvailable`). | DONE |
 | NVG-12 | `scripts/check_renderer_identities.py`: add `("NANOVG", "NanoVg")` to the canonical `IDENTITIES` table (49 → 50). | DONE |
 | NVG-13 | Update the whole-registry count in every `COUNTED_DOCUMENTS`-listed file whose count changes (`docs/runtime-renderer-selection.md`, `docs/renderer-expansion-candidates.md`, `docs/physical-modules.md`, `plan_platform.md`), and mark NANOVG delivered in `docs/renderer-expansion-candidates.md` §3 (Tier A6) and `FUTURE.md`. | DONE |
@@ -104,12 +103,14 @@ different, unbuilt NanoVG backend, so this identity does not claim them).
 | NVG-15 | Tests (`modules/renderers/nanovg/examples/`): smoke (Clear + SpriteBatch draw + readback), rotation/orientation pixel oracle, blend-mode pixel oracle (Opaque/AlphaBlend/NonPremultiplied/**Additive**), unsupported-3D-behavior guard. | DONE |
 | NVG-16 | Configure + build `-DCNA_GRAPHICS_RENDERER=NANOVG` (`cmake-build-nanovg/`), run the NanoVg-labelled CTest suite under Xvfb, confirm `scripts/check_renderer_identities.py` passes with the new count. | DONE |
 | NVG-17 | Audit pass: two adversarial test files (`nanovg_texture_orientation_test`, `nanovg_presentation_viewport_scissor_test`) closing the rigor gap against `OPENVG`'s own test precedent (partial-`sourceRectangle` crop math, `Clamp` pixel-exactness, `SpriteEffects` flips, `UpdatePixels`, every presentation mode, custom `Viewport`, resize-without-`Clear`, scissor, multi-instance coexistence). Found and genuinely fixed a real bug: `NanoVgRenderer` and its `SpriteBatch`/`Texture` helpers never called `MakeCurrent()`, so two live instances silently corrupted each other's GL state (added `MakeContextCurrentEXT()` to every GL-touching entry point). Also found and documented a real, permanent characteristic (not a bug): a partial-`sourceRectangle` crop's internal seam with its own neighboring texel bleeds under linear filtering with no flat safety margin, unlike the outer `GL_CLAMP_TO_EDGE` bound. | DONE |
+| NVG-18 | Deep correctness audit of `SpriteBatch` semantics, and the repair of what it found. Five defects, all reproduced against the shipped implementation before any fix: (1) `AlphaBlend` double-premultiplied its source RGB, because `nanovg_gl.h`'s fragment shader applied a `SourceAlpha` factor of its own on top of already-premultiplied data; (2) `AlphaBlend` and `NonPremultiplied` were both mapped to `NVG_SOURCE_OVER` and so produced identical pixels although their source factors differ; (3) destination alpha was wrong for every state whose alpha source factor is not `One`; (4) `Opaque` attenuated a translucent source by its own alpha — documented until then as an unavoidable NanoVG limitation, actually a consequence of (1); (5) every custom `BlendState` was rejected although `nvgGlobalCompositeBlendFuncSeparate` can express nearly all of them. Also: `SetSamplerFilter` was an empty no-op while `SamplerState.PointClamp` was accepted without complaint, `Wrap`/`Mirror` was rejected outright, and sprite quads received NanoVG's vector-path edge feathering. Fixed by emitting XNA's own `texel * tint` from the fragment stage (`NVG_IMAGE_PREMULTIPLIED` plus an alpha-pre-divided tint), mapping `BlendState` factor-by-factor onto `NVGblendFactor`, writing the batch's sampler onto each drawn image's GL texture object per draw, and scoping `nvgShapeAntiAlias(0)` to the sprite fill. Three test files rewritten or added (`nanovg_blend_test`, `nanovg_sampler_state_test`, `nanovg_sprite_rasterization_test`), each check confirmed to fail against the previous implementation. | DONE |
 
 ## Status
 
-**Complete**, including a second adversarial audit pass (NVG-17). See `docs/nanovg-renderer.md`
-for the delivered capability boundary and test status, and `nanovg-spike/README.md` for the
-existence-gate proof that predates the CNA integration.
+**Complete**, including two adversarial audit passes: NVG-17 (geometry, presentation, multi-instance
+coexistence) and NVG-18 (blend, sampler and rasterization semantics). See
+`docs/nanovg-renderer.md` for the delivered capability boundary and test status, and
+`nanovg-spike/README.md` for the existence-gate proof that predates the CNA integration.
 
 No further work (a GL3/shader-effect path, render-target support via `NVGLUframebuffer`, or a
 GLES/WebGL backend) is planned. Any of it needs its own explicit owner instruction, exactly like

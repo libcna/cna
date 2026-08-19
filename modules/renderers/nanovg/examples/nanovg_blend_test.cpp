@@ -394,6 +394,21 @@ int main()
                 }
             }
 
+            // The shared cross-renderer corpus's own row 3, executed verbatim: the exact texels,
+            // tint and background modules/graphics/examples/cross_renderer_2d_corpus.cpp draws
+            // there, whose stated contract is that both halves "must produce the same composited
+            // colour". That corpus is registered for EasyGL and Direct2D only, because its row 4
+            // round-trips through a RenderTarget2D and NANOVG has no render-target storage -- so
+            // the contract it states is reproduced here rather than the whole file being run.
+            {
+                const Color kCorpusBackground(20, 20, 20, 255);
+                harness.Expect("cross-renderer corpus row 3 (AlphaBlend half)", kAlphaBlend,
+                               Color(128, 64, 0, 128), kWhite, kCorpusBackground);
+                harness.Expect("cross-renderer corpus row 3 (NonPremultiplied half)",
+                               kNonPremultiplied, Color(255, 128, 0, 128), kWhite,
+                               kCorpusBackground);
+            }
+
             // ---- Opaque: source replacement, including translucent sources -----------------
             harness.Expect("Opaque with a fully opaque source", kOpaque, Color(255, 0, 0, 255),
                            kWhite, kDst);

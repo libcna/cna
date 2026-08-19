@@ -39,41 +39,110 @@ Two concrete consequences, both verified by tests:
 
 - **No device-flip transform anywhere in `NanoVgSpriteBatchRenderer`.** NanoVG's own coordinate
   system already matches XNA's, the same reason `CanvasSpriteBatchRenderer` needs none either.
-- **`BlendState.Additive` is genuinely supported.** NanoVG's `NVG_LIGHTER` composite operation is a
-  real `(GL_ONE, GL_ONE)` `glBlendFuncSeparate` (`nanovg.c`'s own `nvg__compositeOperationState`);
-  ShivaVG declares `VG_BLEND_ADDITIVE` but its `updateBlendingStateGL` has no case for it and
-  silently falls back to ordinary alpha blending, so `OPENVG` must reject it. `NANOVG` accepts it
-  and reports `GraphicsCapability::AdditiveBlending` true — the one genuine capability edge over
-  `OPENVG`.
+- **Blending is expressed as real blend factors, not as preset modes.** NanoVG exposes
+  `nvgGlobalCompositeBlendFuncSeparate(ctx, srcRGB, dstRGB, srcAlpha, dstAlpha)`, whose factors
+  reach a genuine `glBlendFuncSeparate` (`nanovg_gl.h`'s own `glnvg__blendCompositeOperation`).
+  That is a 1:1 fit for `BlendState`'s own four factors, so `NANOVG` honours `Additive` and every
+  custom combination built from representable factors — while ShivaVG declares
+  `VG_BLEND_ADDITIVE` but its `updateBlendingStateGL` has no case for it and silently falls back
+  to ordinary alpha blending, so `OPENVG` must reject it. `NANOVG` reports
+  `GraphicsCapability::AdditiveBlending` true — the most visible capability edge over `OPENVG`.
 
-## NanoVG's own internal alpha premultiplication (a real, load-bearing implementation detail)
+## Source colour, tint and the blend stage
 
-`nanovg_gl.h`'s fragment shader always premultiplies an RGBA image's sampled colour by its own
-alpha before any blend stage runs:
+XNA's `SpriteBatch` pixel shader emits `texel * tint`, component-wise, with **no** alpha
+premultiplication of its own; `BlendState` alone decides what happens to that value afterwards.
+Everything this renderer does with colour follows from reproducing exactly that, because it is the
+only model in which `AlphaBlend` (whose source data is already premultiplied) and
+`NonPremultiplied` (whose source data is straight) can stay distinct — `BlendState.cpp` gives them
+the same destination factor and different source factors, so collapsing the two is a semantic
+error, not a rounding one.
 
-    if (texType == 1) color = vec4(color.xyz*color.w, color.w);
+NanoVG's own image-paint fragment shader (`nanovg_gl.h`) is:
 
-`texType` is `1` whenever the image was **not** created with `NVG_IMAGE_PREMULTIPLIED` — true of
-every `NanoVgTextureRenderer` (`ImageData`/`Texture2D::SetData` are always straight alpha, matching
-every other CNA renderer's own convention). This is *why* `NVG_SOURCE_OVER` (`GL_ONE,
-GL_ONE_MINUS_SRC_ALPHA`) correctly reproduces a straight-alpha "over" composite for
-`AlphaBlend`/`NonPremultiplied` — premultiplied-then-over is the textbook-correct way to perform
-the identical blend a straight-alpha renderer expresses as `(SrcAlpha, InvSrcAlpha)` — and it is
-also *why* `NVG_LIGHTER` (`GL_ONE, GL_ONE`) correctly reproduces real XNA `BlendState.Additive`
-(`SourceBlend=SourceAlpha, DestinationBlend=One`, per `modules/graphics/src/Xna/BlendState.cpp`):
-the shader's own premultiply already applies the `SourceAlpha` factor, so the fixed-function
-`(One, One)` blend on top of it is exactly equivalent.
+    if (texType == 1) color = vec4(color.xyz*color.w, color.w);   // premultiply by own alpha
+    if (texType == 2) color = vec4(color.x);
+    color *= innerCol;                                            // CPU-premultiplied paint colour
+    color *= strokeAlpha * scissor;
 
-The one place this premultiplication is directly OBSERVABLE rather than compensated-for is
-`BlendState.Opaque` (`NVG_COPY`, `GL_ONE, GL_ZERO`): "copy" has no compensating blend factor, so a
-genuinely translucent source drawn with `Opaque` shows the shader's premultiplied (alpha-attenuated)
-colour, not the full un-multiplied source colour a straight-alpha renderer would show. There is no
-way to avoid this within NanoVG's public API — moving the premultiply to the CPU side (uploading
-already-premultiplied bytes with `NVG_IMAGE_PREMULTIPLIED` set) produces the identical final colour
-by associativity, it only moves WHERE the multiply happens, not whether it happens. This is a real,
-permanent, documented deviation for `Opaque` combined with a non-opaque-alpha source; `Opaque`
-combined with a fully-opaque (alpha=255) source — the overwhelmingly common real usage — is
-unaffected (multiplying by 1.0 is the identity).
+`texType` is `1` for an RGBA image created **without** `NVG_IMAGE_PREMULTIPLIED` and `0` with it
+(`glnvg__convertPaint`), and `innerCol` is `glnvg__premulColor(paint->innerColor)`, i.e.
+`(r*a, g*a, b*a, a)`. Both are therefore CNA's to choose, and both are chosen so the shader's
+output equals XNA's:
+
+- **Every `NanoVgTextureRenderer` image is created WITH `NVG_IMAGE_PREMULTIPLIED`** — even though
+  the bytes uploaded are always straight RGBA8, exactly like every other CNA renderer's. The flag
+  is not a claim about the data; it selects the branch that leaves the sampled texel alone. Leaving
+  it alone is what XNA's own shader does, and it is what lets the `SourceAlpha` factor that
+  `NonPremultiplied` and `Additive` call for be applied once, by the real blend stage, where
+  `BlendState` says it belongs.
+- **The tint is pre-divided by its own alpha** before being written into the paint's
+  `innerColor`/`outerColor`, so NanoVG's own `glnvg__premulColor` puts it back and the uniform the
+  shader multiplies by is the tint itself. A tint alpha of exactly zero cannot be inverted, so the
+  round-trip alpha is floored at `1/65536` — far below one 8-bit step, which preserves the tint's
+  RGB exactly while contributing at most 0.004 of a step to any alpha derived from it. That case is
+  not academic: a zero source alpha does not imply a zero source colour under `Opaque` (`One`,
+  `Zero`) or `AlphaBlend` (`One`, `InverseSourceAlpha`).
+
+With the shader emitting `texel * tint`, each built-in `BlendState` then maps straight onto its own
+factors, with the colour and alpha channels independent all the way to `glBlendFuncSeparate`:
+
+| `BlendState` | Colour src/dst | Alpha src/dst | Destination alpha |
+|---|---|---|---|
+| `Opaque` | `One` / `Zero` | `One` / `Zero` | `As` |
+| `AlphaBlend` | `One` / `1-As` | `One` / `1-As` | `As + Ad(1-As)` |
+| `NonPremultiplied` | `As` / `1-As` | `As` / `1-As` | `As² + Ad(1-As)` |
+| `Additive` | `As` / `One` | `As` / `One` | `As² + Ad` |
+
+`NonPremultiplied`'s destination alpha genuinely differs from `AlphaBlend`'s, because its
+`AlphaSourceBlend` is `SourceAlpha` rather than `One`. `nanovg_blend_test` asserts all four
+channels against a CPU reference computed from the same factor ordinals `ApplyBlendState` receives,
+precisely so a renderer that gets RGB right and alpha wrong cannot pass.
+
+**None of NanoVG's own `NVGcompositeOperation` presets are used.** They are a lossy vocabulary:
+`NVG_SOURCE_OVER` means `(ONE, ONE_MINUS_SRC_ALPHA)` on both channels, which is `AlphaBlend` and
+not `NonPremultiplied`, and `NVG_COPY`/`NVG_LIGHTER` are similarly single points in a space
+`BlendState` addresses continuously.
+
+## Sprite quads are rasterized, not vector-filled
+
+The `NVGcontext` is created with `NVG_ANTIALIAS`, which is right for genuine vector work and wrong
+for a sprite quad: `nvgFill` then insets the filled polygon by half a pixel and covers the missing
+half with a fringe triangle strip whose alpha ramps across roughly one pixel
+(`nanovg.c`'s own `nvg__expandFill`). XNA's `SpriteBatch` has no coverage antialiasing at all
+unless the backbuffer is multisampled, and this renderer never creates a multisample-capable
+context (`GraphicsCapability.MultiSampleAntiAliasing` is `false`).
+
+`NanoVgSpriteBatchRenderer::Draw` therefore calls `nvgShapeAntiAlias(ctx, 0)` **inside** the
+`nvgSave`/`nvgRestore` pair that already scopes each sprite, so `nvg__expandFill` emits the path's
+own vertices verbatim and GL's ordinary "is the pixel centre inside" coverage rule decides each
+pixel — the same rule XNA uses. Antialiasing is untouched for any other NanoVG drawing on the same
+context. `nanovg_sprite_rasterization_test` censuses every pixel of the frame after drawing an
+opaque sprite over a contrasting background and requires that none of them is a partially-covered
+in-between value, for an axis-aligned quad and for ~17°/~23° rotations with fractional
+origins, non-integer scale, a partial source rectangle, both `SpriteEffects` flips and a
+`SetTransformMatrix`.
+
+## SamplerState is honoured per batch, not per texture
+
+NanoVG's sampler-related image flags (`NVG_IMAGE_NEAREST`, `NVG_IMAGE_REPEATX`/`Y`) are applied
+once, inside `glnvg__renderCreateTexture`, and never re-applied per draw — `glnvg__setUniforms`
+only binds the texture. XNA's `SamplerState` is the opposite: chosen per `SpriteBatch.Begin()`,
+independent of which texture is drawn. The creation-time flags therefore cannot express it.
+
+Each `Draw()` instead writes the batch's filter and address pair straight onto the drawn image's own
+GL texture object (`ApplyNanoVgImageSamplerState`, in `NanoVgGl.cpp` — the one translation unit that
+can reach `nvglImageHandleGL2`). This is exact (NanoVG's flags reduce to these same GL enums), costs
+no duplicated pixel storage, and reaches `GL_MIRRORED_REPEAT`, which NanoVG's flag set has no name
+for at all. It is safe because NanoVG only *records* draw calls until `nvgEndFrame` and binds
+textures when that flush runs, and because the parameters are written back to a texture binding of
+`0` — which is both what NanoVG's `NANOVG_GL_USE_STATE_FILTER` cache holds while a frame is being
+recorded and what `glnvg__renderFlush` resets it to before its first draw.
+
+`GL_TEXTURE_MIN_FILTER` and `GL_TEXTURE_MAG_FILTER` are independent, so every `TextureFilter` whose
+minification and magnification components differ is representable exactly. The mip component of the
+six mip-qualified ordinals is inert: `nvgCreateImageRGBA` allocates exactly one level, so there is
+no chain to select between.
 
 ## Presentation model
 
@@ -104,15 +173,19 @@ so `NanoVgRenderer::SetScissorRect` stores its argument verbatim.
 | `Texture2D` create/update | Real `nvgCreateImageRGBA`/`nvgUpdateImage` | Straight (non-premultiplied) RGBA8, top-row-first, tightly packed (NanoVG's own API has no stride parameter — `NanoVgTextureRenderer` repacks when the caller's stride differs). No row flip anywhere: NanoVG's Y-down image space already matches `ImageData`'s own convention. |
 | `SpriteBatch` draw (all 3 overloads, rotation, origin, source rectangle, tint, `SpriteEffects` flip) | Real `nvgImagePattern` + a filled rectangle path (`nvgBeginPath`/`nvgRect`/`nvgFillPaint`/`nvgFill`) | NanoVG has no "draw image" primitive; a partial `sourceRectangle` needs no CPU-side sub-image copy (unlike `OPENVG`'s `vgCopyImage` workaround) — the pattern box is positioned purely algebraically, all inside the already-`nvgScale`d coordinate system. Verified by `nanovg_spritebatch_rotation_test`. |
 | `SpriteBatch.SetTransformMatrix` | Real `nvgTransform` | Row-major XNA `Matrix` decomposed to a 2D affine, same `(a,b,c,d,e,f)` convention `OpenVgRenderer`/`CanvasRenderer` use. |
-| Out-of-bounds `sourceRectangle` + `TextureAddressMode.Clamp` | **Real, automatic GPU `GL_CLAMP_TO_EDGE`** | Every `NanoVgTextureRenderer` is created with no `NVG_IMAGE_REPEATX`/`NVG_IMAGE_REPEATY` flag, which NanoVG's own `glnvg__renderTexture` maps to `GL_CLAMP_TO_EDGE` on both axes — no CPU-side edge-padding needed, unlike `OPENVG`. |
-| `TextureAddressMode.Wrap`/`Mirror` combined with an out-of-bounds `sourceRectangle` | **Rejected** (throws) | NanoVG bakes repeat/clamp into the IMAGE at creation time (`NVG_IMAGE_REPEATX`/`Y`), not per draw — a genuinely different per-draw wrap mode cannot be honored without recreating the texture. |
+| `SamplerState.Filter` — `Linear`, `Point`, and the four `Min*Mag*` combinations | **Real per-batch `GL_TEXTURE_MIN_FILTER`/`GL_TEXTURE_MAG_FILTER`** | Written onto the drawn image's own GL texture object by each `Draw()` — see "SamplerState is honoured per batch" above. Minification and magnification are independent, so a filter whose two components differ is exact. The mip component of `LinearMipPoint`/`PointMipLinear`/`Min*Mip*` is inert (one mip level exists). Pixel-tested (`nanovg_sampler_state_test`). |
+| `SamplerState.Filter` — `Anisotropic` | **Rejected** (throws) | No anisotropic sampler is configured; `SupportsCapability(AnisotropicFiltering)` reports `false`. Tested. |
+| `SamplerState.AddressU`/`AddressV` — `Clamp`, `Wrap`, `Mirror` | **Real `GL_CLAMP_TO_EDGE`/`GL_REPEAT`/`GL_MIRRORED_REPEAT`**, per batch and per axis | Including on an out-of-bounds `sourceRectangle`, where the three modes genuinely differ. `Mirror` has no NanoVG image flag at all and is reachable only because the wrap mode is written to the GL texture directly. Pixel-tested (`nanovg_sampler_state_test`, `nanovg_texture_orientation_test`). |
 | Backbuffer readback | Real `glReadPixels` against the same GL framebuffer NanoVG rendered into | Physical pixel coordinates. |
-| `BlendState.Opaque` | Real `NVG_COPY` (`GL_ONE, GL_ZERO`) | Pixel-tested (`nanovg_blend_test`) with a fully-opaque source. **Known deviation** for a translucent source — see "NanoVG's own internal alpha premultiplication" above. |
-| `BlendState.NonPremultiplied` | Real `NVG_SOURCE_OVER` | Pixel-tested against a computed expected composite; correct because of the shader's own premultiply (see above), not despite it. |
-| `BlendState.AlphaBlend` | Mapped to `NVG_SOURCE_OVER` too | Produces the SAME visible pixel as `NonPremultiplied` — see "NanoVG's own internal alpha premultiplication" above for why this is exact, not approximate. Pixel-tested. |
-| `BlendState.Additive` | **Real `NVG_LIGHTER`** (`GL_ONE, GL_ONE`) | Genuinely implemented and pixel-EXACT (not approximate) — see "NanoVG's own internal alpha premultiplication" above. Pixel-tested. |
-| Arbitrary custom `BlendState` combinations | **Rejected** (throws) | No generic blend-factor/equation model exists. Tested. |
-| `BlendState.ColorWriteChannels` | **Rejected when non-default** (throws) | NanoVG's own stencil-then-color two-pass fill implementation (`nanovg_gl.h`'s `glnvg__fill`/`glnvg__convexFill`) unconditionally calls `glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE)` before every color pass, so an externally-set write mask cannot survive a single draw — verified empirically (a mask wrapped around a whole `SpriteBatch` batch was silently undone). Rejecting is the honest choice; silently ignoring it would be a capability lie. Tested. |
+| `BlendState.Opaque` | Real `(GL_ONE, GL_ZERO)` on both channels | Exact for a translucent source too: the shader emits the un-attenuated `texel * tint`. Pixel-tested for alpha 255, 128 and 0 (`nanovg_blend_test`). |
+| `BlendState.NonPremultiplied` | Real `(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)` on both channels | Pixel-tested against a CPU reference on all four channels, at four source alphas. |
+| `BlendState.AlphaBlend` | Real `(GL_ONE, GL_ONE_MINUS_SRC_ALPHA)` on both channels | Genuinely distinct from `NonPremultiplied`: it consumes already-premultiplied source RGB without multiplying it again, and writes a different destination alpha. Pixel-tested, including the "premultiplied texel and its straight twin composite to the same RGB" contract `cross_renderer_2d_corpus.cpp` states across renderers. |
+| `BlendState.Additive` | Real `(GL_SRC_ALPHA, GL_ONE)` on both channels | CNA's `BlendState.Additive` is `SourceAlpha`/`One`, not `One`/`One`. Pixel-tested including saturation. |
+| Custom `BlendState` built from representable factors | **Honoured exactly** | Every XNA `Blend` except `BlendFactor`/`InverseBlendFactor` maps onto an `NVGblendFactor`, and the colour and alpha factor pairs stay independent to `glBlendFuncSeparate`. Four custom states pixel-tested, including asymmetric colour/alpha pairs. |
+| `BlendState` using `Blend.BlendFactor`/`InverseBlendFactor` | **Rejected** (throws) | `NVGblendFactor` has no constant-colour factor, so `GraphicsDevice.BlendFactor` can never reach the blend stage. Tested. |
+| `BlendState` using `Blend.SourceAlphaSaturation` as a **destination** factor | **Rejected** (throws) | GL accepts `GL_SRC_ALPHA_SATURATE` as a destination factor only from OpenGL 4.4; this renderer requests 2.1. Accepted as a source factor. Tested. |
+| `BlendState.ColorBlendFunction`/`AlphaBlendFunction` other than `Add` | **Rejected** (throws) | NanoVG's GL2 backend never calls `glBlendEquation`, so the equation is permanently `GL_FUNC_ADD`. Tested. |
+| `BlendState.ColorWriteChannels` | **Rejected when non-default** (throws) | `nanovg_gl.h`'s own `glnvg__renderFlush` calls `glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE)` at the top of **every** flush, before the first draw call it submits, so an externally-set write mask cannot survive to the draw that would need it — verified empirically (a mask wrapped around a whole `SpriteBatch` batch was silently undone). Rejecting is the honest choice; silently ignoring it would be a capability lie. Tested. |
 | `BlendState.MultiSampleMask` | Intentionally ignored (not honored, not rejected) | This renderer never creates a multisample-capable GL context (`GraphicsCapability.MultiSampleAntiAliasing` is `false`), so a coverage mask can never have any observable effect here. |
 | `RasterizerState.CullMode` | Accepted for every value | 2D quads are never back-face culled by any CNA renderer regardless of value. |
 | `RasterizerState.FillMode.WireFrame` | **Rejected** (throws) | No unfilled-polygon draw path exists. `SupportsCapability(WireFrame)` reports `false`. |
@@ -158,17 +231,31 @@ established split for GPU/window-creating tests — pure-function pieces live in
 |---|---|
 | `nanovg_smoke_test` | Vertical slice: Clear, SpriteBatch draw, readback. |
 | `nanovg_spritebatch_rotation_test` | Decisive rotation/origin geometry oracle (`NativeBackBuffer`). |
-| `nanovg_blend_test` | `Opaque`/`AlphaBlend`/`NonPremultiplied`/**`Additive`** against a computed expected composite, deterministic rejection of both a custom `BlendState` and a non-default `ColorWriteChannels`. |
+| `nanovg_blend_test` | Every built-in `BlendState` and four custom ones, all four RGBA channels, against a CPU reference computed from the same factor ordinals `ApplyBlendState` receives; genuinely premultiplied source data for `AlphaBlend` and its straight twin for `NonPremultiplied`; translucent and alpha-zero sources under `Opaque`; six tint combinations; deterministic rejection of non-`Add` blend functions, constant-colour factors, `SourceAlphaSaturation` as a destination factor and a non-default `ColorWriteChannels` (34 checks). |
 | `nanovg_unsupported_3d_behavior_test` | Throw/WarnAndStub policy across every inherently-3D entry point, `AdditiveBlending`/`Texture3D` capability honesty. |
-| `nanovg_texture_orientation_test` | Upload/`UpdatePixels` row orientation, partial-`sourceRectangle` `nvgImagePattern` box crop math (including a multi-texel span), tint, rotation, both `SpriteEffects` flips, out-of-bounds `Clamp` pixel-exactness (right edge and left/top simultaneously), `Wrap`/`Mirror` + out-of-bounds rejection (22 checks). |
+| `nanovg_texture_orientation_test` | Upload/`UpdatePixels` row orientation, partial-`sourceRectangle` `nvgImagePattern` box crop math (including a multi-texel span), tint, rotation, both `SpriteEffects` flips, out-of-bounds `Clamp` pixel-exactness (right edge and left/top simultaneously), and real out-of-bounds `Wrap` tiling / `Mirror` reflection (26 checks). |
+| `nanovg_sampler_state_test` | `PointClamp` vs `LinearClamp` at sample points where the two genuinely disagree, the four `Min*Mag*` filters, the inert mip component, the same texture drawn Point → Linear → Point across consecutive batches, two textures in one batch, `Clamp`/`Wrap`/`Mirror` on an out-of-bounds source rectangle, independent U/V address modes, and rejection of `Anisotropic` and of out-of-range ordinals (22 checks). |
+| `nanovg_sprite_rasterization_test` | A whole-frame census requiring that no pixel is partially covered — for an axis-aligned integer quad (with its exact edge columns/rows and covered-pixel count), a ~23° rotation with a fractional origin, non-integer scale and a partial source rectangle, and two ~17° rotations with both `SpriteEffects` flips under a `SetTransformMatrix`; plus a translucent sprite whose edge column must composite exactly once (11 checks). |
 | `nanovg_presentation_viewport_scissor_test` | Every `CnaPresentationMode` (`Letterbox`/`Overscan`/`Stretch`/`FixedHeightDynamicWidth`/`NativeBackBuffer`), `TransformWindowToLogical`/`TransformLogicalToWindow` round-trips, a custom `Viewport`, resize-without-`Clear`, `RasterizerState`-driven scissor pixel-clipping, two simultaneous `NanoVgRenderer` instances (construction, interleaved `Clear`/readback, and destroying one while the other stays live), 25 repeated construct/destroy cycles, `SetSwapInterval` (41 checks). |
 
 Plus `NanoVgBlendStateMapping.*` (`modules/renderers/nanovg/tests/`, the pure
-`BlendStateToNvgCompositeOperation` mapping function, no window/GL context needed).
+`BlendStateToNvgBlendFunc` mapping function, no window/GL context needed) — including the case
+that keeps `AlphaBlend` and `NonPremultiplied` from collapsing onto the same factors again.
 
-**Exact commands run** (this environment): `Xvfb :0 -screen 0 1280x1024x24 &`, then
-`DISPLAY=:0 ctest --test-dir cmake-build-nanovg -R NanoVg --output-on-failure` (11/11 pass) and
-`DISPLAY=:0 ctest --test-dir cmake-build-nanovg -j4` (the complete `CnaTests` corpus).
+**Cross-renderer comparison.** `modules/graphics/examples/cross_renderer_2d_corpus.cpp` is
+deliberately NOT registered for `NANOVG`: its row 4 round-trips through a `RenderTarget2D`, which
+this renderer has no storage for, so the file would abort rather than dump a comparable frame (it
+is registered for `EASYGL` and `DIRECT2D`, both of which do). What the corpus exists to pin down —
+that a premultiplied texel under `AlphaBlend` and its straight twin under `NonPremultiplied` must
+composite to the same colour — is instead asserted against `NANOVG` with the corpus's own texels,
+tint and background inside `nanovg_blend_test`. The rest of that test compares against a CPU
+reference derived from `BlendState`'s own factor ordinals rather than against another renderer's
+output, which is a stronger oracle than a differential: it cannot agree with a second
+implementation that is wrong in the same way.
+
+**Exact commands run** (this environment): `Xvfb :64 -screen 0 1280x1024x24 -nolisten tcp &`, then
+`DISPLAY=:64 ctest --test-dir cmake-build-nanovg -R NanoVg --output-on-failure` (8/8 pass) and
+`DISPLAY=:64 ctest --test-dir cmake-build-nanovg -j4` (the complete `CnaTests` corpus).
 
 **Audit note.** The two multi-texel/presentation test files above were added in a second,
 deliberately adversarial pass after the renderer's initial delivery, closing a real rigor gap
@@ -225,20 +312,26 @@ assumed every renderer provides 3D/render-target/cube-texture storage:
   — a real follow-up, not attempted here.
 - **No custom `Effect`/shader stage.** NanoVG's GLSL pipeline is fixed and internal; there is no
   mechanism to inject a caller-supplied shader into it.
-- **Per-draw texture filter/wrap mode is not independently switchable.** NanoVG bakes both
-  `NVG_IMAGE_NEAREST` and `NVG_IMAGE_REPEATX`/`Y` into the image at CREATION time, not per draw —
-  unlike XNA's `SamplerState`, which is chosen per `SpriteBatch.Begin()` independent of which
-  texture is drawn. Every `NanoVgTextureRenderer` is therefore created linear-filtered and
-  clamp-addressed; `SetSamplerFilter` is a documented no-op, and `Wrap`/`Mirror` is rejected only
-  when it would actually matter (an out-of-bounds `sourceRectangle`).
-- **`BlendState.Opaque` on a translucent source shows alpha-attenuated colour, not the full
-  un-multiplied source colour.** A real, permanent consequence of NanoVG's own fragment shader
-  always premultiplying an RGBA image's colour by its own alpha (upstream behavior, not a CNA
-  choice) — see "NanoVG's own internal alpha premultiplication" above. Unaffected for a
-  fully-opaque (alpha=255) source, the overwhelmingly common real usage.
+- **`TextureFilter.Anisotropic` is rejected.** No anisotropic sampler is configured on this
+  renderer, which is why `SupportsCapability(AnisotropicFiltering)` reports `false`. Every other
+  `TextureFilter`, and all three `TextureAddressMode` values, are honoured exactly per batch —
+  see "SamplerState is honoured per batch, not per texture" above.
+- **Mip levels are never allocated.** `nvgCreateImageRGBA` is called with exactly one level and
+  `ImageData::mipLevels` is not honoured, so the mip component of a mip-qualified `TextureFilter`
+  has nothing to select between. That is a texture-storage limitation, not a sampler one: the
+  minification and magnification components of every such filter are still applied exactly.
+- **`BlendState` factors that name a constant colour are rejected.** `NVGblendFactor` has no
+  `GL_CONSTANT_COLOR` counterpart, so `Blend.BlendFactor`/`InverseBlendFactor` — and therefore
+  `GraphicsDevice.BlendFactor` — can never reach the blend stage.
+- **Only `BlendFunction.Add` is supported.** NanoVG's GL2 backend never calls
+  `glBlendEquation`/`glBlendEquationSeparate`, so the equation is permanently `GL_FUNC_ADD` and
+  `Subtract`/`ReverseSubtract`/`Min`/`Max` are rejected rather than approximated.
+- **`Blend.SourceAlphaSaturation` is a source factor only.** GL accepts `GL_SRC_ALPHA_SATURATE` as
+  a destination factor only from OpenGL 4.4 onwards, and this renderer requests a 2.1 context.
 - **`BlendState.ColorWriteChannels` cannot be honored at all and is rejected when non-default.**
-  NanoVG's own stencil-based fill implementation unconditionally resets `glColorMask` to
-  all-channels-enabled before every color pass — verified empirically, not a CNA design choice.
+  `nanovg_gl.h`'s own `glnvg__renderFlush` unconditionally resets `glColorMask` to
+  all-channels-enabled before the first draw of every flush — verified empirically, not a CNA
+  design choice.
 - **A partial `sourceRectangle`'s internal seam with its own neighboring texel bleeds under linear
   filtering, with no flat margin.** There is no CPU-side sub-image copy (see "How it differs from
   OPENVG" above) — cropping is purely a `nvgImagePattern` box-position trick over the SAME
@@ -252,7 +345,8 @@ assumed every renderer provides 3D/render-target/cube-texture storage:
   sample point is negligibly close to its own center) and was found by
   `nanovg_texture_orientation_test`'s multi-texel-span case, which now samples texel centers
   exactly rather than "just inside" the texel, matching this renderer's real, no-flat-margin
-  seam behavior.
+  seam behavior. It applies only to a linear-filtered crop: `SamplerState.PointClamp` has no seam
+  at all, and is now genuinely honoured.
 - **Multiple simultaneous `NanoVgRenderer` instances required `MakeContextCurrentEXT()` at every
   GL-touching entry point — found and fixed by this audit.** OpenGL context state is current to
   the calling THREAD, not to the C++ renderer object: with two live instances, whichever one's
@@ -264,3 +358,23 @@ assumed every renderer provides 3D/render-target/cube-texture storage:
   through `NanoVgSpriteBatchRenderer`/`NanoVgTextureRenderer`, both of which hold a reference back
   to their owning `NanoVgRenderer` — call `NanoVgRenderer::MakeContextCurrentEXT()` first. The
   claim is now genuinely true, not just documented.
+
+### Corrected by the NVG-18 audit
+
+The four entries below described real behaviour of an earlier implementation and are recorded here
+only so a reader of an older revision is not misled. None of them is true any more; each is now a
+pixel-tested guarantee instead.
+
+- *"`BlendState.Opaque` on a translucent source shows alpha-attenuated colour, and there is no way
+  to avoid this within NanoVG's public API."* There was: `NVG_IMAGE_PREMULTIPLIED` selects the
+  fragment-shader branch that does not premultiply, and the claim that moving the multiply to the
+  CPU "produces the identical final colour by associativity" was simply wrong for `Opaque`, whose
+  `(One, Zero)` factors have no `1/a` anywhere to cancel it.
+- *"`AlphaBlend` produces the same visible pixel as `NonPremultiplied`, and this is exact, not
+  approximate."* It was neither: `AlphaBlend`'s source data is already premultiplied, so the shader
+  applied its alpha a second time, and the two states' destination alpha differed from the contract
+  in opposite directions.
+- *"No generic blend-factor/equation model exists, so an arbitrary custom `BlendState` is
+  rejected."* `nvgGlobalCompositeBlendFuncSeparate` is exactly that model.
+- *"`SetSamplerFilter` is a documented no-op."* Documented, but not defensible while
+  `SamplerState.PointClamp` was accepted without complaint.
