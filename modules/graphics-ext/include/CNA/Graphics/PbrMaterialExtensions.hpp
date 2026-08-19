@@ -293,6 +293,41 @@ namespace CNA::Graphics {
         void setIridescenceThicknessTexture(
             Microsoft::Xna::Framework::Graphics::Texture2D* texture);
 
+        // ── Subsurface scattering (a CNA addition, not a glTF extension) ─────
+
+        /**
+         * @brief Returns the colour light takes on after travelling inside the surface.
+         *
+         * Black -- the default -- disables the approximation entirely.
+         */
+        [[nodiscard]] Microsoft::Xna::Framework::Vector3 getSubsurfaceColor() const;
+        /**
+         * @brief Sets the colour light takes on after travelling inside the surface.
+         *
+         * **This is a wrapped-diffuse approximation and it says so.** Real subsurface scattering is
+         * a screen-space diffusion: light enters at one pixel and leaves at another, which needs a
+         * separate diffuse-only buffer and a depth-aware separable blur over it. What this does
+         * instead is per-pixel -- it softens the terminator and adds a back-lit glow -- so it
+         * captures the *look* of skin, wax or leaves at grazing light without simulating anything
+         * travelling sideways. A thin object lit from behind glows; a thick one glows just as much,
+         * because nothing here knows how thick it is.
+         *
+         * @param value Linear, per channel clamped to [0, 1]. Black turns it off.
+         */
+        void setSubsurfaceColor(const Microsoft::Xna::Framework::Vector3& value);
+
+        /** @brief Returns how far the light wraps past the terminator, 0 to 1. */
+        [[nodiscard]] float getSubsurfaceWrap() const;
+        /**
+         * @brief Sets how far the light wraps past the terminator.
+         *
+         * 0 is an ordinary Lambert terminator; 1 lets light reach a full quarter-turn around the
+         * surface, which is what makes an ear or a leaf look lit from within.
+         *
+         * @param value Clamped to [0, 1].
+         */
+        void setSubsurfaceWrap(float value);
+
         // ── Value semantics ──────────────────────────────────────────────────
 
         /**
@@ -328,6 +363,9 @@ namespace CNA::Graphics {
          */
         [[nodiscard]] std::string ToString() const;
 
+        /** @brief Returns whether the subsurface approximation is on, i.e. its colour is not black. */
+        [[nodiscard]] bool isSubsurfaceEnabled() const;
+
         /** @brief Returns whether the thin film is on, which is whether its factor is above zero. */
         [[nodiscard]] bool isIridescenceEnabled() const;
 
@@ -342,6 +380,9 @@ namespace CNA::Graphics {
 
     private:
         using Tex2D = Microsoft::Xna::Framework::Graphics::Texture2D;
+
+        Microsoft::Xna::Framework::Vector3 subsurfaceColor_{0.0f, 0.0f, 0.0f};
+        float subsurfaceWrap_ = 0.5f;
 
         float iridescenceFactor_           = 0.0f;
         float iridescenceIor_              = 1.3f;

@@ -38,6 +38,8 @@ TEST(PbrMaterialExtensionsTest, TheDefaultSetChangesNothing)
     EXPECT_EQ(extensions.getClearcoatTexture(), nullptr);
     EXPECT_EQ(extensions.getClearcoatRoughnessTexture(), nullptr);
     EXPECT_EQ(extensions.getClearcoatNormalTexture(), nullptr);
+    EXPECT_FALSE(extensions.isSubsurfaceEnabled());
+    EXPECT_FLOAT_EQ(extensions.getSubsurfaceWrap(), 0.5f);
     EXPECT_FALSE(extensions.isSheenEnabled());
     EXPECT_FLOAT_EQ(extensions.getSheenColorFactor().X, 0.0f);
     EXPECT_FLOAT_EQ(extensions.getSheenRoughness(), 0.0f);
@@ -73,6 +75,8 @@ TEST(PbrMaterialExtensionsTest, TheSheenFieldsRoundTripAndAreValidated)
 
     // Black is how the lobe is turned off, and it has to turn off even with its maps still bound.
     extensions.setSheenColorFactor(Vector3(0.0f, 0.0f, 0.0f));
+    EXPECT_FALSE(extensions.isSubsurfaceEnabled());
+    EXPECT_FLOAT_EQ(extensions.getSubsurfaceWrap(), 0.5f);
     EXPECT_FALSE(extensions.isSheenEnabled());
     EXPECT_TRUE(extensions.isNeutral());
 }
@@ -287,6 +291,13 @@ TEST(PbrMaterialExtensionsTest, EqualityComparesEveryFieldIncludingTheTextures)
     a.setIridescenceThicknessTexture(&second);
     EXPECT_NE(a, b);
     b.setIridescenceThicknessTexture(&second);
+
+    a.setSubsurfaceColor(Vector3(0.4f, 0.1f, 0.1f));
+    EXPECT_NE(a, b);
+    b.setSubsurfaceColor(Vector3(0.4f, 0.1f, 0.1f));
+    a.setSubsurfaceWrap(0.9f);
+    EXPECT_NE(a, b);
+    b.setSubsurfaceWrap(0.9f);
     EXPECT_EQ(a, b) << "every field has now been set on both, so they must agree again";
 }
 
@@ -333,7 +344,11 @@ TEST(PbrMaterialExtensionsTest, EqualSetsHashEqually)
     hashes.insert(b.GetHashCode());
     b.setIridescenceThicknessMaximum(700.0f);
     hashes.insert(b.GetHashCode());
-    EXPECT_EQ(hashes.size(), 14u) << "a field is missing from the hash";
+    b.setSubsurfaceColor(Vector3(0.2f, 0.1f, 0.1f));
+    hashes.insert(b.GetHashCode());
+    b.setSubsurfaceWrap(0.9f);
+    hashes.insert(b.GetHashCode());
+    EXPECT_EQ(hashes.size(), 16u) << "a field is missing from the hash";
 }
 
 TEST(PbrMaterialExtensionsTest, ToStringNamesOnlyTheLobesThatAreOn)
@@ -383,6 +398,12 @@ TEST(PbrMaterialExtensionsTest, ToStringNamesOnlyTheLobesThatAreOn)
               "Sheen:{Color:{X:0.5 Y:0.25 Z:0} Roughness:0.5 Textures:0} "
               "Clearcoat:{Factor:0.5 Roughness:0.25 Textures:2}}")
         << "four lobes at once must read as four entries, in a stable order";
+
+    extensions.setSubsurfaceColor(Vector3(0.4f, 0.1f, 0.05f));
+    extensions.setSubsurfaceWrap(0.75f);
+    EXPECT_EQ(extensions.ToString().substr(0, 56),
+              "{Subsurface:{Color:{X:0.4 Y:0.1 Z:0.05} Wrap:0.75} Iride")
+        << "the subsurface term must appear, and first";
 }
 
 } // namespace

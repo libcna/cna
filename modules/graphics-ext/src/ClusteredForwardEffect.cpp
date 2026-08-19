@@ -92,6 +92,8 @@ uniform float uClearcoat;
 uniform float uClearcoatRoughness;
 uniform vec3  uSheenColor;
 uniform float uSheenRoughness;
+uniform vec3  uSubsurfaceColor;
+uniform float uSubsurfaceWrap;
 uniform float uIridescence;
 uniform float uIridescenceIor;
 uniform float uIridescenceThickness;
@@ -136,12 +138,29 @@ vec3 cnaShade(CnaClusteredLight light, vec3 surface, vec3 normal, vec3 viewDirec
     }
     if (attenuation <= 0.0) return vec3(0.0);
 
-    vec3 H = normalize(L + viewDirection);
-    float NoL = max(dot(normal, L), 0.0);
+    // Guarded: with the light exactly behind the surface, L is -V and their sum is the zero
+    // vector, so normalizing it is a NaN -- which then survives being multiplied by a zero N.L and
+    // paints the pixel black. That configuration is not exotic, it is precisely the one the
+    // subsurface back-scatter exists for.
+    vec3 halfSum = L + viewDirection;
+    vec3 H = dot(halfSum, halfSum) > 1e-8 ? normalize(halfSum) : normal;
+    float rawNoL = dot(normal, L);
+    float NoL = max(rawNoL, 0.0);
+    // Wrapped diffuse: light reaches a little past the terminator, which is what a surface light
+    // travels *inside* looks like. An approximation, and one that cannot know how thick the object
+    // is -- see PbrMaterialExtensions::setSubsurfaceColor for what that costs.
+    float subsurface = uSubsurfaceColor.r + uSubsurfaceColor.g + uSubsurfaceColor.b;
+    float wrappedNoL = NoL;
+    if (subsurface > 0.0) {
+        float w = uSubsurfaceWrap;
+        wrappedNoL = clamp((rawNoL + w) / ((1.0 + w) * (1.0 + w)), 0.0, 1.0);
+    }
     float NoV = max(dot(normal, viewDirection), 1e-4);
     float NoH = max(dot(normal, H), 0.0);
     float VoH = max(dot(viewDirection, H), 0.0);
-    if (NoL <= 0.0) return vec3(0.0);
+    float backScatter = 0.0;
+    if (subsurface > 0.0) backScatter = pow(clamp(dot(viewDirection, -L), 0.0, 1.0), 4.0);
+    if (NoL <= 0.0 && wrappedNoL <= 0.0 && backScatter <= 0.0) return vec3(0.0);
 
     vec3 f0 = mix(vec3(0.04), baseColor, metallic);
     vec3 fresnel = cnaFresnel(VoH, f0);
@@ -157,7 +176,10 @@ vec3 cnaShade(CnaClusteredLight light, vec3 surface, vec3 normal, vec3 viewDirec
     // The diffuse term leaves separately, because KHR_materials_transmission replaces *it* with
     // what is behind the surface and leaves the highlights alone -- glass with no highlight is the
     // thing that stops looking like glass.
-    diffuseOut = diffuse * light.colour * attenuation * NoL;
+    diffuseOut = diffuse * light.colour * attenuation * wrappedNoL;
+    // What comes through from behind: strongest when looking straight into the light through the
+    // surface, which is the second half of what makes a leaf or an ear read as translucent.
+    if (subsurface > 0.0) diffuseOut += uSubsurfaceColor * backScatter * light.colour * attenuation;
     vec3 layered = specular;
 
     if (uSheenColor.r + uSheenColor.g + uSheenColor.b > 0.0) {
@@ -307,6 +329,11 @@ void main() {
         effect_->SetUniformFloat("uSheenRoughness",
                                  extensions_ != nullptr ? extensions_->getSheenRoughness() : 0.0f);
 
+        const Vector3 subsurface = extensions_ != nullptr ? extensions_->getSubsurfaceColor()
+                                                          : Vector3(0.0f, 0.0f, 0.0f);
+        effect_->SetUniformVec3("uSubsurfaceColor", subsurface.X, subsurface.Y, subsurface.Z);
+        effect_->SetUniformFloat("uSubsurfaceWrap",
+                                 extensions_ != nullptr ? extensions_->getSubsurfaceWrap() : 0.5f);
         effect_->SetUniformFloat("uIridescence",
                                  extensions_ != nullptr ? extensions_->getIridescenceFactor()
                                                         : 0.0f);
@@ -451,7 +478,8 @@ void main() {
                             extensions.getClearcoatFactor(), extensions.getClearcoatRoughness(),
                             extensions.getSheenColorFactor(), extensions.getSheenRoughness(),
                             extensions.getIridescenceFactor(), extensions.getIridescenceIor(),
-                            extensions.getIridescenceThicknessMaximum());
+                            extensions.getIridescenceThicknessMaximum(),
+                            extensions.getSubsurfaceColor(), extensions.getSubsurfaceWrap());
     }
 
     Vector3 ClusteredForwardEffect::contribution(const ClusteredLightEXT& light,
@@ -464,7 +492,9 @@ void main() {
                                                  const float sheenRoughness,
                                                  const float iridescence,
                                                  const float iridescenceIor,
-                                                 const float iridescenceThickness)
+                                                 const float iridescenceThickness,
+                                                 const Vector3& subsurfaceColor,
+                                                 const float subsurfaceWrap)
     {
         const Vector3 toLight(light.Position.X - surface.X, light.Position.Y - surface.Y,
                               light.Position.Z - surface.Z);
@@ -491,14 +521,28 @@ void main() {
         const Vector3 viewDirection = Normalized(Vector3(cameraPosition.X - surface.X,
                                                          cameraPosition.Y - surface.Y,
                                                          cameraPosition.Z - surface.Z));
-        const Vector3 H = Normalized(Vector3(L.X + viewDirection.X, L.Y + viewDirection.Y,
-                                             L.Z + viewDirection.Z));
+        // Guarded for the same reason the shader is: with the light exactly behind the surface the
+        // half-vector's sum is zero, and a NaN there survives being multiplied by a zero N.L.
+        const Vector3 halfSum(L.X + viewDirection.X, L.Y + viewDirection.Y, L.Z + viewDirection.Z);
+        const Vector3 H = Dot(halfSum, halfSum) > 1e-8f ? Normalized(halfSum) : normal;
 
-        const float NoL = std::max(Dot(normal, L), 0.0f);
+        const float rawNoL = Dot(normal, L);
+        const float NoL = std::max(rawNoL, 0.0f);
+        const bool subsurface = subsurfaceColor.X > 0.0f || subsurfaceColor.Y > 0.0f ||
+                                subsurfaceColor.Z > 0.0f;
+        float wrappedNoL = NoL;
+        if (subsurface)
+            wrappedNoL = std::clamp((rawNoL + subsurfaceWrap) /
+                                        ((1.0f + subsurfaceWrap) * (1.0f + subsurfaceWrap)),
+                                    0.0f, 1.0f);
+        float backScatter = 0.0f;
+        if (subsurface)
+            backScatter = std::pow(std::clamp(-Dot(viewDirection, L), 0.0f, 1.0f), 4.0f);
         const float NoV = std::max(Dot(normal, viewDirection), 1e-4f);
         const float NoH = std::max(Dot(normal, H), 0.0f);
         const float VoH = std::max(Dot(viewDirection, H), 0.0f);
-        if (NoL <= 0.0f) return Vector3(0.0f, 0.0f, 0.0f);
+        if (NoL <= 0.0f && wrappedNoL <= 0.0f && backScatter <= 0.0f)
+            return Vector3(0.0f, 0.0f, 0.0f);
 
         const float a = roughness * roughness;
         const float aa = a * a;
@@ -564,11 +608,14 @@ void main() {
                                    std::max(4.0f * NoV * NoL, 1e-7f);
             const float diffuse = (1.0f - fresnel) * (1.0f - metallic) * base[channel] /
                                   3.14159265359f;
-            float layered = diffuse + specular + (&sheenColor.X)[channel] * sheenTerm;
+            float layered = specular + (&sheenColor.X)[channel] * sheenTerm;
             if (clearcoat > 0.0f)
                 layered = layered * (1.0f - clearcoat * clearcoatFresnel) +
                           clearcoat * clearcoatSpecular;
-            out[channel] = layered * emitted[channel] * light.Intensity * attenuation * NoL;
+            const float diffuseTerm = diffuse * wrappedNoL +
+                                      (&subsurfaceColor.X)[channel] * backScatter;
+            out[channel] = (layered * NoL + diffuseTerm) * emitted[channel] * light.Intensity *
+                           attenuation;
         }
         return result;
     }

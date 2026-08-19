@@ -903,6 +903,111 @@ TEST(ClusteredForwardEffectTest, AThickVolumeAbsorbsWhatPassesThroughIt)
         << "the volume absorbed every channel equally, so its colour did nothing";
 }
 
+// ── Subsurface scattering, and what it is honest about (MOD-2074) ────────────
+
+TEST(ClusteredForwardEffectTest, SubsurfaceLightWrapsPastTheTerminator)
+{
+    // What the approximation buys: a surface turned slightly *away* from a light still receives
+    // some, which is what softens the hard Lambert edge on skin, wax and leaves.
+    const ClusteredLightEXT light = MakePoint(Vector3(0.0f, 4.0f, 0.0f), 40.0f, 4.0f);
+    const Vector3 surface(0.0f, 0.0f, 0.0f);
+    const Vector3 eye(0.0f, 2.0f, 4.0f);
+    const Vector3 base(0.7f, 0.6f, 0.55f);
+
+    // Tilted just past the terminator: the light is behind this normal's horizon.
+    const Vector3 justPast(0.0f, -0.15f, 0.99f);
+
+    PbrMaterialExtensions skin;
+    skin.setSubsurfaceColor(Vector3(0.6f, 0.2f, 0.15f));
+    skin.setSubsurfaceWrap(0.7f);
+
+    const Vector3 plain = ClusteredForwardEffect::contribution(light, surface, justPast, eye, base,
+                                                               0.0f, 0.6f);
+    const Vector3 waxy = ClusteredForwardEffect::contribution(light, surface, justPast, eye, base,
+                                                              0.0f, 0.6f, skin);
+    EXPECT_FLOAT_EQ(plain.X, 0.0f) << "an ordinary surface past the terminator must be black";
+    EXPECT_GT(waxy.X, 0.0f) << "the light did not wrap past the terminator at all";
+}
+
+TEST(ClusteredForwardEffectTest, SubsurfaceGlowsWhenTheLightIsBehindTheSurface)
+{
+    // The other half: looking straight into a light through a translucent surface should glow, and
+    // looking away from it should not.
+    const ClusteredLightEXT light = MakePoint(Vector3(0.0f, 0.0f, -4.0f), 40.0f, 4.0f);
+    const Vector3 surface(0.0f, 0.0f, 0.0f);
+    const Vector3 normal(0.0f, 0.0f, 1.0f);
+    const Vector3 base(0.7f, 0.6f, 0.55f);
+
+    PbrMaterialExtensions leaf;
+    leaf.setSubsurfaceColor(Vector3(0.2f, 0.6f, 0.15f));
+    leaf.setSubsurfaceWrap(0.5f);
+
+    // The eye is on the lit side of the surface looking towards the light through it.
+    const Vector3 towards = ClusteredForwardEffect::contribution(
+        light, surface, normal, Vector3(0.0f, 0.0f, 4.0f), base, 0.0f, 0.6f, leaf);
+    // And off to the side, where nothing is being looked through.
+    const Vector3 aside = ClusteredForwardEffect::contribution(
+        light, surface, normal, Vector3(6.0f, 0.0f, 0.5f), base, 0.0f, 0.6f, leaf);
+
+    EXPECT_GT(towards.Y, aside.Y * 2.0f)
+        << "the surface did not glow when the light was behind it";
+    EXPECT_GT(towards.Y, towards.X) << "the leaf's own colour did not survive the glow";
+}
+
+TEST(ClusteredForwardEffectTest, ABlackSubsurfaceColourIsExactlyTheOrdinaryResult)
+{
+    const ClusteredLightEXT light = MakePoint(Vector3(1.0f, 3.0f, 2.0f), 20.0f, 3.0f);
+    const Vector3 surface(0.0f, 0.0f, 0.0f);
+    const Vector3 normal(0.0f, 1.0f, 0.0f);
+    const Vector3 eye(2.0f, 4.0f, 1.0f);
+    const Vector3 base(0.6f, 0.4f, 0.2f);
+
+    PbrMaterialExtensions off;
+    off.setSubsurfaceWrap(1.0f);   // a wrap that would change everything, with the colour black
+    const Vector3 plain = ClusteredForwardEffect::contribution(light, surface, normal, eye, base,
+                                                               0.2f, 0.5f);
+    const Vector3 withOff = ClusteredForwardEffect::contribution(light, surface, normal, eye, base,
+                                                                 0.2f, 0.5f, off);
+    EXPECT_FLOAT_EQ(plain.X, withOff.X);
+    EXPECT_FLOAT_EQ(plain.Y, withOff.Y);
+    EXPECT_FLOAT_EQ(plain.Z, withOff.Z);
+}
+
+TEST(ClusteredForwardEffectTest, TheSubsurfaceSettingsReachTheShader)
+{
+    GraphicsDevice gd;
+    ClusteredForwardEffect effect(gd);
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+    if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
+
+    ClusteredLightSetEXT lights;
+    lights.add(MakePoint(Vector3(6.0f, 0.0f, kWallZ + 0.5f), 14.0f, 5.0f));
+
+    effect.setBaseColor(Vector3(0.5f, 0.5f, 0.5f));
+    effect.setMetallic(0.0f);
+    effect.setRoughness(0.7f);
+    const long long plain = TotalBrightness(RenderWall(gd, effect, lights));
+
+    PbrMaterialExtensions waxy;
+    waxy.setSubsurfaceColor(Vector3(0.7f, 0.3f, 0.2f));
+    waxy.setSubsurfaceWrap(0.8f);
+    effect.setMaterialExtensions(waxy);
+    const long long translucent = TotalBrightness(RenderWall(gd, effect, lights));
+    EXPECT_GT(translucent, plain) << "the subsurface uniforms never reached the shader";
+
+    const Vector3 centre(0.0f, 0.0f, kWallZ);
+    const Vector3 expected = ClusteredForwardEffect::contribution(
+        MakePoint(Vector3(6.0f, 0.0f, kWallZ + 0.5f), 14.0f, 5.0f), centre,
+        Vector3(0.0f, 0.0f, 1.0f), Vector3::Zero, Vector3(0.5f, 0.5f, 0.5f), 0.0f, 0.7f, waxy);
+    const std::vector<Color> pixels = RenderWall(gd, effect, lights);
+    const Color middle = pixels[static_cast<std::size_t>(kSize) * (kSize / 2) + kSize / 2];
+    ASSERT_LT(expected.X, 0.95f) << "the reference saturates, so the comparison proves little";
+    EXPECT_NEAR(static_cast<float>(middle.getRProperty()) / 255.0f, expected.X, 0.03f)
+        << "the shader and the CPU model disagree about the subsurface term";
+}
+
 } // namespace
 
 #endif // CNA_CNAEXT

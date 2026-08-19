@@ -76,6 +76,20 @@ namespace CNA::Graphics {
         if (value >= 0.0f) clearcoatNormalScale_ = value;
     }
 
+    Vector3 PbrMaterialExtensions::getSubsurfaceColor() const { return subsurfaceColor_; }
+    void    PbrMaterialExtensions::setSubsurfaceColor(const Vector3& value)
+    {
+        subsurfaceColor_ = Vector3(std::clamp(value.X, 0.0f, 1.0f),
+                                   std::clamp(value.Y, 0.0f, 1.0f),
+                                   std::clamp(value.Z, 0.0f, 1.0f));
+    }
+
+    float PbrMaterialExtensions::getSubsurfaceWrap() const { return subsurfaceWrap_; }
+    void  PbrMaterialExtensions::setSubsurfaceWrap(const float value)
+    {
+        subsurfaceWrap_ = std::clamp(value, 0.0f, 1.0f);
+    }
+
     float PbrMaterialExtensions::getIridescenceFactor() const { return iridescenceFactor_; }
     void  PbrMaterialExtensions::setIridescenceFactor(const float value)
     {
@@ -193,7 +207,11 @@ namespace CNA::Graphics {
 
     bool PbrMaterialExtensions::operator==(const PbrMaterialExtensions& other) const
     {
-        return iridescenceFactor_ == other.iridescenceFactor_ &&
+        return subsurfaceColor_.X == other.subsurfaceColor_.X &&
+               subsurfaceColor_.Y == other.subsurfaceColor_.Y &&
+               subsurfaceColor_.Z == other.subsurfaceColor_.Z &&
+               subsurfaceWrap_ == other.subsurfaceWrap_ &&
+               iridescenceFactor_ == other.iridescenceFactor_ &&
                iridescenceIor_ == other.iridescenceIor_ &&
                iridescenceThicknessMinimum_ == other.iridescenceThicknessMinimum_ &&
                iridescenceThicknessMaximum_ == other.iridescenceThicknessMaximum_ &&
@@ -229,6 +247,10 @@ namespace CNA::Graphics {
     std::size_t PbrMaterialExtensions::GetHashCode() const
     {
         std::size_t seed = 0;
+        Combine(seed, HashFloat(subsurfaceColor_.X));
+        Combine(seed, HashFloat(subsurfaceColor_.Y));
+        Combine(seed, HashFloat(subsurfaceColor_.Z));
+        Combine(seed, HashFloat(subsurfaceWrap_));
         Combine(seed, HashFloat(iridescenceFactor_));
         Combine(seed, HashFloat(iridescenceIor_));
         Combine(seed, HashFloat(iridescenceThicknessMinimum_));
@@ -264,6 +286,11 @@ namespace CNA::Graphics {
                sheenColorFactor_.Z > 0.0f;
     }
 
+    bool PbrMaterialExtensions::isSubsurfaceEnabled() const
+    {
+        return subsurfaceColor_.X > 0.0f || subsurfaceColor_.Y > 0.0f || subsurfaceColor_.Z > 0.0f;
+    }
+
     bool PbrMaterialExtensions::isIridescenceEnabled() const { return iridescenceFactor_ > 0.0f; }
 
     bool PbrMaterialExtensions::isTransmissionEnabled() const
@@ -274,14 +301,19 @@ namespace CNA::Graphics {
     bool PbrMaterialExtensions::isNeutral() const
     {
         return clearcoatFactor_ <= 0.0f && !isSheenEnabled() && !isTransmissionEnabled() &&
-               !isIridescenceEnabled();
+               !isIridescenceEnabled() && !isSubsurfaceEnabled();
     }
 
     std::string PbrMaterialExtensions::ToString() const
     {
         std::string text = "{";
+        if (isSubsurfaceEnabled())
+            text += "Subsurface:{Color:{X:" + Trimmed(subsurfaceColor_.X) + " Y:" +
+                    Trimmed(subsurfaceColor_.Y) + " Z:" + Trimmed(subsurfaceColor_.Z) +
+                    "} Wrap:" + Trimmed(subsurfaceWrap_) + "}";
         if (isIridescenceEnabled())
         {
+            if (text.size() > 1) text += " ";
             int maps = 0;
             if (iridescenceTexture_ != nullptr) ++maps;
             if (iridescenceThicknessTexture_ != nullptr) ++maps;
