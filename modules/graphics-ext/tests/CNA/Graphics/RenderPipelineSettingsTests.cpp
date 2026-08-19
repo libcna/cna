@@ -141,6 +141,67 @@ TEST(RenderPipelineSettingsTest, ValuesWhoseOutOfRangeCaseIsUndefinedAreClamped)
     EXPECT_FLOAT_EQ(settings.getGamma(), RenderPipelineSettings::kMinimumGamma);
 }
 
+TEST(RenderPipelineSettingsTest, TheVolumetricsDefaultsAreOff)
+{
+    // MOD-2054. Three passes share section 20.6, and the thing they have in common is that a game
+    // that has never heard of them must render exactly what it rendered before. Each one is turned
+    // off by *its own* amount being zero rather than by an enable flag, so the zero is the switch
+    // and it is what this pins. The other four fields are shapes, not amounts: they describe how
+    // the effect would look if it were on, so their defaults are usable values rather than zeros.
+    const RenderPipelineSettings settings;
+
+    EXPECT_FLOAT_EQ(settings.getVolumetricFogDensity(), 0.0f);
+    EXPECT_FLOAT_EQ(settings.getLightShaftIntensity(), 0.0f);
+    EXPECT_FLOAT_EQ(settings.getHeightFogDensity(), 0.0f);
+
+    EXPECT_FLOAT_EQ(settings.getLightShaftThreshold(), 0.7f);
+    EXPECT_FLOAT_EQ(settings.getLightShaftDecay(), 0.92f);
+    EXPECT_FLOAT_EQ(settings.getHeightFogFalloff(), 0.1f);
+    EXPECT_FLOAT_EQ(settings.getHeightFogBaseHeight(), 0.0f);
+}
+
+TEST(RenderPipelineSettingsTest, TheVolumetricsFieldsRoundTripAndAreValidated)
+{
+    RenderPipelineSettings settings;
+
+    settings.setVolumetricFogDensity(0.4f);
+    settings.setLightShaftThreshold(0.55f);
+    settings.setLightShaftIntensity(1.3f);
+    settings.setLightShaftDecay(0.85f);
+    settings.setHeightFogDensity(0.25f);
+    settings.setHeightFogFalloff(0.3f);
+    settings.setHeightFogBaseHeight(-12.5f);
+
+    EXPECT_FLOAT_EQ(settings.getVolumetricFogDensity(), 0.4f);
+    EXPECT_FLOAT_EQ(settings.getLightShaftThreshold(), 0.55f);
+    EXPECT_FLOAT_EQ(settings.getLightShaftIntensity(), 1.3f);
+    EXPECT_FLOAT_EQ(settings.getLightShaftDecay(), 0.85f);
+    EXPECT_FLOAT_EQ(settings.getHeightFogDensity(), 0.25f);
+    EXPECT_FLOAT_EQ(settings.getHeightFogFalloff(), 0.3f);
+    EXPECT_FLOAT_EQ(settings.getHeightFogBaseHeight(), -12.5f)
+        << "a base height below the origin is a valley floor, not a mistake";
+
+    // Negative amounts have no meaning -- a medium cannot scatter a negative quantity of light --
+    // so they land on the value that means "off" rather than being stored and inverted later.
+    settings.setVolumetricFogDensity(-1.0f);
+    settings.setLightShaftIntensity(-1.0f);
+    settings.setLightShaftThreshold(-1.0f);
+    settings.setHeightFogDensity(-1.0f);
+    settings.setHeightFogFalloff(-1.0f);
+    EXPECT_FLOAT_EQ(settings.getVolumetricFogDensity(), 0.0f);
+    EXPECT_FLOAT_EQ(settings.getLightShaftIntensity(), 0.0f);
+    EXPECT_FLOAT_EQ(settings.getLightShaftThreshold(), 0.0f);
+    EXPECT_FLOAT_EQ(settings.getHeightFogDensity(), 0.0f);
+    EXPECT_FLOAT_EQ(settings.getHeightFogFalloff(), 0.0f);
+
+    // Decay is a per-step multiplier along the shaft walk, so above 1 it would brighten with
+    // distance and diverge; it is clamped in both directions rather than merely floored.
+    settings.setLightShaftDecay(2.0f);
+    EXPECT_FLOAT_EQ(settings.getLightShaftDecay(), 1.0f);
+    settings.setLightShaftDecay(-0.5f);
+    EXPECT_FLOAT_EQ(settings.getLightShaftDecay(), 0.0f);
+}
+
 TEST(RenderPipelineSettingsTest, TonemappingModeOrdinalsAreStable)
 {
     // Uncharted2 was appended, not inserted. A settings bag serialized by an earlier build must

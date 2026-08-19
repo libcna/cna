@@ -22,6 +22,23 @@ shader source, so rollout rows would wait on those renderers' own plans rather t
 Four items are refused up front against that profile — hardware ray tracing, mesh shaders, temporal
 upscalers and virtual texturing — each with the specific reason rather than silence.
 
+**Phase 20 progress** (updated as sections close): 20.1 render-target coordinates, 20.2
+screen-space reflections, 20.3 the lens and grade passes, 20.4 motion blur and depth of field, and
+20.6 volumetrics (`MOD-2050`–`MOD-2054`: height fog, light shafts, froxel volumetric scattering and
+`AtmosphericSky`) are done. Still open: 20.5 clustered lighting, 20.7 area lights, 20.8 the glTF
+material extensions, 20.9 probe-based GI, 20.10 GPU-driven and display. Two rows stay deliberately
+open rather than closed: `MOD-2033` (per-object velocity — an obligation on the application, not
+something the layer can supply) and `MOD-2035`, which is the one red gate, `CNAEXT_Showcase`, and
+whose cause is bisected to EasyGL's half-float render target rather than to anything in the pass.
+
+**Three sections in a row shipped with a bug the tests caught and a test that was itself wrong**,
+which is worth stating plainly: light shafts measured a black occluder against black, volumetric fog
+computed the backward phase lobe and then asserted the frame got *brighter*, and the atmospheric sky
+summed two path lengths that do opposite jobs while its tests placed the sun where the question it
+was asking could not be true. All six produced frames that looked like what they claimed to be. The
+lesson these rows keep repeating is that a plausible frame is not evidence, and that when a test
+fails the model is not automatically the thing that is wrong.
+
 The whole orchestration layer exists and is verified on EasyGL: `RenderPipeline`, the post-process
 chain, all four shadow types, skybox and IBL, materials, instancing/LOD/culling, compute and
 auto-exposure. Final sweep: **7944 ran · 7880 pass · 64 skip · 0 fail**. See

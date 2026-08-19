@@ -605,6 +605,62 @@ stair-step. The pass asks `GraphicsCapability::HalfFloatTextureLinearFiltering` 
 and takes the fallback silently; there is no setting for it, because there is no reason to prefer the
 worse path where the better one exists.
 
+### Volumetrics: air you can see, and three passes that do it differently
+
+`plan_modern.md` `MOD-2050`–`MOD-2054`. Three passes put light *in the air between things* rather
+than on the things themselves, and they are not alternatives to each other -- they cost different
+amounts and answer different questions. All three are **off when their own amount is zero**, which
+is the default, and each reads its numbers from `RenderPipelineSettings` when the pipeline supplies
+one.
+
+| Pass | What it models | What it needs | Cost |
+|------|----------------|---------------|------|
+| `HeightFogPass` | A medium whose density falls off exponentially with height | Depth, camera | One fullscreen pass, closed form |
+| `LightShaftPass` | The bright streaks a screen-space light throws past occluders | Colour only, plus the light's screen position | One fullscreen pass, radial walk |
+| `VolumetricFogPass` | A lit, shadowed medium marched in 3D | Depth, camera, light, optionally a shadow map | A slice atlas plus a fullscreen composite |
+
+```cpp
+settings.setHeightFogDensity(0.15f);      // 0 is off; this is the switch
+settings.setHeightFogFalloff(0.08f);      // how fast density thins with height
+settings.setHeightFogBaseHeight(0.0f);    // the world height the density is quoted at
+
+settings.setLightShaftIntensity(0.8f);    // 0 is off
+settings.setLightShaftThreshold(0.7f);    // only pixels brighter than this seed a shaft
+settings.setLightShaftDecay(0.92f);       // per-step multiplier along the walk
+
+settings.setVolumetricFogDensity(0.3f);   // 0 is off
+```
+
+- **Height fog is an integral, not a fade.** What reaches the camera is the medium's density
+  *integrated along the view ray*, so a valley fills while the hilltop above it stays clear, and a
+  view down through the valley fogs correctly because the integral knows the ray crossed the thick
+  part. `HeightFogPass::opticalDepth` is public and is the same formula the shader runs, so the
+  optics can be checked without a frame. A **level look is a separate branch** rather than a nudged
+  general one: the general form divides by the ray's climb, and pushing that away from zero would
+  make a level view's fog depend on the size of the nudge.
+- **A shaft is the shape of an occluder.** The pass walks from each pixel towards the light
+  gathering brightness, so what you see is where the *bright* pixels were blocked -- the streaks
+  are the gaps. The light's screen position is the application's to supply
+  (`LightShaftPass::setLightScreenPosition`), because the layer does not know which of a scene's lights
+  is the sun and the application already holds the matrices. **Positions outside [0, 1] are
+  meaningful and are not clamped**: a light just past the edge still throws shafts inward, and the
+  effect fades with how far outside it is rather than cutting off at the border.
+- **Volumetric fog earns its cost with the shadow map.** Without one the medium is lit wherever the
+  light points, which is haze; with one the beams have edges. It fills a **slice atlas** -- a 2D
+  render target holding the depth slices side by side, the same layout `ColorGradePass` reads a 3D
+  lookup table from -- because CNA has a `Texture3D` a shader can sample and no render target that
+  writes into one, and filling a volume with compute needs the image stores GL ES refuses
+  (`MOD-1514`). Slices are spaced quadratically, so the near ones are thinner and the resolution
+  stays where the eye is.
+- **Order in the chain**: shafts, then volumetric fog, then height fog, all before motion blur.
+  Shafts are light travelling through air, so the fog that dims distance should dim them too; and
+  fog is part of what the shutter collected, so a moving camera smears the fogged image rather than
+  fogging a smeared one.
+- **What a dense medium does to a lit scene is *darken* it.** Extinction removes the source's light
+  faster than in-scattering adds the medium's own, which is why the tests for volumetric fog start
+  from a black frame and measure only what the medium put there. A test that asserts "the frame got
+  brighter" is asking the wrong question and will pass for the wrong reasons.
+
 ### Motion blur, and the half of it that is not here
 
 `plan_modern.md` `MOD-2030`–`MOD-2034`. `MotionBlurPass` works out where each pixel used to be
@@ -963,6 +1019,47 @@ pipeline.setSkyboxCamera(view, projection);  // the pipeline has no camera of it
   are tested as inverses, so the converter cannot disagree with itself.
 - **Cost** (`cnaext_skybox_test --benchmark`, 128×128, Mesa llvmpipe): 0.020 ms per frame against
   0.005 ms for a clear alone — one fullscreen pass, which is what it should be.
+
+### A sky computed instead of sampled
+
+`plan_modern.md` `MOD-2053`. `AtmosphericSky` is an alternative to `Skybox`, not a replacement: the
+cube path above is untouched, and a game that wants an artist's sky keeps using it. What this buys
+is that **a time of day becomes a number rather than an asset**.
+
+```cpp
+CNA::Graphics::AtmosphericSky sky(device);
+sky.setSunDirection(Vector3(0.0f, -0.08f, -1.0f));   // where the light travels; near-horizontal
+sky.setTurbidity(2.5f);                              // 1 is aerosol-free air
+sky.setIntensity(1.0f);
+
+sky.draw(view, projection, width, height);           // before the scene's geometry, as with Skybox
+```
+
+- **The colour is single-scattered Rayleigh and Mie radiance**, computed per view ray. Rayleigh's
+  coefficients fall as the fourth power of wavelength, so a clear sky is blue; Mie's do not depend
+  on wavelength at all, so haze is white and the glare around the sun has no colour of its own.
+  Moving the sun down reddens the sky on its own, because the light has further to travel and the
+  blue has been scattered out of it before it arrives.
+- **Turbidity is the ratio of the whole atmosphere's optical thickness to the molecular part
+  alone**, so 1 means air with no aerosol in it and the Mie term vanishes there. It is clamped to
+  [1, 10].
+- **`AtmosphericSky::radiance()` is public and static**, and is the same model the shader runs. Use
+  it to ask what colour the sky is for an ambient or fog term without drawing one -- and it is what
+  lets the physics be tested as ratios between channels and directions rather than against a
+  screenshot.
+- **Two lengths, doing opposite jobs.** The view path is how much lit air is being looked through,
+  so a longer one is *brighter*; the sun path is what the light lost getting in, so a longer one is
+  *dimmer and redder*. They must not be summed into one extinction term -- that saturates, and the
+  result is a sky whose horizon is darker than its zenith and whose sunset is bluer than its noon.
+  It still looks like a sky, which is why it is worth naming.
+- **Air mass is Kasten and Young's fit**, taking the zenith angle in degrees; it runs from 1
+  overhead to about 38 at the horizon rather than to infinity, so the horizon is finite without a
+  clamp doing the work.
+- **The sun at the zenith is the brightest thing in the sky, and white.** Both phase functions peak
+  forward, so a camera looking straight up under an overhead sun is looking into the aureole. A
+  test that wants "the zenith is blue" or "the horizon is brighter than the zenith" has to put the
+  sun somewhere other than directly overhead, or it is asking the model to disagree with every
+  photograph.
 
 ### Image-based lighting: the precompute
 
