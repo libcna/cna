@@ -23,10 +23,20 @@ Four items are refused up front against that profile — hardware ray tracing, m
 upscalers and virtual texturing — each with the specific reason rather than silence.
 
 **Phase 20 progress** (updated as sections close): 20.1 render-target coordinates, 20.2
-screen-space reflections, 20.3 the lens and grade passes, 20.4 motion blur and depth of field, and
-20.6 volumetrics (`MOD-2050`–`MOD-2054`: height fog, light shafts, froxel volumetric scattering and
-`AtmosphericSky`) are done. Still open: 20.5 clustered lighting, 20.7 area lights, 20.8 the glTF
-material extensions, 20.9 probe-based GI, 20.10 GPU-driven and display. Two rows stay deliberately
+screen-space reflections, 20.3 the lens and grade passes, 20.4 motion blur and depth of field,
+20.5 clustered forward lighting (`MOD-2040`–`MOD-2048`), 20.6 volumetrics (`MOD-2050`–`MOD-2054`)
+and 20.7 area lights (`MOD-2060`–`MOD-2063`) are done. Still open: 20.8 the glTF material
+extensions, 20.9 probe-based GI, 20.10 GPU-driven and display.
+
+Two rows in the closed sections carry a bound rather than a tick, and both bounds are the same
+shape — **the engine layer cannot put code in `PbrEffect`**. `PbrEffect` owns no shader source: it
+fills a `GpuDrawParams` and the *renderer* generates the program, so a light loop or an area-light
+term there would be a change to EasyGL's built-in effect family, compiled into every game whether
+`CNA_CNAEXT` is on or off. Clustered shading (`MOD-2045`) and area lights (`MOD-2062`) are therefore
+delivered in `ClusteredForwardEffect`, the layer's own `ShaderEffect`-based PBR effect. A game using
+it gives up `PbrEffect`'s texture set and its one shadowed punctual light, and gains the light
+count and the area lights. **Anything else in Phase 20 that the plan words as "in `PbrEffect`" will
+hit the same wall** — `MOD-2070`–`MOD-2074` and `MOD-2082` are worded that way today. Two rows stay deliberately
 open rather than closed: `MOD-2033` (per-object velocity — an obligation on the application, not
 something the layer can supply) and `MOD-2035`, which is the one red gate, `CNAEXT_Showcase`, and
 whose cause is bisected to EasyGL's half-float render target rather than to anything in the pass.
