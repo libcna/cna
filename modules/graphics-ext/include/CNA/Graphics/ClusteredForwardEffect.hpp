@@ -13,8 +13,13 @@ namespace Microsoft::Xna::Framework::Graphics {
     class ShaderEffect;
 }
 
+namespace Microsoft::Xna::Framework::Graphics {
+    struct AreaLightEXT;
+}
+
 namespace CNA::Graphics {
 
+    class AreaLightBrdfTable;
     class ClusteredLightBuffer;
     struct ClusteredLightEXT;
 
@@ -101,6 +106,27 @@ namespace CNA::Graphics {
          */
         [[nodiscard]] Microsoft::Xna::Framework::Graphics::ShaderEffect* getEffect() const;
 
+        /**
+         * @brief Adds one area light to the draws that follow.
+         *
+         * **One per draw**, and deliberately so, for the reason `PunctualLightEXT` gives for its own
+         * budget of one: an area light's integral is an edge sum over a clipped polygon, which is
+         * an order of magnitude more work per fragment than a punctual light's dot products. A
+         * scene wanting many of them wants them in the cluster grid, and the cluster grid holds
+         * punctual lights.
+         *
+         * @param light The light; an invalid one clears the slot instead.
+         * @param table The BRDF table the specular term reads; borrowed, not owned.
+         */
+        void setAreaLight(const Microsoft::Xna::Framework::Graphics::AreaLightEXT& light,
+                          const AreaLightBrdfTable& table);
+
+        /** @brief Removes the area light, so the following draws are lit by the clusters alone. */
+        void clearAreaLight();
+
+        /** @brief Returns whether an area light is set. */
+        [[nodiscard]] bool hasAreaLight() const;
+
         /** @brief Returns the surface's base colour. */
         [[nodiscard]] Microsoft::Xna::Framework::Vector3 getBaseColor() const;
         /** @brief Sets the surface's base colour. @param value Linear, per channel in [0, 1]. */
@@ -153,6 +179,9 @@ namespace CNA::Graphics {
         float metallic_  = 0.0f;
         float roughness_ = 0.5f;
         bool  supported_ = false;
+
+        std::unique_ptr<Microsoft::Xna::Framework::Graphics::AreaLightEXT> areaLight_;
+        const AreaLightBrdfTable* areaTable_ = nullptr;
     };
 
 /** @} */

@@ -180,11 +180,22 @@ namespace CNA::Graphics {
     {
         return R"(
 uniform sampler2D uCnaAreaBrdf;
+uniform float uCnaAreaBrdfSize;
 
 /// x = directional albedo, y = Fresnel weight, z/w = the average reflection direction in the plane
 /// the view and the normal span.
+///
+/// The coordinate is remapped onto the first and last texel *centres* rather than onto the edges
+/// of the texture, and that is not tidiness. A texture bound through ShaderEffect::SetTexture keeps
+/// the default wrap mode, and per-unit sampler state does not reach it (measured, MOD-2029) -- so a
+/// lookup at N.V = 1 lands exactly on the seam and the filter averages the last column with the
+/// *first*, which is the grazing end of the table. The result was a mirror looked at head-on being
+/// told its reflection leans thirty degrees off the normal, which pushed a corner of every area
+/// light below the horizon and left the highlight black.
 vec4 cnaAreaBrdfTerms(float nDotV, float roughness) {
-    return texture(uCnaAreaBrdf, vec2(clamp(nDotV, 0.0, 1.0), clamp(roughness, 0.0, 1.0)));
+    vec2 index = clamp(vec2(nDotV, roughness), 0.0, 1.0);
+    vec2 uv = (index * (uCnaAreaBrdfSize - 1.0) + 0.5) / max(uCnaAreaBrdfSize, 1.0);
+    return texture(uCnaAreaBrdf, uv);
 }
 )";
     }

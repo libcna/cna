@@ -4,9 +4,13 @@
 
 #ifdef CNA_CNAEXT
 
+#include "CNA/Graphics/AreaLightBrdfTable.hpp"
+#include "CNA/Graphics/AreaLightShading.hpp"
 #include "CNA/Graphics/ClusteredLightBuffer.hpp"
 #include "CNA/Graphics/ClusteredLightEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AreaLightEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 
 #include <algorithm>
@@ -19,6 +23,8 @@ namespace CNA::Graphics {
     using Microsoft::Xna::Framework::Matrix;
     using Microsoft::Xna::Framework::Vector3;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::AreaLightEXT;
+    using Microsoft::Xna::Framework::Graphics::AreaLightShapeEXT;
     using Microsoft::Xna::Framework::Graphics::ShaderEffect;
 
     namespace {
@@ -134,6 +140,8 @@ void main() {
     int count = cnaClusterLightCount(cluster);
 
     vec3 colour = uAmbient * uBaseColor;
+    colour += cnaAreaContribution(vWorldPosition, normal, viewDirection, uBaseColor, uMetallic,
+                                  uRoughness);
     for (int i = 0; i < kCnaMaxLightsPerFragment; ++i) {
         if (i >= count) break;
         CnaClusteredLight light = cnaLoadLight(cnaClusterLightIndex(cluster, i));
@@ -150,6 +158,8 @@ void main() {
             source += "const int kCnaMaxLightsPerFragment = " +
                       std::to_string(ClusteredForwardEffect::kMaxLightsPerFragment) + ";\n";
             source += ClusteredLightBuffer::getLightLookupGlsl();
+            source += AreaLightBrdfTable::getLookupGlsl();
+            source += AreaLightShading::getShadingGlsl();
             source += kShadingGlsl;
             source += kFragmentBody;
             return source;
@@ -201,7 +211,49 @@ void main() {
         effect_->SetUniformFloat("uRoughness", roughness_);
 
         lights.bind(*effect_, 1);
+
+        const bool haveArea = areaLight_ != nullptr && areaTable_ != nullptr &&
+                              areaTable_->getTexture() != nullptr;
+        effect_->SetUniformInt("uAreaShape", haveArea ? static_cast<int>(areaLight_->Shape) : -1);
+        if (haveArea)
+        {
+            effect_->SetUniformInt("uCnaAreaBrdf", 4);
+            effect_->SetTexture(4, *areaTable_->getTexture());
+            effect_->SetUniformFloat("uCnaAreaBrdfSize",
+                                     static_cast<float>(areaTable_->getSize()));
+            effect_->SetUniformVec3("uAreaPosition", areaLight_->Position.X, areaLight_->Position.Y,
+                                    areaLight_->Position.Z);
+            effect_->SetUniformVec3("uAreaRight", areaLight_->RightAxis.X, areaLight_->RightAxis.Y,
+                                    areaLight_->RightAxis.Z);
+            effect_->SetUniformVec3("uAreaUp", areaLight_->UpAxis.X, areaLight_->UpAxis.Y,
+                                    areaLight_->UpAxis.Z);
+            effect_->SetUniformVec3("uAreaColour", areaLight_->Color.X * areaLight_->Intensity,
+                                    areaLight_->Color.Y * areaLight_->Intensity,
+                                    areaLight_->Color.Z * areaLight_->Intensity);
+            effect_->SetUniformFloat("uAreaRange", areaLight_->Range);
+            effect_->SetUniformFloat("uAreaTwoSided", areaLight_->TwoSided ? 1.0f : 0.0f);
+        }
     }
+
+    void ClusteredForwardEffect::setAreaLight(const AreaLightEXT& light,
+                                              const AreaLightBrdfTable& table)
+    {
+        if (!light.IsValidEXT())
+        {
+            clearAreaLight();
+            return;
+        }
+        areaLight_ = std::make_unique<AreaLightEXT>(light);
+        areaTable_ = &table;
+    }
+
+    void ClusteredForwardEffect::clearAreaLight()
+    {
+        areaLight_.reset();
+        areaTable_ = nullptr;
+    }
+
+    bool ClusteredForwardEffect::hasAreaLight() const { return areaLight_ != nullptr; }
 
     ShaderEffect* ClusteredForwardEffect::getEffect() const { return effect_.get(); }
 

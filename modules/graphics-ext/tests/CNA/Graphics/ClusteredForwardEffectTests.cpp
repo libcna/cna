@@ -10,6 +10,8 @@
 
 #include <gtest/gtest.h>
 
+#include "CNA/Graphics/AreaLightBrdfTable.hpp"
+#include "CNA/Graphics/AreaLightShading.hpp"
 #include "CNA/Graphics/ClusteredForwardEffect.hpp"
 #include "CNA/Graphics/ClusteredLightAssignment.hpp"
 #include "CNA/Graphics/ClusteredLightBuffer.hpp"
@@ -20,6 +22,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AreaLightEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -36,6 +39,8 @@
 
 namespace {
 
+using CNA::Graphics::AreaLightBrdfTable;
+using CNA::Graphics::AreaLightShading;
 using CNA::Graphics::ClusteredForwardEffect;
 using CNA::Graphics::ClusteredLightAssignment;
 using CNA::Graphics::ClusteredLightBuffer;
@@ -47,6 +52,8 @@ using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Graphics::AreaLightEXT;
+using Microsoft::Xna::Framework::Graphics::AreaLightShapeEXT;
 using Microsoft::Xna::Framework::Graphics::BlendState;
 using Microsoft::Xna::Framework::Graphics::DepthStencilState;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
@@ -382,6 +389,145 @@ TEST(ClusteredForwardEffectTest, TheShadedValueMatchesTheCpuModel)
     const float measured = static_cast<float>(middle.getRProperty()) / 255.0f;
     EXPECT_NEAR(measured, expected.X, 0.03f)
         << "the shader and the CPU model disagree about how bright the centre is";
+}
+
+
+// ── The area light (MOD-2062) ────────────────────────────────────────────────
+
+namespace {
+
+/// A rectangle floating in front of the wall, facing it, so its footprint lands on the wall.
+AreaLightEXT WallLight(const float halfWidth)
+{
+    AreaLightEXT light;
+    light.Shape = AreaLightShapeEXT::Rectangle;
+    light.Position = Vector3(0.0f, 0.0f, kWallZ + 2.0f);
+    light.RightAxis = Vector3(halfWidth, 0.0f, 0.0f);
+    light.UpAxis = Vector3(0.0f, halfWidth, 0.0f);
+    light.Color = Vector3(1.0f, 1.0f, 1.0f);
+    light.Intensity = 1.0f;
+    light.Range = 60.0f;
+    light.TwoSided = true;
+    return light;
+}
+
+}  // namespace
+
+TEST(ClusteredForwardEffectTest, AnAreaLightLightsTheWallWithNoPunctualLightsAtAll)
+{
+    GraphicsDevice gd;
+    ClusteredForwardEffect effect(gd);
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+    if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
+
+    const ClusteredLightSetEXT none;
+    EXPECT_EQ(TotalBrightness(RenderWall(gd, effect, none)), 0)
+        << "the wall was not black before the area light was added";
+
+    AreaLightBrdfTable table(gd, 16, 64);
+    effect.setBaseColor(Vector3(0.8f, 0.8f, 0.8f));
+    effect.setRoughness(0.6f);
+    effect.setAreaLight(WallLight(3.0f), table);
+    EXPECT_TRUE(effect.hasAreaLight());
+
+    EXPECT_GT(TotalBrightness(RenderWall(gd, effect, none)), 0)
+        << "an area light with no punctual lights lit nothing";
+
+    effect.clearAreaLight();
+    EXPECT_FALSE(effect.hasAreaLight());
+    EXPECT_EQ(TotalBrightness(RenderWall(gd, effect, none)), 0)
+        << "clearing the area light left it lighting the wall";
+}
+
+TEST(ClusteredForwardEffectTest, AnInvalidAreaLightClearsTheSlotRatherThanBeingStored)
+{
+    GraphicsDevice gd;
+    ClusteredForwardEffect effect(gd);
+    AreaLightBrdfTable table(gd, 8, 32);
+
+    effect.setAreaLight(WallLight(2.0f), table);
+    ASSERT_TRUE(effect.hasAreaLight());
+
+    AreaLightEXT degenerate = WallLight(2.0f);
+    degenerate.UpAxis = degenerate.RightAxis;   // parallel axes, no area
+    effect.setAreaLight(degenerate, table);
+    EXPECT_FALSE(effect.hasAreaLight())
+        << "a light the form factor cannot integrate was kept rather than refused";
+}
+
+TEST(ClusteredForwardEffectTest, TheAreaLightsShadedValueMatchesTheCpuModel)
+{
+    // The same claim as for the punctual lights, on the half of the shading that is exact: the
+    // wall's centre is a known point, and what the shader puts there has to be the number
+    // AreaLightShading::contribution computes for it.
+    GraphicsDevice gd;
+    ClusteredForwardEffect effect(gd);
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+    if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
+
+    const AreaLightEXT light = WallLight(2.5f);
+    AreaLightBrdfTable table(gd, 32, 128);
+
+    effect.setBaseColor(Vector3(0.7f, 0.7f, 0.7f));
+    effect.setMetallic(0.0f);
+    effect.setRoughness(0.6f);
+    effect.setAreaLight(light, table);
+
+    const std::vector<Color> pixels = RenderWall(gd, effect, ClusteredLightSetEXT());
+
+    const Vector3 centre(0.0f, 0.0f, kWallZ);
+    const Vector3 expected = AreaLightShading::contribution(
+        light, centre, Vector3(0.0f, 0.0f, 1.0f), Vector3::Zero, Vector3(0.7f, 0.7f, 0.7f), 0.0f,
+        0.6f);
+    ASSERT_GT(expected.X, 0.05f) << "the reference is too dark to compare against";
+    ASSERT_LT(expected.X, 0.95f) << "the reference saturates, so the comparison proves little";
+
+    const Color middle = pixels[static_cast<std::size_t>(kSize) * (kSize / 2) + kSize / 2];
+    const float measured = static_cast<float>(middle.getRProperty()) / 255.0f;
+    // Looser than the punctual comparison by design: the BRDF table reaching the shader is an
+    // 8-bit texture, so the specular term carries a quantisation the CPU reference does not.
+    EXPECT_NEAR(measured, expected.X, 0.05f)
+        << "the shader and the CPU model disagree about the area light";
+}
+
+TEST(ClusteredForwardEffectTest, TheHighlightHasTheLightsShapeOnASmoothSurface)
+{
+    // The property no punctual light can produce. A small bright rectangle on a smooth wall leaves
+    // a bright patch with an edge; the same light on a rough wall leaves a gradient. Measured as
+    // the contrast between the frame's centre and its corner.
+    GraphicsDevice gd;
+    ClusteredForwardEffect effect(gd);
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+    if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
+
+    AreaLightBrdfTable table(gd, 32, 128);
+    AreaLightEXT light = WallLight(1.5f);
+    light.Intensity = 4.0f;
+
+    const auto contrastAt = [&](const float roughness) {
+        effect.setBaseColor(Vector3(0.05f, 0.05f, 0.05f));   // dark, so specular dominates
+        effect.setMetallic(1.0f);
+        effect.setRoughness(roughness);
+        effect.setAreaLight(light, table);
+        const std::vector<Color> pixels = RenderWall(gd, effect, ClusteredLightSetEXT());
+        const int centre = pixels[static_cast<std::size_t>(kSize) * (kSize / 2) + kSize / 2]
+                               .getRProperty();
+        const int edge = pixels[static_cast<std::size_t>(kSize) * (kSize / 2) + 2].getRProperty();
+        return std::make_pair(centre, edge);
+    };
+
+    const auto smooth = contrastAt(0.08f);
+    const auto rough  = contrastAt(0.9f);
+
+    EXPECT_GT(smooth.first, 20) << "the smooth surface shows no highlight at all";
+    EXPECT_GT(smooth.first - smooth.second, rough.first - rough.second)
+        << "the rough surface's highlight had at least as much of an edge as the smooth one's";
 }
 
 } // namespace
