@@ -31,6 +31,7 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ValidateCanonicalBool;
 using Microsoft::Xna::Framework::Net::GameEndedEventArgs;
 using Microsoft::Xna::Framework::Net::GamerJoinedEventArgs;
 using Microsoft::Xna::Framework::Net::GamerLeftEventArgs;
@@ -333,6 +334,10 @@ CNA_Result cna_network_gamer_set_has_left_session_ext(
     const CNA_Bool value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(value, "value");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         return GamerCommand(gamerHandle, [value](NetworkGamer& gamer) {
             gamer.SetHasLeftSession(value != CNA_FALSE);
         });
@@ -415,6 +420,10 @@ CNA_Result cna_network_gamer_set_is_host_ext(
     const CNA_Bool value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(value, "value");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         return GamerCommand(gamerHandle, [value](NetworkGamer& gamer) {
             gamer.SetIsHost(value != CNA_FALSE);
         });
@@ -486,6 +495,10 @@ CNA_Result cna_network_gamer_set_is_ready(
     const CNA_Bool value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(value, "value");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         return GamerCommand(gamerHandle, [value](NetworkGamer& gamer) {
             gamer.setIsReadyProperty(value != CNA_FALSE);
         });
@@ -915,6 +928,10 @@ CNA_Result cna_write_leaderboards_event_info_init(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInfo == nullptr) {
             return InvalidArgument("The event description output is null.");
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(isLeaving, "is_leaving");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         if (const CNA_Result result = ValidateEventPrefix(
                 outInfo->struct_size,

@@ -28,6 +28,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
+using CNA::C::Detail::ValidateCanonicalBool;
 using Microsoft::Xna::Framework::DisplayOrientation;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::DisplayMode;
@@ -446,6 +447,10 @@ CNA_Result cna_graphics_adapter_get_display_mode_count(
         if (outCount == nullptr) {
             return InvalidArgument("The display-mode count output is null.");
         }
+        if (const CNA_Result result = ValidateCanonicalBool(filterByFormat, "filter_by_format");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         GraphicsAdapter* adapter = nullptr;
         if (const CNA_Result result = GetAdapter(
@@ -476,6 +481,10 @@ CNA_Result cna_graphics_adapter_copy_display_modes(
     return CallWithExceptionBarrier([&]() {
         if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
             return InvalidArgument("The display-mode output buffer is invalid.");
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(filterByFormat, "filter_by_format");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         GraphicsAdapter* adapter = nullptr;

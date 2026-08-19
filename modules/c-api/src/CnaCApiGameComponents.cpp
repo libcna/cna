@@ -29,6 +29,7 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateActiveGameHandle;
+using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
 
@@ -521,6 +522,10 @@ CNA_Result cna_game_component_set_enabled(
     const CNA_Bool enabled)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(enabled, "enabled");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<ComponentResource> resource;
         if (const CNA_Result result = BorrowComponent(component, &resource);
             result != CNA_RESULT_SUCCESS) {
@@ -620,6 +625,10 @@ CNA_Result cna_drawable_game_component_set_visible(
     const CNA_Bool visible)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(visible, "visible");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<ComponentResource> resource;
         if (const CNA_Result result = BorrowDrawable(component, &resource);
             result != CNA_RESULT_SUCCESS) {

@@ -24,6 +24,7 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateActiveGameHandle;
+using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
 
@@ -587,6 +588,10 @@ CNA_Result cna_video_player_set_is_looped(
     const CNA_Bool looped)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(looped, "looped");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<VideoPlayerResource> resource;
         if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
             result != CNA_RESULT_SUCCESS) {
@@ -620,6 +625,10 @@ CNA_Result cna_video_player_set_is_muted(
     const CNA_Bool muted)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(muted, "muted");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<VideoPlayerResource> resource;
         if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
             result != CNA_RESULT_SUCCESS) {

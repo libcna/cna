@@ -27,6 +27,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
 
@@ -203,6 +204,10 @@ CNA_Result cna_game_get_is_mouse_visible(const CNA_Handle gameHandle, CNA_Bool* 
 CNA_Result cna_game_set_is_mouse_visible(const CNA_Handle gameHandle, const CNA_Bool visible)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(visible, "visible");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         Game* game = nullptr;
         if (const CNA_Result result = BorrowGame(gameHandle, &game);
             result != CNA_RESULT_SUCCESS) {
@@ -232,6 +237,10 @@ CNA_Result cna_game_get_is_fixed_time_step(const CNA_Handle gameHandle, CNA_Bool
 CNA_Result cna_game_set_is_fixed_time_step(const CNA_Handle gameHandle, const CNA_Bool fixed)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(fixed, "fixed");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         Game* game = nullptr;
         if (const CNA_Result result = BorrowGame(gameHandle, &game);
             result != CNA_RESULT_SUCCESS) {
@@ -383,6 +392,10 @@ CNA_Result cna_game_get_run_application_ext(const CNA_Handle gameHandle, CNA_Boo
 CNA_Result cna_game_set_run_application_ext(const CNA_Handle gameHandle, const CNA_Bool running)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(running, "running");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         Game* game = nullptr;
         if (const CNA_Result result = BorrowGame(gameHandle, &game);
             result != CNA_RESULT_SUCCESS) {
@@ -958,6 +971,10 @@ CNA_Result cna_game_window_set_allow_user_resizing(
     const CNA_Bool allowed)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(allowed, "allowed");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         Microsoft::Xna::Framework::GameWindow* window = nullptr;
         if (const CNA_Result result = BorrowWindow(gameHandle, &window);
             result != CNA_RESULT_SUCCESS) {
@@ -1118,6 +1135,10 @@ CNA_Result cna_game_window_set_is_borderless_ext(
     const CNA_Bool borderless)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(borderless, "borderless");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         Microsoft::Xna::Framework::GameWindow* window = nullptr;
         if (const CNA_Result result = BorrowWindow(gameHandle, &window);
             result != CNA_RESULT_SUCCESS) {
@@ -1156,6 +1177,10 @@ CNA_Result cna_game_window_begin_screen_device_change(
     const CNA_Bool willBeFullScreen)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(willBeFullScreen, "will_be_full_screen");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         Microsoft::Xna::Framework::GameWindow* window = nullptr;
         if (const CNA_Result result = BorrowWindow(gameHandle, &window);
             result != CNA_RESULT_SUCCESS) {

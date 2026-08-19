@@ -62,6 +62,7 @@ namespace {
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::ValidateActiveGameHandle;
+using CNA::C::Detail::ValidateCanonicalBool;
 using Microsoft::Xna::Framework::PlayerIndex;
 using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Input::ButtonState;
@@ -1201,6 +1202,22 @@ CNA_Result cna_gamepad_dpad_init_from_states(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDPad == nullptr) {
             return InvalidInput("The directional-pad output is null.");
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(up, "up");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(down, "down");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(left, "left");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(right, "right");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         CNA_GamePadButtonFlags mask = CNA_GAMEPAD_BUTTON_NONE;
         if (up != CNA_FALSE) { mask |= CNA_GAMEPAD_BUTTON_DPAD_UP; }
@@ -3036,6 +3053,10 @@ CNA_Result cna_mouse_set_is_relative_mouse_mode_ext(
     const CNA_Bool enabled)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(enabled, "enabled");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -3053,6 +3074,10 @@ CNA_Result cna_mouse_set_capture_ext(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outApplied == nullptr) {
             return InvalidInput("The mouse capture output is null.");
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(enabled, "enabled");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -3675,6 +3700,10 @@ CNA_Result cna_text_input_raise_text_editing_candidates_ext(
     const CNA_Bool horizontal)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(horizontal, "horizontal");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         if (candidateCount < 0) {
             return InvalidInput("The candidate count is negative.");
         }
@@ -4127,6 +4156,10 @@ CNA_Result cna_touch_capabilities_init_from_values_ext(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCapabilities == nullptr) {
             return InvalidInput("The touch-capabilities output is null.");
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(isConnected, "is_connected");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         if (maximumTouchCount < 0) {
             return InvalidInput("The maximum touch count is negative.");
@@ -4820,6 +4853,10 @@ CNA_Result cna_touch_panel_set_touch_device_exists_ext(
     const CNA_Bool exists)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(exists, "exists");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;

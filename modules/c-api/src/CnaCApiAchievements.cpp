@@ -23,6 +23,7 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::TryBorrowSignedInGamerQuietly;
+using CNA::C::Detail::ValidateCanonicalBool;
 
 using Microsoft::Xna::Framework::GamerServices::Achievement;
 using Microsoft::Xna::Framework::GamerServices::AchievementCollection;
@@ -171,6 +172,14 @@ CNA_Result cna_achievement_create_ext(
             return InvalidInput("The Achievement output handle is null.");
         }
         *outAchievement = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = ValidateCanonicalBool(displayBeforeEarned, "display_before_earned");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(isEarned, "is_earned");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::string nativeKey;
         std::string nativeName;
         std::string nativeDescription;

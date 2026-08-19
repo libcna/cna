@@ -26,6 +26,7 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateActiveGameHandle;
+using CNA::C::Detail::ValidateCanonicalBool;
 using CNA::C::Media::Detail::BorrowMediaChild;
 using CNA::C::Media::Detail::MediaChildResource;
 using CNA::C::Media::Detail::PublishMediaChild;
@@ -230,6 +231,10 @@ CNA_Result cna_media_player_get_is_muted(const CNA_Handle gameHandle, CNA_Bool* 
 CNA_Result cna_media_player_set_is_muted(const CNA_Handle gameHandle, const CNA_Bool muted)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(muted, "muted");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         return WithGame(gameHandle, [&]() -> CNA_Result {
             MediaPlayer::setIsMutedProperty(muted != CNA_FALSE);
             return CNA_RESULT_SUCCESS;
@@ -257,6 +262,10 @@ CNA_Result cna_media_player_set_is_repeating(
     const CNA_Bool repeating)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(repeating, "repeating");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         return WithGame(gameHandle, [&]() -> CNA_Result {
             MediaPlayer::setIsRepeatingProperty(repeating != CNA_FALSE);
             return CNA_RESULT_SUCCESS;
@@ -282,6 +291,10 @@ CNA_Result cna_media_player_get_is_shuffled(
 CNA_Result cna_media_player_set_is_shuffled(const CNA_Handle gameHandle, const CNA_Bool shuffled)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(shuffled, "shuffled");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         return WithGame(gameHandle, [&]() -> CNA_Result {
             MediaPlayer::setIsShuffledProperty(shuffled != CNA_FALSE);
             return CNA_RESULT_SUCCESS;
@@ -365,6 +378,10 @@ CNA_Result cna_media_player_set_is_visualization_enabled(
     const CNA_Bool enabled)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(enabled, "enabled");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         return WithGame(gameHandle, [&]() -> CNA_Result {
             MediaPlayer::setIsVisualizationEnabledProperty(enabled != CNA_FALSE);
             return CNA_RESULT_SUCCESS;

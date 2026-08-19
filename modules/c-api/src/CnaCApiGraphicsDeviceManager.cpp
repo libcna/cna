@@ -23,6 +23,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
 
@@ -492,6 +493,10 @@ CNA_Result cna_graphics_device_manager_set_is_full_screen(
     const CNA_Bool fullScreen)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(fullScreen, "full_screen");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
             result != CNA_RESULT_SUCCESS) {
@@ -525,6 +530,10 @@ CNA_Result cna_graphics_device_manager_set_prefer_multi_sampling(
     const CNA_Bool prefer)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(prefer, "prefer");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
             result != CNA_RESULT_SUCCESS) {
@@ -703,6 +712,10 @@ CNA_Result cna_graphics_device_manager_set_synchronize_with_vertical_retrace(
     const CNA_Bool synchronize)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(synchronize, "synchronize");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
             result != CNA_RESULT_SUCCESS) {

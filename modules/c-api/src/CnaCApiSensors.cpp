@@ -41,6 +41,7 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateActiveGameHandle;
+using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
 
@@ -1342,6 +1343,10 @@ CNA_Result cna_accelerometer_set_started_for_tests_ext(
     const CNA_Bool started)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(started, "started");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<SensorResource<Accelerometer>> resource;
         if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
             result != CNA_RESULT_SUCCESS) {
@@ -1357,6 +1362,10 @@ CNA_Result cna_accelerometer_set_supported_for_tests_ext(
     const CNA_Bool supported)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(supported, "supported");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<SensorResource<Accelerometer>> resource;
         if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
             result != CNA_RESULT_SUCCESS) {
@@ -1447,6 +1456,10 @@ CNA_Result cna_accelerometer_set_event_watch_registration_failure_for_tests_ext(
     const CNA_Bool shouldFail)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(shouldFail, "should_fail");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1821,6 +1834,10 @@ CNA_Result cna_gyroscope_set_started_for_tests_ext(
     const CNA_Bool started)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(started, "started");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<SensorResource<Gyroscope>> resource;
         if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
             result != CNA_RESULT_SUCCESS) {
@@ -1836,6 +1853,10 @@ CNA_Result cna_gyroscope_set_supported_for_tests_ext(
     const CNA_Bool supported)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(supported, "supported");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<SensorResource<Gyroscope>> resource;
         if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
             result != CNA_RESULT_SUCCESS) {
@@ -1926,6 +1947,10 @@ CNA_Result cna_gyroscope_set_event_watch_registration_failure_for_tests_ext(
     const CNA_Bool shouldFail)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(shouldFail, "should_fail");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -2713,6 +2738,14 @@ CNA_Result cna_compass_set_test_backend_ext(
     const CNA_Bool supported)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(installed, "installed");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(supported, "supported");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<SensorResource<Compass>> resource;
         if (const CNA_Result result = BorrowSensor<Compass>(sensor, &resource);
             result != CNA_RESULT_SUCCESS) {
@@ -3056,6 +3089,18 @@ CNA_Result cna_motion_set_test_backend_ext(
     const CNA_Bool northReferenced)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateCanonicalBool(installed, "installed");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(supported, "supported");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(northReferenced, "north_referenced");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::shared_ptr<SensorResource<Motion>> resource;
         if (const CNA_Result result = BorrowSensor<Motion>(sensor, &resource);
             result != CNA_RESULT_SUCCESS) {

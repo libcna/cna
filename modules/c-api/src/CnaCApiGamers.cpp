@@ -36,6 +36,7 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::TryBorrowSignedInGamerQuietly;
+using CNA::C::Detail::ValidateCanonicalBool;
 
 using Microsoft::Xna::Framework::PlayerIndex;
 using Microsoft::Xna::Framework::Audio::Microphone;
@@ -1348,6 +1349,30 @@ CNA_Result cna_friend_gamer_create_ext(
             return InvalidInput("The Gamer output handle is null.");
         }
         *outGamer = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = ValidateCanonicalBool(isOnline, "is_online");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(isPlaying, "is_playing");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(isAway, "is_away");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(isBusy, "is_busy");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(friendRequestSentTo, "friend_request_sent_to");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(friendRequestReceivedFrom, "friend_request_received_from");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         std::string nativeGamertag;
         std::string nativeDisplayName;
         if (const CNA_Result result =

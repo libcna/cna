@@ -27,6 +27,7 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ValidateCanonicalBool;
 using Microsoft::Xna::Framework::PlayerIndex;
 using Microsoft::Xna::Framework::GamerServices::AvatarAnimationPreset;
 using Microsoft::Xna::Framework::GamerServices::AvatarBodyType;
@@ -230,6 +231,14 @@ CNA_Result cna_signed_in_gamer_create_ext(
             return InvalidArgument("The SignedInGamer output handle is null.");
         }
         *outGamer = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = ValidateCanonicalBool(isSignedInToLive, "is_signed_in_to_live");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateCanonicalBool(isGuest, "is_guest");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         if (playerIndex > CNA_PLAYER_INDEX_FOUR) {
             return InvalidArgument("The requested player is not a canonical PlayerIndex identity.");
         }
