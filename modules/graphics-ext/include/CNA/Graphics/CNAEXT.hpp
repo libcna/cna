@@ -50,6 +50,7 @@
 #include "CNA/Graphics/HeightFogPass.hpp"
 #include "CNA/Graphics/LensFlarePass.hpp"
 #include "CNA/Graphics/LightShaftPass.hpp"
+#include "CNA/Graphics/VolumetricFogPass.hpp"
 #include "CNA/Graphics/MotionBlurPass.hpp"
 #include "CNA/Graphics/DepthNormalPrepass.hpp"
 #include "CNA/Graphics/DepthOfFieldPass.hpp"

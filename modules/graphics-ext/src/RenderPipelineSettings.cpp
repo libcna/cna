@@ -86,6 +86,9 @@ namespace CNA::Graphics {
     float           RenderPipelineSettings::getSSREdgeFade()      const { return ssrEdgeFade_; }
     void            RenderPipelineSettings::setSSREdgeFade(float v)     { ssrEdgeFade_ = std::clamp(v, 0.0f, 0.5f); }
 
+    float           RenderPipelineSettings::getVolumetricFogDensity() const { return volumetricFogDensity_; }
+    void            RenderPipelineSettings::setVolumetricFogDensity(float v) { volumetricFogDensity_ = AtLeast(v, 0.0f); }
+
     float           RenderPipelineSettings::getLightShaftThreshold() const { return lightShaftThreshold_; }
     void            RenderPipelineSettings::setLightShaftThreshold(float v) { lightShaftThreshold_ = AtLeast(v, 0.0f); }
 

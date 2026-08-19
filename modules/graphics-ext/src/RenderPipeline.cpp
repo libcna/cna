@@ -14,6 +14,7 @@
 #include "CNA/Graphics/LensFlarePass.hpp"
 #include "CNA/Graphics/HeightFogPass.hpp"
 #include "CNA/Graphics/LightShaftPass.hpp"
+#include "CNA/Graphics/VolumetricFogPass.hpp"
 #include "CNA/Graphics/MotionBlurPass.hpp"
 #include "CNA/Graphics/DepthOfFieldPass.hpp"
 #include "CNA/Graphics/SsrPass.hpp"
@@ -50,7 +51,8 @@ namespace CNA::Graphics {
           lensFlarePass_(std::make_unique<LensFlarePass>(device)),
           motionBlurPass_(std::make_unique<MotionBlurPass>(device)),
           heightFogPass_(std::make_unique<HeightFogPass>(device)),
-          lightShaftPass_(std::make_unique<LightShaftPass>(device))
+          lightShaftPass_(std::make_unique<LightShaftPass>(device)),
+          volumetricFogPass_(std::make_unique<VolumetricFogPass>(device))
     {
         // plan_modern.md MOD-715. After a context loss every GPU object this pipeline holds names
         // storage the driver has already destroyed; rendering into one is undefined rather than
@@ -89,7 +91,8 @@ namespace CNA::Graphics {
             settings_.isColorGradeEnabled() || settings_.getChromaticAberrationStrength() > 0.0f ||
             settings_.getFilmGrainIntensity() > 0.0f || settings_.getLensFlareIntensity() > 0.0f ||
             settings_.getMotionBlurStrength() > 0.0f || settings_.getHeightFogDensity() > 0.0f ||
-            settings_.getLightShaftIntensity() > 0.0f)
+            settings_.getLightShaftIntensity() > 0.0f ||
+            settings_.getVolumetricFogDensity() > 0.0f)
             return true;
         return !userPasses_.empty();
     }
@@ -259,6 +262,11 @@ namespace CNA::Graphics {
         // because what a mirror shows should be the shaded scene, not the unshaded one.
         if (settings_.isSSREnabled())
             chain_.addPass(ssrPass_.get());
+        // Volumetric fog before the analytic one: they are the same medium described two ways, and
+        // a scene using both wants the lit volume first so the height fog fades what it produced
+        // along with everything else.
+        if (settings_.getVolumetricFogDensity() > 0.0f)
+            chain_.addPass(volumetricFogPass_.get());
         // Shafts before fog: they are light travelling through the air, so the fog that dims
         // distance should dim them along with everything else rather than the other way round.
         if (settings_.getLightShaftIntensity() > 0.0f)
@@ -267,7 +275,8 @@ namespace CNA::Graphics {
         // scene the shutter collected, so a moving camera should smear the fogged image rather
         // than fog a smeared one.
         if (settings_.getHeightFogDensity() > 0.0f ||
-            settings_.getLightShaftIntensity() > 0.0f)
+            settings_.getLightShaftIntensity() > 0.0f ||
+            settings_.getVolumetricFogDensity() > 0.0f)
             chain_.addPass(heightFogPass_.get());
         // Motion blur before the lens effects and before the tonemapper, for the reason every
         // scene-referred pass is: it is averaging light the shutter collected, and averaging

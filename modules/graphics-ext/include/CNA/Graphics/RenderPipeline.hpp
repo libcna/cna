@@ -48,6 +48,7 @@ namespace CNA::Graphics {
     class MotionBlurPass;
     class HeightFogPass;
     class LightShaftPass;
+    class VolumetricFogPass;
     class TonemapPass;
 
     /**
@@ -376,6 +377,7 @@ namespace CNA::Graphics {
         std::unique_ptr<MotionBlurPass> motionBlurPass_;
         std::unique_ptr<HeightFogPass> heightFogPass_;
         std::unique_ptr<LightShaftPass> lightShaftPass_;
+        std::unique_ptr<VolumetricFogPass> volumetricFogPass_;
         Skybox* skybox_ = nullptr;
         Microsoft::Xna::Framework::Matrix skyboxView_{};
         Microsoft::Xna::Framework::Matrix skyboxProjection_{};
