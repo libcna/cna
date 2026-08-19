@@ -227,6 +227,44 @@ namespace CNA::Internal::Renderers::NanoVg
         return viewport;
     }
 
+    NanoVgRenderer::SpriteProjection NanoVgRenderer::GetSpriteProjectionEXT() const
+    {
+        const LogicalViewport viewport = ComputeLogicalViewportEXT();
+        const float logicalW = viewport.logicalWidth > 0.0f ? viewport.logicalWidth : 1.0f;
+        const float logicalH = viewport.logicalHeight > 0.0f ? viewport.logicalHeight : 1.0f;
+
+        SpriteProjection projection;
+        projection.width = logicalW;
+        projection.height = logicalH;
+        projection.devicePixelRatio = viewport.width > 0.0f ? viewport.width / logicalW : 1.0f;
+
+        int defaultX = 0, defaultY = 0, defaultW = 0, defaultH = 0;
+        defaultX = static_cast<int>(std::lround(viewport.x));
+        defaultY = static_cast<int>(std::lround(viewport.y));
+        defaultW = static_cast<int>(std::lround(viewport.width));
+        defaultH = static_cast<int>(std::lround(viewport.height));
+
+        const bool custom = viewportW_ > 0 && viewportH_ > 0 &&
+                            (viewportX_ != defaultX || viewportY_ != defaultY ||
+                             viewportW_ != defaultW || viewportH_ != defaultH);
+        if (!custom)
+            return projection;
+
+        // Sprite coordinates are viewport-local physical pixels now, so the scissor rectangle --
+        // which stays expressed in the render target's own logical space, exactly as XNA's
+        // GraphicsDevice.ScissorRectangle does -- has to be carried across: logical -> physical
+        // through the presentation mapping, then minus the viewport's own origin.
+        projection.customViewport = true;
+        projection.width = static_cast<float>(viewportW_);
+        projection.height = static_cast<float>(viewportH_);
+        projection.devicePixelRatio = 1.0f;
+        projection.scissorScaleX = viewport.width > 0.0f ? viewport.width / logicalW : 1.0f;
+        projection.scissorScaleY = viewport.height > 0.0f ? viewport.height / logicalH : 1.0f;
+        projection.scissorOffsetX = viewport.x - static_cast<float>(viewportX_);
+        projection.scissorOffsetY = viewport.y - static_cast<float>(viewportY_);
+        return projection;
+    }
+
     int NanoVgRenderer::GetPhysicalHeightEXT() const
     {
         int physH = 0;

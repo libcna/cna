@@ -182,6 +182,48 @@ is **green** under `Immediate` (the sprite was already on the surface, so the `C
 **red** under `Deferred` (the sprite was still queued, so it landed afterwards). Both are asserted,
 so neither ignoring the flag nor flushing unconditionally passes.
 
+Flushing is only half of it. The contract is explicitly about device state changed **between** two
+`Draw()` calls, and a per-draw flush only submits work that was already recorded against the state
+captured at `Begin()`. Each Immediate `Draw()` therefore re-reads the owner's current blend factors
+and sprite projection first, re-issuing `nvgGlobalCompositeBlendFuncSeparate` when the factors moved
+and re-opening the frame when the viewport extent did (safe at that point: the previous Immediate
+draw already flushed, so no recorded call can be lost, and it happens before the `nvgSave` that
+scopes the draw). The scissor rectangle needs no equivalent — `Draw()` reads it from the owner on
+every call already. `Deferred` deliberately keeps the batch snapshot every other CNA renderer
+establishes.
+
+## The sprite coordinate space follows GraphicsDevice.Viewport
+
+XNA/FNA build the `SpriteBatch` projection from the active viewport
+(`CreateOrthographicOffCenter(0, Viewport.Width, Viewport.Height, 0, 0, 1)`), so a custom
+`GraphicsDevice.Viewport` makes sprite destination rectangles **viewport-local**: sprite `(0,0)` is
+the viewport's top-left corner and the rasterizer viewport alone positions the result.
+`Viewport.X`/`Y` are never subtracted from sprite coordinates.
+
+`nvgBeginFrame(ctx, w, h, ratio)` is what establishes that space here — NanoVG's vertex shader
+normalises positions by exactly that extent — so it is handed the viewport's own size whenever a
+custom viewport is active. Handing it the full drawable while `glViewport` already held a
+sub-region is the canonical "squish" failure `modules/graphics/examples/spritebatch_custom_viewport_test.cpp`
+exists to catch: a 17-pixel-wide sprite in a 41-wide viewport on a 96-wide backbuffer came out
+`17 x 41 / 96 = 7` pixels wide.
+
+"Custom" means *differing from `GetDefaultViewportRect()`*, not *differing from the whole drawable*.
+That distinction is load-bearing for this renderer specifically: under `Letterbox`/`Overscan` the
+DEFAULT viewport is already a physical sub-rectangle of the window, while sprites there are still
+addressed in the logical (virtual-resolution) space. Comparing against the full drawable would
+treat every letterboxed frame as a custom viewport and project sprites in physical pixels.
+
+`GraphicsDevice.ScissorRectangle` stays in the render target's own logical space regardless, so it
+is carried into the sprite space (logical → physical through the presentation mapping, then minus
+the viewport origin) before the clipping below runs.
+
+This renderer runs the two shared contract tests directly —
+`spritebatch_custom_viewport_test.cpp` and `spritebatch_viewport_switch_test.cpp` — rather than a
+renderer-local approximation of them. A local test that draws a full-canvas sprite into a
+sub-viewport passes whether the projection is right or wrong, because a wrongly-projected
+full-canvas sprite squashes into exactly the sub-viewport; the shared files use a small
+viewport-local rectangle precisely so that cannot happen.
+
 ## The scissor rectangle is clipped geometrically, not masked
 
 `nvgScissor` is **not** used for sprite draws. NanoVG's scissor is a shader mask — the fragment
@@ -229,9 +271,9 @@ so `NanoVgRenderer::SetScissorRect` stores its argument verbatim.
 |---|---|---|
 | `Clear`, `Present` | Real `glClearColor`/`glClear` + `SDL_GL_SwapWindow` | |
 | Presentation modes (`Letterbox`/`Overscan`/`Stretch`/`NativeBackBuffer`/`FixedHeightDynamicWidth`) | Real `glViewport` for the physical sub-rectangle + NanoVG's own internal logical-space ortho | All five modes implemented; pixel-tested for `NativeBackBuffer` (`nanovg_spritebatch_rotation_test`). |
-| Custom `Viewport` | Real `glViewport`, raw pass-through (matches every sibling renderer) | |
+| Custom `Viewport` | Real `glViewport`, **plus a sprite projection sized to the active viewport** | XNA builds the `SpriteBatch` ortho from `Viewport.Width`/`Height`, so a custom viewport makes sprite coordinates viewport-local — see "The sprite coordinate space follows GraphicsDevice.Viewport" below. Verified by the shared `spritebatch_custom_viewport_test` / `spritebatch_viewport_switch_test`, not by a renderer-local substitute. |
 | `ScissorRectangle` / `RasterizerState.ScissorTestEnable` | **Geometric clip of each sprite quad**, not `nvgScissor` | Exact for every `BlendState` (including `Opaque`) and for rotated quads, with a hard edge — see "The scissor rectangle is clipped geometrically" above. Enable and rectangle stay independent, matching `OPENVG`. Pixel-tested under both `AlphaBlend` and `Opaque`. |
-| `SpriteSortMode.Immediate` | **Real per-draw flush** (`nvgInternalParams(ctx)->renderFlush`) | A `GraphicsDevice` operation issued between two `Draw()` calls is ordered between them, not before the whole batch. `Deferred` still flushes once at `End()`. Both pixel-tested against each other (`nanovg_immediate_mode_test`). |
+| `SpriteSortMode.Immediate` | **Real per-draw flush** (`nvgInternalParams(ctx)->renderFlush`) **plus a per-draw device-state re-read** | Covers both halves of the contract: a `GraphicsDevice` operation issued between two `Draw()` calls is ordered between them, AND a `BlendState`/`Viewport` changed between them applies from that sprite onward. `Deferred` keeps the batch snapshot (all of its draws run from `End()` under one device state). Pixel-tested against each other (`nanovg_immediate_mode_test`). |
 | Mip-mapped `Texture2D` (`mipMap: true`), and `Texture2D.SetData(level > 0, ...)` | **Rejected** (throws) | NanoVG images are single-level with no per-level upload or LOD-sampling API. Refused at construction and at `UpdatePixelsLevel`, rather than accepted with storage that does not exist. Tested. |
 | `Texture2D` create/update | Real `nvgCreateImageRGBA`/`nvgUpdateImage` | Straight (non-premultiplied) RGBA8, top-row-first, tightly packed (NanoVG's own API has no stride parameter — `NanoVgTextureRenderer` repacks when the caller's stride differs). No row flip anywhere: NanoVG's Y-down image space already matches `ImageData`'s own convention. |
 | `SpriteBatch` draw (all 3 overloads, rotation, origin, source rectangle, tint, `SpriteEffects` flip) | Real `nvgImagePattern` + a filled rectangle path (`nvgBeginPath`/`nvgRect`/`nvgFillPaint`/`nvgFill`) | NanoVG has no "draw image" primitive; a partial `sourceRectangle` needs no CPU-side sub-image copy (unlike `OPENVG`'s `vgCopyImage` workaround) — the pattern box is positioned purely algebraically, all inside the already-`nvgScale`d coordinate system. Verified by `nanovg_spritebatch_rotation_test`. |
@@ -298,7 +340,9 @@ established split for GPU/window-creating tests — pure-function pieces live in
 | `nanovg_unsupported_3d_behavior_test` | Throw/WarnAndStub policy across every inherently-3D entry point, `AdditiveBlending`/`Texture3D` capability honesty. |
 | `nanovg_texture_orientation_test` | Upload/`UpdatePixels` row orientation, partial-`sourceRectangle` `nvgImagePattern` box crop math (including a multi-texel span), tint, rotation, both `SpriteEffects` flips, out-of-bounds `Clamp` pixel-exactness (right edge and left/top simultaneously), real out-of-bounds `Wrap` tiling / `Mirror` reflection, and refusal of both a mip-mapped `Texture2D` and a level>0 upload (29 checks). |
 | `nanovg_sampler_state_test` | `PointClamp` vs `LinearClamp` at sample points where the two genuinely disagree, the four `Min*Mag*` filters, the inert mip component, the same texture drawn Point → Linear → Point across consecutive batches, two textures in one batch, `Clamp`/`Wrap`/`Mirror` on an out-of-bounds source rectangle, independent U/V address modes, and rejection of `Anisotropic` and of out-of-range ordinals (22 checks). |
-| `nanovg_immediate_mode_test` | `SpriteSortMode::Immediate` vs `Deferred` as an ordering guarantee: a `Clear()` between the `Draw()` and the `End()` must wipe the sprite under Immediate and be overdrawn by it under Deferred; ordering between two Immediate draws; that the per-draw flush leaves the batch's own scissor/transform/blend state intact; and that the flag is per batch rather than sticky (9 checks). |
+| `nanovg_immediate_mode_test` | `SpriteSortMode::Immediate` vs `Deferred` as an ordering guarantee: a `Clear()` between the `Draw()` and the `End()` must wipe the sprite under Immediate and be overdrawn by it under Deferred; ordering between two Immediate draws; a `BlendState` and a `Viewport` changed between two Immediate draws applying from that sprite onward; that the per-draw flush leaves the batch's own scissor/transform/blend state intact; and that the flag is per batch rather than sticky (14 checks). |
+| `spritebatch_custom_viewport_test` (shared) | REMED-GFX-072's own contract: sprite clip space built from the active `GraphicsDevice.Viewport`, viewport-local placement, no squish, a transform composed in viewport-local space, and a full-target batch staying full-target afterwards (13 checks). |
+| `spritebatch_viewport_switch_test` (shared) | Two `SpriteBatch` batches with different viewports in one frame, each projected and rasterized by its own (6 checks). |
 | `nanovg_sprite_rasterization_test` | A whole-frame census requiring that no pixel is partially covered — for an axis-aligned integer quad (with its exact edge columns/rows and covered-pixel count), a ~23° rotation with a fractional origin, non-integer scale and a partial source rectangle, and two ~17° rotations with both `SpriteEffects` flips under a `SetTransformMatrix`; plus a translucent sprite whose edge column must composite exactly once (11 checks). |
 | `nanovg_presentation_viewport_scissor_test` | Every `CnaPresentationMode` (`Letterbox`/`Overscan`/`Stretch`/`FixedHeightDynamicWidth`/`NativeBackBuffer`), `TransformWindowToLogical`/`TransformLogicalToWindow` round-trips, a custom `Viewport`, resize-without-`Clear`, `RasterizerState`-driven scissor pixel-clipping under both `AlphaBlend` and `Opaque` (the latter over a background far from black, so a masked-but-still-written fragment cannot hide in the tolerance), two simultaneous `NanoVgRenderer` instances (construction, interleaved `Clear`/readback, and destroying one while the other stays live), 25 repeated construct/destroy cycles, `SetSwapInterval` (43 checks). |
 
@@ -318,7 +362,7 @@ output, which is a stronger oracle than a differential: it cannot agree with a s
 implementation that is wrong in the same way.
 
 **Exact commands run** (this environment): `Xvfb :64 -screen 0 1280x1024x24 -nolisten tcp &`, then
-`DISPLAY=:64 ctest --test-dir cmake-build-nanovg -R NanoVg --output-on-failure` (19/19 pass) and
+`DISPLAY=:64 ctest --test-dir cmake-build-nanovg -R NanoVg --output-on-failure` (21/21 pass) and
 `DISPLAY=:64 ctest --test-dir cmake-build-nanovg -j4` (the complete `CnaTests` corpus).
 
 **Audit note.** The two multi-texel/presentation test files above were added in a second,
@@ -443,6 +487,16 @@ pixel-tested guarantee instead.
   rejected."* `nvgGlobalCompositeBlendFuncSeparate` is exactly that model.
 - *"`SetSamplerFilter` is a documented no-op."* Documented, but not defensible while
   `SamplerState.PointClamp` was accepted without complaint.
+
+A third pass (NVG-20) found two more:
+
+- *"Custom `Viewport`: real `glViewport`, raw pass-through."* Pass-through of the rasterizer
+  viewport was never the whole job: the sprite projection has to be sized to it as well, or every
+  sprite is squashed into the sub-region. The renderer-local viewport test in place at the time
+  drew a full-canvas sprite, which squashes into exactly the sub-viewport and so passed either way.
+- *"A `GraphicsDevice` operation issued between two Immediate `Draw()` calls."* True for ordering
+  after NVG-19, but not yet for the device STATE that operation changes — the blend factors and the
+  sprite projection were still the ones captured at `Begin()`.
 
 A follow-up review pass (NVG-19) found three more, all of the same shape — an accepted API whose
 behaviour quietly differed from its contract:

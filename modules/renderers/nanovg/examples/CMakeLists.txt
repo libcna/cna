@@ -75,6 +75,22 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "NANOVG")
     cna_register_renderer_test(NAME NanoVg_SpriteRasterization
         COMMAND cna_test_nanovg_sprite_rasterization TIMEOUT 30 LABELS "NanoVg")
 
+    # REMED-GFX-072's own shared contract tests, run against NANOVG rather than reimplemented:
+    # SpriteBatch clip space must be built from the active GraphicsDevice.Viewport, not the full
+    # drawable. NANOVG handed nvgBeginFrame the whole drawable while glViewport already held the
+    # sub-region, which squashed every sprite into it -- the canonical "squish" failure these files
+    # were written for. The switch test additionally covers two batches with different viewports in
+    # one frame.
+    cna_nanovg_test(cna_test_nanovg_spritebatch_custom_viewport
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_test.cpp)
+    cna_register_renderer_test(NAME NanoVg_SpriteBatch_CustomViewport
+        COMMAND cna_test_nanovg_spritebatch_custom_viewport TIMEOUT 60 LABELS "NanoVg")
+
+    cna_nanovg_test(cna_test_nanovg_spritebatch_viewport_switch
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_viewport_switch_test.cpp)
+    cna_register_renderer_test(NAME NanoVg_SpriteBatch_ViewportSwitch
+        COMMAND cna_test_nanovg_spritebatch_viewport_switch TIMEOUT 60 LABELS "NanoVg")
+
     # Presentation-mode viewport math, coordinate transforms, custom Viewport, resize-without-Clear,
     # RasterizerState-driven scissor, multi-instance coexistence, repeated construct/destroy cycling,
     # and SwapInterval -- see that file's own top comment.

@@ -223,6 +223,77 @@ int main()
             Check(CloseTo(readPixel(30, 30), kRed) && CloseTo(readPixel(80, 30), kBlue),
                   "Immediate: several sprites in one batch all reach the surface");
 
+            // ---- Device state changed BETWEEN two Immediate draws ---------------------------
+            // The ordering fix alone does not deliver this: a per-draw flush only submits work that
+            // was already RECORDED against the state captured at Begin(). SetImmediateMode's own
+            // contract is explicitly about state changed between two Draw() calls, so the state has
+            // to be re-read per draw as well. Deferred deliberately keeps the batch snapshot -- all
+            // of its Draw() calls run from End() under one device state anyway -- so only Immediate
+            // is asserted here.
+            {
+                // Straight red at half alpha over an opaque green background: Opaque writes it
+                // un-attenuated as (255,0,0), NonPremultiplied composites it to about (128,127,0).
+                // Nothing subtle separates the two.
+                auto translucentRed = renderer.CreateTexture(Solid(4, 4, Color(255, 0, 0, 128)));
+                const auto applyOpaque = [&renderer]
+                {
+                    renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, BlendWriteState{});
+                };
+                const auto applyNonPremultiplied = [&renderer]
+                {
+                    renderer.ApplyBlendState(4, 4, 5, 5, 0, 0, BlendWriteState{});
+                };
+
+                applyOpaque();
+                clearTo(kGreen);
+                sprites->SetImmediateMode(true);
+                sprites->Begin();
+                drawAt(translucentRed, 10, 10);
+                applyNonPremultiplied();
+                drawAt(translucentRed, 60, 10);
+                sprites->End();
+
+                const Color firstSprite = readPixel(30, 30);
+                const Color secondSprite = readPixel(80, 30);
+                Check(CloseTo(firstSprite, kRed),
+                      "Immediate: the sprite drawn BEFORE the BlendState change keeps the old state "
+                      "-- expected " + Describe(kRed) + ", got " + Describe(firstSprite));
+                Check(CloseTo(secondSprite, Color(128, 127, 0, 255)),
+                      "Immediate: the sprite drawn AFTER the BlendState change uses the NEW state "
+                      "-- expected (128,127,0), got " + Describe(secondSprite));
+
+                applyOpaque();
+            }
+
+            // ---- Viewport changed BETWEEN two Immediate draws --------------------------------
+            // The sprite coordinate space follows GraphicsDevice.Viewport, so a viewport set
+            // between two Immediate draws has to re-open the frame at the new extent -- otherwise
+            // the second sprite is projected through the previous space and squashed into the new
+            // rasterizer viewport.
+            {
+                clearTo(kGreen);
+                sprites->SetImmediateMode(true);
+                sprites->Begin();
+                drawAt(red, 10, 10);
+                renderer.SetViewport(80, 0, 40, 30, 0.0f, 1.0f);
+                // Viewport-local: the full viewport rectangle, which must land exactly on the
+                // physical rectangle (80,0,40,30) rather than a shrunken corner of it.
+                sprites->Draw(*blue, Rectangle(0, 0, 40, 30), Rectangle(0, 0, 4, 4), Color::White,
+                              0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
+                sprites->End();
+                renderer.SetViewport(0, 0, 160, 120, 0.0f, 1.0f);
+
+                Check(CloseTo(readPixel(30, 30), kRed),
+                      "Immediate: the sprite drawn before the Viewport change is unaffected");
+                Check(CloseTo(readPixel(82, 2), kBlue) && CloseTo(readPixel(117, 27), kBlue),
+                      "Immediate: the sprite drawn after the Viewport change fills the NEW viewport "
+                      "corner to corner -- got " + Describe(readPixel(82, 2)) + " and " +
+                          Describe(readPixel(117, 27)));
+                Check(CloseTo(readPixel(122, 15), kGreen),
+                      "Immediate: nothing is drawn outside the new viewport -- got " +
+                          Describe(readPixel(122, 15)));
+            }
+
             // ---- The flag is per batch, not sticky ------------------------------------------
             sprites->SetImmediateMode(false);
             clearTo(kBlue);

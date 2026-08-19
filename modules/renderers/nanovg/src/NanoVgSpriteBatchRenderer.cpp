@@ -166,26 +166,44 @@ namespace CNA::Internal::Renderers::NanoVg
 
     NanoVgSpriteBatchRenderer::~NanoVgSpriteBatchRenderer() = default;
 
+    void NanoVgSpriteBatchRenderer::BeginFrameForProjection(
+        const NanoVgRenderer::SpriteProjection& projection)
+    {
+        NVGcontext* ctx = owner_.GetNvgContextEXT();
+        nvgBeginFrame(ctx, projection.width, projection.height,
+                      projection.devicePixelRatio > 0.0f ? projection.devicePixelRatio : 1.0f);
+        projection_ = projection;
+
+        // nvgBeginFrame resets the state stack, so the blend factors have to be re-asserted here.
+        // Not nvgGlobalCompositeOperation: NanoVG's composite presets cannot express BlendState's
+        // independent colour/alpha factor pairs -- see BlendStateToNvgBlendFunc's own comment.
+        ApplyCurrentBlendFunc();
+
+        if (transform_[0] != 1 || transform_[1] != 0 || transform_[2] != 0 ||
+            transform_[3] != 1 || transform_[4] != 0 || transform_[5] != 0)
+        {
+            nvgTransform(ctx, transform_[0], transform_[1], transform_[2],
+                        transform_[3], transform_[4], transform_[5]);
+        }
+    }
+
+    void NanoVgSpriteBatchRenderer::ApplyCurrentBlendFunc()
+    {
+        const NanoVgBlendFunc blend = owner_.GetBlendFuncEXT();
+        nvgGlobalCompositeBlendFuncSeparate(owner_.GetNvgContextEXT(), blend.srcRGB, blend.dstRGB,
+                                            blend.srcAlpha, blend.dstAlpha);
+        appliedBlend_ = blend;
+    }
+
     void NanoVgSpriteBatchRenderer::Begin()
     {
         begun_ = true;
         lastSamplerImage_ = 0;
         owner_.EnsureSurfaceSizeEXT();
 
-        const NanoVgRenderer::LogicalViewport viewport = owner_.ComputeLogicalViewportEXT();
-        const float logicalW = viewport.logicalWidth > 0.0f ? viewport.logicalWidth : 1.0f;
-        const float logicalH = viewport.logicalHeight > 0.0f ? viewport.logicalHeight : 1.0f;
-        const float ratio = logicalW > 0.0f ? viewport.width / logicalW : 1.0f;
-
-        NVGcontext* ctx = owner_.GetNvgContextEXT();
-        nvgBeginFrame(ctx, logicalW, logicalH, ratio > 0.0f ? ratio : 1.0f);
-
-        // nvgBeginFrame resets the state stack, so the blend factors have to be re-asserted here.
-        // Not nvgGlobalCompositeOperation: NanoVG's composite presets cannot express BlendState's
-        // independent colour/alpha factor pairs -- see BlendStateToNvgBlendFunc's own comment.
-        const NanoVgBlendFunc blend = owner_.GetBlendFuncEXT();
-        nvgGlobalCompositeBlendFuncSeparate(ctx, blend.srcRGB, blend.dstRGB,
-                                            blend.srcAlpha, blend.dstAlpha);
+        // The sprite coordinate space is the ACTIVE GraphicsDevice.Viewport's, not the whole
+        // drawable -- see NanoVgRenderer::GetSpriteProjectionEXT's own doc comment.
+        BeginFrameForProjection(owner_.GetSpriteProjectionEXT());
 
         // Deliberately NOT nvgScissor(): NanoVG's scissor is a SHADER MASK that multiplies the
         // fragment colour (`color *= scissor` in nanovg_gl.h's own fragment shader), not a
@@ -195,13 +213,6 @@ namespace CNA::Internal::Renderers::NanoVg
         // blackened rather than left alone. Each Draw() clips its own quad geometrically instead,
         // which is exact for every BlendState and, as a bonus, hard-edged rather than carrying the
         // shader mask's own one-pixel feather.
-
-        if (transform_[0] != 1 || transform_[1] != 0 || transform_[2] != 0 ||
-            transform_[3] != 1 || transform_[4] != 0 || transform_[5] != 0)
-        {
-            nvgTransform(ctx, transform_[0], transform_[1], transform_[2],
-                        transform_[3], transform_[4], transform_[5]);
-        }
     }
 
     void NanoVgSpriteBatchRenderer::End()
@@ -288,6 +299,35 @@ namespace CNA::Internal::Renderers::NanoVg
 
         const auto* tex = dynamic_cast<const NanoVgTextureRenderer*>(&texture);
         if (!tex) return;
+
+        // SpriteSortMode::Immediate promises that device state changed BETWEEN two Draw() calls is
+        // reflected per sprite (ISpriteBatchRenderer::SetImmediateMode's own contract), so the
+        // state captured at Begin() has to be re-read here. Deferred keeps the batch-snapshot
+        // semantics every other renderer establishes: all of its Draw() calls run from End()
+        // anyway, under one device state. Safe to re-issue nvgBeginFrame at this point because the
+        // previous Immediate Draw() already flushed, so no recorded call can be lost -- and it is
+        // done BEFORE the nvgSave below, so the state stack nvgBeginFrame resets is not one this
+        // call is in the middle of using. The scissor rectangle needs no equivalent: Draw() reads
+        // it from the owner on every call already.
+        if (immediate_)
+        {
+            const NanoVgRenderer::SpriteProjection projection = owner_.GetSpriteProjectionEXT();
+            if (projection.width != projection_.width || projection.height != projection_.height ||
+                projection.customViewport != projection_.customViewport)
+            {
+                BeginFrameForProjection(projection);
+            }
+            else
+            {
+                const NanoVgBlendFunc blend = owner_.GetBlendFuncEXT();
+                if (blend.srcRGB != appliedBlend_.srcRGB || blend.dstRGB != appliedBlend_.dstRGB ||
+                    blend.srcAlpha != appliedBlend_.srcAlpha ||
+                    blend.dstAlpha != appliedBlend_.dstAlpha)
+                {
+                    ApplyCurrentBlendFunc();
+                }
+            }
+        }
 
         const int sx = sourceRectangle.X, sy = sourceRectangle.Y;
         const int sw = sourceRectangle.Width, sh = sourceRectangle.Height;
@@ -378,6 +418,16 @@ namespace CNA::Internal::Renderers::NanoVg
                 return;
             }
 
+            // GraphicsDevice.ScissorRectangle is expressed in the render target's own logical
+            // space, which is NOT the sprite coordinate space once a custom Viewport makes sprites
+            // viewport-local -- see NanoVgRenderer::GetSpriteProjectionEXT.
+            const float clipMinX = projection_.scissorOffsetX +
+                                   static_cast<float>(scissorX) * projection_.scissorScaleX;
+            const float clipMinY = projection_.scissorOffsetY +
+                                   static_cast<float>(scissorY) * projection_.scissorScaleY;
+            const float clipMaxX = clipMinX + static_cast<float>(scissorW) * projection_.scissorScaleX;
+            const float clipMaxY = clipMinY + static_cast<float>(scissorH) * projection_.scissorScaleY;
+
             float xform[6];
             nvgCurrentTransform(ctx, xform);
             const float lx0 = -origin.X, ly0 = -origin.Y;
@@ -389,9 +439,7 @@ namespace CNA::Internal::Renderers::NanoVg
                 nvgTransformPoint(&polygon[i][0], &polygon[i][1], xform,
                                   localCorners[i][0], localCorners[i][1]);
             }
-            const int corners = ClipConvexToRect(
-                polygon, 4, static_cast<float>(scissorX), static_cast<float>(scissorY),
-                static_cast<float>(scissorX + scissorW), static_cast<float>(scissorY + scissorH));
+            const int corners = ClipConvexToRect(polygon, 4, clipMinX, clipMinY, clipMaxX, clipMaxY);
             if (corners < 3)
             {
                 nvgRestore(ctx);

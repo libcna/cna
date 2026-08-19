@@ -182,6 +182,40 @@ namespace CNA::Internal::Renderers::NanoVg
         };
         [[nodiscard]] LogicalViewport ComputeLogicalViewportEXT() const;
 
+        /// CNAEXT. The coordinate space `SpriteBatch` destination rectangles live in, i.e. what
+        /// `nvgBeginFrame` must be handed, plus the mapping that carries a scissor rectangle into
+        /// the same space.
+        struct SpriteProjection
+        {
+            /** @brief Extent of the sprite coordinate space, for `nvgBeginFrame`. */
+            float width = 0.0f, height = 0.0f;
+            /** @brief `nvgBeginFrame`'s device-pixel ratio for that space. */
+            float devicePixelRatio = 1.0f;
+            /** @brief Maps a scissor rectangle from CNA's logical space into this space. */
+            float scissorScaleX = 1.0f, scissorScaleY = 1.0f;
+            float scissorOffsetX = 0.0f, scissorOffsetY = 0.0f;
+            /** @brief True when a game-set `GraphicsDevice.Viewport` sub-region is active. */
+            bool customViewport = false;
+        };
+
+        /**
+         * @brief CNAEXT. Builds the current sprite coordinate space.
+         *
+         * XNA/FNA build the `SpriteBatch` projection from `Viewport.Width`/`Height`
+         * (`CreateOrthographicOffCenter(0, Viewport.Width, Viewport.Height, 0, 0, 1)`), so a custom
+         * `GraphicsDevice.Viewport` makes sprite destination rectangles VIEWPORT-LOCAL and the
+         * rasterizer viewport alone positions the result -- `Viewport.X`/`Y` are never subtracted
+         * from sprite coordinates. Handing `nvgBeginFrame` the full drawable while `glViewport`
+         * holds a sub-region would instead squash every sprite into that sub-region.
+         *
+         * A custom viewport is one that differs from `GetDefaultViewportRect()`. Comparing against
+         * that rather than against the whole drawable is what keeps the presentation modes working:
+         * under `Letterbox`/`Overscan` the DEFAULT viewport is already a physical sub-rectangle, and
+         * sprites there are still addressed in the logical (virtual-resolution) space, not in
+         * physical pixels.
+         */
+        [[nodiscard]] SpriteProjection GetSpriteProjectionEXT() const;
+
         /// CNAEXT. Re-syncs the real `glViewport` with the current physical window size whenever
         /// it changed since the last call. Called from every entry point whose correctness
         /// depends on the physical surface size being current (Clear, SetViewport, SpriteBatch

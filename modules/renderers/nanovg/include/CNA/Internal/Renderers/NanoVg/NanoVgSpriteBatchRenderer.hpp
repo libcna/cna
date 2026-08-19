@@ -3,10 +3,10 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/NanoVg/NanoVgGlLoader.hpp"
+#include "CNA/Internal/Renderers/NanoVg/NanoVgRenderer.hpp"
 
 namespace CNA::Internal::Renderers::NanoVg
 {
-    class NanoVgRenderer;
 
     /**
      * @brief `SpriteBatch` renderer driven by `nvgImagePattern` + a filled rectangle path, one
@@ -95,6 +95,12 @@ namespace CNA::Internal::Renderers::NanoVg
         [[nodiscard]] bool IsBegun() const { return begun_; }
 
     private:
+        /// Opens a NanoVG frame for @p projection and re-establishes the batch state that
+        /// `nvgBeginFrame`'s own `nvgReset()` clears (blend factors, transform).
+        void BeginFrameForProjection(const NanoVgRenderer::SpriteProjection& projection);
+        /// Pushes the owner's current blend factors into the open frame.
+        void ApplyCurrentBlendFunc();
+
         NanoVgRenderer& owner_;
         bool begun_ = false;
         /// The batch's own sampler state. Defaults to linear filtering and clamped addressing,
@@ -107,6 +113,11 @@ namespace CNA::Internal::Renderers::NanoVg
         /// True for a `SpriteSortMode::Immediate` batch, set by `SpriteBatch::Begin()` before
         /// `Begin()` itself. Drives the per-draw flush; see this class's own doc comment.
         bool immediate_ = false;
+        /// The sprite coordinate space this batch's frame was opened for, and the blend factors
+        /// currently pushed into it. Compared per Draw() in Immediate mode so a device state change
+        /// between two draws is picked up without re-issuing work that has not changed.
+        NanoVgRenderer::SpriteProjection projection_{};
+        NanoVgBlendFunc appliedBlend_{};
         /// Row-major XNA Matrix decomposed to a 2D affine (a,b,c,d,e,f), same Canvas/OpenVG
         /// convention: x'=a*x+c*y+e, y'=b*x+d*y+f. Identity by default.
         float transform_[6] = {1, 0, 0, 1, 0, 0};
