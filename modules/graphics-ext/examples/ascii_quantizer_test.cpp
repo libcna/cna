@@ -18,6 +18,7 @@
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
 #include "CNA/Internal/Graphics/Ascii/AsciiQuantizer.hpp"
+#include "System/Environment.hpp"
 #include "CNA/Internal/Graphics/Ascii/AsciiFontAtlas.hpp"
 
 #include <cstdint>
@@ -97,19 +98,19 @@ int main()
     // Check D (ASCII-3): CNA_ASCII_MODE env-var parsing -- unset/unrecognized default to Color,
     // case-insensitive BLACKWHITE/COLOR both parse correctly.
     {
-        unsetenv("CNA_ASCII_MODE");
+        System::Environment::SetEnvironmentVariable("CNA_ASCII_MODE", "");
         check(ParseAsciiModeFromEnvironment() == AsciiQuantizeMode::Color, "CNA_ASCII_MODE unset defaults to Color");
 
-        setenv("CNA_ASCII_MODE", "blackwhite", 1);
+        System::Environment::SetEnvironmentVariable("CNA_ASCII_MODE", "blackwhite");
         check(ParseAsciiModeFromEnvironment() == AsciiQuantizeMode::BlackWhite, "CNA_ASCII_MODE=blackwhite (lowercase) parses to BlackWhite");
 
-        setenv("CNA_ASCII_MODE", "COLOR", 1);
+        System::Environment::SetEnvironmentVariable("CNA_ASCII_MODE", "COLOR");
         check(ParseAsciiModeFromEnvironment() == AsciiQuantizeMode::Color, "CNA_ASCII_MODE=COLOR (uppercase) parses to Color");
 
-        setenv("CNA_ASCII_MODE", "bogus", 1);
+        System::Environment::SetEnvironmentVariable("CNA_ASCII_MODE", "bogus");
         check(ParseAsciiModeFromEnvironment() == AsciiQuantizeMode::Color, "CNA_ASCII_MODE=bogus (unrecognized) defaults to Color");
 
-        unsetenv("CNA_ASCII_MODE");
+        System::Environment::SetEnvironmentVariable("CNA_ASCII_MODE", "");
     }
 
     std::printf("=== %d/%d PASS ===\n", passCount, 13);

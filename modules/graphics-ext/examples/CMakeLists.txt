@@ -269,6 +269,19 @@ if(CNA_BUILD_TESTS)
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "CnaExt")
     endif()
 
+    # docs/cnatests-mingw-setenv-proposal.md, kept from regressing. POSIX setenv/unsetenv do not
+    # exist on MinGW-w64, so one call site anywhere stops every Windows cross-build's CnaTests.exe
+    # compiling. The proposal replaced all 62 in 2026-07; eleven new ones had appeared by 2026-08,
+    # found while measuring D3D11 for Phase 16. This fails on a Linux build instead.
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME CNAEXT_NoPosixSetenv
+                 COMMAND ${Python3_EXECUTABLE}
+                         "${CMAKE_SOURCE_DIR}/scripts/check_no_posix_setenv.py"
+                         "${CMAKE_SOURCE_DIR}")
+        set_tests_properties(CNAEXT_NoPosixSetenv PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "CnaExt")
+    endif()
+
     # plan_modern.md MOD-7: the layer builds one Doxygen module page and has no undocumented public
     # member. SKIPs (77) where doxygen is not installed, since the check is about these headers and
     # not about the container.

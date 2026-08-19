@@ -9,6 +9,7 @@
 // verifying a fallback chain without breaking a driver to do it.
 
 #include <gtest/gtest.h>
+#include "System/Environment.hpp"
 
 #ifdef CNA_MULTI_RENDERER
 
@@ -49,14 +50,14 @@ namespace
         void SetUp() override
         {
             GraphicsRendererSelection::ResetForTestingEXT();
-            unsetenv("CNA_DEBUG_UNAVAILABLE_RENDERERS");
-            unsetenv("CNA_DEBUG_FAIL_RENDERER_INIT");
+            System::Environment::SetEnvironmentVariable("CNA_DEBUG_UNAVAILABLE_RENDERERS", "");
+            System::Environment::SetEnvironmentVariable("CNA_DEBUG_FAIL_RENDERER_INIT", "");
         }
 
         void TearDown() override
         {
-            unsetenv("CNA_DEBUG_UNAVAILABLE_RENDERERS");
-            unsetenv("CNA_DEBUG_FAIL_RENDERER_INIT");
+            System::Environment::SetEnvironmentVariable("CNA_DEBUG_UNAVAILABLE_RENDERERS", "");
+            System::Environment::SetEnvironmentVariable("CNA_DEBUG_FAIL_RENDERER_INIT", "");
             GraphicsRendererSelection::ResetForTestingEXT();
         }
 
@@ -70,7 +71,7 @@ namespace
                     value += ',';
                 value += CNA::getGraphicsRendererName(type);
             }
-            setenv("CNA_DEBUG_UNAVAILABLE_RENDERERS", value.c_str(), 1);
+            System::Environment::SetEnvironmentVariable("CNA_DEBUG_UNAVAILABLE_RENDERERS", value.c_str());
         }
 
         /// Marks renderers as failing during initialization -- after their window already exists.
@@ -83,7 +84,7 @@ namespace
                     value += ',';
                 value += CNA::getGraphicsRendererName(type);
             }
-            setenv("CNA_DEBUG_FAIL_RENDERER_INIT", value.c_str(), 1);
+            System::Environment::SetEnvironmentVariable("CNA_DEBUG_FAIL_RENDERER_INIT", value.c_str());
         }
 
         /// The first compiled-in renderer whose window kind differs from @p from's.

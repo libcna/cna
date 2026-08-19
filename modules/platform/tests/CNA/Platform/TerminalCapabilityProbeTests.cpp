@@ -13,6 +13,7 @@
 // takes its descriptors as parameters precisely so this file never has to.
 
 #include "../../../src/Terminal/TerminalCapabilityProbe.hpp"
+#include "System/Environment.hpp"
 
 #include <gtest/gtest.h>
 
@@ -343,11 +344,11 @@ public:
         }
         if (value != nullptr)
         {
-            setenv(name_.c_str(), value, 1);
+            System::Environment::SetEnvironmentVariable(name_.c_str(), value);
         }
         else
         {
-            unsetenv(name_.c_str());
+            System::Environment::SetEnvironmentVariable(name_.c_str(), "");
         }
     }
 
@@ -355,11 +356,11 @@ public:
     {
         if (had_)
         {
-            setenv(name_.c_str(), previous_.c_str(), 1);
+            System::Environment::SetEnvironmentVariable(name_.c_str(), previous_.c_str());
         }
         else
         {
-            unsetenv(name_.c_str());
+            System::Environment::SetEnvironmentVariable(name_.c_str(), "");
         }
     }
 
