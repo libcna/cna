@@ -4,6 +4,7 @@
 #ifdef CNA_CNAEXT
 
 #include "CNA/Graphics/PbrMaterial.hpp"
+#include "CNA/Graphics/PbrMaterialExtensions.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
@@ -128,6 +129,106 @@ namespace CNA::Graphics {
                 named, source.textureTransformsEXT[static_cast<std::size_t>(slot)]);
         }
         return material;
+    }
+
+    /**
+     * @brief What `materialExtensionsFromGltfEXT` needs of an imported glTF material.
+     *
+     * plan_modern.md `MOD-2076`. Separate from `GltfMaterialSourceEXT` rather than folded into
+     * it, so that a caller with an older importer record still satisfies the first concept: the
+     * extension fields arrived later, and a single widened concept would have turned that into a
+     * compile error at every existing call site.
+     */
+    template<typename T>
+    concept GltfMaterialExtensionSourceEXT = requires(const T& source) {
+        { source.clearcoatFactorEXT } -> std::convertible_to<float>;
+        { source.clearcoatRoughnessFactorEXT } -> std::convertible_to<float>;
+        { source.sheenColorFactorEXT } -> std::convertible_to<Microsoft::Xna::Framework::Vector3>;
+        { source.sheenRoughnessFactorEXT } -> std::convertible_to<float>;
+        { source.transmissionFactorEXT } -> std::convertible_to<float>;
+        { source.thicknessFactorEXT } -> std::convertible_to<float>;
+        { source.attenuationDistanceEXT } -> std::convertible_to<float>;
+        { source.attenuationColorEXT } -> std::convertible_to<Microsoft::Xna::Framework::Vector3>;
+        { source.iridescenceFactorEXT } -> std::convertible_to<float>;
+        { source.iridescenceIorEXT } -> std::convertible_to<float>;
+        { source.iridescenceThicknessMinimumEXT } -> std::convertible_to<float>;
+        { source.iridescenceThicknessMaximumEXT } -> std::convertible_to<float>;
+    };
+
+    /**
+     * @brief The textures an imported material's extension slots resolve to.
+     *
+     * As with @ref GltfMaterialTexturesEXT, the importer decodes images and the loader turns them
+     * into textures; the two meet here. Any entry may be null.
+     */
+    struct GltfMaterialExtensionTexturesEXT
+    {
+        /** @brief `KHR_materials_clearcoat.clearcoatTexture`. */
+        Microsoft::Xna::Framework::Graphics::Texture2D* Clearcoat = nullptr;
+        /** @brief `KHR_materials_clearcoat.clearcoatRoughnessTexture`. */
+        Microsoft::Xna::Framework::Graphics::Texture2D* ClearcoatRoughness = nullptr;
+        /** @brief `KHR_materials_clearcoat.clearcoatNormalTexture`. */
+        Microsoft::Xna::Framework::Graphics::Texture2D* ClearcoatNormal = nullptr;
+        /** @brief `KHR_materials_sheen.sheenColorTexture`. */
+        Microsoft::Xna::Framework::Graphics::Texture2D* SheenColor = nullptr;
+        /** @brief `KHR_materials_sheen.sheenRoughnessTexture`. */
+        Microsoft::Xna::Framework::Graphics::Texture2D* SheenRoughness = nullptr;
+        /** @brief `KHR_materials_transmission.transmissionTexture`. */
+        Microsoft::Xna::Framework::Graphics::Texture2D* Transmission = nullptr;
+        /** @brief `KHR_materials_volume.thicknessTexture`. */
+        Microsoft::Xna::Framework::Graphics::Texture2D* Thickness = nullptr;
+        /** @brief `KHR_materials_iridescence.iridescenceTexture`. */
+        Microsoft::Xna::Framework::Graphics::Texture2D* Iridescence = nullptr;
+        /** @brief `KHR_materials_iridescence.iridescenceThicknessTexture`. */
+        Microsoft::Xna::Framework::Graphics::Texture2D* IridescenceThickness = nullptr;
+    };
+
+    /**
+     * @brief Builds a `PbrMaterialExtensions` from one imported glTF material.
+     *
+     * plan_modern.md `MOD-2076`. A file declaring none of these extensions produces a **neutral**
+     * set, because the importer carries each extension's own default -- so reading the extensions
+     * of a material that has none changes nothing, and a loader can call this unconditionally.
+     *
+     * Subsurface scattering is not among them: it is a CNA addition rather than a glTF extension
+     * (`MOD-2074`), so nothing in a file names it and nothing here invents it.
+     *
+     * @param source   The imported material record.
+     * @param textures The textures its extension slots resolve to; any may be null.
+     * @return The extension set.
+     */
+    template<GltfMaterialExtensionSourceEXT TSource>
+    [[nodiscard]] PbrMaterialExtensions materialExtensionsFromGltfEXT(
+        const TSource& source, const GltfMaterialExtensionTexturesEXT& textures = {})
+    {
+        PbrMaterialExtensions extensions;
+
+        extensions.setClearcoatFactor(source.clearcoatFactorEXT);
+        extensions.setClearcoatRoughness(source.clearcoatRoughnessFactorEXT);
+        extensions.setClearcoatTexture(textures.Clearcoat);
+        extensions.setClearcoatRoughnessTexture(textures.ClearcoatRoughness);
+        extensions.setClearcoatNormalTexture(textures.ClearcoatNormal);
+
+        extensions.setSheenColorFactor(source.sheenColorFactorEXT);
+        extensions.setSheenRoughness(source.sheenRoughnessFactorEXT);
+        extensions.setSheenColorTexture(textures.SheenColor);
+        extensions.setSheenRoughnessTexture(textures.SheenRoughness);
+
+        extensions.setTransmissionFactor(source.transmissionFactorEXT);
+        extensions.setTransmissionTexture(textures.Transmission);
+        extensions.setThicknessFactor(source.thicknessFactorEXT);
+        extensions.setThicknessTexture(textures.Thickness);
+        extensions.setAttenuationDistance(source.attenuationDistanceEXT);
+        extensions.setAttenuationColor(source.attenuationColorEXT);
+
+        extensions.setIridescenceFactor(source.iridescenceFactorEXT);
+        extensions.setIridescenceIor(source.iridescenceIorEXT);
+        extensions.setIridescenceThicknessMinimum(source.iridescenceThicknessMinimumEXT);
+        extensions.setIridescenceThicknessMaximum(source.iridescenceThicknessMaximumEXT);
+        extensions.setIridescenceTexture(textures.Iridescence);
+        extensions.setIridescenceThicknessTexture(textures.IridescenceThickness);
+
+        return extensions;
     }
 
 /** @} */ // end of cnaext_engine
