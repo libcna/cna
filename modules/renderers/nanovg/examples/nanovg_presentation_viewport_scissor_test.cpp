@@ -369,6 +369,34 @@ namespace
         Check(CloseTo(ReadPixel(renderer, 70, 70), kSprite) && CloseTo(ReadPixel(renderer, 15, 15), kClear),
               "scissor rectangle change while enabled takes effect immediately");
 
+        // The clipped-away region must be left ALONE, not overwritten, for every BlendState --
+        // including BlendState.Opaque, whose destination factor is Zero. NanoVG's own nvgScissor is
+        // a shader mask that multiplies the fragment colour, so a masked fragment still writes (it
+        // writes zero); under Opaque that blackens the clipped region instead of preserving it,
+        // which is why NanoVgSpriteBatchRenderer clips the quad geometrically instead. Every other
+        // check in this function runs under the default AlphaBlend factors, where a zero source
+        // happens to leave the destination intact -- which is exactly why the shader mask looked
+        // correct here for so long.
+        // The background here is deliberately NOT kClear (3,3,3): a fragment that is masked but
+        // still written lands on black, and black is within any sane tolerance of (3,3,3), so that
+        // background would let the defect pass unnoticed. This one is far from black in every
+        // channel that matters.
+        const Color kOpaqueClear(0, 120, 200, 255);
+        renderer.ApplyBlendState(/*colorSrc*/0, /*alphaSrc*/0, /*colorDst*/1, /*alphaDst*/1,
+                                 /*colorFunc*/0, /*alphaFunc*/0, BlendWriteState{});
+        renderer.SetScissorRect(10, 10, 20, 20);
+        renderer.Clear(kOpaqueClear.getRProperty() / 255.0f, kOpaqueClear.getGProperty() / 255.0f,
+                       kOpaqueClear.getBProperty() / 255.0f, 1.0f);
+        DrawFullCanvasSprite(renderer, *sb, *tex, Rectangle(0, 0, 100, 100));
+        Check(CloseTo(ReadPixel(renderer, 15, 15), kSprite),
+              "scissor under BlendState.Opaque: inside the rect still draws");
+        Check(CloseTo(ReadPixel(renderer, 50, 50), kOpaqueClear),
+              "scissor under BlendState.Opaque: outside the rect keeps the destination rather than "
+              "being blackened by a masked-but-still-written fragment");
+        // Restore the default factors for the checks below.
+        renderer.ApplyBlendState(/*colorSrc*/0, /*alphaSrc*/0, /*colorDst*/5, /*alphaDst*/5,
+                                 /*colorFunc*/0, /*alphaFunc*/0, BlendWriteState{});
+
         // Disabling again restores unclipped drawing.
         renderer.ApplyRasterizerState(kCullCCW, kFillSolid, /*scissorTestEnable=*/false, 0.0f, 0.0f);
         renderer.Clear(kClear.getRProperty() / 255.0f, kClear.getGProperty() / 255.0f,

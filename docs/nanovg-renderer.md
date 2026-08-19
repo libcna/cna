@@ -141,8 +141,69 @@ recorded and what `glnvg__renderFlush` resets it to before its first draw.
 
 `GL_TEXTURE_MIN_FILTER` and `GL_TEXTURE_MAG_FILTER` are independent, so every `TextureFilter` whose
 minification and magnification components differ is representable exactly. The mip component of the
-six mip-qualified ordinals is inert: `nvgCreateImageRGBA` allocates exactly one level, so there is
-no chain to select between.
+six mip-qualified ordinals selects nothing, because there is never a chain to select from: a
+mip-mapped `Texture2D` is refused outright (see below), so every texture that exists here has
+exactly one level and the mip component is vacuous rather than approximated.
+
+## Mip levels are refused, not quietly dropped
+
+`nvgCreateImageRGBA` allocates a single level and NanoVG exposes no per-level upload or LOD
+sampling API at all, so a mip chain can be neither stored, written to, nor sampled from.
+
+Two entry points reach it and both refuse:
+
+- `NanoVgTextureRenderer`'s constructor rejects `ImageData::mipLevels != 1`, which is what
+  `Texture2D(device, w, h, mipMap: true, format)` produces — the same construction-time gate
+  `TINYGL` uses for its own single-level textures. Accepting it would leave `Texture2D` reporting
+  `LevelCount > 1` for storage that does not exist.
+- `UpdatePixelsLevel` rejects any level above zero. `ITextureRenderer`'s own default for that
+  method is an **empty body**, so without the override `Texture2D::SetData(level, ...)` would
+  succeed while the upload vanished — the exact silent approximation this renderer must not have.
+  Level 0 through the same entry point is an ordinary full-surface update.
+
+## SpriteSortMode::Immediate is a real ordering guarantee
+
+NanoVG submits nothing until `nvgEndFrame()` calls the backend's `renderFlush()`, so this renderer
+defers its GPU work across `Draw()` calls. That makes `ISpriteBatchRenderer::SetImmediateMode` — a
+no-op by default, and correctly so for renderers that are already synchronous per draw —
+load-bearing here rather than decorative.
+
+Under `SpriteSortMode::Immediate` each `Draw()` submits its own work before returning, through
+`nvgInternalParams(ctx)->renderFlush`. That flushes the recorded call list **without ending the
+frame**, so the batch's scissor, transform and blend factors survive it; `nvgEndFrame()` /
+`nvgBeginFrame()` would not, because that pair runs `nvgReset()`. Deferred batches are untouched
+and still flush once, at `End()`.
+
+The difference is directly observable and is what `nanovg_immediate_mode_test` pins down:
+
+    Begin(mode); Draw(red); Clear(green); End();
+
+is **green** under `Immediate` (the sprite was already on the surface, so the `Clear` wiped it) and
+**red** under `Deferred` (the sprite was still queued, so it landed afterwards). Both are asserted,
+so neither ignoring the flag nor flushing unconditionally passes.
+
+## The scissor rectangle is clipped geometrically, not masked
+
+`nvgScissor` is **not** used for sprite draws. NanoVG's scissor is a shader mask — the fragment
+shader ends with `color *= scissor` — not a rasterizer clip, so a masked-out fragment still writes;
+it writes zero. Under any `BlendState` whose destination factor does not evaluate to one for a zero
+source, that blackens the clipped region instead of leaving it alone. `BlendState.Opaque`
+(destination factor `Zero`) is the obvious case, and every custom state with a `Zero`,
+`SourceAlpha`, `SourceColor` or `Destination*` destination factor behaves the same way. Only
+`One`, `InverseSourceAlpha` and `InverseSourceColor` happen to preserve the destination — which is
+why the mask looked correct for as long as the tests around it all ran under `AlphaBlend`.
+
+Each `Draw()` therefore clips its own quad instead: the four corners are transformed into logical
+space, clipped against the scissor rectangle with Sutherland-Hodgman over four axis-aligned
+half-planes (orientation-independent, so a `SpriteEffects` flip needs no special case), and the
+surviving convex polygon is filled. `nvgFillPaint` has already multiplied the sprite's own
+transform into the paint by that point, so the texture mapping is unaffected by emitting the
+outline in logical space. A quad that survives with fewer than three corners is skipped entirely.
+
+Two consequences beyond correctness under `Opaque`: the clip is exact for a rotated sprite as well
+as an axis-aligned one, and its edge is hard rather than carrying the shader mask's own one-pixel
+feather — matching XNA's rectangular scissor, which is a rasterizer decision and not a colour
+operation.
 
 ## Presentation model
 
@@ -169,7 +230,9 @@ so `NanoVgRenderer::SetScissorRect` stores its argument verbatim.
 | `Clear`, `Present` | Real `glClearColor`/`glClear` + `SDL_GL_SwapWindow` | |
 | Presentation modes (`Letterbox`/`Overscan`/`Stretch`/`NativeBackBuffer`/`FixedHeightDynamicWidth`) | Real `glViewport` for the physical sub-rectangle + NanoVG's own internal logical-space ortho | All five modes implemented; pixel-tested for `NativeBackBuffer` (`nanovg_spritebatch_rotation_test`). |
 | Custom `Viewport` | Real `glViewport`, raw pass-through (matches every sibling renderer) | |
-| `ScissorRectangle` / `RasterizerState.ScissorTestEnable` | Real `nvgScissor`/no-op-when-disabled, applied once per `SpriteBatch.Begin()` | Independent of `SetScissorRect`, matching `OPENVG`'s own enable/rectangle separation. |
+| `ScissorRectangle` / `RasterizerState.ScissorTestEnable` | **Geometric clip of each sprite quad**, not `nvgScissor` | Exact for every `BlendState` (including `Opaque`) and for rotated quads, with a hard edge — see "The scissor rectangle is clipped geometrically" above. Enable and rectangle stay independent, matching `OPENVG`. Pixel-tested under both `AlphaBlend` and `Opaque`. |
+| `SpriteSortMode.Immediate` | **Real per-draw flush** (`nvgInternalParams(ctx)->renderFlush`) | A `GraphicsDevice` operation issued between two `Draw()` calls is ordered between them, not before the whole batch. `Deferred` still flushes once at `End()`. Both pixel-tested against each other (`nanovg_immediate_mode_test`). |
+| Mip-mapped `Texture2D` (`mipMap: true`), and `Texture2D.SetData(level > 0, ...)` | **Rejected** (throws) | NanoVG images are single-level with no per-level upload or LOD-sampling API. Refused at construction and at `UpdatePixelsLevel`, rather than accepted with storage that does not exist. Tested. |
 | `Texture2D` create/update | Real `nvgCreateImageRGBA`/`nvgUpdateImage` | Straight (non-premultiplied) RGBA8, top-row-first, tightly packed (NanoVG's own API has no stride parameter — `NanoVgTextureRenderer` repacks when the caller's stride differs). No row flip anywhere: NanoVG's Y-down image space already matches `ImageData`'s own convention. |
 | `SpriteBatch` draw (all 3 overloads, rotation, origin, source rectangle, tint, `SpriteEffects` flip) | Real `nvgImagePattern` + a filled rectangle path (`nvgBeginPath`/`nvgRect`/`nvgFillPaint`/`nvgFill`) | NanoVG has no "draw image" primitive; a partial `sourceRectangle` needs no CPU-side sub-image copy (unlike `OPENVG`'s `vgCopyImage` workaround) — the pattern box is positioned purely algebraically, all inside the already-`nvgScale`d coordinate system. Verified by `nanovg_spritebatch_rotation_test`. |
 | `SpriteBatch.SetTransformMatrix` | Real `nvgTransform` | Row-major XNA `Matrix` decomposed to a 2D affine, same `(a,b,c,d,e,f)` convention `OpenVgRenderer`/`CanvasRenderer` use. |
@@ -233,10 +296,11 @@ established split for GPU/window-creating tests — pure-function pieces live in
 | `nanovg_spritebatch_rotation_test` | Decisive rotation/origin geometry oracle (`NativeBackBuffer`). |
 | `nanovg_blend_test` | Every built-in `BlendState` and four custom ones, all four RGBA channels, against a CPU reference computed from the same factor ordinals `ApplyBlendState` receives; genuinely premultiplied source data for `AlphaBlend` and its straight twin for `NonPremultiplied`; translucent and alpha-zero sources under `Opaque`; six tint combinations; deterministic rejection of non-`Add` blend functions, constant-colour factors, `SourceAlphaSaturation` as a destination factor and a non-default `ColorWriteChannels` (34 checks). |
 | `nanovg_unsupported_3d_behavior_test` | Throw/WarnAndStub policy across every inherently-3D entry point, `AdditiveBlending`/`Texture3D` capability honesty. |
-| `nanovg_texture_orientation_test` | Upload/`UpdatePixels` row orientation, partial-`sourceRectangle` `nvgImagePattern` box crop math (including a multi-texel span), tint, rotation, both `SpriteEffects` flips, out-of-bounds `Clamp` pixel-exactness (right edge and left/top simultaneously), and real out-of-bounds `Wrap` tiling / `Mirror` reflection (26 checks). |
+| `nanovg_texture_orientation_test` | Upload/`UpdatePixels` row orientation, partial-`sourceRectangle` `nvgImagePattern` box crop math (including a multi-texel span), tint, rotation, both `SpriteEffects` flips, out-of-bounds `Clamp` pixel-exactness (right edge and left/top simultaneously), real out-of-bounds `Wrap` tiling / `Mirror` reflection, and refusal of both a mip-mapped `Texture2D` and a level>0 upload (29 checks). |
 | `nanovg_sampler_state_test` | `PointClamp` vs `LinearClamp` at sample points where the two genuinely disagree, the four `Min*Mag*` filters, the inert mip component, the same texture drawn Point → Linear → Point across consecutive batches, two textures in one batch, `Clamp`/`Wrap`/`Mirror` on an out-of-bounds source rectangle, independent U/V address modes, and rejection of `Anisotropic` and of out-of-range ordinals (22 checks). |
+| `nanovg_immediate_mode_test` | `SpriteSortMode::Immediate` vs `Deferred` as an ordering guarantee: a `Clear()` between the `Draw()` and the `End()` must wipe the sprite under Immediate and be overdrawn by it under Deferred; ordering between two Immediate draws; that the per-draw flush leaves the batch's own scissor/transform/blend state intact; and that the flag is per batch rather than sticky (9 checks). |
 | `nanovg_sprite_rasterization_test` | A whole-frame census requiring that no pixel is partially covered — for an axis-aligned integer quad (with its exact edge columns/rows and covered-pixel count), a ~23° rotation with a fractional origin, non-integer scale and a partial source rectangle, and two ~17° rotations with both `SpriteEffects` flips under a `SetTransformMatrix`; plus a translucent sprite whose edge column must composite exactly once (11 checks). |
-| `nanovg_presentation_viewport_scissor_test` | Every `CnaPresentationMode` (`Letterbox`/`Overscan`/`Stretch`/`FixedHeightDynamicWidth`/`NativeBackBuffer`), `TransformWindowToLogical`/`TransformLogicalToWindow` round-trips, a custom `Viewport`, resize-without-`Clear`, `RasterizerState`-driven scissor pixel-clipping, two simultaneous `NanoVgRenderer` instances (construction, interleaved `Clear`/readback, and destroying one while the other stays live), 25 repeated construct/destroy cycles, `SetSwapInterval` (41 checks). |
+| `nanovg_presentation_viewport_scissor_test` | Every `CnaPresentationMode` (`Letterbox`/`Overscan`/`Stretch`/`FixedHeightDynamicWidth`/`NativeBackBuffer`), `TransformWindowToLogical`/`TransformLogicalToWindow` round-trips, a custom `Viewport`, resize-without-`Clear`, `RasterizerState`-driven scissor pixel-clipping under both `AlphaBlend` and `Opaque` (the latter over a background far from black, so a masked-but-still-written fragment cannot hide in the tolerance), two simultaneous `NanoVgRenderer` instances (construction, interleaved `Clear`/readback, and destroying one while the other stays live), 25 repeated construct/destroy cycles, `SetSwapInterval` (43 checks). |
 
 Plus `NanoVgBlendStateMapping.*` (`modules/renderers/nanovg/tests/`, the pure
 `BlendStateToNvgBlendFunc` mapping function, no window/GL context needed) — including the case
@@ -254,7 +318,7 @@ output, which is a stronger oracle than a differential: it cannot agree with a s
 implementation that is wrong in the same way.
 
 **Exact commands run** (this environment): `Xvfb :64 -screen 0 1280x1024x24 -nolisten tcp &`, then
-`DISPLAY=:64 ctest --test-dir cmake-build-nanovg -R NanoVg --output-on-failure` (8/8 pass) and
+`DISPLAY=:64 ctest --test-dir cmake-build-nanovg -R NanoVg --output-on-failure` (19/19 pass) and
 `DISPLAY=:64 ctest --test-dir cmake-build-nanovg -j4` (the complete `CnaTests` corpus).
 
 **Audit note.** The two multi-texel/presentation test files above were added in a second,
@@ -316,10 +380,11 @@ assumed every renderer provides 3D/render-target/cube-texture storage:
   renderer, which is why `SupportsCapability(AnisotropicFiltering)` reports `false`. Every other
   `TextureFilter`, and all three `TextureAddressMode` values, are honoured exactly per batch —
   see "SamplerState is honoured per batch, not per texture" above.
-- **Mip levels are never allocated.** `nvgCreateImageRGBA` is called with exactly one level and
-  `ImageData::mipLevels` is not honoured, so the mip component of a mip-qualified `TextureFilter`
-  has nothing to select between. That is a texture-storage limitation, not a sampler one: the
-  minification and magnification components of every such filter are still applied exactly.
+- **Mip chains are unsupported and refused.** `nvgCreateImageRGBA` allocates exactly one level and
+  NanoVG has no per-level upload or LOD-sampling API, so a mip-mapped `Texture2D` is rejected at
+  construction and `SetData(level > 0, ...)` throws. The mip component of a mip-qualified
+  `TextureFilter` is consequently vacuous; its minification and magnification components are still
+  applied exactly.
 - **`BlendState` factors that name a constant colour are rejected.** `NVGblendFactor` has no
   `GL_CONSTANT_COLOR` counterpart, so `Blend.BlendFactor`/`InverseBlendFactor` — and therefore
   `GraphicsDevice.BlendFactor` — can never reach the blend stage.
@@ -378,3 +443,14 @@ pixel-tested guarantee instead.
   rejected."* `nvgGlobalCompositeBlendFuncSeparate` is exactly that model.
 - *"`SetSamplerFilter` is a documented no-op."* Documented, but not defensible while
   `SamplerState.PointClamp` was accepted without complaint.
+
+A follow-up review pass (NVG-19) found three more, all of the same shape — an accepted API whose
+behaviour quietly differed from its contract:
+
+- *"`SetImmediateMode` is still a no-op"* (the class's own header comment). It could not be: this
+  renderer defers every `Draw()` to `nvgEndFrame`, which is exactly the case
+  `ISpriteBatchRenderer::SetImmediateMode` exists for.
+- Mip-mapped `Texture2D` was accepted with no chain behind it, and `UpdatePixelsLevel` inherited a
+  base-class default with an empty body, so a level>0 upload was discarded without a word.
+- `nvgScissor`'s shader mask was treated as a clip. It is not one, and the difference is visible
+  under any `BlendState` whose destination factor does not preserve the destination at zero source.

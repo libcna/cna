@@ -28,6 +28,8 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
 
+#include "System/NotSupportedException.hpp"
+
 #include <SDL3/SDL.h>
 
 #include <cmath>
@@ -240,6 +242,42 @@ int main()
         clearAndDraw(Rectangle(0, 0, 90, 60), Rectangle(-1, -1, 4, 3), Color::White, 0.0f, Vector2(0, 0), SpriteEffects::None);
         Check(CloseTo(ReadPixel(renderer, 5, 10), kTL), "OOB Clamp (left/top): repeats the corner texel into the padded region");
         Check(CloseTo(ReadPixel(renderer, 5, 30), kTL), "OOB Clamp (left/top): the real top row is still reachable one step in");
+
+        // 9b) Mip levels. NanoVG images are single-level, so a mip-mapped Texture2D must be
+        //     refused at creation rather than silently losing every level above zero, and a
+        //     level>0 upload must throw rather than being discarded by ITextureRenderer's own
+        //     empty default UpdatePixelsLevel. Both are what Texture2D's public API reaches:
+        //     Texture2D(device, w, h, mipMap=true, ...) sets ImageData::mipLevels, and
+        //     Texture2D::SetData(level, ...) calls UpdatePixelsLevel.
+        {
+            ImageData mipped;
+            mipped.width = 4; mipped.height = 4;
+            mipped.pixels.assign(4 * 4 * 4, 255);
+            mipped.mipLevels = 3;
+            bool creationThrew = false;
+            std::string creationMessage;
+            try { (void)renderer.CreateTexture(mipped); }
+            catch (const System::NotSupportedException& ex)
+            { creationThrew = true; creationMessage = ex.what(); }
+            Check(creationThrew && creationMessage.find("mip") != std::string::npos,
+                  "a mip-mapped Texture2D is refused at creation, not accepted with a chain that "
+                  "does not exist");
+
+            const std::vector<uint8_t> levelBytes(2 * 2 * 4, 128);
+            bool levelUploadThrew = false;
+            try { tex->UpdatePixelsLevel(1, levelBytes.data(), 2, 2); }
+            catch (const System::NotSupportedException&) { levelUploadThrew = true; }
+            Check(levelUploadThrew,
+                  "a level>0 UpdatePixelsLevel is refused, not silently discarded by the base "
+                  "class's empty default");
+
+            // Level 0 through the same entry point is an ordinary full-surface update, so a caller
+            // that addresses level 0 explicitly is not penalised for it.
+            bool levelZeroThrew = false;
+            try { tex->UpdatePixelsLevel(0, img.pixels.data(), 3, 2); }
+            catch (const System::NotSupportedException&) { levelZeroThrew = true; }
+            Check(!levelZeroThrew, "UpdatePixelsLevel(0, ...) is an ordinary full-surface update");
+        }
 
         // 10) Out-of-bounds Wrap and Mirror. Same geometry as case 8, so the five destination
         //     columns are 18px wide and each source texel's own centre lands at dest x = 9, 27,

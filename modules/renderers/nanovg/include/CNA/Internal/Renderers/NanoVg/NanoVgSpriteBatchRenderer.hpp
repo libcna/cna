@@ -46,12 +46,16 @@ namespace CNA::Internal::Renderers::NanoVg
      * renderer never creates a multisample-capable context, so the feathering would be a
      * systematically different rasterization model rather than a refinement.
      *
-     * `End()` calls `nvgEndFrame()`, which is where NanoVG actually submits its accumulated GL
-     * draw calls -- so, unlike `OpenVgSpriteBatchRenderer`'s per-`Draw()`-immediate `vgDrawImage`,
-     * this renderer's draws are recorded during `Begin()..End()` and flushed once at `End()`.
-     * `SetImmediateMode` is still a no-op: `SpriteSortMode::Immediate` already calls `Draw()`
-     * once per sprite with no batching above this layer, and NanoVG's own internal call list still
-     * flushes correctly regardless of how many `Draw()`s occur between `Begin()`/`End()`.
+     * `nvgEndFrame()` is where NanoVG normally submits its accumulated GL draw calls, so this
+     * renderer defers its GPU work across `Draw()` calls -- unlike `OpenVgSpriteBatchRenderer`'s
+     * per-`Draw()`-immediate `vgDrawImage`. That makes `SetImmediateMode` load-bearing rather than
+     * decorative: under `SpriteSortMode::Immediate` each `Draw()` submits its own work before
+     * returning (`nvgInternalParams(ctx)->renderFlush`, which flushes the recorded call list
+     * WITHOUT ending the frame, so the batch's scissor/transform/blend state survives), exactly as
+     * `ISpriteBatchRenderer::SetImmediateMode`'s own contract requires. Without it, a
+     * `GraphicsDevice` operation issued between two Immediate `Draw()` calls -- a `Clear()`, most
+     * visibly -- would land BEFORE sprites the caller has already drawn, which is the wrong order.
+     * Deferred batches are unaffected and still flush once, at `End()`.
      */
     class NanoVgSpriteBatchRenderer final : public ISpriteBatchRenderer
     {
@@ -70,6 +74,9 @@ namespace CNA::Internal::Renderers::NanoVg
         /// Records the batch's `TextureAddressMode` pair, rejecting any ordinal outside the enum.
         /// `Wrap`, `Clamp` and `Mirror` all map onto a real GL wrap enum.
         void SetSamplerAddressMode(int addressU, int addressV) override;
+        /// Records whether this batch is `SpriteSortMode::Immediate`. Immediate batches submit each
+        /// `Draw()`'s work before returning instead of accumulating it until `End()`.
+        void SetImmediateMode(bool immediate) override;
 
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,
@@ -97,6 +104,9 @@ namespace CNA::Internal::Renderers::NanoVg
         /// texture repeatedly writes its parameters once. Reset whenever the sampler changes and
         /// at every Begin()/End() boundary, because the next batch may want a different one.
         int lastSamplerImage_ = 0;
+        /// True for a `SpriteSortMode::Immediate` batch, set by `SpriteBatch::Begin()` before
+        /// `Begin()` itself. Drives the per-draw flush; see this class's own doc comment.
+        bool immediate_ = false;
         /// Row-major XNA Matrix decomposed to a 2D affine (a,b,c,d,e,f), same Canvas/OpenVG
         /// convention: x'=a*x+c*y+e, y'=b*x+d*y+f. Identity by default.
         float transform_[6] = {1, 0, 0, 1, 0, 0};

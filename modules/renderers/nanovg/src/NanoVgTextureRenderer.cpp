@@ -4,8 +4,11 @@
 
 #include "nanovg.h"
 
+#include "System/NotSupportedException.hpp"
+
 #include <cstring>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace CNA::Internal::Renderers::NanoVg
@@ -38,6 +41,25 @@ namespace CNA::Internal::Renderers::NanoVg
     {
         if (width_ <= 0 || height_ <= 0)
             throw std::runtime_error("NANOVG: texture width/height must be positive.");
+
+        // nvgCreateImageRGBA allocates exactly one level and NanoVG's image API has no per-level
+        // upload entry point at all, so a mip chain cannot be stored, uploaded into, or sampled
+        // from here. Refusing at construction is the only honest answer: accepting the request
+        // would leave Texture2D reporting LevelCount > 1 while every level above zero silently
+        // vanished. Same conclusion, and the same construction-time gate, TinyGL reached for its
+        // own single-level textures.
+        // System::NotSupportedException rather than this renderer's usual std::runtime_error:
+        // Texture2D's own public contract for an unsupported mip request is that type, which is
+        // what the shared Texture2DTests.cpp arms assert (TINYGL reached the same conclusion and
+        // the same guard).
+        if (data.mipLevels != 1)
+        {
+            throw System::NotSupportedException(
+                "NANOVG does not support mip-mapped Texture2D (requested " +
+                std::to_string(data.mipLevels) + " levels): nvgCreateImageRGBA allocates a single "
+                "level and NanoVG has no per-mip-level upload or LOD-sampling API. Create the "
+                "texture with mipMap=false.");
+        }
 
         const int stride = width_ * 4;
         if (!data.pixels.empty() &&
@@ -90,5 +112,25 @@ namespace CNA::Internal::Renderers::NanoVg
         const uint8_t* packed = TightlyPack(rgba, width_, height_, stride, scratch);
         owner_.MakeContextCurrentEXT();
         nvgUpdateImage(owner_.GetNvgContextEXT(), image_, packed);
+    }
+
+    void NanoVgTextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba,
+                                                 int /*levelW*/, int /*levelH*/)
+    {
+        // The base-class default is an empty body, which would make Texture2D::SetData(level > 0)
+        // succeed while discarding the upload -- exactly the silent approximation this renderer
+        // must not have. Level 0 is a plain full-surface update; anything above it is refused,
+        // matching every other CNA backend with no native mip chain (the SDL renderer family,
+        // Canvas, DirectX1/2/8). Construction already refuses a mip-mapped Texture2D outright, so
+        // reaching
+        // a non-zero level here means the caller addressed a level this texture never had.
+        if (level != 0)
+        {
+            throw System::NotSupportedException(
+                "NANOVG does not support mip-level texture uploads (level " +
+                std::to_string(level) + "): NanoVG images are single-level, with no per-level "
+                "upload or LOD-sampling API. Use Texture2D::SetData(level=0, ...) only.");
+        }
+        UpdatePixels(rgba, width_ * 4);
     }
 }

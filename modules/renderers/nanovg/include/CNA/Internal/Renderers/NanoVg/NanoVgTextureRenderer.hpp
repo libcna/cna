@@ -25,6 +25,11 @@ namespace CNA::Internal::Renderers::NanoVg
      * (premultiplied source) and `NonPremultiplied` (straight source) genuinely distinct. See
      * NanoVgTextureRenderer.cpp's own comment for the full reasoning.
      *
+     * A mip-mapped `Texture2D` is refused at construction: `nvgCreateImageRGBA` allocates exactly
+     * one level and NanoVG exposes no per-level upload or LOD-sampling API, so a chain can be
+     * neither stored nor sampled. `UpdatePixelsLevel` refuses any level above zero for the same
+     * reason, rather than inheriting the base class's silently-discarding default.
+     *
      * Holds a reference back to its owning `NanoVgRenderer` (not just its `NVGcontext*`) so
      * `UpdatePixels()` -- called any time after construction, possibly after a sibling
      * `NanoVgRenderer` instance last made ITS OWN context current -- can re-assert the correct GL
@@ -43,6 +48,11 @@ namespace CNA::Internal::Renderers::NanoVg
         [[nodiscard]] int GetHeight() const override { return height_; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
+
+        /// Level 0 is an ordinary full-surface update; any higher level is refused. NanoVG images
+        /// are single-level, so accepting one would discard the upload silently -- the base class's
+        /// own default is an empty body, which is why this override exists.
+        void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
         /// The NanoVG image handle (an `int`, scoped to the owning `NVGcontext`) this texture
         /// draws through `nvgImagePattern`.

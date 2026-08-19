@@ -61,6 +61,81 @@ namespace CNA::Internal::Renderers::NanoVg
             }
         }
 
+        /// Clips a convex polygon to an axis-aligned rectangle (Sutherland-Hodgman against four
+        /// half-planes). Axis-aligned clip edges make this orientation-independent, so a sprite
+        /// whose transform flips it -- every `SpriteEffects` flip does -- needs no special case.
+        ///
+        /// @param points In/out polygon vertices; at most 8 are ever produced from a quad, because
+        ///        each of the four half-planes adds at most one vertex.
+        /// @param count Number of valid vertices on entry.
+        /// @param minX,minY,maxX,maxY The clip rectangle.
+        /// @return The number of vertices left; fewer than three means nothing survives.
+        int ClipConvexToRect(float points[8][2], int count,
+                             float minX, float minY, float maxX, float maxY)
+        {
+            // edge 0: x >= minX, 1: x <= maxX, 2: y >= minY, 3: y <= maxY
+            for (int edge = 0; edge < 4 && count > 0; ++edge)
+            {
+                const auto inside = [&](const float* p)
+                {
+                    switch (edge)
+                    {
+                    case 0:  return p[0] >= minX;
+                    case 1:  return p[0] <= maxX;
+                    case 2:  return p[1] >= minY;
+                    default: return p[1] <= maxY;
+                    }
+                };
+                const auto intersect = [&](const float* a, const float* b, float* out)
+                {
+                    // Parameter along a->b at which the edge is crossed. The denominators cannot be
+                    // zero here: `inside` differs for a and b, so the relevant component differs.
+                    float t = 0.0f;
+                    switch (edge)
+                    {
+                    case 0:  t = (minX - a[0]) / (b[0] - a[0]); break;
+                    case 1:  t = (maxX - a[0]) / (b[0] - a[0]); break;
+                    case 2:  t = (minY - a[1]) / (b[1] - a[1]); break;
+                    default: t = (maxY - a[1]) / (b[1] - a[1]); break;
+                    }
+                    out[0] = a[0] + t * (b[0] - a[0]);
+                    out[1] = a[1] + t * (b[1] - a[1]);
+                };
+
+                float output[8][2];
+                int produced = 0;
+                for (int i = 0; i < count && produced < 8; ++i)
+                {
+                    const float* current = points[i];
+                    const float* previous = points[(i + count - 1) % count];
+                    const bool currentIn = inside(current);
+                    const bool previousIn = inside(previous);
+                    if (currentIn)
+                    {
+                        if (!previousIn && produced < 8)
+                            intersect(previous, current, output[produced++]);
+                        if (produced < 8)
+                        {
+                            output[produced][0] = current[0];
+                            output[produced][1] = current[1];
+                            ++produced;
+                        }
+                    }
+                    else if (previousIn && produced < 8)
+                    {
+                        intersect(previous, current, output[produced++]);
+                    }
+                }
+                count = produced;
+                for (int i = 0; i < count; ++i)
+                {
+                    points[i][0] = output[i][0];
+                    points[i][1] = output[i][1];
+                }
+            }
+            return count;
+        }
+
         /// The paint colour whose NanoVG-side premultiplication lands on exactly @p tint.
         ///
         /// nanovg_gl.h's `glnvg__convertPaint` uploads `glnvg__premulColor(paint->innerColor)`,
@@ -112,12 +187,14 @@ namespace CNA::Internal::Renderers::NanoVg
         nvgGlobalCompositeBlendFuncSeparate(ctx, blend.srcRGB, blend.dstRGB,
                                             blend.srcAlpha, blend.dstAlpha);
 
-        int sx = 0, sy = 0, sw = 0, sh = 0;
-        bool scissorEnabled = false;
-        owner_.GetScissorEXT(sx, sy, sw, sh, scissorEnabled);
-        if (scissorEnabled)
-            nvgScissor(ctx, static_cast<float>(sx), static_cast<float>(sy),
-                      static_cast<float>(sw), static_cast<float>(sh));
+        // Deliberately NOT nvgScissor(): NanoVG's scissor is a SHADER MASK that multiplies the
+        // fragment colour (`color *= scissor` in nanovg_gl.h's own fragment shader), not a
+        // rasterizer clip. A masked-out fragment therefore still WRITES -- it writes zero -- so
+        // under any BlendState whose destination factor does not evaluate to one for a zero
+        // source (BlendState.Opaque's Zero, most obviously) the "clipped" region would be
+        // blackened rather than left alone. Each Draw() clips its own quad geometrically instead,
+        // which is exact for every BlendState and, as a bonus, hard-edged rather than carrying the
+        // shader mask's own one-pixel feather.
 
         if (transform_[0] != 1 || transform_[1] != 0 || transform_[2] != 0 ||
             transform_[3] != 1 || transform_[4] != 0 || transform_[5] != 0)
@@ -173,6 +250,11 @@ namespace CNA::Internal::Renderers::NanoVg
         sampler_.addressU = addressU;
         sampler_.addressV = addressV;
         lastSamplerImage_ = 0;
+    }
+
+    void NanoVgSpriteBatchRenderer::SetImmediateMode(bool immediate)
+    {
+        immediate_ = immediate;
     }
 
     void NanoVgSpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
@@ -274,11 +356,75 @@ namespace CNA::Internal::Renderers::NanoVg
                                          0.0f, tex->GetImageHandle(), 1.0f);
         paint.innerColor = paint.outerColor = PaintColorForTint(color);
 
-        nvgBeginPath(ctx);
-        nvgRect(ctx, -origin.X, -origin.Y, static_cast<float>(sw), static_cast<float>(sh));
+        // nvgFillPaint multiplies the CURRENT transform into the paint's own (nanovg.c), anchoring
+        // the texture mapping to this local space. Doing it before the path is built is what lets
+        // the clipped path below be emitted in logical space without disturbing a single texel.
         nvgFillPaint(ctx, paint);
+
+        int scissorX = 0, scissorY = 0, scissorW = 0, scissorH = 0;
+        bool scissorEnabled = false;
+        owner_.GetScissorEXT(scissorX, scissorY, scissorW, scissorH, scissorEnabled);
+
+        nvgBeginPath(ctx);
+        if (!scissorEnabled)
+        {
+            nvgRect(ctx, -origin.X, -origin.Y, static_cast<float>(sw), static_cast<float>(sh));
+        }
+        else
+        {
+            if (scissorW <= 0 || scissorH <= 0)
+            {
+                nvgRestore(ctx);
+                return;
+            }
+
+            float xform[6];
+            nvgCurrentTransform(ctx, xform);
+            const float lx0 = -origin.X, ly0 = -origin.Y;
+            const float lx1 = lx0 + static_cast<float>(sw), ly1 = ly0 + static_cast<float>(sh);
+            const float localCorners[4][2] = {{lx0, ly0}, {lx1, ly0}, {lx1, ly1}, {lx0, ly1}};
+            float polygon[8][2];
+            for (int i = 0; i < 4; ++i)
+            {
+                nvgTransformPoint(&polygon[i][0], &polygon[i][1], xform,
+                                  localCorners[i][0], localCorners[i][1]);
+            }
+            const int corners = ClipConvexToRect(
+                polygon, 4, static_cast<float>(scissorX), static_cast<float>(scissorY),
+                static_cast<float>(scissorX + scissorW), static_cast<float>(scissorY + scissorH));
+            if (corners < 3)
+            {
+                nvgRestore(ctx);
+                return;
+            }
+
+            // The clipped outline is already in logical space, so the accumulated sprite transform
+            // must not be applied to it a second time. The paint keeps its own copy (see above),
+            // and nvgRestore puts the batch's transform back for the next Draw().
+            nvgResetTransform(ctx);
+            nvgMoveTo(ctx, polygon[0][0], polygon[0][1]);
+            for (int i = 1; i < corners; ++i)
+                nvgLineTo(ctx, polygon[i][0], polygon[i][1]);
+            nvgClosePath(ctx);
+        }
         nvgFill(ctx);
 
         nvgRestore(ctx);
+
+        // SpriteSortMode::Immediate means this sprite must already be on the surface when Draw()
+        // returns, so that a GraphicsDevice operation the caller issues before the next Draw() --
+        // a Clear(), a render-state change, a readback -- happens AFTER it rather than before the
+        // whole batch. NanoVG normally submits only at nvgEndFrame, so the recorded call list is
+        // flushed here through the backend's own renderFlush, reached via the public
+        // nvgInternalParams(). Deliberately NOT nvgEndFrame()/nvgBeginFrame(): that pair runs
+        // nvgReset(), which would discard the batch's scissor, transform and blend factors
+        // mid-batch. renderFlush leaves the frame open and simply empties the call list, so the
+        // next Draw() accumulates from a clean list into the same frame.
+        if (immediate_)
+        {
+            NVGparams* params = nvgInternalParams(ctx);
+            if (params != nullptr && params->renderFlush != nullptr)
+                params->renderFlush(params->userPtr);
+        }
     }
 }

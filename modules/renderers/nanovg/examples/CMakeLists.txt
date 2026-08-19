@@ -62,6 +62,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "NANOVG")
     cna_register_renderer_test(NAME NanoVg_SamplerState
         COMMAND cna_test_nanovg_sampler_state TIMEOUT 30 LABELS "NanoVg")
 
+    # SpriteSortMode::Immediate must be a real ordering guarantee: a GraphicsDevice operation
+    # issued between two Draw() calls has to land between them, not before the whole batch --
+    # see that file's own top comment.
+    cna_nanovg_test(cna_test_nanovg_immediate_mode nanovg_immediate_mode_test.cpp)
+    cna_register_renderer_test(NAME NanoVg_ImmediateMode
+        COMMAND cna_test_nanovg_immediate_mode TIMEOUT 30 LABELS "NanoVg")
+
     # SpriteBatch quads must rasterize with XNA's hard per-pixel-centre coverage rule, not with
     # NanoVG's own vector-path edge feathering -- see that file's own top comment.
     cna_nanovg_test(cna_test_nanovg_sprite_rasterization nanovg_sprite_rasterization_test.cpp)
