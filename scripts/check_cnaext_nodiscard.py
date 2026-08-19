@@ -11,7 +11,9 @@ Two rules, both narrow enough to be mechanical:
    name begins with get/is/has and whose return type is not void. Discarding one of those is always
    a bug -- it does nothing at all.
 2. **Every value-returning accessor that takes no argument is const.** A zero-argument getter that
-   mutates is either misnamed or hiding state.
+   mutates is either misnamed or hiding state. A `static` member is excused from this one rather
+   than exempted by name: a static member function cannot be const, so the rule has nothing to ask
+   of it. Rule 1 still applies -- discarding a static accessor's return value is just as pointless.
 
 Both rules have deliberate exemptions, listed in EXEMPT below with the reason in the entry itself.
 Adding to that list is a decision; the point of the gate is that it has to be made explicitly.
@@ -34,6 +36,8 @@ EXEMPT_NONCONST = {
     "getTargetPool": "non-const half of an overload pair (PostProcessChain)",
     "getSettings": "non-const half of an overload pair (RenderPipeline)",
 }
+
+STATIC_DECL = re.compile(r"^(?:CNAEXT\s+)?(?:\[\[nodiscard\]\]\s*)?(?:CNAEXT\s+)?static\b")
 
 ACCESSOR = re.compile(
     r"^(?:CNAEXT\s+)?(?:\[\[nodiscard\]\]\s*)?(?:CNAEXT\s+)?"
@@ -65,7 +69,8 @@ def main() -> int:
             where = f"{header.relative_to(root)}:{number}"
             if "[[nodiscard]]" not in text:
                 problems.append(f"{where}: accessor without [[nodiscard]] -- {text}")
-            if not match.group("const") and not match.group("args").strip():
+            if (not match.group("const") and not match.group("args").strip()
+                    and not STATIC_DECL.match(text)):
                 if match.group("name") not in EXEMPT_NONCONST:
                     problems.append(f"{where}: zero-argument accessor is not const -- {text}")
 
