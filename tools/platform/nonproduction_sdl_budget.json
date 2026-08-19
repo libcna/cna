@@ -63,7 +63,7 @@
     },
     "modules/audio/tests/Microsoft/Xna/Framework/Audio/SoundEffectInstanceTestAccess.hpp": {
       "category": "audio-native-integration",
-      "max_references": 3
+      "max_references": 2
     },
     "modules/audio/tests/Microsoft/Xna/Framework/Audio/SoundEffectInstanceTests.cpp": {
       "category": "audio-native-integration",
@@ -644,6 +644,18 @@
     "modules/renderers/metal/examples/metal_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 6
+    },
+    "modules/renderers/nanovg/examples/nanovg_blend_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 12
+    },
+    "modules/renderers/nanovg/examples/nanovg_spritebatch_rotation_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/nanovg/examples/nanovg_unsupported_3d_behavior_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 7
     },
     "modules/renderers/opengl1/examples/opengl1_anisotropic_gl_state_test.cpp": {
       "category": "renderer-integration-executable",

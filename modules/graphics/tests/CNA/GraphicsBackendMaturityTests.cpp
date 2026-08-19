@@ -88,6 +88,7 @@ namespace
             case GraphicsRendererType::OpenVg:
             case GraphicsRendererType::PortableGL:
             case GraphicsRendererType::TinyGL:
+            case GraphicsRendererType::NanoVg:
                 return GraphicsBackendMaturity::Experimental;
 
             case GraphicsRendererType::DirectX1:

@@ -158,7 +158,12 @@ namespace CNA
         /** @brief PixiJS (pixijs.com, Emscripten only, 2D-only in v1 scope): SpriteBatch output as
          * a retained-mode PIXI.Sprite scene graph rendered through PixiJS's own WebGL batch
          * renderer. */
-        PixiJs
+        PixiJs,
+
+        /** @brief NanoVG (memononen/nanovg, 2D-only): SpriteBatch output rendered through
+         * NanoVG's own compiled GLSL vector-rasterization pipeline (GL2 backend) on top of a
+         * real desktop OpenGL context this renderer creates itself. */
+        NanoVg
     };
 
     /**
@@ -276,6 +281,8 @@ namespace CNA
         return GraphicsRendererType::Igl;
 #elif defined(CNA_RENDERER_PIXIJS)
         return GraphicsRendererType::PixiJs;
+#elif defined(CNA_RENDERER_NANOVG)
+        return GraphicsRendererType::NanoVg;
 #else
 #error "CNA: no CNA_RENDERER_* compile definition set -- graphics renderer selection (cmake/RendererSelection.cmake) is broken"
 #endif
@@ -349,6 +356,7 @@ namespace CNA
             case GraphicsRendererType::TinyGL:        return "TINYGL";
             case GraphicsRendererType::Igl:           return "IGL";
             case GraphicsRendererType::PixiJs:        return "PIXIJS";
+            case GraphicsRendererType::NanoVg:        return "NANOVG";
         }
         return "UNKNOWN";
     }
@@ -382,7 +390,7 @@ namespace CNA
             return true;
         };
 
-        for (int ordinal = 0; ordinal <= static_cast<int>(GraphicsRendererType::PixiJs); ++ordinal)
+        for (int ordinal = 0; ordinal <= static_cast<int>(GraphicsRendererType::NanoVg); ++ordinal)
         {
             const auto candidate = static_cast<GraphicsRendererType>(ordinal);
             if (equalsIgnoreCase(getGraphicsRendererName(candidate), name))
