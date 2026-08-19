@@ -24,6 +24,25 @@ notes and a regenerated ABI baseline. ABI `1.x` and later permit only additive, 
 changes within a major. Removing or changing an existing function, numeric constant, struct field,
 field meaning, ownership rule, error rule or callback rule requires a new ABI major.
 
+### What a `CNA_Bool` outside {0, 1} actually does
+
+The table above states the contract, and `CBIND-066` measured how evenly it is enforced: **94
+routes take a `CNA_Bool` by value, and 29 of them refuse a byte outside {0, 1}** with
+`CNA_RESULT_INVALID_ARGUMENT` — a refusal `EffectTechniqueSmoke.c` asserts as documented
+behaviour. The other 65 accept it, and what happens next is not uniform: the implementation reads a
+`CNA_Bool` as `!= CNA_FALSE` in 97 places and as `== CNA_TRUE` in 77, so a byte of `9` means
+**true** in one route and **false** in another.
+
+So: pass only `CNA_FALSE` or `CNA_TRUE`. Anything else is a caller error that some routes catch and
+some do not, and the ones that do not disagree with each other about what it meant. Do not read
+this as a licence to pass `!!x`-style values expecting C's usual any-nonzero-is-true rule — that
+rule holds for barely more than half of it.
+
+This paragraph exists because the sentence above it promised a rule the library only partly
+enforces, and a contract that is documented but unevenly enforced is worse than one that says where
+it stops. Making the 94 uniform is a behavioural change to published routes and is recorded as an
+open decision in `plan_binding.md` `CBIND-066`, with the counts to size it.
+
 ## Naming and linkage
 
 The public export macro will be named `CNA_C_API`. On Windows it expands to `__declspec(dllexport)`
@@ -44,7 +63,7 @@ The C API uses only these primitive representations:
 |---|---|
 | Signed integers | `int8_t`, `int16_t`, `int32_t`, `int64_t` |
 | Unsigned integers | `uint8_t`, `uint16_t`, `uint32_t`, `uint64_t` |
-| Boolean | `CNA_Bool` = `uint8_t`, with only `CNA_FALSE` (0) and `CNA_TRUE` (1) valid |
+| Boolean | `CNA_Bool` = `uint8_t`, with only `CNA_FALSE` (0) and `CNA_TRUE` (1) valid — see below |
 | Result/category/flag/set identifiers | typedef of `uint32_t` plus named integer constants, never a C `enum` field |
 | Length/count/capacity/offset | `uint64_t` |
 | Floating point | IEEE-754 binary32 `float` or binary64 `double`, verified on every supported build |
