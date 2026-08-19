@@ -17,6 +17,7 @@
 #include "CNA/Graphics/ClusteredLightBuffer.hpp"
 #include "CNA/Graphics/ClusteredLightGrid.hpp"
 #include "CNA/Graphics/ClusteredLightSetEXT.hpp"
+#include "CNA/Graphics/PbrMaterialExtensions.hpp"
 #include "EngineTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -48,6 +49,7 @@ using CNA::Graphics::ClusteredLightEXT;
 using CNA::Graphics::ClusteredLightGrid;
 using CNA::Graphics::ClusteredLightSetEXT;
 using CNA::Graphics::ClusteredLightType;
+using CNA::Graphics::PbrMaterialExtensions;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector2;
@@ -528,6 +530,110 @@ TEST(ClusteredForwardEffectTest, TheHighlightHasTheLightsShapeOnASmoothSurface)
     EXPECT_GT(smooth.first, 20) << "the smooth surface shows no highlight at all";
     EXPECT_GT(smooth.first - smooth.second, rough.first - rough.second)
         << "the rough surface's highlight had at least as much of an edge as the smooth one's";
+}
+
+// ── The clearcoat lobe (MOD-2070) ────────────────────────────────────────────
+
+TEST(ClusteredForwardEffectTest, AClearcoatAddsASecondLobeAndTakesFromTheFirst)
+{
+    // What makes lacquer look like lacquer is not that it is brighter -- it is that it is brighter
+    // *where it catches the light* and darker everywhere else, because the coat reflects exactly
+    // what it stops reaching the base. Both halves are asserted; a coat that only ever added would
+    // pass the first and be wrong.
+    const ClusteredLightEXT light = MakePoint(Vector3(0.0f, 3.0f, 0.0f), 20.0f, 4.0f);
+    const Vector3 surface(0.0f, 0.0f, 0.0f);
+    const Vector3 normal(0.0f, 1.0f, 0.0f);
+    const Vector3 base(0.5f, 0.5f, 0.5f);
+
+    // A rough base under a smooth coat: the configuration one roughness cannot describe.
+    const float roughness = 0.9f;
+    const float coatRoughness = 0.05f;
+
+    // Straight above, so the half-vector is the normal and the coat's lobe is aimed at the eye.
+    const Vector3 onAxis(0.0f, 5.0f, 0.0f);
+    const Vector3 bare = ClusteredForwardEffect::contribution(light, surface, normal, onAxis, base,
+                                                              0.0f, roughness);
+    const Vector3 coated = ClusteredForwardEffect::contribution(light, surface, normal, onAxis,
+                                                                base, 0.0f, roughness, 1.0f,
+                                                                coatRoughness);
+    EXPECT_GT(coated.X, bare.X * 1.5f) << "the coat added no highlight where it should be brightest";
+
+    // Well off the specular direction, where the coat's own lobe contributes almost nothing and
+    // all it does is take from the base.
+    const Vector3 offAxis(6.0f, 0.6f, 0.0f);
+    const Vector3 bareOff = ClusteredForwardEffect::contribution(light, surface, normal, offAxis,
+                                                                 base, 0.0f, roughness);
+    const Vector3 coatedOff = ClusteredForwardEffect::contribution(light, surface, normal, offAxis,
+                                                                   base, 0.0f, roughness, 1.0f,
+                                                                   coatRoughness);
+    EXPECT_LT(coatedOff.X, bareOff.X) << "the coat reflected without taking anything from the base";
+    EXPECT_GT(coatedOff.X, 0.0f) << "the coat swallowed the base entirely";
+}
+
+TEST(ClusteredForwardEffectTest, AZeroClearcoatIsExactlyTheUncoatedResult)
+{
+    // The default has to change nothing at all, bit for bit -- not "close enough".
+    const ClusteredLightEXT light = MakePoint(Vector3(1.0f, 3.0f, 2.0f), 20.0f, 3.0f);
+    const Vector3 surface(0.0f, 0.0f, 0.0f);
+    const Vector3 normal(0.0f, 1.0f, 0.0f);
+    const Vector3 eye(2.0f, 4.0f, 1.0f);
+    const Vector3 base(0.6f, 0.4f, 0.2f);
+
+    const Vector3 bare = ClusteredForwardEffect::contribution(light, surface, normal, eye, base,
+                                                              0.2f, 0.5f);
+    const Vector3 zeroCoat = ClusteredForwardEffect::contribution(light, surface, normal, eye,
+                                                                  base, 0.2f, 0.5f, 0.0f, 0.5f);
+    EXPECT_FLOAT_EQ(bare.X, zeroCoat.X);
+    EXPECT_FLOAT_EQ(bare.Y, zeroCoat.Y);
+    EXPECT_FLOAT_EQ(bare.Z, zeroCoat.Z);
+}
+
+TEST(ClusteredForwardEffectTest, TheClearcoatSettingsReachTheShader)
+{
+    GraphicsDevice gd;
+    ClusteredForwardEffect effect(gd);
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+    if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
+
+    EXPECT_TRUE(effect.getMaterialExtensions().isNeutral())
+        << "an effect nobody gave extensions to must shade as if there were none";
+
+    ClusteredLightSetEXT lights;
+    lights.add(MakePoint(Vector3(0.0f, 0.0f, kWallZ + 3.0f), 10.0f, 5.0f));
+
+    effect.setBaseColor(Vector3(0.4f, 0.4f, 0.4f));
+    effect.setMetallic(0.0f);
+    effect.setRoughness(0.9f);
+
+    const long long bare = TotalBrightness(RenderWall(gd, effect, lights));
+
+    PbrMaterialExtensions extensions;
+    extensions.setClearcoatFactor(1.0f);
+    // Not a mirror coat, on purpose: a roughness of 0.05 gives a lobe about a seventh of a degree
+    // wide, and the pixel the comparison reads sits about four degrees off the specular direction,
+    // so the reference would be reading a peak the frame cannot contain. 0.35 is a lobe wide
+    // enough that half a pixel does not decide the answer.
+    extensions.setClearcoatRoughness(0.35f);
+    effect.setMaterialExtensions(extensions);
+    EXPECT_FALSE(effect.getMaterialExtensions().isNeutral());
+
+    const long long coated = TotalBrightness(RenderWall(gd, effect, lights));
+    EXPECT_NE(coated, bare) << "the clearcoat uniforms never reached the shader";
+
+    // And the frame agrees with the CPU model at the point directly under the light, which is
+    // where the coat's own lobe is aimed.
+    const Vector3 centre(0.0f, 0.0f, kWallZ);
+    const Vector3 expected = ClusteredForwardEffect::contribution(
+        MakePoint(Vector3(0.0f, 0.0f, kWallZ + 3.0f), 10.0f, 5.0f), centre,
+        Vector3(0.0f, 0.0f, 1.0f), Vector3::Zero, Vector3(0.4f, 0.4f, 0.4f), 0.0f, 0.9f, 1.0f,
+        0.35f);
+    const std::vector<Color> pixels = RenderWall(gd, effect, lights);
+    const Color middle = pixels[static_cast<std::size_t>(kSize) * (kSize / 2) + kSize / 2];
+    ASSERT_LT(expected.X, 0.95f) << "the reference saturates, so the comparison proves little";
+    EXPECT_NEAR(static_cast<float>(middle.getRProperty()) / 255.0f, expected.X, 0.03f)
+        << "the shader and the CPU model disagree about the clearcoat";
 }
 
 } // namespace

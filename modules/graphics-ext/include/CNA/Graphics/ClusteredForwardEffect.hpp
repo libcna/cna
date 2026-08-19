@@ -21,6 +21,7 @@ namespace CNA::Graphics {
 
     class AreaLightBrdfTable;
     class ClusteredLightBuffer;
+    class PbrMaterialExtensions;
     struct ClusteredLightEXT;
 
 /** @addtogroup cnaext_engine
@@ -142,6 +143,21 @@ namespace CNA::Graphics {
         /** @brief Sets the surface's roughness. @param value Clamped to [0.04, 1]. */
         void setRoughness(float value);
 
+        /**
+         * @brief Sets the material extensions the following draws are shaded with.
+         *
+         * **Only the scalar lobes are consumed.** This effect binds no material textures at all --
+         * it has a base colour, a metallic and a roughness, not a texture set -- so a clearcoat's
+         * strength, roughness and normal *maps* are carried by the extension set for the importer
+         * and the round trip, and are not read here. The factors are.
+         *
+         * @param extensions The extensions; a neutral set turns every lobe off.
+         */
+        void setMaterialExtensions(const PbrMaterialExtensions& extensions);
+
+        /** @brief Returns the material extensions the following draws are shaded with. */
+        [[nodiscard]] const PbrMaterialExtensions& getMaterialExtensions() const;
+
         /** @brief Returns the ambient term added once per fragment. */
         [[nodiscard]] Microsoft::Xna::Framework::Vector3 getAmbient() const;
         /** @brief Sets the ambient term added once per fragment. @param value Linear, non-negative. */
@@ -162,6 +178,8 @@ namespace CNA::Graphics {
          * @param baseColor      The surface's base colour.
          * @param metallic       How metallic the surface is.
          * @param roughness      The surface's roughness.
+         * @param clearcoat      How strongly the clearcoat lobe is applied, 0 to 1.
+         * @param clearcoatRoughness The clearcoat layer's own roughness.
          * @return The contribution, unbounded above; zero when the point is out of range.
          */
         [[nodiscard]] static Microsoft::Xna::Framework::Vector3 contribution(
@@ -169,7 +187,8 @@ namespace CNA::Graphics {
             const Microsoft::Xna::Framework::Vector3& surface,
             const Microsoft::Xna::Framework::Vector3& normal,
             const Microsoft::Xna::Framework::Vector3& cameraPosition,
-            const Microsoft::Xna::Framework::Vector3& baseColor, float metallic, float roughness);
+            const Microsoft::Xna::Framework::Vector3& baseColor, float metallic, float roughness,
+            float clearcoat = 0.0f, float clearcoatRoughness = 0.0f);
 
     private:
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> effect_;
@@ -182,6 +201,7 @@ namespace CNA::Graphics {
 
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::AreaLightEXT> areaLight_;
         const AreaLightBrdfTable* areaTable_ = nullptr;
+        std::unique_ptr<PbrMaterialExtensions> extensions_;
     };
 
 /** @} */

@@ -107,6 +107,7 @@
 #include "CNA/Graphics/GltfMaterialBridge.hpp"
 #include "CNA/Graphics/MaterialBinding.hpp"
 #include "CNA/Graphics/PbrMaterial.hpp"
+#include "CNA/Graphics/PbrMaterialExtensions.hpp"
 
 // ---- Post-process effects ------------------------------------------------------------------
 #include "CNA/Graphics/AreaLightBrdfTable.hpp"

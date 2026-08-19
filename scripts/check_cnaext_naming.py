@@ -30,6 +30,8 @@ EXEMPT = {
     # Deliberate mirrors of System.Object's members, spelled as the rest of CNA spells them.
     "PbrMaterial::GetHashCode": "mirrors System.Object.GetHashCode",
     "PbrMaterial::ToString": "mirrors System.Object.ToString",
+    "PbrMaterialExtensions::GetHashCode": "mirrors System.Object.GetHashCode, as PbrMaterial does",
+    "PbrMaterialExtensions::ToString": "mirrors System.Object.ToString, as PbrMaterial does",
     # Predates the engine layer and its naming rule, and is exposed through the C ABI
     # (modules/c-api/src/CnaCApiGraphicsExt.cpp), so the name is not this layer's to change.
     "AsciiPostProcessEffect::Draw": "predates MOD-6 and is part of the C ABI surface",

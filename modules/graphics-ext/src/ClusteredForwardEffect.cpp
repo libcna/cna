@@ -8,6 +8,7 @@
 #include "CNA/Graphics/AreaLightShading.hpp"
 #include "CNA/Graphics/ClusteredLightBuffer.hpp"
 #include "CNA/Graphics/ClusteredLightEXT.hpp"
+#include "CNA/Graphics/PbrMaterialExtensions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AreaLightEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -85,6 +86,9 @@ float cnaFalloff(float distance, float range) {
     return window * window / max(distance * distance, 1e-4);
 }
 
+uniform float uClearcoat;
+uniform float uClearcoatRoughness;
+
 vec3 cnaShade(CnaClusteredLight light, vec3 surface, vec3 normal, vec3 viewDirection,
               vec3 baseColor, float metallic, float roughness) {
     vec3 toLight = light.position - surface;
@@ -113,8 +117,21 @@ vec3 cnaShade(CnaClusteredLight light, vec3 surface, vec3 normal, vec3 viewDirec
     vec3 specular = fresnel * cnaDistribution(NoH, roughness) * cnaGeometry(NoV, NoL, roughness)
                   / max(4.0 * NoV * NoL, 1e-7);
     vec3 diffuse = (vec3(1.0) - fresnel) * (1.0 - metallic) * baseColor / kCnaPi;
+    vec3 layered = diffuse + specular;
 
-    return (diffuse + specular) * light.colour * attenuation * NoL;
+    // KHR_materials_clearcoat: a second, thin specular layer over the whole material, with its own
+    // roughness. Not a brighter highlight -- a *second* one. What it takes from the base layer is
+    // exactly what it reflects, so a coat brightens the surface where it catches the light and
+    // darkens it everywhere else, which is what makes lacquer look like lacquer.
+    if (uClearcoat > 0.0) {
+        float ccRoughness = max(uClearcoatRoughness, 0.04);
+        float ccFresnel = 0.04 + 0.96 * pow(clamp(1.0 - VoH, 0.0, 1.0), 5.0);
+        float ccSpecular = ccFresnel * cnaDistribution(NoH, ccRoughness)
+                         * cnaGeometry(NoV, NoL, ccRoughness) / max(4.0 * NoV * NoL, 1e-7);
+        layered = layered * (1.0 - uClearcoat * ccFresnel) + vec3(uClearcoat * ccSpecular);
+    }
+
+    return layered * light.colour * attenuation * NoL;
 }
 )";
 
@@ -209,6 +226,11 @@ void main() {
         effect_->SetUniformVec3("uAmbient", ambient_.X, ambient_.Y, ambient_.Z);
         effect_->SetUniformFloat("uMetallic", metallic_);
         effect_->SetUniformFloat("uRoughness", roughness_);
+        effect_->SetUniformFloat("uClearcoat",
+                                 extensions_ != nullptr ? extensions_->getClearcoatFactor() : 0.0f);
+        effect_->SetUniformFloat("uClearcoatRoughness",
+                                 extensions_ != nullptr ? extensions_->getClearcoatRoughness()
+                                                        : 0.0f);
 
         lights.bind(*effect_, 1);
 
@@ -278,6 +300,17 @@ void main() {
         roughness_ = std::clamp(value, 0.04f, 1.0f);
     }
 
+    void ClusteredForwardEffect::setMaterialExtensions(const PbrMaterialExtensions& extensions)
+    {
+        extensions_ = std::make_unique<PbrMaterialExtensions>(extensions);
+    }
+
+    const PbrMaterialExtensions& ClusteredForwardEffect::getMaterialExtensions() const
+    {
+        static const PbrMaterialExtensions neutral;
+        return extensions_ != nullptr ? *extensions_ : neutral;
+    }
+
     Vector3 ClusteredForwardEffect::getAmbient() const { return ambient_; }
     void    ClusteredForwardEffect::setAmbient(const Vector3& value)
     {
@@ -289,7 +322,8 @@ void main() {
                                                  const Vector3& surface, const Vector3& normal,
                                                  const Vector3& cameraPosition,
                                                  const Vector3& baseColor, const float metallic,
-                                                 const float roughness)
+                                                 const float roughness, const float clearcoat,
+                                                 const float clearcoatRoughness)
     {
         const Vector3 toLight(light.Position.X - surface.X, light.Position.Y - surface.Y,
                               light.Position.Z - surface.Z);
@@ -335,6 +369,24 @@ void main() {
                                    (NoL / std::max(NoL * (1.0f - k) + k, 1e-7f));
 
         const float schlick = std::pow(std::clamp(1.0f - VoH, 0.0f, 1.0f), 5.0f);
+
+        float clearcoatFresnel = 0.0f;
+        float clearcoatSpecular = 0.0f;
+        if (clearcoat > 0.0f)
+        {
+            const float ccRoughness = std::max(clearcoatRoughness, 0.04f);
+            const float ccA = ccRoughness * ccRoughness;
+            const float ccAA = ccA * ccA;
+            const float ccD = NoH * NoH * (ccAA - 1.0f) + 1.0f;
+            const float ccDistribution = ccAA / std::max(3.14159265359f * ccD * ccD, 1e-7f);
+            const float ccK = (ccRoughness + 1.0f) * (ccRoughness + 1.0f) / 8.0f;
+            const float ccGeometry = (NoV / std::max(NoV * (1.0f - ccK) + ccK, 1e-7f)) *
+                                     (NoL / std::max(NoL * (1.0f - ccK) + ccK, 1e-7f));
+            clearcoatFresnel = 0.04f + 0.96f * schlick;
+            clearcoatSpecular = clearcoatFresnel * ccDistribution * ccGeometry /
+                                std::max(4.0f * NoV * NoL, 1e-7f);
+        }
+
         Vector3 result(0.0f, 0.0f, 0.0f);
         float* out = &result.X;
         const float* base = &baseColor.X;
@@ -347,8 +399,11 @@ void main() {
                                    std::max(4.0f * NoV * NoL, 1e-7f);
             const float diffuse = (1.0f - fresnel) * (1.0f - metallic) * base[channel] /
                                   3.14159265359f;
-            out[channel] = (diffuse + specular) * emitted[channel] * light.Intensity *
-                           attenuation * NoL;
+            float layered = diffuse + specular;
+            if (clearcoat > 0.0f)
+                layered = layered * (1.0f - clearcoat * clearcoatFresnel) +
+                          clearcoat * clearcoatSpecular;
+            out[channel] = layered * emitted[channel] * light.Intensity * attenuation * NoL;
         }
         return result;
     }
