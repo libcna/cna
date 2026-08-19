@@ -1272,11 +1272,30 @@ CNA_C_API CNA_Result cna_content_manager_load_effect(
 
 /**
  * @brief Creates a source-based ShaderEffect.
+ *
  * @param graphics_device Borrowed graphics-device handle from an active game callback.
  * @param vertex_source UTF-8 vertex-shader source copied by the call.
  * @param fragment_source UTF-8 fragment-shader source copied by the call.
  * @param out_effect Receives the owned effect handle.
- * @return A CNA result code; renderer availability is reported separately.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when both sources are empty or the
+ *         output is null, `CNA_RESULT_ENCODING` for source that is not valid UTF-8, or a documented
+ *         handle/thread failure.
+ *
+ * **Success means the effect object exists, not that the source compiled.** Read the failure list
+ * above literally: a shader the renderer rejects is not on it. Whether a renderer compiles at
+ * construction, and whether it inspects the source at all, is renderer-specific and this ABI does
+ * not normalize it -- doing so would mean parsing shader source here. Measured across two of CNA's
+ * renderers, the same nonsense text is accepted by both, and afterwards one reports it valid while
+ * the other reports it invalid.
+ *
+ * So ask @ref cna_shader_effect_is_valid after creating, and read its answer the way that route
+ * documents it. The one case this ABI does settle is both sources empty, which is refused
+ * identically everywhere rather than left to the renderer.
+ *
+ * `CNA_GRAPHICS_CAPABILITY_CUSTOM_EFFECTS` gates whether this route is usable at all, and is a
+ * different capability from `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`: a renderer can support
+ * source-based effects while refusing compiled `.xnb` ones, and the software renderer does exactly
+ * that. Testing the wrong one reports a game as blocked that is not.
  */
 CNA_C_API CNA_Result cna_shader_effect_create(
     CNA_Handle graphics_device,
@@ -1431,7 +1450,18 @@ CNA_C_API CNA_Result cna_effect_is_exact_stock_sprite_effect(
     CNA_EffectHandle effect,
     CNA_Bool* out_is_exact);
 
-/** @brief Reports whether a ShaderEffect has a valid compiled shader program. */
+/**
+ * @brief Reports what the active renderer concluded about a ShaderEffect's source.
+ *
+ * @param effect ShaderEffect handle.
+ * @param out_is_valid Receives the renderer's verdict.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * `CNA_TRUE` means *nothing rejected this source*, which is weaker than *this will draw*. A
+ * renderer that compiles the source reports a real verdict; a renderer that does not inspect source
+ * at all -- the software rasterizer accepts any non-empty text -- reports `CNA_TRUE` for text that
+ * cannot draw anything. `CNA_FALSE` is the strong answer: it means a renderer looked and refused.
+ */
 CNA_C_API CNA_Result cna_shader_effect_is_valid(
     CNA_EffectHandle effect,
     CNA_Bool* out_is_valid);

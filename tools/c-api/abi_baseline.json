@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 1280,
+  "encoded": 1536,
   "major": 0,
-  "minor": 5,
+  "minor": 6,
   "patch": 0,
-  "runtime": 1280
+  "runtime": 1536
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -3712,9 +3712,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 1280,
+  "CNA_ABI_VERSION": 1536,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 5,
+  "CNA_ABI_VERSION_MINOR": 6,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,

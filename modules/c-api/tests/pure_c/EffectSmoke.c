@@ -418,6 +418,31 @@ static int validate_shader_effect(const CNA_Handle device)
             shader_has_renderer == base_has_renderer &&
             (is_valid == CNA_FALSE || shader_has_renderer == CNA_TRUE));
 
+    /* CBIND-075. Creating succeeds for source no renderer could run, and that is the documented
+       contract: success means the object exists, not that anything compiled. What the renderers
+       then say about it differs -- one accepts any non-empty text and calls it valid, another
+       compiles and calls it invalid -- so the verdict is read as a canonical boolean rather than
+       pinned to one value. The refusal that IS uniform is source-less creation: it used to be an
+       INTERNAL from one renderer's exception, blaming CNA for the caller's input, and a plain
+       success from another. */
+    {
+        CNA_EffectHandle junk = CNA_INVALID_HANDLE;
+        CNA_EffectHandle empty = CNA_INVALID_HANDLE;
+        CNA_Bool junk_valid = UINT8_C(9);
+
+        REQUIRE(cna_shader_effect_create(
+                    device, string_view("this is not a shader"),
+                    string_view("neither is this"), &junk) == CNA_RESULT_SUCCESS);
+        REQUIRE(junk != CNA_INVALID_HANDLE);
+        REQUIRE(cna_shader_effect_is_valid(junk, &junk_valid) == CNA_RESULT_SUCCESS &&
+                (junk_valid == CNA_FALSE || junk_valid == CNA_TRUE));
+        REQUIRE(cna_effect_destroy(junk) == CNA_RESULT_SUCCESS);
+
+        REQUIRE(cna_shader_effect_create(
+                    device, string_view(""), string_view(""), &empty) ==
+                CNA_RESULT_INVALID_ARGUMENT);
+        REQUIRE(empty == CNA_INVALID_HANDLE);
+    }
     REQUIRE(cna_shader_effect_get_world(shader, &value) == CNA_RESULT_SUCCESS &&
             memcmp(&value, &identity, sizeof(value)) == 0);
     value.m41 = 7.0F;

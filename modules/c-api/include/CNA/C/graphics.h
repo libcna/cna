@@ -147,7 +147,19 @@ typedef uint32_t CNA_GraphicsCapability;
 /** @brief Indicates support for real occlusion queries. */
 #define CNA_GRAPHICS_CAPABILITY_OCCLUSION_QUERY UINT32_C(6)
 
-/** @brief Indicates support for custom effects in sprite batches. */
+/**
+ * @brief Indicates support for custom effects in sprite batches.
+ *
+ * This gates `cna_shader_effect_create` -- an effect built from shader **source**. It is a separate
+ * capability from `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`, which gates a compiled `.xnb` effect
+ * asset, and the two genuinely differ: the software renderer reports this one true and that one
+ * false. Deciding whether a game can supply its own shaders by testing the compiled capability
+ * reports it blocked when it is not.
+ *
+ * True promises the route works and returns an effect. It does not promise the renderer validates
+ * the source; see `cna_shader_effect_create` and `cna_shader_effect_is_valid` for what a caller can
+ * conclude afterwards.
+ */
 #define CNA_GRAPHICS_CAPABILITY_CUSTOM_EFFECTS UINT32_C(7)
 
 /** @brief Indicates support for real three-dimensional texture storage. */

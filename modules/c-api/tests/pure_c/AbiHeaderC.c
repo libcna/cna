@@ -8,7 +8,7 @@
 
 #include <stddef.h>
 
-_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 5, 0),
+_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 6, 0),
                "CNA C ABI version encoding must remain stable");
 _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
                "CNA_Result must have a fixed-width representation");

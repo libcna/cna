@@ -3502,6 +3502,14 @@ CNA_Result cna_shader_effect_create(
                 result, ErrorCategoryForResult(result),
                 "The ShaderEffect fragment source is not valid UTF-8 text.");
         }
+        // CBIND-075: an effect with no source at all is the caller's mistake, and renderers
+        // disagreed about it -- one threw, which the barrier reported as CNA_RESULT_INTERNAL and so
+        // blamed CNA for the caller's input, and another accepted it and handed back an effect that
+        // could never draw. Refused here so the answer is the same whichever renderer is active.
+        if (vertex.empty() && fragment.empty()) {
+            return InvalidArgument(
+                "A ShaderEffect needs source: the vertex and fragment sources are both empty.");
+        }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result = GetBorrowedGraphicsDevice(
                 graphicsDeviceHandle, &graphicsDevice);
