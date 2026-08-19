@@ -439,6 +439,10 @@ you are measuring and it prints the answers, `CustomEffects` next to `ExecutesSh
 | ShadowSamplingEXT / IBL | yes / yes | no / no | no / no | no / no | no / no | no / no | no / no | no / no |
 | Engine-layer suites | 0 fail | 0 fail | 380/111/0 | 348/143/0 | 348/143/0 | 402/89/0 | 406/85/0 | 406/85/0 |
 
+Blend2D and OpenVG were measured too and need no column of their own: they answer **no** to every
+capability and every query, `ThreeD` included, and their engine-layer runs are 380/111/0 and
+334/157/0. OpenVG is the renderer that supports *nothing*, which turned out to matter — see below.
+
 Two columns are worth reading twice. **`CustomEffects: yes` with `ExecutesShaderSourceEXT: no`**
 (SDL_GPU, OpenGL2, OpenGL4) is the pair `MOD-1699` exists for: those renderers accept an effect and
 do not run this layer's GLSL, and only the two-part question tells them apart from EasyGL. And

@@ -65,8 +65,13 @@ TEST(RequireCapabilityTest, ASupportedCapabilityReturnsWithoutThrowing)
         ++checked;
         EXPECT_NO_THROW(requireCapability(gd, capability, "RequireCapabilityTest"));
     }
-    EXPECT_GT(checked, 0) << "this renderer supports nothing at all, so the quiet path went "
-                             "unchecked";
+    // plan_modern.md MOD-1693. This used to be an EXPECT_GT, on the assumption that every renderer
+    // supports at least one thing. OpenVG is the counterexample: it answers no to every capability
+    // in the enum. That makes the quiet path genuinely unreachable there rather than untested, and
+    // this test is about the helper, not about the renderer -- so it skips, and says why.
+    if (checked == 0)
+        GTEST_SKIP() << "this renderer supports no capability at all, so requireCapability's quiet "
+                        "path has nothing to be quiet about here";
 }
 
 TEST(RequireCapabilityTest, AnUnsupportedCapabilityThrowsWithTheRenderersOwnName)
