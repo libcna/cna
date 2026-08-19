@@ -760,7 +760,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1610 | Magnum | ⬜ | |
 | MOD-1611 | Diligent | ⬜ | Runtime-selected native API — verify on at least two. |
 | MOD-1612 | LLGL | ⬜ | |
-| MOD-1613 | Sokol | ⬜ | |
+| MOD-1613 | Sokol | 🟨 | **Measured, not implemented.** `FloatRenderTargets: no`, `HalfFloatRenderTargets: no`; the refusal path runs. sokol_gfx has `SG_PIXELFORMAT_RGBA16F`, so this is implementable work. |
 | MOD-1614 | Metal | ⬜ | |
 | MOD-1615 | FNA3D | ⬜ | Already overrides `CreateRenderTarget2DEXT` — verify float formats specifically. |
 | MOD-1616 | Wicked | ⬜ | |
@@ -782,7 +782,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1629 | Magnum | ⬜ | |
 | MOD-1630 | Diligent | ⬜ | |
 | MOD-1631 | LLGL | ⬜ | |
-| MOD-1632 | Sokol | ⬜ | |
+| MOD-1632 | Sokol | 🟨 | **Measured, and it found a process abort.** SOKOL answers `CustomEffects: yes` / `ExecutesShaderSourceEXT: no` — the `MOD-1699` pair again — so every shader-based pass reports `isSupported() == false` and copies through: **403 pass · 88 skip · 0 fail**. What the run first did instead was **abort the whole test process**: sokol_gfx keeps its state in one process-wide context and `sg_setup()` asserts `!_sg.valid`, so `MOD-1715`'s second-device probe killed `CnaTests` outright. Fixed in `Sokol::CreateGraphicsRenderer` — refuse by name, exactly as TinyGL does. The placement is the interesting part: the guard cannot live in `SetupSokol()`, because `SokolRenderer`'s initializer list creates a platform GL context first, and that makes the *new* context current, so the existing renderer's sokol objects are then torn down against the wrong context and sokol asserts again on the way out (`_sg_gl_discard_shader: glGetError() == 0`). Refusing before anything is constructed is the only point at which nothing has been disturbed. Under `NDEBUG` the assert is not there at all, which makes the same situation silent corruption rather than a crash. |
 | MOD-1633 | Metal | ⬜ | |
 | MOD-1634 | FNA3D | ⬜ | |
 | MOD-1635 | Wicked | ⬜ | |
@@ -805,7 +805,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1649 | Magnum | ⬜ | |
 | MOD-1650 | Diligent | ⬜ | |
 | MOD-1651 | LLGL | ⬜ | |
-| MOD-1652 | Sokol | ⬜ | |
+| MOD-1652 | Sokol | 🟨 | **Measured:** `SupportsShadowSamplingEXT: no`; all four casters report `isSupported() == false` and the shadow suites skip. |
 | MOD-1653 | Metal | ⬜ | |
 | MOD-1654 | FNA3D | ⬜ | |
 | MOD-1655 | Wicked | ⬜ | |
@@ -827,7 +827,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1669 | Magnum | ⬜ | |
 | MOD-1670 | Diligent | ⬜ | |
 | MOD-1671 | LLGL | ⬜ | |
-| MOD-1672 | Sokol | ⬜ | |
+| MOD-1672 | Sokol | 🟨 | **Measured:** `SupportsImageBasedLightingEXT: no`; the CPU-side precompute works, the shading half does not. |
 | MOD-1673 | Metal | ⬜ | |
 | MOD-1674 | Cross-renderer IBL sphere-grid parity test | ⬜ | The `MOD-1242` golden reproduced within tolerance. |
 
