@@ -8,6 +8,7 @@
 #include "CNA/Graphics/ShadowMap.hpp"
 #include "CNA/Graphics/Skybox.hpp"
 #include "CNA/Graphics/SsaoPass.hpp"
+#include "CNA/Graphics/ColorGradePass.hpp"
 #include "CNA/Graphics/DepthOfFieldPass.hpp"
 #include "CNA/Graphics/SsrPass.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
@@ -36,7 +37,8 @@ namespace CNA::Graphics {
           fxaaPass_(std::make_unique<FxaaPass>(device)),
           ssaoPass_(std::make_unique<SsaoPass>(device)),
           ssrPass_(std::make_unique<SsrPass>(device)),
-          dofPass_(std::make_unique<DepthOfFieldPass>(device))
+          dofPass_(std::make_unique<DepthOfFieldPass>(device)),
+          colorGradePass_(std::make_unique<ColorGradePass>(device))
     {
         // plan_modern.md MOD-715. After a context loss every GPU object this pipeline holds names
         // storage the driver has already destroyed; rendering into one is undefined rather than
@@ -71,7 +73,8 @@ namespace CNA::Graphics {
         if (settings_.getTonemappingMode() != TonemappingMode::None)
             return true;
         if (settings_.isBloomEnabled() || settings_.isSSAOEnabled() || settings_.isFXAAEnabled() ||
-            settings_.isSSREnabled() || settings_.isDOFEnabled())
+            settings_.isSSREnabled() || settings_.isDOFEnabled() ||
+            settings_.isColorGradeEnabled())
             return true;
         return !userPasses_.empty();
     }
@@ -251,6 +254,13 @@ namespace CNA::Graphics {
             chain_.addPass(bloomPass_.get());
         if (settings_.getTonemappingMode() != TonemappingMode::None || settings_.isHDREnabled())
             chain_.addPass(tonemapPass_.get());
+        // The grade is the last word on colour, and it runs on displayed pixels: a lookup table
+        // indexed by scene-referred values would be asked about numbers past 1.0, where a table has
+        // nothing to say. It comes before FXAA rather than after so the edge filter sees the
+        // contrast the viewer will see -- a grade that lifts the blacks changes which edges there
+        // are to find.
+        if (settings_.isColorGradeEnabled())
+            chain_.addPass(colorGradePass_.get());
         // FXAA detects edges by luminance contrast, so it runs on displayed pixels: on
         // scene-referred values a highlight ten times brighter than white reads as an enormous
         // edge and gets blurred into its surroundings.

@@ -86,6 +86,12 @@ namespace CNA::Graphics {
     float           RenderPipelineSettings::getSSREdgeFade()      const { return ssrEdgeFade_; }
     void            RenderPipelineSettings::setSSREdgeFade(float v)     { ssrEdgeFade_ = std::clamp(v, 0.0f, 0.5f); }
 
+    bool            RenderPipelineSettings::isColorGradeEnabled()   const { return colorGradeEnabled_; }
+    void            RenderPipelineSettings::setColorGradeEnabled(bool v)   { colorGradeEnabled_ = v; }
+
+    float           RenderPipelineSettings::getColorGradeStrength()  const { return colorGradeStrength_; }
+    void            RenderPipelineSettings::setColorGradeStrength(float v) { colorGradeStrength_ = std::clamp(v, 0.0f, 1.0f); }
+
     bool            RenderPipelineSettings::isDOFEnabled()        const { return dofEnabled_; }
     void            RenderPipelineSettings::setDOFEnabled(bool v)       { dofEnabled_ = v; }
 

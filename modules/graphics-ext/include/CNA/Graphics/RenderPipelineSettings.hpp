@@ -147,6 +147,16 @@ namespace CNA::Graphics {
         /** @brief Sets how wide the fade at the edge of the screen is, in screen fractions. */
         void setSSREdgeFade(float value);
 
+        /** @brief Returns true if colour grading is enabled. */
+        [[nodiscard]] bool isColorGradeEnabled() const;
+        /** @brief Enables or disables the colour-grading pass. */
+        void setColorGradeEnabled(bool value);
+
+        /** @brief Returns how strongly the graded colour replaces the original. */
+        [[nodiscard]] float getColorGradeStrength() const;
+        /** @brief Sets how strongly the graded colour replaces the original, clamped to [0, 1]. */
+        void setColorGradeStrength(float value);
+
         /** @brief Returns true if depth of field is enabled. */
         [[nodiscard]] bool isDOFEnabled() const;
         /** @brief Enables or disables the depth-of-field pass. */
@@ -308,6 +318,8 @@ namespace CNA::Graphics {
         float           dofFocalLength_   = 50.0f;
         float           dofFNumber_       = 5.6f;
         float           dofMaxRadius_     = 0.02f;
+        bool            colorGradeEnabled_ = false;
+        float           colorGradeStrength_ = 1.0f;
         float           fxaaEdgeThreshold_ = 0.125f;
 
         bool            fxaaEnabled_     = false;
