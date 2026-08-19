@@ -274,5 +274,20 @@ roughly 0.5 ms per megabyte, bringing a 720p downsample result back costs about 
 
 ## Not measured yet
 
-The bloom, tonemapping, SSAO and FXAA passes have no recorded per-pass cost (`MOD-407`, `MOD-317`,
-`MOD-523`, `MOD-606` are open). When they are measured they belong in this file, in this format.
+**Corrected 2026-08-19 (`MOD-1906`).** This section used to say bloom, tonemapping, SSAO and FXAA
+had no recorded per-pass cost, and cited four row IDs that were never about performance at all
+(`MOD-407` is the linear-filter fallback, `MOD-317` the tonemapping ordinal test, `MOD-523`
+half-resolution AO, `MOD-606` an FXAA image check — all closed, none of them a benchmark). All four
+passes *are* measured above: bloom, tonemapping and FXAA in **Post-process passes**, SSAO in **SSAO,
+per quality preset**. The stale paragraph is left visible rather than deleted, because a "not
+measured" note that is wrong is worse than none — it sends a reader looking for numbers that are
+two screens up.
+
+What genuinely has no numbers here:
+
+- **Every renderer except EasyGL.** Phase 16 measured fifteen renderers for *behaviour*; none of
+  them for cost, and on all but one the passes do not run at all (they report `isSupported() ==
+  false` and copy through), so a timing would measure the copy. Only a renderer that executes
+  shader source can be timed against this table.
+- **Any GPU.** Everything here is Mesa llvmpipe. The ratios between passes carry over; the absolute
+  numbers do not.
