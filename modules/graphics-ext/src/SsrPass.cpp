@@ -69,6 +69,10 @@ uniform int   uStepCount;
 // not reach a texture bound through `ShaderEffect::SetTexture` -- measured, linear and point give
 // the same filtered value. Snapping the coordinate to the texel centre gives the same result through
 // arithmetic the shader owns.
+// One texel short of the far plane. The clear writes exactly 1.0, and a real surface at the far
+// plane is already outside anything worth reflecting.
+const float kCnaSkyDepth = 0.999;
+
 vec2 cnaSnapToTexel(vec2 uv, vec2 size) {
     return (floor(uv * size) + 0.5) / size;
 }
@@ -77,8 +81,11 @@ void main() {
     vec3 sourceColor = texture(texture1, TexCoord).rgb;
     float centerDepth = cnaDecodeLinearDepth(texture(uDepthSampler, cnaSnapToTexel(TexCoord, uDepthSize)));
 
-    // Nothing was drawn here: the prepass cleared to "infinitely far", and the sky reflects nothing.
-    if (centerDepth <= 0.0) {
+    // Nothing was drawn here, and "nothing" has two spellings. `DepthNormalPrepass` clears depth to
+    // **white**, so an empty pixel decodes to 1.0 -- the far plane -- and a pass that only tested
+    // for zero would treat the sky as a surface sitting at the camera and march a reflection out of
+    // it. Zero is still checked because a renderer that clears its target to black produces it.
+    if (centerDepth <= 0.0 || centerDepth >= kCnaSkyDepth) {
         FragColor = vec4(sourceColor, 1.0);
         return;
     }
@@ -112,7 +119,9 @@ void main() {
 
         vec2 snappedUv = cnaSnapToTexel(sampleUv, uDepthSize);
         float sceneDepth = cnaDecodeLinearDepth(textureLod(uDepthSampler, snappedUv, 0.0));
-        if (sceneDepth <= 0.0) continue;
+        // The sky is not an occluder: a ray passing over empty frame must keep going rather than
+        // stop against the far plane, which is behind everything and would swallow every ray.
+        if (sceneDepth <= 0.0 || sceneDepth >= kCnaSkyDepth) continue;
 
         // Two tolerances, and they guard opposite errors.
         //

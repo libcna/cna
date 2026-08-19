@@ -371,10 +371,38 @@ TEST(SsrPassTest, ASurfaceFacingTheCameraReflectsNothing)
         << "a wall facing the camera reflected something";
 }
 
-TEST(SsrPassTest, TheSkyIsNotReflective)
+TEST(SsrPassTest, TheClearedFarPlaneIsNotReflective)
 {
-    // Depth 0 is the prepass's "nothing was drawn here". Reconstructing a position from it puts the
-    // surface at the eye, and every ray from there hits immediately.
+    // The spelling of "nothing here" that a real prepass actually produces. `DepthNormalPrepass`
+    // clears depth to **white**, so an empty pixel decodes to 1.0, and this pass tested only for
+    // zero until `MOD-2009` measured the clear -- which made the sky a surface at the camera with a
+    // reflection marched out of it. Both spellings are checked now, and this is the one that would
+    // have shipped broken.
+    GraphicsDevice gd;
+    SsrPass pass(gd);
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+
+    auto depth   = MakeFlatDepth(gd, 255);
+    auto normals = MakeUniformNormals(gd, kTiltedNormal);
+    RenderTarget2D source(gd, kSize, kSize);
+    RenderTarget2D destination(gd, kSize, kSize);
+    FillSourceFlat(gd, source, Color(90, 90, 90, 255));
+
+    PostProcessContext context = MakeContext(source, destination);
+    context.sourceDepth   = depth.get();
+    context.sourceNormals = normals.get();
+    pass.apply(context);
+
+    const std::vector<Color> pixels = ReadTarget(destination);
+    EXPECT_NEAR(pixels[CentreIndex()].getRProperty(), 90, 6)
+        << "the cleared far plane reflected something";
+}
+
+TEST(SsrPassTest, AZeroDepthIsAlsoNotReflective)
+{
+    // The other spelling: a renderer that clears its depth target to black. Reconstructing a
+    // position from zero puts the surface at the eye, and every ray from there hits immediately.
     GraphicsDevice gd;
     SsrPass pass(gd);
     CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);

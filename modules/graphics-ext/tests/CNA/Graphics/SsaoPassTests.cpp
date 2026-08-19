@@ -173,6 +173,64 @@ TEST(SsaoPassTest, AFlatSurfaceIsLeftUnoccluded)
     EXPECT_GE(pixels[middle].getRProperty(), 190) << "a flat wall must not shade itself";
 }
 
+TEST(SsaoPassTest, TheClearedSkyIsNotDarkenedBesideASilhouette)
+{
+    // plan_modern.md MOD-2009. `DepthNormalPrepass` clears depth to white, so an empty pixel reads
+    // as 1.0 -- the far plane -- while this pass tests for "nothing here" by comparing against
+    // *zero*. Its early-out therefore never fires for the sky, and each sky pixel is estimated as a
+    // surface at the far plane with every near object in front of it counting as an occluder. What
+    // stops that becoming a dark halo around every silhouette is the **range check**, not the
+    // early-out: an occluder that far in front contributes essentially nothing. That is a real
+    // property of the estimator resting on a coincidence of two unrelated guards, so it is asserted
+    // here rather than left to be rediscovered -- `SsrPass` had no equivalent second guard and did
+    // ship the corresponding bug until this task measured the clear.
+    GraphicsDevice gd;
+    SsaoPass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run custom effects";
+
+    // A near object on the left, cleared sky on the right, in the prepass's own convention.
+    auto depth = std::make_unique<Texture2D>(gd, kSize, kSize);
+    std::vector<Color> texels;
+    texels.reserve(static_cast<std::size_t>(kSize) * kSize);
+    for (int y = 0; y < kSize; ++y)
+        for (int x = 0; x < kSize; ++x)
+        {
+            const int value = x < kSize / 2 ? 60 : 255;
+            texels.emplace_back(value, value, value, 255);
+        }
+    depth->SetData(texels.data(), static_cast<int>(texels.size()));
+
+    auto normals = MakeFacingNormals(gd);
+    RenderTarget2D source(gd, kSize, kSize);
+    RenderTarget2D destination(gd, kSize, kSize);
+    gd.SetRenderTarget(&source);
+    gd.Clear(Color(200, 200, 200, 255));
+    gd.SetRenderTarget(nullptr);
+
+    RenderPipelineSettings settings;
+    settings.setSSAORadius(0.25f);
+    settings.setSSAOIntensity(2.0f);
+    settings.setSSAOSampleCount(32);
+
+    PostProcessContext context;
+    context.source        = &source;
+    context.sourceDepth   = depth.get();
+    context.sourceNormals = normals.get();
+    context.destination   = &destination;
+    context.width         = kSize;
+    context.height        = kSize;
+    context.settings      = &settings;
+    pass.apply(context);
+
+    const std::vector<Color> pixels = ReadTarget(destination);
+    // A few texels clear of the silhouette, still well inside the sky.
+    const std::size_t skyBesideTheEdge =
+        static_cast<std::size_t>(kSize / 2) * kSize + kSize / 2 + 3;
+    EXPECT_GE(pixels[skyBesideTheEdge].getRProperty(), 190)
+        << "the sky was darkened beside the silhouette in front of it";
+}
+
 TEST(SsaoPassTest, ADepthDiscontinuityDarkensTheSurfaceBesideIt)
 {
     GraphicsDevice gd;
