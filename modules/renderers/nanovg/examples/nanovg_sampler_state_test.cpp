@@ -287,6 +287,50 @@ int main()
                       "addressV=Clamp is honoured independently of addressU=Wrap");
             }
 
+            // ---- Texture lifetime around the per-batch sampler cache ------------------------
+            // Draw() remembers which image already carries this batch's sampler so a batch drawing
+            // one texture repeatedly writes its parameters once. That cache is keyed by a NanoVG
+            // image handle, so it must not survive a texture's destruction: destroying a texture
+            // and creating another between two batches has to leave the second one correctly
+            // sampled. (NanoVG's own glnvg__allocTexture hands out monotonically increasing ids and
+            // never recycles one, so the handles genuinely differ -- this pins that assumption
+            // down rather than relying on it silently.)
+            {
+                auto doomed = renderer.CreateTexture(FromTexels(2, 1, {kBlack, kWhite}));
+                renderer.Clear(0.0f, 0.25f, 0.0f, 1.0f);
+                sprites->SetSamplerFilter(kPoint);
+                sprites->SetSamplerAddressMode(kClamp, kClamp);
+                sprites->Begin();
+                sprites->Draw(*doomed, Rectangle(0, 0, 40, 20), Rectangle(0, 0, 2, 1), Color::White,
+                              0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
+                sprites->End();
+                const Color beforeDestruction = readPixel(15, 10);
+                doomed.reset();
+
+                auto replacement = renderer.CreateTexture(FromTexels(2, 1, {kBlack, kWhite}));
+                renderer.Clear(0.0f, 0.25f, 0.0f, 1.0f);
+                sprites->SetSamplerFilter(kLinear);
+                sprites->Begin();
+                sprites->Draw(*replacement, Rectangle(0, 0, 40, 20), Rectangle(0, 0, 2, 1),
+                              Color::White, 0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
+                sprites->End();
+                Check(CloseTo(beforeDestruction, kBlack, kTolerance) &&
+                          CloseTo(readPixel(15, 10), Color(70, 70, 70, 255), kTolerance),
+                      "a texture created after another was destroyed is sampled by its own batch's "
+                      "filter, not the destroyed texture's");
+
+                // And the surviving texture from earlier in this test still draws correctly, so
+                // the destruction above released only what it owned.
+                renderer.Clear(0.0f, 0.25f, 0.0f, 1.0f);
+                sprites->SetSamplerFilter(kPoint);
+                sprites->Begin();
+                sprites->Draw(*ramp, Rectangle(0, 0, 40, 20), Rectangle(0, 0, 2, 1), Color::White,
+                              0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
+                sprites->End();
+                Check(CloseTo(readPixel(15, 10), kBlack, kTolerance),
+                      "a texture that outlived another's destruction still draws correctly");
+            }
+
             // ---- Deterministic rejection of what cannot be represented ----------------------
             const auto expectRejected = [&](const std::string& label, const std::string& fragment,
                                             auto&& call)
