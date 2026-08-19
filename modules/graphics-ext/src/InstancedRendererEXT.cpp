@@ -135,7 +135,12 @@ namespace CNA::Graphics {
 
     bool InstancedRendererEXT::isInstancingSupported() const
     {
-        return device_.SupportsCapability(CNA::GraphicsCapability::Instancing);
+        // MOD-1621: the instanced path binds the transforms as stream 1, so it needs multi-stream
+        // input as much as it needs instancing. Asking only for Instancing believed SDL_GPU, whose
+        // Instancing answer is the base class's `true` default while its DrawInstancedPrimitives
+        // is the base class's refusal.
+        return device_.SupportsCapability(CNA::GraphicsCapability::Instancing) &&
+               device_.SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput);
     }
 
     void InstancedRendererEXT::setFallbackEnabled(const bool enabled)

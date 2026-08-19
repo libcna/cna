@@ -136,9 +136,17 @@ namespace CNA::Graphics {
         void draw(Microsoft::Xna::Framework::Graphics::Effect& effect);
 
         /**
-         * @brief Returns whether the device can draw instanced at all.
+         * @brief Returns whether the device can draw this renderer's instanced path.
          *
-         * @return True when `GraphicsCapability::Instancing` is supported.
+         * plan_modern.md `MOD-1621`. **Two capabilities, not one**, because the instanced path
+         * binds the per-instance transforms as a *second* vertex stream: a renderer that reports
+         * `Instancing` but not `MultiStreamVertexInput` cannot run it. SDL_GPU is exactly that
+         * renderer -- `Instancing` is `true` by base-class default while
+         * `DrawInstancedPrimitives` refuses -- and asking only the first is how `draw()` threw
+         * where it should have taken the per-instance fallback.
+         *
+         * @return True when `GraphicsCapability::Instancing` **and**
+         *         `GraphicsCapability::MultiStreamVertexInput` are both supported.
          */
         [[nodiscard]] bool isInstancingSupported() const;
 

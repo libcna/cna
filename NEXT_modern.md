@@ -396,6 +396,53 @@ Xvfb also dies periodically in this container. A wrapper that checks `xdpyinfo` 
 before running is worth having; without one, a test run fails with "x11 not available" and looks
 like a regression.
 
+### Measuring a third renderer, and the two bugs it found (SDL_GPU)
+
+`cmake-build-sdlgpu` is a real SDL_GPU build of the engine layer (`-DCNA_CNAEXT=ON
+-DCNA_GRAPHICS_RENDERER=SDL_GPU`; it needs `libshaderc-dev`, which the renderer requires for its
+runtime GLSL compile). The engine-layer suites there end at **0 failures and 130 skips** — the
+capability gates doing exactly what they promise on a renderer that runs almost none of this.
+
+Two defects came out of it, and neither was visible on EasyGL:
+
+- **`InstancedRendererEXT` asked one capability where it needed two.** SDL_GPU answers
+  `Instancing: yes` — the base class's `default: return true` — while `DrawInstancedPrimitives` is
+  the base class's *refusal* and `MultiStreamVertexInput` is `no`. So `draw()` threw where it should
+  have taken the per-instance fallback. The fix is the `MOD-1699` shape again: the instanced path
+  binds the transforms as a **second vertex stream**, so it needs multi-stream input as much as it
+  needs instancing. That the renderer's `Instancing` answer is itself a promise it does not keep is
+  a separate, renderer-level finding, recorded for `plan_sdlgpu.md` rather than fixed here.
+- **A process-exit segfault with nothing to do with graphics.** `CnaTests
+  --gtest_filter=*Instanc*` crashed *after* every test reported, deterministically, on every
+  renderer and with `CNA_CNAEXT` off. `__run_exit_handlers → ~VibrateController →
+  ~PlatformVibrateBackend → ReleaseService →` a call through address 0: the controller's
+  function-local static outlives the platform, and `ReleaseService` trusted the `IPlatform*` it had
+  captured. `DevicesShutdownCoordinator`'s flag was meant to cover this and does not on its own —
+  it is process-global and a test resets it. Fixed by checking the condition that actually matters
+  (the captured platform is still the installed one), with a regression test that pins the guard
+  rather than the crash, since a crash test would need ASan to be reliable.
+
+`modules/graphics-ext/examples/cnaext_caps_probe.cpp` (`cna_test_cnaext_caps`) exists because of
+this: every Phase 16 row asks what a renderer promises, and answering that by reading its source is
+how `MOD-1699` got answered wrongly three times. Build it in whichever renderer's build directory
+you are measuring and it prints the answers, `CustomEffects` next to `ExecutesShaderSourceEXT` and
+`Instancing` next to `MultiStreamVertexInput` — the pairs where a renderer says yes and then no.
+
+| | EasyGL (OPENGLES3) | SDL_GPU |
+|---|---|---|
+| ThreeD / CustomEffects | yes / yes | yes / yes |
+| Float / half-float RTs | yes / yes | no / no |
+| ComputeShaders | yes | no |
+| Instancing / MultiStream | yes / yes | **yes / no** |
+| ExecutesShaderSourceEXT | yes | no |
+| ShadowSamplingEXT / IBL | yes / yes | no / no |
+
+There is no `GraphicsDevice::SupportsComputeShadersEXT()`, despite what a reading of the four-query
+rule suggests: compute's device-side answer is `SupportsCapability(ComputeShaders)`, which is
+already derived from a false-by-default renderer virtual rather than from a renderer's own
+`default: return true` switch. `SupportsComputeShadersEXT()` exists one layer down, on
+`IGraphicsRenderer`.
+
 ### Release vs Debug, and the 32-bit half of `MOD-1716`
 
 `cmake-build-cnaext-release/` is the third persistent build directory for this work

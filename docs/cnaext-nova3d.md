@@ -28,9 +28,16 @@ every subsystem survives a `GraphicsDevice` reset and renders again.
 
 - **Ask two questions, not one.** `SupportsCapability(CustomEffects)` means the renderer *accepts*
   an effect, not that it runs your shader source. Pair it with the matching device query —
-  `ExecutesShaderEffectSourceEXT()`, `SupportsShadowSamplingEXT()`,
-  `SupportsImageBasedLightingEXT()`, `SupportsComputeShadersEXT()`. A subsystem asked only the
-  capability is how a pass reports success while drawing nothing; it cost three bugs to learn.
+  `GraphicsDevice::ExecutesShaderEffectSourceEXT()`, `SupportsShadowSamplingEXT()`,
+  `SupportsImageBasedLightingEXT()`. A subsystem asked only the capability is how a pass reports
+  success while drawing nothing; it cost three bugs to learn.
+  Compute is the exception in spelling only: `SupportsCapability(ComputeShaders)` is already the
+  derived answer (a false-by-default renderer virtual, not a renderer's own `default: return true`
+  switch), so there is no fourth device query and none is needed. `SupportsComputeShadersEXT()`
+  exists on `IGraphicsRenderer`, one layer below anything a consumer calls.
+- **Instancing needs two capabilities too.** `InstancedRendererEXT` binds the per-instance
+  transforms as a *second* vertex stream, so it asks for `Instancing` **and**
+  `MultiStreamVertexInput`. SDL_GPU is the renderer that made that necessary.
 - **Every pass answers `isSupported()`, and answering `false` is normal.** The contract on an
   unsupported pass is that it copies its input through rather than failing, so a chain stays
   correct on a renderer that cannot run part of it. Nova-3D should treat `false` as "this look is
