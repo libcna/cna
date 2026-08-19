@@ -759,7 +759,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1609 | OpenGL2 | 🟨 | **Measured, not implemented — and this is OpenGL2's only row, so it carries the whole picture.** Both float capabilities `no`; `CustomEffects: yes` with `ExecutesShaderSourceEXT: no` (it accepts an effect and does not run this layer's GLSL, so every shader-based pass reports `isSupported() == false` and copies through); `Instancing: yes` with `MultiStreamVertexInput: no`, the mismatch `MOD-1621`'s fix covers; shadow sampling, IBL and compute all `no`. Engine-layer suites: **406 pass · 85 skip · 0 fail**. `ARB_texture_float` is the route for float targets if it is ever taken; nothing has declined it, it simply has not been done. |
 | MOD-1610 | Magnum | ⬜ | |
 | MOD-1611 | Diligent | ⬜ | Runtime-selected native API — verify on at least two. |
-| MOD-1612 | LLGL | ⬜ | |
+| MOD-1612 | LLGL | 🟨 | **Measured, not implemented — after fixing what stopped it building at all.** `LlglRendererDescriptor.cpp` carried a headless `namespace { return 0; } }` block, the remains of a `PrepareWindowFlags()` helper the PLAT-8 merge deleted the signature of, so `-DCNA_GRAPHICS_RENDERER=LLGL` had never compiled (the same merge, `2f00c201`, that broke OpenGL1). With it removed: `FloatRenderTargets: no`, `HalfFloatRenderTargets: no`, and the refusal path runs. |
 | MOD-1613 | Sokol | 🟨 | **Measured, not implemented.** `FloatRenderTargets: no`, `HalfFloatRenderTargets: no`; the refusal path runs. sokol_gfx has `SG_PIXELFORMAT_RGBA16F`, so this is implementable work. |
 | MOD-1614 | Metal | ⬜ | |
 | MOD-1615 | FNA3D | ⬜ | Already overrides `CreateRenderTarget2DEXT` — verify float formats specifically. |
@@ -781,7 +781,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1628 | OpenGL4 | 🟨 | **Measured, and it is the interesting one.** OPENGL4 answers `CustomEffects: yes` and `ExecutesShaderSourceEXT: no` — it accepts an effect and does not run this layer's GLSL. That is exactly the pair `MOD-1699` exists for, and the two-part question does its job: every shader-based pass reports `isSupported() == false` and copies through, giving **406 pass · 85 skip · 0 fail**. It also answers `Instancing: yes` with `MultiStreamVertexInput: no`, the same mismatch SDL_GPU has, which `MOD-1621`'s fix already covers. |
 | MOD-1629 | Magnum | ⬜ | |
 | MOD-1630 | Diligent | ⬜ | |
-| MOD-1631 | LLGL | ⬜ | |
+| MOD-1631 | LLGL | 🟨 | **Measured:** `CustomEffects: yes` / `ExecutesShaderSourceEXT: no`, the `MOD-1699` pair, so every shader-based pass reports `isSupported() == false` and copies through. **399 pass · 89 skip · 0 fail** across the engine-layer suites, once three test-gating gaps this renderer exposed were closed: LLGL's validated OpenGL path **refuses a `RenderTargetCube` from the constructor**, so `CubeShadowMapTest.TheCubeIsAllocatedAndTheLightRoundTrips`, `SpotShadowMapTest.AnUnsupportedRendererIsReportedRatherThanFailing` and `MOD-1714`'s all-subsystems fixture failed rather than skipping. The first two now gate on `CNA_SKIP_WITHOUT_CUBE_RENDER_TARGETS`; the third holds its `CubeShadowMap` by pointer so the rest of the sweep still runs. **Recorded, not fixed:** a *second* `GraphicsDevice` on LLGL leaves LLGL's global state broken and the ensuing teardown throws `"in 'Get': expression 'current_' must not be null"` from an unwind path, which is `std::terminate`. `~LlglRenderer` is now `try`/`catch(...)`-wrapped — a destructor must not throw, independent of this — but the terminate persists from elsewhere in the failed-construction path, so `MultiDeviceTest` is excluded from LLGL's measurement rather than run. That belongs to `plan_llgl.md`. |
 | MOD-1632 | Sokol | 🟨 | **Measured, and it found a process abort.** SOKOL answers `CustomEffects: yes` / `ExecutesShaderSourceEXT: no` — the `MOD-1699` pair again — so every shader-based pass reports `isSupported() == false` and copies through: **403 pass · 88 skip · 0 fail**. What the run first did instead was **abort the whole test process**: sokol_gfx keeps its state in one process-wide context and `sg_setup()` asserts `!_sg.valid`, so `MOD-1715`'s second-device probe killed `CnaTests` outright. Fixed in `Sokol::CreateGraphicsRenderer` — refuse by name, exactly as TinyGL does. The placement is the interesting part: the guard cannot live in `SetupSokol()`, because `SokolRenderer`'s initializer list creates a platform GL context first, and that makes the *new* context current, so the existing renderer's sokol objects are then torn down against the wrong context and sokol asserts again on the way out (`_sg_gl_discard_shader: glGetError() == 0`). Refusing before anything is constructed is the only point at which nothing has been disturbed. Under `NDEBUG` the assert is not there at all, which makes the same situation silent corruption rather than a crash. |
 | MOD-1633 | Metal | ⬜ | |
 | MOD-1634 | FNA3D | ⬜ | |
@@ -804,7 +804,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1648 | OpenGL4 | 🟨 | **Measured:** `SupportsShadowSamplingEXT: no`, so all four casters report `isSupported() == false` and the shadow suites skip rather than fail. |
 | MOD-1649 | Magnum | ⬜ | |
 | MOD-1650 | Diligent | ⬜ | |
-| MOD-1651 | LLGL | ⬜ | |
+| MOD-1651 | LLGL | 🟨 | **Measured:** `SupportsShadowSamplingEXT: no`; the casters report `isSupported() == false`, and the point-light caster cannot even be constructed (no `RenderTargetCube`). |
 | MOD-1652 | Sokol | 🟨 | **Measured:** `SupportsShadowSamplingEXT: no`; all four casters report `isSupported() == false` and the shadow suites skip. |
 | MOD-1653 | Metal | ⬜ | |
 | MOD-1654 | FNA3D | ⬜ | |
@@ -826,7 +826,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1668 | OpenGL4 | 🟨 | **Measured:** `SupportsImageBasedLightingEXT: no`; `EnvironmentProcessor`'s CPU-side precompute works, the shading half does not. |
 | MOD-1669 | Magnum | ⬜ | |
 | MOD-1670 | Diligent | ⬜ | |
-| MOD-1671 | LLGL | ⬜ | |
+| MOD-1671 | LLGL | 🟨 | **Measured:** `SupportsImageBasedLightingEXT: no`. |
 | MOD-1672 | Sokol | 🟨 | **Measured:** `SupportsImageBasedLightingEXT: no`; the CPU-side precompute works, the shading half does not. |
 | MOD-1673 | Metal | ⬜ | |
 | MOD-1674 | Cross-renderer IBL sphere-grid parity test | ⬜ | The `MOD-1242` golden reproduced within tolerance. |

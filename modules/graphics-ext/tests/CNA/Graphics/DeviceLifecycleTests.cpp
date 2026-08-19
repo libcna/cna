@@ -74,7 +74,13 @@ TEST(DeviceLossTest, EverySubsystemSurvivesAResetAndRendersAgain)
     CNA::Graphics::ShadowMap          shadowMap(gd, ShadowQuality::Low);
     CNA::Graphics::CascadedShadowMap  cascades(gd, ShadowQuality::Low, 3);
     CNA::Graphics::SpotShadowMap      spot(gd, ShadowQuality::Low);
-    CNA::Graphics::CubeShadowMap      cube(gd, ShadowQuality::Low);
+    // plan_modern.md MOD-1612. The one subsystem here that some renderers cannot even construct:
+    // a point-light shadow needs a RenderTargetCube, and LLGL's validated OpenGL path refuses one
+    // outright. Held by pointer so the rest of the sweep still runs there rather than the whole
+    // test failing on the subsystem the renderer never claimed to have.
+    std::unique_ptr<CNA::Graphics::CubeShadowMap> cube;
+    if (::CnaTest::EngineLayer::CanBindCubeRenderTargetFaces(gd))
+        cube = std::make_unique<CNA::Graphics::CubeShadowMap>(gd, ShadowQuality::Low);
     CNA::Graphics::DepthNormalPrepass prepass(gd, kWidth, kHeight);
     CNA::Graphics::Skybox             sky(gd, nullptr);
     CNA::Graphics::BloomPass          bloom(gd);
@@ -101,7 +107,7 @@ TEST(DeviceLossTest, EverySubsystemSurvivesAResetAndRendersAgain)
     EXPECT_NO_THROW((void)shadowMap.isSupported());
     EXPECT_NO_THROW((void)cascades.getCascadeCount());
     EXPECT_NO_THROW((void)spot.isSupported());
-    EXPECT_NO_THROW((void)cube.isSupported());
+    if (cube) EXPECT_NO_THROW((void)cube->isSupported());
     EXPECT_NO_THROW((void)prepass.isSupported(gd));
     EXPECT_NO_THROW((void)sky.isSupported());
     EXPECT_NO_THROW((void)bloom.isSupported(gd));

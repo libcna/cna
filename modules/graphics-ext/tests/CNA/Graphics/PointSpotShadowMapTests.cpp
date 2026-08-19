@@ -155,6 +155,9 @@ TEST(CubeShadowMapTest, TheFaceSizeIsCappedWhateverTheQualityAsks)
 TEST(CubeShadowMapTest, TheCubeIsAllocatedAndTheLightRoundTrips)
 {
     GraphicsDevice gd;
+    // plan_modern.md MOD-1612: some renderers refuse a RenderTargetCube outright -- LLGL's
+    // validated OpenGL path throws from the constructor -- so the cube cannot even be built there.
+    CNA_SKIP_WITHOUT_CUBE_RENDER_TARGETS(gd);
     CubeShadowMap cube(gd, ShadowQuality::Low);
 
     EXPECT_EQ(cube.getSize(), 512);
@@ -338,6 +341,9 @@ TEST(SpotShadowMapTest, AnUnsupportedRendererIsReportedRatherThanFailing)
 {
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    // Same reason as CubeShadowMapTest above: this case asserts about the spot *and* the cube, and
+    // a renderer that refuses a RenderTargetCube cannot construct half of it.
+    CNA_SKIP_WITHOUT_CUBE_RENDER_TARGETS(gd);
     SpotShadowMap spot(gd, ShadowQuality::Low);
     CubeShadowMap cube(gd, ShadowQuality::Low);
 
