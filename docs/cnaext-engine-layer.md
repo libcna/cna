@@ -1124,6 +1124,56 @@ sky.draw(view, projection, width, height);           // before the scene's geome
   sun somewhere other than directly overhead, or it is asking the model to disagree with every
   photograph.
 
+### Area lights, and the two things they do not do
+
+`plan_modern.md` `MOD-2060`–`MOD-2063`. A punctual light is a point, so its highlight is a point and
+its shadow has a hard edge. Almost every real light is a *surface*, and the difference is not
+brightness — a window is a bright rectangle in a polished floor, and no amount of tuning turns a
+point light into one.
+
+```cpp
+Microsoft::Xna::Framework::Graphics::AreaLightEXT window;
+window.Shape     = AreaLightShapeEXT::Rectangle;
+window.Position  = {0.0f, 2.0f, -4.0f};
+window.RightAxis = {1.5f, 0.0f, 0.0f};    // half-axes: the light is 3 by 2
+window.UpAxis    = {0.0f, 1.0f, 0.0f};
+window.Range     = 20.0f;
+
+CNA::Graphics::AreaLightBrdfTable table(device);   // generated at load, ~39 ms
+effect.setAreaLight(window, table);
+```
+
+- **The diffuse term is exact.** A Lambertian surface reflects a clamped cosine, and the irradiance
+  a polygon delivers to one has a closed form: a sum with one term per edge. That identity is what
+  linearly transformed cosines are built on, and it needs none of the fitted matrix.
+- **The specular term is approximate in shape and exact in energy.** It is a cosine lobe aimed along
+  the BRDF's average reflection direction and widened with roughness. A fitted LTC matrix would skew
+  the lobe as well as aiming it; what is here does not skew. The magnitude comes from
+  `AreaLightBrdfTable`, so a surface is never brighter or darker than it should be — the half a
+  viewer notices.
+- **The fitted LTC table is not generated, and it is not shipped.** It is the output of a
+  Nelder–Mead fit per cell — upwards of a hundred million BRDF evaluations at the published
+  resolution, seconds to minutes at every start — and this layer has no asset path to ship a table
+  through, the constraint that also refused SMAA (`MOD-610`).
+- **Three shapes, one quad.** A rectangle is its own corners; a disc is an area-matched rectangle,
+  its axes scaled by `sqrt(pi)/2`; a tube is a quad turned to face whatever it is lighting, which is
+  what a cylinder looks like from anywhere. Each is an approximation in outline only, never in
+  energy.
+- **One area light per draw.** The same budget `PunctualLightEXT` sets for itself, for the same
+  reason: an edge sum over a clipped polygon is an order of magnitude more work per fragment than a
+  punctual light's dot products. A scene wanting many lights wants them in the cluster grid, and the
+  cluster grid holds punctual lights.
+
+**There are no area-light shadows.** A soft shadow needs either many samples of the light's surface
+or a ray query, and this layer has neither: an area light lights whatever faces it, whether or not
+something stands in the way. This is stated in `AreaLightEXT`'s own header as well as here, because
+meeting it without warning looks like a bug in the shadow system rather than a boundary.
+
+**A light with no area is refused rather than drawn.** Two axes that both have length but lie along
+the same line enclose nothing, and the form factor answers that with a division by zero rather than
+with darkness — `AreaLightEXT::IsValidEXT` is where that is caught. A *tube* is a line with a radius
+rather than a surface, so parallel axes are meaningful there and are accepted.
+
 ### Image-based lighting: the precompute
 
 The same `EnvironmentProcessor` turns an environment cube into the three products the split-sum
