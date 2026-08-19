@@ -111,6 +111,53 @@ TEST(PbrMaterialExtensionsTest, EveryFieldRoundTripsAndIsValidated)
         << "a negative normal scale is nonsense and must be ignored, not stored";
 }
 
+TEST(PbrMaterialExtensionsTest, TheTransmissionAndVolumeFieldsRoundTripAndAreValidated)
+{
+    GraphicsDevice gd;
+    Texture2D transmission(gd, 1, 1);
+    Texture2D thickness(gd, 1, 1);
+
+    PbrMaterialExtensions extensions;
+    EXPECT_FALSE(extensions.isTransmissionEnabled());
+    EXPECT_FLOAT_EQ(extensions.getThicknessFactor(), 0.0f)
+        << "glTF's default is a thin surface with no interior";
+    EXPECT_FLOAT_EQ(extensions.getAttenuationDistance(), 0.0f)
+        << "zero stands for the infinite distance of a medium that absorbs nothing";
+    EXPECT_FLOAT_EQ(extensions.getAttenuationColor().X, 1.0f);
+
+    extensions.setTransmissionFactor(0.8f);
+    extensions.setTransmissionTexture(&transmission);
+    extensions.setThicknessFactor(1.25f);
+    extensions.setThicknessTexture(&thickness);
+    extensions.setAttenuationDistance(3.0f);
+    extensions.setAttenuationColor(Vector3(0.9f, 0.4f, 0.1f));
+
+    EXPECT_TRUE(extensions.isTransmissionEnabled());
+    EXPECT_FALSE(extensions.isNeutral());
+    EXPECT_FLOAT_EQ(extensions.getTransmissionFactor(), 0.8f);
+    EXPECT_EQ(extensions.getTransmissionTexture(), &transmission);
+    EXPECT_FLOAT_EQ(extensions.getThicknessFactor(), 1.25f);
+    EXPECT_EQ(extensions.getThicknessTexture(), &thickness);
+    EXPECT_FLOAT_EQ(extensions.getAttenuationDistance(), 3.0f);
+    EXPECT_FLOAT_EQ(extensions.getAttenuationColor().Y, 0.4f);
+
+    extensions.setTransmissionFactor(3.0f);
+    EXPECT_FLOAT_EQ(extensions.getTransmissionFactor(), 1.0f);
+    extensions.setThicknessFactor(-2.0f);
+    EXPECT_FLOAT_EQ(extensions.getThicknessFactor(), 1.25f)
+        << "a negative thickness is nonsense and must be ignored";
+    extensions.setAttenuationDistance(-4.0f);
+    EXPECT_FLOAT_EQ(extensions.getAttenuationDistance(), 0.0f)
+        << "a negative distance folds onto the value meaning infinite";
+    extensions.setAttenuationColor(Vector3(2.0f, -1.0f, 0.5f));
+    EXPECT_FLOAT_EQ(extensions.getAttenuationColor().X, 1.0f);
+    EXPECT_FLOAT_EQ(extensions.getAttenuationColor().Y, 0.0f);
+
+    extensions.setTransmissionFactor(0.0f);
+    EXPECT_FALSE(extensions.isTransmissionEnabled())
+        << "zero has to switch it off with its maps still bound";
+}
+
 TEST(PbrMaterialExtensionsTest, EqualityComparesEveryFieldIncludingTheTextures)
 {
     GraphicsDevice gd;
@@ -162,6 +209,25 @@ TEST(PbrMaterialExtensionsTest, EqualityComparesEveryFieldIncludingTheTextures)
     a.setSheenRoughnessTexture(&second);
     EXPECT_NE(a, b);
     b.setSheenRoughnessTexture(&second);
+
+    a.setTransmissionFactor(0.5f);
+    EXPECT_NE(a, b);
+    b.setTransmissionFactor(0.5f);
+    a.setThicknessFactor(2.0f);
+    EXPECT_NE(a, b);
+    b.setThicknessFactor(2.0f);
+    a.setAttenuationDistance(4.0f);
+    EXPECT_NE(a, b);
+    b.setAttenuationDistance(4.0f);
+    a.setAttenuationColor(Vector3(0.5f, 0.5f, 0.5f));
+    EXPECT_NE(a, b);
+    b.setAttenuationColor(Vector3(0.5f, 0.5f, 0.5f));
+    a.setTransmissionTexture(&first);
+    EXPECT_NE(a, b);
+    b.setTransmissionTexture(&first);
+    a.setThicknessTexture(&second);
+    EXPECT_NE(a, b);
+    b.setThicknessTexture(&second);
     EXPECT_EQ(a, b) << "every field has now been set on both, so they must agree again";
 }
 
@@ -192,7 +258,15 @@ TEST(PbrMaterialExtensionsTest, EqualSetsHashEqually)
     hashes.insert(b.GetHashCode());
     b.setSheenRoughness(0.6f);
     hashes.insert(b.GetHashCode());
-    EXPECT_EQ(hashes.size(), 6u) << "a field is missing from the hash";
+    b.setTransmissionFactor(0.7f);
+    hashes.insert(b.GetHashCode());
+    b.setThicknessFactor(1.5f);
+    hashes.insert(b.GetHashCode());
+    b.setAttenuationDistance(2.5f);
+    hashes.insert(b.GetHashCode());
+    b.setAttenuationColor(Vector3(0.3f, 0.3f, 0.3f));
+    hashes.insert(b.GetHashCode());
+    EXPECT_EQ(hashes.size(), 10u) << "a field is missing from the hash";
 }
 
 TEST(PbrMaterialExtensionsTest, ToStringNamesOnlyTheLobesThatAreOn)
@@ -226,6 +300,14 @@ TEST(PbrMaterialExtensionsTest, ToStringNamesOnlyTheLobesThatAreOn)
               "{Sheen:{Color:{X:0.5 Y:0.25 Z:0} Roughness:0.5 Textures:0} "
               "Clearcoat:{Factor:0.5 Roughness:0.25 Textures:2}}")
         << "two lobes on at once must be separated rather than run together";
+
+    extensions.setTransmissionFactor(0.75f);
+    extensions.setThicknessFactor(2.0f);
+    extensions.setAttenuationDistance(4.0f);
+    EXPECT_EQ(extensions.ToString(),
+              "{Transmission:{Factor:0.75 Thickness:2 AttenuationDistance:4 Textures:0} "
+              "Sheen:{Color:{X:0.5 Y:0.25 Z:0} Roughness:0.5 Textures:0} "
+              "Clearcoat:{Factor:0.5 Roughness:0.25 Textures:2}}");
 }
 
 } // namespace

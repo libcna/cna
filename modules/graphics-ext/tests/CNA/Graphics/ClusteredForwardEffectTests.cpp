@@ -31,6 +31,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
 #include <array>
@@ -62,6 +63,7 @@ using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 using Microsoft::Xna::Framework::Graphics::RasterizerState;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTexture;
 
 constexpr int   kSize = 64;
@@ -742,6 +744,163 @@ TEST(ClusteredForwardEffectTest, TheSheenSettingsReachTheShader)
     ASSERT_LT(expected.X, 0.95f) << "the reference saturates, so the comparison proves little";
     EXPECT_NEAR(static_cast<float>(middle.getRProperty()) / 255.0f, expected.X, 0.03f)
         << "the shader and the CPU model disagree about the sheen";
+}
+
+// ── Transmission and volume (MOD-2072) ───────────────────────────────────────
+
+TEST(ClusteredForwardEffectTest, TheVolumeAbsorbsByBeersLaw)
+{
+    // The defining property of the attenuation distance: after travelling exactly that far, white
+    // light has become the attenuation colour. Nothing else about the model is worth asserting if
+    // that one number is wrong.
+    const Vector3 amber(0.9f, 0.5f, 0.2f);
+    const Vector3 atOneDistance = ClusteredForwardEffect::volumeAttenuation(amber, 2.0f, 2.0f);
+    EXPECT_NEAR(atOneDistance.X, amber.X, 1e-4f);
+    EXPECT_NEAR(atOneDistance.Y, amber.Y, 1e-4f);
+    EXPECT_NEAR(atOneDistance.Z, amber.Z, 1e-4f);
+
+    // And twice as far absorbs twice as much, in the exponent -- so the survival squares.
+    const Vector3 atTwo = ClusteredForwardEffect::volumeAttenuation(amber, 2.0f, 4.0f);
+    EXPECT_NEAR(atTwo.X, amber.X * amber.X, 1e-4f);
+    EXPECT_NEAR(atTwo.Z, amber.Z * amber.Z, 1e-4f);
+
+    // A volume with no thickness, or no attenuation distance, absorbs nothing at all.
+    for (const Vector3& clear : {ClusteredForwardEffect::volumeAttenuation(amber, 2.0f, 0.0f),
+                                 ClusteredForwardEffect::volumeAttenuation(amber, 0.0f, 5.0f),
+                                 ClusteredForwardEffect::volumeAttenuation(amber, -1.0f, 5.0f)})
+    {
+        EXPECT_FLOAT_EQ(clear.X, 1.0f);
+        EXPECT_FLOAT_EQ(clear.Y, 1.0f);
+        EXPECT_FLOAT_EQ(clear.Z, 1.0f);
+    }
+}
+
+TEST(ClusteredForwardEffectTest, ATransmissiveMaterialWithoutAnOpaqueFrameIsRefused)
+{
+    // Refused, not approximated. Without the copy the surface would come back opaque, which is not
+    // a slightly wrong glass -- it is the absence of one, and it would look like the extension was
+    // never implemented.
+    GraphicsDevice gd;
+    ClusteredForwardEffect effect(gd);
+
+    const ClusteredLightGrid grid = MakeGrid();
+    ClusteredLightAssignment assignment;
+    const ClusteredLightSetEXT lights;
+    assignment.assign(grid, View(), lights.collectBounds());
+    ClusteredLightBuffer buffer(gd);
+    buffer.upload(lights, grid, assignment);
+
+    PbrMaterialExtensions glass;
+    glass.setTransmissionFactor(1.0f);
+    effect.setMaterialExtensions(glass);
+    EXPECT_THROW(effect.begin(Matrix::getIdentityProperty(), View(), Projection(), Vector3::Zero,
+                              buffer),
+                 std::runtime_error);
+
+    // The same material with a frame to refract against is accepted.
+    Texture2D frame(gd, 2, 2);
+    const std::vector<Color> pixels(4, Color(0, 0, 255, 255));
+    frame.SetData(pixels.data(), 4);
+    effect.setOpaqueFrame(&frame);
+    EXPECT_NO_THROW(effect.begin(Matrix::getIdentityProperty(), View(), Projection(),
+                                 Vector3::Zero, buffer));
+
+    // And withdrawing the frame refuses it again, rather than remembering the old one.
+    effect.setOpaqueFrame(nullptr);
+    EXPECT_THROW(effect.begin(Matrix::getIdentityProperty(), View(), Projection(), Vector3::Zero,
+                              buffer),
+                 std::runtime_error);
+}
+
+TEST(ClusteredForwardEffectTest, TheIndexOfRefractionRefusesToGoBelowAVacuum)
+{
+    GraphicsDevice gd;
+    ClusteredForwardEffect effect(gd);
+    EXPECT_FLOAT_EQ(effect.getIor(), 1.5f) << "glass is the default";
+    effect.setIor(1.33f);
+    EXPECT_FLOAT_EQ(effect.getIor(), 1.33f);
+    effect.setIor(0.5f);
+    EXPECT_FLOAT_EQ(effect.getIor(), 1.33f) << "below 1 a surface would refract the wrong way";
+}
+
+TEST(ClusteredForwardEffectTest, ATransmissiveWallShowsWhatIsBehindIt)
+{
+    GraphicsDevice gd;
+    ClusteredForwardEffect effect(gd);
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+    if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
+
+    // A frame with nothing in it but blue, so anything blue in the result came through the wall.
+    Texture2D behind(gd, 4, 4);
+    const std::vector<Color> blue(16, Color(0, 0, 220, 255));
+    behind.SetData(blue.data(), 16);
+
+    ClusteredLightSetEXT lights;
+    lights.add(MakePoint(Vector3(0.0f, 0.0f, kWallZ + 3.0f), 12.0f, 3.0f));
+    effect.setBaseColor(Vector3(0.6f, 0.0f, 0.0f));    // red, so the two are told apart
+    effect.setMetallic(0.0f);
+    effect.setRoughness(0.6f);
+    effect.setOpaqueFrame(&behind);
+
+    const std::vector<Color> opaque = RenderWall(gd, effect, lights);
+    const Color opaqueMiddle = opaque[static_cast<std::size_t>(kSize) * (kSize / 2) + kSize / 2];
+    EXPECT_LT(static_cast<int>(opaqueMiddle.getBProperty()), 10)
+        << "the wall was already blue before anything was transmitted through it";
+
+    PbrMaterialExtensions glass;
+    glass.setTransmissionFactor(1.0f);
+    effect.setMaterialExtensions(glass);
+
+    const std::vector<Color> clear = RenderWall(gd, effect, lights);
+    const Color clearMiddle = clear[static_cast<std::size_t>(kSize) * (kSize / 2) + kSize / 2];
+    EXPECT_GT(static_cast<int>(clearMiddle.getBProperty()), 150)
+        << "the frame behind the wall did not come through it";
+    EXPECT_LT(static_cast<int>(clearMiddle.getRProperty()),
+              static_cast<int>(opaqueMiddle.getRProperty()))
+        << "the surface's own diffuse colour survived being transmitted through";
+}
+
+TEST(ClusteredForwardEffectTest, AThickVolumeAbsorbsWhatPassesThroughIt)
+{
+    GraphicsDevice gd;
+    ClusteredForwardEffect effect(gd);
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+    if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
+
+    Texture2D behind(gd, 4, 4);
+    const std::vector<Color> white(16, Color(255, 255, 255, 255));
+    behind.SetData(white.data(), 16);
+
+    ClusteredLightSetEXT lights;
+    effect.setBaseColor(Vector3(0.0f, 0.0f, 0.0f));
+    effect.setOpaqueFrame(&behind);
+
+    PbrMaterialExtensions thin;
+    thin.setTransmissionFactor(1.0f);
+    effect.setMaterialExtensions(thin);
+    const Color unabsorbed =
+        RenderWall(gd, effect, lights)[static_cast<std::size_t>(kSize) * (kSize / 2) + kSize / 2];
+
+    PbrMaterialExtensions thick = thin;
+    thick.setThicknessFactor(2.0f);
+    thick.setAttenuationDistance(1.0f);
+    thick.setAttenuationColor(Vector3(0.9f, 0.2f, 0.2f));   // absorbs green and blue hard
+    effect.setMaterialExtensions(thick);
+    const Color absorbed =
+        RenderWall(gd, effect, lights)[static_cast<std::size_t>(kSize) * (kSize / 2) + kSize / 2];
+
+    EXPECT_GT(static_cast<int>(unabsorbed.getGProperty()), 200)
+        << "white did not come through a volume that absorbs nothing";
+    EXPECT_LT(static_cast<int>(absorbed.getGProperty()),
+              static_cast<int>(unabsorbed.getGProperty()) / 2)
+        << "the volume did not absorb the green it was told to";
+    EXPECT_GT(static_cast<int>(absorbed.getRProperty()),
+              static_cast<int>(absorbed.getGProperty()) * 2)
+        << "the volume absorbed every channel equally, so its colour did nothing";
 }
 
 } // namespace

@@ -27,6 +27,7 @@ namespace CNA::Graphics {
     using Microsoft::Xna::Framework::Graphics::AreaLightEXT;
     using Microsoft::Xna::Framework::Graphics::AreaLightShapeEXT;
     using Microsoft::Xna::Framework::Graphics::ShaderEffect;
+    using Microsoft::Xna::Framework::Graphics::Texture2D;
 
     namespace {
 
@@ -90,6 +91,13 @@ uniform float uClearcoat;
 uniform float uClearcoatRoughness;
 uniform vec3  uSheenColor;
 uniform float uSheenRoughness;
+uniform float uTransmission;
+uniform float uThickness;
+uniform float uAttenuationDistance;
+uniform vec3  uAttenuationColor;
+uniform float uIor;
+uniform mat4  uViewProjection;
+uniform sampler2D uOpaqueFrame;
 
 // KHR_materials_sheen: the Charlie distribution with Ashikhmin's visibility. Its peak is where the
 // half-vector is *perpendicular* to the normal, which is the opposite of a specular lobe -- that is
@@ -108,7 +116,8 @@ float cnaSheenVisibility(float NoV, float NoL) {
 }
 
 vec3 cnaShade(CnaClusteredLight light, vec3 surface, vec3 normal, vec3 viewDirection,
-              vec3 baseColor, float metallic, float roughness) {
+              vec3 baseColor, float metallic, float roughness, out vec3 diffuseOut) {
+    diffuseOut = vec3(0.0);
     vec3 toLight = light.position - surface;
     float distance = length(toLight);
     if (distance >= light.range || distance <= 0.0) return vec3(0.0);
@@ -135,7 +144,11 @@ vec3 cnaShade(CnaClusteredLight light, vec3 surface, vec3 normal, vec3 viewDirec
     vec3 specular = fresnel * cnaDistribution(NoH, roughness) * cnaGeometry(NoV, NoL, roughness)
                   / max(4.0 * NoV * NoL, 1e-7);
     vec3 diffuse = (vec3(1.0) - fresnel) * (1.0 - metallic) * baseColor / kCnaPi;
-    vec3 layered = diffuse + specular;
+    // The diffuse term leaves separately, because KHR_materials_transmission replaces *it* with
+    // what is behind the surface and leaves the highlights alone -- glass with no highlight is the
+    // thing that stops looking like glass.
+    diffuseOut = diffuse * light.colour * attenuation * NoL;
+    vec3 layered = specular;
 
     if (uSheenColor.r + uSheenColor.g + uSheenColor.b > 0.0) {
         layered += uSheenColor * cnaSheenDistribution(NoH, uSheenRoughness)
@@ -179,16 +192,39 @@ void main() {
     int cluster = cnaClusterFromNdc(ndc, vViewDistance);
     int count = cnaClusterLightCount(cluster);
 
-    vec3 colour = uAmbient * uBaseColor;
-    colour += cnaAreaContribution(vWorldPosition, normal, viewDirection, uBaseColor, uMetallic,
-                                  uRoughness);
+    vec3 diffuseSum = uAmbient * uBaseColor;
+    diffuseSum += cnaAreaContribution(vWorldPosition, normal, viewDirection, uBaseColor, uMetallic,
+                                      uRoughness);
+    vec3 otherSum = vec3(0.0);
     for (int i = 0; i < kCnaMaxLightsPerFragment; ++i) {
         if (i >= count) break;
         CnaClusteredLight light = cnaLoadLight(cnaClusterLightIndex(cluster, i));
-        colour += cnaShade(light, vWorldPosition, normal, viewDirection, uBaseColor, uMetallic,
-                           uRoughness);
+        vec3 lightDiffuse;
+        otherSum += cnaShade(light, vWorldPosition, normal, viewDirection, uBaseColor, uMetallic,
+                             uRoughness, lightDiffuse);
+        diffuseSum += lightDiffuse;
     }
-    FragColor = vec4(colour, 1.0);
+
+    if (uTransmission > 0.0) {
+        // Refraction, not transparency: the ray bends entering the surface, travels the volume's
+        // thickness, and leaves somewhere else -- so what shows through is *displaced*, which is
+        // the whole visual difference from alpha blending. The exit point is projected back to
+        // screen space to find it in the copy of the opaque frame.
+        vec3 refracted = refract(-viewDirection, normal, 1.0 / max(uIor, 1.0));
+        vec3 exitPoint = vWorldPosition + refracted * uThickness;
+        vec4 exitClip = uViewProjection * vec4(exitPoint, 1.0);
+        vec2 uv = exitClip.xy / max(abs(exitClip.w), 1e-4) * sign(exitClip.w) * 0.5 + 0.5;
+        vec3 behind = texture(uOpaqueFrame, clamp(uv, 0.0, 1.0)).rgb;
+
+        vec3 absorbed = vec3(1.0);
+        if (uAttenuationDistance > 0.0 && uThickness > 0.0) {
+            vec3 sigma = -log(clamp(uAttenuationColor, 1e-4, 1.0)) / uAttenuationDistance;
+            absorbed = exp(-sigma * uThickness);
+        }
+        diffuseSum = mix(diffuseSum, behind * absorbed, uTransmission);
+    }
+
+    FragColor = vec4(diffuseSum + otherSum, 1.0);
 }
 )";
 
@@ -259,6 +295,30 @@ void main() {
         effect_->SetUniformVec3("uSheenColor", sheen.X, sheen.Y, sheen.Z);
         effect_->SetUniformFloat("uSheenRoughness",
                                  extensions_ != nullptr ? extensions_->getSheenRoughness() : 0.0f);
+
+        const bool transmits = extensions_ != nullptr && extensions_->isTransmissionEnabled();
+        if (transmits && opaqueFrame_ == nullptr)
+            throw std::runtime_error(
+                "CNA::Graphics::ClusteredForwardEffect::begin: this material transmits, and no copy "
+                "of the opaque frame has been given to refract against. Refused rather than "
+                "approximated: a transmissive material drawn without one is not slightly wrong, it "
+                "is an opaque object where a glass one was asked for -- see setOpaqueFrame");
+        effect_->SetUniformFloat("uTransmission",
+                                 transmits ? extensions_->getTransmissionFactor() : 0.0f);
+        effect_->SetUniformFloat("uIor", ior_);
+        if (transmits)
+        {
+            effect_->SetUniformFloat("uThickness", extensions_->getThicknessFactor());
+            effect_->SetUniformFloat("uAttenuationDistance",
+                                     extensions_->getAttenuationDistance());
+            const Vector3 attenuation = extensions_->getAttenuationColor();
+            effect_->SetUniformVec3("uAttenuationColor", attenuation.X, attenuation.Y,
+                                    attenuation.Z);
+            const Matrix viewProjection = view * projection;
+            effect_->SetUniformMat4("uViewProjection", &viewProjection.M11);
+            effect_->SetUniformInt("uOpaqueFrame", 5);
+            effect_->SetTexture(5, *opaqueFrame_);
+        }
 
         lights.bind(*effect_, 1);
 
@@ -338,6 +398,17 @@ void main() {
         static const PbrMaterialExtensions neutral;
         return extensions_ != nullptr ? *extensions_ : neutral;
     }
+
+    float ClusteredForwardEffect::getIor() const { return ior_; }
+    void  ClusteredForwardEffect::setIor(const float value)
+    {
+        // Below 1 a surface would refract the wrong way; the vacuum is the floor of what a material
+        // can be, not a value to interpolate through.
+        if (value >= 1.0f) ior_ = value;
+    }
+
+    Texture2D* ClusteredForwardEffect::getOpaqueFrame() const { return opaqueFrame_; }
+    void       ClusteredForwardEffect::setOpaqueFrame(Texture2D* frame) { opaqueFrame_ = frame; }
 
     Vector3 ClusteredForwardEffect::getAmbient() const { return ambient_; }
     void    ClusteredForwardEffect::setAmbient(const Vector3& value)
@@ -459,6 +530,24 @@ void main() {
                 layered = layered * (1.0f - clearcoat * clearcoatFresnel) +
                           clearcoat * clearcoatSpecular;
             out[channel] = layered * emitted[channel] * light.Intensity * attenuation * NoL;
+        }
+        return result;
+    }
+
+    Vector3 ClusteredForwardEffect::volumeAttenuation(const Vector3& attenuationColor,
+                                                      const float attenuationDistance,
+                                                      const float thickness)
+    {
+        if (!(attenuationDistance > 0.0f) || !(thickness > 0.0f)) return Vector3(1.0f, 1.0f, 1.0f);
+
+        Vector3 result(1.0f, 1.0f, 1.0f);
+        float* out = &result.X;
+        const float* colour = &attenuationColor.X;
+        for (int channel = 0; channel < 3; ++channel)
+        {
+            const float clamped = std::clamp(colour[channel], 1e-4f, 1.0f);
+            const float sigma = -std::log(clamped) / attenuationDistance;
+            out[channel] = std::exp(-sigma * thickness);
         }
         return result;
     }

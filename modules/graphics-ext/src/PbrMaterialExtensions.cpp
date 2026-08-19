@@ -76,6 +76,46 @@ namespace CNA::Graphics {
         if (value >= 0.0f) clearcoatNormalScale_ = value;
     }
 
+    float PbrMaterialExtensions::getTransmissionFactor() const { return transmissionFactor_; }
+    void  PbrMaterialExtensions::setTransmissionFactor(const float value)
+    {
+        transmissionFactor_ = std::clamp(value, 0.0f, 1.0f);
+    }
+
+    Microsoft::Xna::Framework::Graphics::Texture2D*
+    PbrMaterialExtensions::getTransmissionTexture() const { return transmissionTexture_; }
+    void PbrMaterialExtensions::setTransmissionTexture(Tex2D* texture)
+    {
+        transmissionTexture_ = texture;
+    }
+
+    float PbrMaterialExtensions::getThicknessFactor() const { return thicknessFactor_; }
+    void  PbrMaterialExtensions::setThicknessFactor(const float value)
+    {
+        if (value >= 0.0f) thicknessFactor_ = value;
+    }
+
+    Microsoft::Xna::Framework::Graphics::Texture2D*
+    PbrMaterialExtensions::getThicknessTexture() const { return thicknessTexture_; }
+    void PbrMaterialExtensions::setThicknessTexture(Tex2D* texture)
+    {
+        thicknessTexture_ = texture;
+    }
+
+    float PbrMaterialExtensions::getAttenuationDistance() const { return attenuationDistance_; }
+    void  PbrMaterialExtensions::setAttenuationDistance(const float value)
+    {
+        attenuationDistance_ = value > 0.0f ? value : 0.0f;
+    }
+
+    Vector3 PbrMaterialExtensions::getAttenuationColor() const { return attenuationColor_; }
+    void    PbrMaterialExtensions::setAttenuationColor(const Vector3& value)
+    {
+        attenuationColor_ = Vector3(std::clamp(value.X, 0.0f, 1.0f),
+                                    std::clamp(value.Y, 0.0f, 1.0f),
+                                    std::clamp(value.Z, 0.0f, 1.0f));
+    }
+
     Vector3 PbrMaterialExtensions::getSheenColorFactor() const { return sheenColorFactor_; }
     void    PbrMaterialExtensions::setSheenColorFactor(const Vector3& value)
     {
@@ -106,7 +146,15 @@ namespace CNA::Graphics {
 
     bool PbrMaterialExtensions::operator==(const PbrMaterialExtensions& other) const
     {
-        return sheenColorFactor_.X == other.sheenColorFactor_.X &&
+        return transmissionFactor_ == other.transmissionFactor_ &&
+               thicknessFactor_ == other.thicknessFactor_ &&
+               attenuationDistance_ == other.attenuationDistance_ &&
+               attenuationColor_.X == other.attenuationColor_.X &&
+               attenuationColor_.Y == other.attenuationColor_.Y &&
+               attenuationColor_.Z == other.attenuationColor_.Z &&
+               transmissionTexture_ == other.transmissionTexture_ &&
+               thicknessTexture_ == other.thicknessTexture_ &&
+               sheenColorFactor_.X == other.sheenColorFactor_.X &&
                sheenColorFactor_.Y == other.sheenColorFactor_.Y &&
                sheenColorFactor_.Z == other.sheenColorFactor_.Z &&
                sheenRoughness_ == other.sheenRoughness_ &&
@@ -128,6 +176,14 @@ namespace CNA::Graphics {
     std::size_t PbrMaterialExtensions::GetHashCode() const
     {
         std::size_t seed = 0;
+        Combine(seed, HashFloat(transmissionFactor_));
+        Combine(seed, HashFloat(thicknessFactor_));
+        Combine(seed, HashFloat(attenuationDistance_));
+        Combine(seed, HashFloat(attenuationColor_.X));
+        Combine(seed, HashFloat(attenuationColor_.Y));
+        Combine(seed, HashFloat(attenuationColor_.Z));
+        Combine(seed, std::hash<const void*>{}(transmissionTexture_));
+        Combine(seed, std::hash<const void*>{}(thicknessTexture_));
         Combine(seed, HashFloat(sheenColorFactor_.X));
         Combine(seed, HashFloat(sheenColorFactor_.Y));
         Combine(seed, HashFloat(sheenColorFactor_.Z));
@@ -149,16 +205,32 @@ namespace CNA::Graphics {
                sheenColorFactor_.Z > 0.0f;
     }
 
+    bool PbrMaterialExtensions::isTransmissionEnabled() const
+    {
+        return transmissionFactor_ > 0.0f;
+    }
+
     bool PbrMaterialExtensions::isNeutral() const
     {
-        return clearcoatFactor_ <= 0.0f && !isSheenEnabled();
+        return clearcoatFactor_ <= 0.0f && !isSheenEnabled() && !isTransmissionEnabled();
     }
 
     std::string PbrMaterialExtensions::ToString() const
     {
         std::string text = "{";
+        if (isTransmissionEnabled())
+        {
+            int maps = 0;
+            if (transmissionTexture_ != nullptr) ++maps;
+            if (thicknessTexture_ != nullptr) ++maps;
+            text += "Transmission:{Factor:" + Trimmed(transmissionFactor_) +
+                    " Thickness:" + Trimmed(thicknessFactor_) +
+                    " AttenuationDistance:" + Trimmed(attenuationDistance_) +
+                    " Textures:" + std::to_string(maps) + "}";
+        }
         if (isSheenEnabled())
         {
+            if (text.size() > 1) text += " ";
             int maps = 0;
             if (sheenColorTexture_ != nullptr) ++maps;
             if (sheenRoughnessTexture_ != nullptr) ++maps;

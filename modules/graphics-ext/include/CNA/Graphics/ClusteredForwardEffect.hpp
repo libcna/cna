@@ -11,6 +11,7 @@
 namespace Microsoft::Xna::Framework::Graphics {
     class GraphicsDevice;
     class ShaderEffect;
+    class Texture2D;
 }
 
 namespace Microsoft::Xna::Framework::Graphics {
@@ -158,6 +159,47 @@ namespace CNA::Graphics {
         /** @brief Returns the material extensions the following draws are shaded with. */
         [[nodiscard]] const PbrMaterialExtensions& getMaterialExtensions() const;
 
+        /** @brief Returns the surface's index of refraction. */
+        [[nodiscard]] float getIor() const;
+        /**
+         * @brief Sets the surface's index of refraction (`KHR_materials_ior`).
+         *
+         * @param value 1.5 is glass and the default; 1 is a vacuum and the floor. Values below 1
+         *              would refract the wrong way and are ignored.
+         */
+        void setIor(float value);
+
+        /** @brief Returns the copy of the opaque frame transmissive materials refract against. */
+        [[nodiscard]] Microsoft::Xna::Framework::Graphics::Texture2D* getOpaqueFrame() const;
+        /**
+         * @brief Gives the effect a copy of the frame's opaque pass, for transmission to refract.
+         *
+         * **This copy is the cost of transmission**, and it is not small: the opaque geometry has
+         * to be drawn, resolved and copied before any transmissive surface can be drawn at all, so
+         * a scene with one pane of glass in it pays for a second full-resolution image. The layer
+         * does not make that copy for the application, because only the application knows when its
+         * opaque pass ended.
+         *
+         * A transmissive material drawn without one is **refused** by @ref begin rather than
+         * approximated: the result would not be slightly wrong, it would be an opaque object where
+         * a glass one was asked for.
+         *
+         * @param frame The copy, or null to withdraw it. Borrowed, never owned.
+         */
+        void setOpaqueFrame(Microsoft::Xna::Framework::Graphics::Texture2D* frame);
+
+        /**
+         * @brief Returns what a volume does to light crossing it, by Beer's law.
+         *
+         * @param attenuationColor    The colour white light becomes after one distance.
+         * @param attenuationDistance The distance; non-positive means the volume absorbs nothing.
+         * @param thickness           How far the light travelled through the volume.
+         * @return The per-channel survival fraction, each in [0, 1].
+         */
+        [[nodiscard]] static Microsoft::Xna::Framework::Vector3 volumeAttenuation(
+            const Microsoft::Xna::Framework::Vector3& attenuationColor, float attenuationDistance,
+            float thickness);
+
         /** @brief Returns the ambient term added once per fragment. */
         [[nodiscard]] Microsoft::Xna::Framework::Vector3 getAmbient() const;
         /** @brief Sets the ambient term added once per fragment. @param value Linear, non-negative. */
@@ -230,6 +272,8 @@ namespace CNA::Graphics {
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::AreaLightEXT> areaLight_;
         const AreaLightBrdfTable* areaTable_ = nullptr;
         std::unique_ptr<PbrMaterialExtensions> extensions_;
+        Microsoft::Xna::Framework::Graphics::Texture2D* opaqueFrame_ = nullptr;
+        float ior_ = 1.5f;
     };
 
 /** @} */

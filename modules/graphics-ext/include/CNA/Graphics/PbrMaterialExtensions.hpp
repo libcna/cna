@@ -161,6 +161,76 @@ namespace CNA::Graphics {
          */
         void setSheenRoughnessTexture(Microsoft::Xna::Framework::Graphics::Texture2D* texture);
 
+        // ── KHR_materials_transmission and KHR_materials_volume ──────────────
+
+        /** @brief Returns how much light passes through the surface, 0 to 1. */
+        [[nodiscard]] float getTransmissionFactor() const;
+        /**
+         * @brief Sets how much light passes through the surface.
+         *
+         * Not transparency. An alpha-blended surface *lets the background through*; a transmissive
+         * one **refracts** it, so what is behind a glass sphere is displaced and inverted rather
+         * than merely visible. That is why this needs a copy of the opaque frame and alpha blending
+         * does not.
+         *
+         * @param value 0 is an opaque surface; 1 is clear glass. Clamped to [0, 1].
+         */
+        void setTransmissionFactor(float value);
+
+        /** @brief Returns the transmission map, or null. */
+        [[nodiscard]] Microsoft::Xna::Framework::Graphics::Texture2D*
+        getTransmissionTexture() const;
+        /**
+         * @brief Sets the transmission map, multiplied by the factor (R channel).
+         *
+         * @param texture The map, or null. Borrowed, never owned.
+         */
+        void setTransmissionTexture(Microsoft::Xna::Framework::Graphics::Texture2D* texture);
+
+        /** @brief Returns the volume's thickness in world units; 0 makes it a thin surface. */
+        [[nodiscard]] float getThicknessFactor() const;
+        /**
+         * @brief Sets the volume's thickness in world units.
+         *
+         * Zero is meaningful and is the glTF default: a thin surface refracts at its entry face and
+         * has no interior, so nothing is absorbed and the ray is not displaced. A positive
+         * thickness is what turns a pane of glass into a solid.
+         *
+         * @param value Non-negative; negatives are ignored.
+         */
+        void setThicknessFactor(float value);
+
+        /** @brief Returns the thickness map, or null. */
+        [[nodiscard]] Microsoft::Xna::Framework::Graphics::Texture2D* getThicknessTexture() const;
+        /**
+         * @brief Sets the thickness map, multiplied by the factor (G channel).
+         *
+         * @param texture The map, or null. Borrowed, never owned.
+         */
+        void setThicknessTexture(Microsoft::Xna::Framework::Graphics::Texture2D* texture);
+
+        /** @brief Returns the distance over which the volume attenuates light to its colour. */
+        [[nodiscard]] float getAttenuationDistance() const;
+        /**
+         * @brief Sets the distance over which the volume attenuates light to its colour.
+         *
+         * The Beer–Lambert length: after travelling this far through the medium, white light has
+         * become @ref getAttenuationColor. A non-positive value means an infinite distance, which
+         * is glTF's default and describes a medium that absorbs nothing.
+         *
+         * @param value The distance; non-positive means infinite.
+         */
+        void setAttenuationDistance(float value);
+
+        /** @brief Returns the colour white light becomes after one attenuation distance. */
+        [[nodiscard]] Microsoft::Xna::Framework::Vector3 getAttenuationColor() const;
+        /**
+         * @brief Sets the colour white light becomes after one attenuation distance.
+         *
+         * @param value Linear, per channel clamped to [0, 1]. White absorbs nothing.
+         */
+        void setAttenuationColor(const Microsoft::Xna::Framework::Vector3& value);
+
         // ── Value semantics ──────────────────────────────────────────────────
 
         /**
@@ -196,6 +266,9 @@ namespace CNA::Graphics {
          */
         [[nodiscard]] std::string ToString() const;
 
+        /** @brief Returns whether the surface transmits, which is whether its factor is above zero. */
+        [[nodiscard]] bool isTransmissionEnabled() const;
+
         /** @brief Returns whether the sheen lobe is on, which is whether its colour is not black. */
         [[nodiscard]] bool isSheenEnabled() const;
 
@@ -204,6 +277,13 @@ namespace CNA::Graphics {
 
     private:
         using Tex2D = Microsoft::Xna::Framework::Graphics::Texture2D;
+
+        float transmissionFactor_  = 0.0f;
+        float thicknessFactor_     = 0.0f;
+        float attenuationDistance_ = 0.0f;
+        Microsoft::Xna::Framework::Vector3 attenuationColor_{1.0f, 1.0f, 1.0f};
+        Tex2D* transmissionTexture_ = nullptr;
+        Tex2D* thicknessTexture_    = nullptr;
 
         Microsoft::Xna::Framework::Vector3 sheenColorFactor_{0.0f, 0.0f, 0.0f};
         float sheenRoughness_ = 0.0f;
