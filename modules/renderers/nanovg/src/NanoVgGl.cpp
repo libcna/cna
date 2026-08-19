@@ -164,4 +164,46 @@ namespace CNA::Internal::Renderers::NanoVg
     {
         if (ctx) nvgDeleteGL2(ctx);
     }
+
+    namespace
+    {
+        GLint WrapModeFor(int textureAddressModeOrdinal)
+        {
+            switch (textureAddressModeOrdinal)
+            {
+            case 0: return GL_REPEAT;          // TextureAddressMode.Wrap
+            case 1: return GL_CLAMP_TO_EDGE;   // TextureAddressMode.Clamp
+            case 2: return GL_MIRRORED_REPEAT; // TextureAddressMode.Mirror
+            default: return GL_CLAMP_TO_EDGE;  // Validated at SetSamplerAddressMode; belt and braces.
+            }
+        }
+    }
+
+    // nvglImageHandleGL2 is declared only inside nanovg_gl.h's own `#if defined NANOVG_GL2` block,
+    // so -- like nvgCreateGL2/nvgDeleteGL2 above -- this is the one translation unit that can
+    // reach it. See NanoVgGlLoader.hpp's own doc comment for why the sampler is written straight
+    // onto the GL texture object rather than expressed through NanoVG's creation-time image flags.
+    void ApplyNanoVgImageSamplerState(NVGcontext* ctx, int image,
+                                      const NanoVgImageSamplerState& sampler)
+    {
+        if (ctx == nullptr || image == 0) return;
+        const GLuint texture = nvglImageHandleGL2(ctx, image);
+        if (texture == 0) return;
+
+        // Unit 0 is the only one NanoVG's own shader ever samples (glnvg__renderFlush sets
+        // GL_TEXTURE0 and uploads a constant sampler uniform of 0), so selecting it here both
+        // targets the right unit and leaves the selector where NanoVG expects it.
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                        sampler.minifyPoint ? GL_NEAREST : GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+                        sampler.magnifyPoint ? GL_NEAREST : GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, WrapModeFor(sampler.addressU));
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, WrapModeFor(sampler.addressV));
+        // Restoring 0 keeps NanoVG's NANOVG_GL_USE_STATE_FILTER cache truthful: 0 is both what it
+        // holds while a frame is being recorded (every path that binds a texture outside a flush
+        // ends by binding 0) and what glnvg__renderFlush resets it to before its first draw.
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
 }

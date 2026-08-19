@@ -16,9 +16,14 @@ namespace CNA::Internal::Renderers::NanoVg
      * device-flip compensation is needed anywhere in this renderer family: pixels are uploaded
      * top-row-first, straight stride, and drawn top-row-first, straight up.
      *
-     * `ImageData`/`UpdatePixels` always hand this class straight (non-premultiplied) RGBA8 bytes;
-     * `NVG_IMAGE_PREMULTIPLIED` is never set at creation, matching every other CNA renderer's own
-     * "textures are never premultiplied" convention.
+     * `ImageData`/`UpdatePixels` always hand this class straight (non-premultiplied) RGBA8 bytes,
+     * matching every other CNA renderer's own "textures are never premultiplied" convention. The
+     * image is nevertheless created WITH `NVG_IMAGE_PREMULTIPLIED`, because that flag does not
+     * describe the uploaded bytes at all -- it selects the fragment-shader branch that leaves the
+     * sampled texel alone instead of multiplying its RGB by its own alpha. Leaving the texel alone
+     * is exactly what XNA's SpriteBatch pixel shader does, and it is what keeps `AlphaBlend`
+     * (premultiplied source) and `NonPremultiplied` (straight source) genuinely distinct. See
+     * NanoVgTextureRenderer.cpp's own comment for the full reasoning.
      *
      * Holds a reference back to its owning `NanoVgRenderer` (not just its `NVGcontext*`) so
      * `UpdatePixels()` -- called any time after construction, possibly after a sibling

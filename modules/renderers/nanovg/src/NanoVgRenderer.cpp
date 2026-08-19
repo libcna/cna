@@ -27,10 +27,8 @@ namespace CNA::Internal::Renderers::NanoVg
 {
     namespace
     {
-        // Raw XNA Blend/BlendFunction ordinals -- same table OpenVgRenderer.cpp's own
-        // BlendStateToVgBlendMode uses: One=0, Zero=1, SourceAlpha=4, InverseSourceAlpha=5;
-        // Add=0.
-        constexpr int kBlendOne = 0, kBlendZero = 1, kBlendSourceAlpha = 4, kBlendInvSourceAlpha = 5;
+        // Raw XNA BlendFunction ordinal for Add, the only equation NanoVG can express -- its GL2
+        // backend never calls glBlendEquation, so the pipeline stays at GL_FUNC_ADD.
         constexpr int kBlendFuncAdd = 0;
 
         constexpr int kFillModeSolid = 0;
@@ -53,29 +51,92 @@ namespace CNA::Internal::Renderers::NanoVg
         }
     }
 
-    // See nanovg.c's own nvg__compositeOperationState for the real (srcRGB,dstRGB) factor pairs
-    // this maps to. NVG_LIGHTER = (GL_ONE, GL_ONE), a real, working Additive blend -- unlike
-    // OpenVG (ShivaVG), which declares but never implements additive blending.
-    int BlendStateToNvgCompositeOperation(int colorSrcBlend, int alphaSrcBlend,
-                                          int colorDstBlend, int alphaDstBlend,
-                                          int colorBlendFunc, int alphaBlendFunc)
+    namespace
     {
-        const bool isAdd = colorBlendFunc == kBlendFuncAdd && alphaBlendFunc == kBlendFuncAdd;
-        const bool symmetric = colorSrcBlend == alphaSrcBlend && colorDstBlend == alphaDstBlend;
+        const char* BlendName(int blendOrdinal)
+        {
+            switch (blendOrdinal)
+            {
+            case 0:  return "One";
+            case 1:  return "Zero";
+            case 2:  return "SourceColor";
+            case 3:  return "InverseSourceColor";
+            case 4:  return "SourceAlpha";
+            case 5:  return "InverseSourceAlpha";
+            case 6:  return "DestinationColor";
+            case 7:  return "InverseDestinationColor";
+            case 8:  return "DestinationAlpha";
+            case 9:  return "InverseDestinationAlpha";
+            case 10: return "BlendFactor";
+            case 11: return "InverseBlendFactor";
+            case 12: return "SourceAlphaSaturation";
+            default: return "<out of range>";
+            }
+        }
 
-        if (isAdd && symmetric && colorSrcBlend == kBlendOne && colorDstBlend == kBlendZero)
-            return NVG_COPY; // Opaque
-        if (isAdd && symmetric && colorSrcBlend == kBlendSourceAlpha && colorDstBlend == kBlendInvSourceAlpha)
-            return NVG_SOURCE_OVER; // NonPremultiplied
-        if (isAdd && symmetric && colorSrcBlend == kBlendOne && colorDstBlend == kBlendInvSourceAlpha)
-            return NVG_SOURCE_OVER; // AlphaBlend (straight-source caveat, same as OpenVgRenderer's own)
-        if (isAdd && symmetric && colorSrcBlend == kBlendSourceAlpha && colorDstBlend == kBlendOne)
-            return NVG_LIGHTER; // Additive (real XNA BlendState.Additive is SourceAlpha/One, not One/One).
+        /// One XNA `Blend` ordinal as an `NVGblendFactor`. `isSourceFactor` exists only for
+        /// SourceAlphaSaturation, which GL accepts as a source factor but not as a destination one
+        /// on the 2.1 context this renderer requests.
+        int ToNvgBlendFactor(int blendOrdinal, bool isSourceFactor, const char* role)
+        {
+            switch (blendOrdinal)
+            {
+            case 0:  return NVG_ONE;
+            case 1:  return NVG_ZERO;
+            case 2:  return NVG_SRC_COLOR;
+            case 3:  return NVG_ONE_MINUS_SRC_COLOR;
+            case 4:  return NVG_SRC_ALPHA;
+            case 5:  return NVG_ONE_MINUS_SRC_ALPHA;
+            case 6:  return NVG_DST_COLOR;
+            case 7:  return NVG_ONE_MINUS_DST_COLOR;
+            case 8:  return NVG_DST_ALPHA;
+            case 9:  return NVG_ONE_MINUS_DST_ALPHA;
+            case 10:
+            case 11:
+                throw std::runtime_error(
+                    std::string("NANOVG cannot express BlendState.") + role + " = Blend." +
+                    BlendName(blendOrdinal) +
+                    ": NanoVG's own NVGblendFactor enum has no constant-colour factor, so "
+                    "GraphicsDevice.BlendFactor cannot reach the blend stage.");
+            case 12:
+                if (isSourceFactor) return NVG_SRC_ALPHA_SATURATE;
+                throw std::runtime_error(
+                    std::string("NANOVG cannot express BlendState.") + role +
+                    " = Blend.SourceAlphaSaturation: GL accepts SRC_ALPHA_SATURATE as a source "
+                    "factor only on the OpenGL 2.1 context this renderer requests.");
+            default:
+                throw std::runtime_error(
+                    std::string("NANOVG: BlendState.") + role + " has no valid Blend ordinal (" +
+                    std::to_string(blendOrdinal) + ").");
+            }
+        }
+    }
 
-        throw std::runtime_error(
-            "NANOVG only supports the Opaque/AlphaBlend/NonPremultiplied/Additive BlendState "
-            "presets: there is no generic blend-factor/equation model to express an arbitrary "
-            "custom BlendState.");
+    // A direct per-factor translation, not a preset match. NanoVG's own NVGcompositeOperation
+    // presets are a lossy vocabulary -- NVG_SOURCE_OVER stands for (ONE, ONE_MINUS_SRC_ALPHA) on
+    // both channels, which is BlendState.AlphaBlend and NOT BlendState.NonPremultiplied -- so
+    // routing through them would silently collapse states whose semantics genuinely differ.
+    // nvgGlobalCompositeBlendFuncSeparate takes the four factors directly (nanovg.c), and
+    // glnvg_convertBlendFuncFactor maps every one of them onto its real GL enum, so the colour and
+    // alpha channels stay independent all the way to glBlendFuncSeparate.
+    NanoVgBlendFunc BlendStateToNvgBlendFunc(int colorSrcBlend, int alphaSrcBlend,
+                                             int colorDstBlend, int alphaDstBlend,
+                                             int colorBlendFunc, int alphaBlendFunc)
+    {
+        if (colorBlendFunc != kBlendFuncAdd || alphaBlendFunc != kBlendFuncAdd)
+        {
+            throw std::runtime_error(
+                "NANOVG only supports BlendFunction.Add: NanoVG's GL2 backend never calls "
+                "glBlendEquation/glBlendEquationSeparate, so the blend equation is permanently "
+                "GL_FUNC_ADD and Subtract/ReverseSubtract/Min/Max cannot be honoured.");
+        }
+
+        NanoVgBlendFunc blend;
+        blend.srcRGB   = ToNvgBlendFactor(colorSrcBlend, /*isSourceFactor=*/true,  "ColorSourceBlend");
+        blend.dstRGB   = ToNvgBlendFactor(colorDstBlend, /*isSourceFactor=*/false, "ColorDestinationBlend");
+        blend.srcAlpha = ToNvgBlendFactor(alphaSrcBlend, /*isSourceFactor=*/true,  "AlphaSourceBlend");
+        blend.dstAlpha = ToNvgBlendFactor(alphaDstBlend, /*isSourceFactor=*/false, "AlphaDestinationBlend");
+        return blend;
     }
 
     NanoVgRenderer::NanoVgRenderer(const GraphicsRendererCreateArgs& args)
@@ -353,24 +414,24 @@ namespace CNA::Internal::Renderers::NanoVg
                                          int colorBlendFunc, int alphaBlendFunc,
                                          const BlendWriteState& writeState)
     {
-        lastCompositeOp_ = BlendStateToNvgCompositeOperation(
-            colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend, colorBlendFunc, alphaBlendFunc);
-
-        // BlendWriteState.ColorWriteChannels cannot be honored on this renderer: NanoVG's own
-        // stencil-then-color two-pass fill implementation unconditionally calls
-        // glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE) before its color pass (nanovg_gl.h's
-        // glnvg__fill/glnvg__convexFill), overwriting any externally-set mask on every single
-        // draw -- verified empirically (a wrapped glColorMask around the whole SpriteBatch batch
-        // was silently undone). Rejecting a non-default mask is honest; silently ignoring it
-        // would be exactly the "capability lie" this project's own docs warn against.
+        // BlendWriteState.ColorWriteChannels cannot be honored on this renderer: nanovg_gl.h's own
+        // glnvg__renderFlush calls glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE) at the top of
+        // EVERY flush, before the first draw call it submits, overwriting any externally-set mask
+        // -- verified empirically (a glColorMask wrapped around a whole SpriteBatch batch was
+        // silently undone). Rejecting a non-default mask is honest; silently ignoring it would be
+        // exactly the "capability lie" this project's own docs warn against. Validated BEFORE the
+        // factors are stored, so a rejected state leaves the last accepted one untouched.
         const int cwc = writeState.colorWriteChannels[0];
         if (cwc != 15) // 15 = R|G|B|A, the default
         {
             throw std::runtime_error(
-                "NANOVG cannot honor BlendState.ColorWriteChannels: NanoVG's own stencil-based "
-                "fill implementation unconditionally resets glColorMask to all-channels-enabled "
-                "before every color pass, so an externally-set write mask cannot survive a draw.");
+                "NANOVG cannot honor BlendState.ColorWriteChannels: NanoVG's own glnvg__renderFlush "
+                "unconditionally resets glColorMask to all-channels-enabled before the first draw "
+                "of every flush, so an externally-set write mask cannot survive a draw.");
         }
+
+        lastBlendFunc_ = BlendStateToNvgBlendFunc(
+            colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend, colorBlendFunc, alphaBlendFunc);
     }
 
     void NanoVgRenderer::SetScissorRect(int x, int y, int w, int h)

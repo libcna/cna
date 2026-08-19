@@ -54,6 +54,20 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "NANOVG")
     cna_register_renderer_test(NAME NanoVg_TextureOrientation
         COMMAND cna_test_nanovg_texture_orientation TIMEOUT 30 LABELS "NanoVg")
 
+    # SamplerState honesty: Point vs Linear at sample points where the two genuinely disagree,
+    # separate minification/magnification components, Clamp/Wrap/Mirror addressing on an
+    # out-of-bounds source rectangle, per-batch sampler independence for one shared texture, and
+    # deterministic rejection of Anisotropic -- see that file's own top comment.
+    cna_nanovg_test(cna_test_nanovg_sampler_state nanovg_sampler_state_test.cpp)
+    cna_register_renderer_test(NAME NanoVg_SamplerState
+        COMMAND cna_test_nanovg_sampler_state TIMEOUT 30 LABELS "NanoVg")
+
+    # SpriteBatch quads must rasterize with XNA's hard per-pixel-centre coverage rule, not with
+    # NanoVG's own vector-path edge feathering -- see that file's own top comment.
+    cna_nanovg_test(cna_test_nanovg_sprite_rasterization nanovg_sprite_rasterization_test.cpp)
+    cna_register_renderer_test(NAME NanoVg_SpriteRasterization
+        COMMAND cna_test_nanovg_sprite_rasterization TIMEOUT 30 LABELS "NanoVg")
+
     # Presentation-mode viewport math, coordinate transforms, custom Viewport, resize-without-Clear,
     # RasterizerState-driven scissor, multi-instance coexistence, repeated construct/destroy cycling,
     # and SwapInterval -- see that file's own top comment.

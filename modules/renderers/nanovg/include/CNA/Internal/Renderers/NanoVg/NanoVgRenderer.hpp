@@ -8,15 +8,50 @@ struct NVGcontext;
 
 namespace CNA::Internal::Renderers::NanoVg
 {
-    /// Pure mapping from raw BlendState factors/BlendFunction (see IGraphicsRenderer::
-    /// ApplyBlendState's own parameter doc) to a real NanoVG `NVGcompositeOperation` ordinal.
-    /// Unlike OpenVG (ShivaVG)'s `BlendStateToVgBlendMode`, this one genuinely supports Additive
-    /// (`NVG_LIGHTER` is a real `(GL_ONE, GL_ONE)` `glBlendFuncSeparate` -- see
-    /// `nanovg.c`'s own `nvg__compositeOperationState`). Exposed standalone (no GL/NanoVG calls)
-    /// so it can be unit tested directly.
-    int BlendStateToNvgCompositeOperation(int colorSrcBlend, int alphaSrcBlend,
-                                          int colorDstBlend, int alphaDstBlend,
-                                          int colorBlendFunc, int alphaBlendFunc);
+    /**
+     * @brief One `glBlendFuncSeparate` quadruple, expressed in `NVGblendFactor` values.
+     *
+     * NanoVG's own `NVGcompositeOperation` presets are a lossy vocabulary -- several distinct
+     * `BlendState` configurations collapse onto the same preset -- so this renderer never uses
+     * them. `nvgGlobalCompositeBlendFuncSeparate` takes exactly these four factors instead, which
+     * is a 1:1 match for `BlendState`'s own colour/alpha source/destination pairs.
+     */
+    struct NanoVgBlendFunc
+    {
+        /** @brief `NVGblendFactor` applied to the source colour. */
+        int srcRGB = 0;
+        /** @brief `NVGblendFactor` applied to the destination colour. */
+        int dstRGB = 0;
+        /** @brief `NVGblendFactor` applied to the source alpha. */
+        int srcAlpha = 0;
+        /** @brief `NVGblendFactor` applied to the destination alpha. */
+        int dstAlpha = 0;
+    };
+
+    /**
+     * @brief Pure mapping from raw `BlendState` factor/function ordinals (see
+     * `IGraphicsRenderer::ApplyBlendState`'s own parameter doc) to the four `NVGblendFactor`
+     * values `nvgGlobalCompositeBlendFuncSeparate` takes.
+     *
+     * Every XNA `Blend` except `BlendFactor`/`InverseBlendFactor` has an exact `NVGblendFactor`
+     * counterpart, so this is a direct per-factor translation rather than a preset match: the four
+     * built-in `BlendState`s and every custom combination built from the representable factors are
+     * all honoured exactly, with the colour and alpha channels independent.
+     *
+     * @param colorSrcBlend Raw `Blend` ordinal for the colour channels' source factor.
+     * @param alphaSrcBlend Raw `Blend` ordinal for the alpha channel's source factor.
+     * @param colorDstBlend Raw `Blend` ordinal for the colour channels' destination factor.
+     * @param alphaDstBlend Raw `Blend` ordinal for the alpha channel's destination factor.
+     * @param colorBlendFunc Raw `BlendFunction` ordinal for the colour channels.
+     * @param alphaBlendFunc Raw `BlendFunction` ordinal for the alpha channel.
+     * @return The equivalent NanoVG blend factors.
+     * @throws std::runtime_error If any factor or function has no exact NanoVG/GL counterpart. The
+     *         message names the offending property, because silently substituting a different
+     *         blend is exactly the failure mode this renderer must not have.
+     */
+    NanoVgBlendFunc BlendStateToNvgBlendFunc(int colorSrcBlend, int alphaSrcBlend,
+                                             int colorDstBlend, int alphaDstBlend,
+                                             int colorBlendFunc, int alphaBlendFunc);
 
     /**
      * @brief NanoVG (memononen/nanovg, GL2 backend) vector-graphics renderer, on top of a real
@@ -176,11 +211,16 @@ namespace CNA::Internal::Renderers::NanoVg
             x = scissorX_; y = scissorY_; w = scissorW_; h = scissorH_; enabled = scissorEnabled_;
         }
 
-        /// CNAEXT. Current NanoVG composite operation ordinal (`NVGcompositeOperation`), applied
-        /// by NanoVgSpriteBatchRenderer's own Begin() via `nvgGlobalCompositeOperation`.
-        [[nodiscard]] int GetCompositeOperationEXT() const
+        /// CNAEXT. Current blend factors, applied by NanoVgSpriteBatchRenderer's own Begin() via
+        /// `nvgGlobalCompositeBlendFuncSeparate`. With blending disabled these become plain source
+        /// replacement -- NanoVG's own `glnvg__renderFlush` calls `glEnable(GL_BLEND)`
+        /// unconditionally, so "no blending" has to be expressed as `(ONE, ZERO)` rather than by
+        /// turning the blend stage off, which produces the identical result.
+        [[nodiscard]] NanoVgBlendFunc GetBlendFuncEXT() const
         {
-            return blendEnabled_ ? lastCompositeOp_ : /*NVG_COPY*/ 9;
+            if (blendEnabled_) return lastBlendFunc_;
+            return NanoVgBlendFunc{/*NVG_ONE*/ 1 << 1, /*NVG_ZERO*/ 1 << 0,
+                                   /*NVG_ONE*/ 1 << 1, /*NVG_ZERO*/ 1 << 0};
         }
 
     private:
@@ -195,7 +235,10 @@ namespace CNA::Internal::Renderers::NanoVg
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
         bool blendEnabled_ = true;
-        int lastCompositeOp_ = 0; // NVG_SOURCE_OVER
+        /// BlendState.AlphaBlend's own factors (One, InverseSourceAlpha on both channels), which is
+        /// what a GraphicsDevice starts with before any SpriteBatch.Begin() applies its own.
+        NanoVgBlendFunc lastBlendFunc_{/*NVG_ONE*/ 1 << 1, /*NVG_ONE_MINUS_SRC_ALPHA*/ 1 << 7,
+                                       /*NVG_ONE*/ 1 << 1, /*NVG_ONE_MINUS_SRC_ALPHA*/ 1 << 7};
         int swapInterval_ = 1;
         int lastPhysW_ = 0, lastPhysH_ = 0;
 

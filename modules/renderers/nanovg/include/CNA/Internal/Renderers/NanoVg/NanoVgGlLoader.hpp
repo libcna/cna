@@ -42,4 +42,52 @@ namespace CNA::Internal::Renderers::NanoVg
 
     /** @brief Destroys a context created by CreateNanoVgGL2Context(). Safe to call with `nullptr`. */
     void DeleteNanoVgGL2Context(NVGcontext* ctx);
+
+    /**
+     * @brief One XNA `SamplerState`'s filter/address pair, resolved to the two independent
+     * decisions a GL texture object can actually store.
+     *
+     * XNA's `TextureFilter` names a minification AND a magnification component (plus a mip
+     * component, which is inert here -- `nvgCreateImageRGBA` allocates exactly one level, so no
+     * mip chain exists to select from); real desktop GL stores those two components separately
+     * (`GL_TEXTURE_MIN_FILTER`/`GL_TEXTURE_MAG_FILTER`), so both are carried here rather than a
+     * single "point vs linear" flag.
+     */
+    struct NanoVgImageSamplerState
+    {
+        /** @brief Whether minification samples the nearest texel instead of interpolating. */
+        bool minifyPoint = false;
+        /** @brief Whether magnification samples the nearest texel instead of interpolating. */
+        bool magnifyPoint = false;
+        /** @brief Raw `TextureAddressMode` ordinal for U (0=Wrap, 1=Clamp, 2=Mirror). */
+        int addressU = 1;
+        /** @brief Raw `TextureAddressMode` ordinal for V (0=Wrap, 1=Clamp, 2=Mirror). */
+        int addressV = 1;
+    };
+
+    /**
+     * @brief Writes @p sampler onto the GL texture object behind a NanoVG image handle.
+     *
+     * NanoVG's own image flags (`NVG_IMAGE_NEAREST`, `NVG_IMAGE_REPEATX`/`Y`) are applied ONCE, at
+     * `nvgCreateImageRGBA` time, and are never re-applied per draw -- `glnvg__setUniforms` only
+     * binds the texture. XNA's `SamplerState`, by contrast, is chosen per `SpriteBatch.Begin()`,
+     * independent of which texture is drawn, so the creation-time flags cannot express it. This
+     * writes the four `glTexParameteri` values directly instead, which is both exact (GL's own
+     * filter/wrap enums are what NanoVG's flags reduce to anyway) and free of the pixel-storage
+     * duplication a second image handle per sampler combination would cost. It also reaches
+     * `GL_MIRRORED_REPEAT`, which NanoVG's flag set has no name for at all.
+     *
+     * Must be called with the owning context current, and between `nvgBeginFrame` and
+     * `nvgEndFrame`: NanoVG records draw calls during that window and binds textures only when
+     * `nvgEndFrame` flushes them, so parameters written here are the ones the flush actually
+     * samples with. Its internal `boundTexture` cache is left consistent -- this restores the
+     * binding to 0, which is exactly the value `glnvg__renderFlush` both leaves behind and resets
+     * its cache to.
+     *
+     * @param ctx The owning NanoVG context.
+     * @param image The NanoVG image handle whose GL texture should be reconfigured.
+     * @param sampler The filter/address state to write.
+     */
+    void ApplyNanoVgImageSamplerState(NVGcontext* ctx, int image,
+                                      const NanoVgImageSamplerState& sampler);
 }

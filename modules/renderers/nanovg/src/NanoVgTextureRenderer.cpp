@@ -51,13 +51,25 @@ namespace CNA::Internal::Renderers::NanoVg
             ? nullptr
             : TightlyPack(data.pixels.data(), width_, height_, stride, scratch);
 
-        // NVG_IMAGE_NEAREST is a per-IMAGE creation flag, not a per-draw sampler state -- unlike
-        // XNA's SamplerState.Filter (chosen per SpriteBatch.Begin(), independent of which texture
-        // is drawn). NanoVG has no per-draw filter override, so every NanoVgTextureRenderer is
-        // created linear-filtered; NanoVgSpriteBatchRenderer::SetSamplerFilter is a documented
-        // no-op for the same reason (see that class's own comment).
+        // NVG_IMAGE_PREMULTIPLIED does NOT describe the bytes uploaded here -- ImageData is always
+        // straight RGBA8, like every other CNA renderer's. It selects nanovg_gl.h's fragment-shader
+        // branch: with the flag set, texType is 0 and the sampled texel is passed through
+        // untouched; without it, texType is 1 and the shader runs
+        // `color = vec4(color.xyz*color.w, color.w)` on every texel. XNA's own SpriteBatch pixel
+        // shader performs no such multiply, so passing the texel through is what reproduces it --
+        // and it is what lets BlendState.AlphaBlend receive genuinely premultiplied source RGB
+        // without multiplying it a second time, and BlendState.Opaque write a translucent source's
+        // full un-attenuated colour. The SourceAlpha factor NonPremultiplied/Additive need is then
+        // applied by the real blend stage, where BlendState says it belongs.
+        //
+        // No sampler flags (NVG_IMAGE_NEAREST, NVG_IMAGE_REPEATX/Y) are set here either: those are
+        // creation-time image properties, while XNA's SamplerState is chosen per
+        // SpriteBatch.Begin(), independent of which texture is drawn. The batch writes the sampler
+        // onto this image's GL texture object per draw instead -- see
+        // ApplyNanoVgImageSamplerState's own doc comment.
         owner_.MakeContextCurrentEXT();
-        image_ = nvgCreateImageRGBA(owner_.GetNvgContextEXT(), width_, height_, 0, initial);
+        image_ = nvgCreateImageRGBA(owner_.GetNvgContextEXT(), width_, height_,
+                                    NVG_IMAGE_PREMULTIPLIED, initial);
         if (image_ == 0)
             throw std::runtime_error("NANOVG: nvgCreateImageRGBA failed.");
     }

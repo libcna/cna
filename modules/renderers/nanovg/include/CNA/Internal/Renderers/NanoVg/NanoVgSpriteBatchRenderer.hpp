@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/NanoVg/NanoVgGlLoader.hpp"
 
 namespace CNA::Internal::Renderers::NanoVg
 {
@@ -25,13 +26,25 @@ namespace CNA::Internal::Renderers::NanoVg
      * workaround for ShivaVG's broken `vgChildImage`): the pattern box is simply positioned so the
      * image's own natural extent maps correctly relative to the filled sub-rectangle, all still
      * inside the SOURCE-pixel-scaled coordinate system `nvgScale(destW/sw, destH/sh)` already
-     * established -- see NanoVgSpriteBatchRenderer.cpp's own comment. Out-of-bounds
-     * `sourceRectangle` + the default `TextureAddressMode.Clamp` is real, automatic GPU
-     * `GL_CLAMP_TO_EDGE` sampling (every `NanoVgTextureRenderer` is created with no
-     * `NVG_IMAGE_REPEATX`/`NVG_IMAGE_REPEATY` flag) -- no CPU-side edge-padding needed either.
-     * `Wrap`/`Mirror` combined with an out-of-bounds `sourceRectangle` is rejected: NanoVG bakes
-     * repeat/clamp into the IMAGE at creation time, not per draw, so a genuinely different
-     * per-draw wrap mode cannot be honored without recreating the texture.
+     * established -- see NanoVgSpriteBatchRenderer.cpp's own comment. An out-of-bounds
+     * `sourceRectangle` resolves through real GPU sampling under whichever
+     * `TextureAddressMode` the batch was begun with, all three of which map onto a genuine GL wrap
+     * enum (`GL_CLAMP_TO_EDGE`, `GL_REPEAT`, `GL_MIRRORED_REPEAT`) -- no CPU-side edge padding and
+     * no rejection.
+     *
+     * `SamplerState` is honoured per batch, not per texture. NanoVG's own image flags
+     * (`NVG_IMAGE_NEAREST`, `NVG_IMAGE_REPEATX`/`Y`) are creation-time properties of an image and
+     * cannot express a state XNA chooses at `SpriteBatch.Begin()` independently of which texture
+     * is drawn, so each `Draw()` writes the batch's filter/address pair onto the image's own GL
+     * texture object instead (`ApplyNanoVgImageSamplerState`). `TextureFilter.Anisotropic` is
+     * rejected; every other `TextureFilter` maps exactly onto a `GL_TEXTURE_MIN_FILTER`/
+     * `GL_TEXTURE_MAG_FILTER` pair.
+     *
+     * Sprite quads are filled with shape antialiasing disabled (`nvgShapeAntiAlias(ctx, 0)`,
+     * scoped to the draw). NanoVG's `NVG_ANTIALIAS` fill insets a path by half a pixel and
+     * feathers the missing half; XNA's SpriteBatch has no coverage antialiasing at all, and this
+     * renderer never creates a multisample-capable context, so the feathering would be a
+     * systematically different rasterization model rather than a refinement.
      *
      * `End()` calls `nvgEndFrame()`, which is where NanoVG actually submits its accumulated GL
      * draw calls -- so, unlike `OpenVgSpriteBatchRenderer`'s per-`Draw()`-immediate `vgDrawImage`,
@@ -50,9 +63,12 @@ namespace CNA::Internal::Renderers::NanoVg
         void End() override;
         void SetTransformMatrix(const Matrix& m) override;
         void SetCustomEffect(Effect* effect) override;
-        /// No-op: NanoVG's sampling filter (`NVG_IMAGE_NEAREST`) is a per-IMAGE creation flag, not
-        /// a per-draw sampler state -- see NanoVgTextureRenderer's own comment.
+        /// Records the batch's `TextureFilter`, rejecting `Anisotropic` and any ordinal outside the
+        /// enum. Every accepted ordinal resolves to an exact GL minification/magnification pair,
+        /// written onto each drawn texture by `Draw()`.
         void SetSamplerFilter(int textureFilter) override;
+        /// Records the batch's `TextureAddressMode` pair, rejecting any ordinal outside the enum.
+        /// `Wrap`, `Clamp` and `Mirror` all map onto a real GL wrap enum.
         void SetSamplerAddressMode(int addressU, int addressV) override;
 
         void Draw(const ITextureRenderer& texture, float x, float y) override;
@@ -74,10 +90,13 @@ namespace CNA::Internal::Renderers::NanoVg
     private:
         NanoVgRenderer& owner_;
         bool begun_ = false;
-        /// Raw TextureAddressMode ints (0=Wrap, 1=Clamp, 2=Mirror); default Clamp matches XNA/FNA's
-        /// own default SamplerState (LinearClamp).
-        int addressU_ = 1;
-        int addressV_ = 1;
+        /// The batch's own sampler state. Defaults to linear filtering and clamped addressing,
+        /// matching XNA/FNA's own default `SamplerState.LinearClamp`.
+        NanoVgImageSamplerState sampler_{};
+        /// The image whose GL texture object already carries `sampler_`, so a batch drawing one
+        /// texture repeatedly writes its parameters once. Reset whenever the sampler changes and
+        /// at every Begin()/End() boundary, because the next batch may want a different one.
+        int lastSamplerImage_ = 0;
         /// Row-major XNA Matrix decomposed to a 2D affine (a,b,c,d,e,f), same Canvas/OpenVG
         /// convention: x'=a*x+c*y+e, y'=b*x+d*y+f. Identity by default.
         float transform_[6] = {1, 0, 0, 1, 0, 0};

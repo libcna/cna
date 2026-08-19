@@ -653,6 +653,14 @@
       "category": "renderer-integration-executable",
       "max_references": 47
     },
+    "modules/renderers/nanovg/examples/nanovg_sampler_state_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 12
+    },
+    "modules/renderers/nanovg/examples/nanovg_sprite_rasterization_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 12
+    },
     "modules/renderers/nanovg/examples/nanovg_spritebatch_rotation_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 1

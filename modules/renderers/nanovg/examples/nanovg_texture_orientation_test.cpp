@@ -8,10 +8,12 @@
 // partial source rectangle, destination scaling, origin, rotation, both SpriteEffects flips, and
 // alpha/tint, then a real edge-clamped out-of-bounds Clamp draw is checked pixel-by-pixel.
 //
-// Unlike OpenVG, NanoVG has no per-draw Point/Nearest filter (SetSamplerFilter is a documented
-// no-op -- see NanoVgTextureRenderer's own comment): every NanoVgTextureRenderer is linear
-// filtered. Sample points are therefore kept well inside each texel's own screen-space block,
-// away from the linear-interpolation boundary between adjacent texels.
+// Most cases below deliberately leave the sampler at its default (LinearClamp, the state
+// SpriteBatch.Begin() resolves a null SamplerState to), so sample points are kept well inside each
+// texel's own screen-space block, away from the linear-interpolation boundary between adjacent
+// texels. The address-mode cases at the end switch to point filtering, because there the
+// distinction under test is which TEXEL is addressed, not how neighbouring texels blend --
+// nanovg_sampler_state_test.cpp is the file that proves the filter itself is honoured.
 //
 // Exit code 0 = PASS, 1 = FAIL, 77 = SKIPPED (no GPU/display).
 
@@ -239,17 +241,28 @@ int main()
         Check(CloseTo(ReadPixel(renderer, 5, 10), kTL), "OOB Clamp (left/top): repeats the corner texel into the padded region");
         Check(CloseTo(ReadPixel(renderer, 5, 30), kTL), "OOB Clamp (left/top): the real top row is still reachable one step in");
 
-        // 10) Wrap/Mirror + out-of-bounds must be rejected deterministically, not silently cropped.
+        // 10) Out-of-bounds Wrap and Mirror. Same geometry as case 8, so the five destination
+        //     columns are 18px wide and each source texel's own centre lands at dest x = 9, 27,
+        //     45, 63, 81; rows are 30px, centres at y = 15 and 45. Point-filtered so each read is
+        //     the addressed texel itself rather than a blend of it with its neighbour across the
+        //     repeat seam.
+        sb->SetSamplerFilter(/*Point=*/1);
         sb->SetSamplerAddressMode(/*Wrap=*/0, /*Wrap=*/0);
-        bool threw = false;
-        try
-        {
-            sb->Begin();
-            sb->Draw(*tex, Rectangle(0, 0, 90, 60), Rectangle(0, 0, 5, 2), Color::White, 0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
-            sb->End();
-        }
-        catch (const std::runtime_error&) { threw = true; }
-        Check(threw, "OOB Wrap/Mirror TextureAddressMode is rejected, not silently mis-rendered");
+        clearAndDraw(Rectangle(0, 0, 90, 60), Rectangle(0, 0, 5, 2), Color::White, 0.0f, Vector2(0, 0), SpriteEffects::None);
+        Check(CloseTo(ReadPixel(renderer, 9, 15), kTL) && CloseTo(ReadPixel(renderer, 27, 15), kTM) &&
+                  CloseTo(ReadPixel(renderer, 45, 15), kTR),
+              "OOB Wrap: the in-bounds columns are unaffected");
+        Check(CloseTo(ReadPixel(renderer, 63, 15), kTL) && CloseTo(ReadPixel(renderer, 81, 15), kTM),
+              "OOB Wrap: the out-of-bounds columns tile the texture from its own left edge");
+        Check(CloseTo(ReadPixel(renderer, 63, 45), kBL),
+              "OOB Wrap: the bottom row tiles independently, keeping its own row");
+
+        sb->SetSamplerAddressMode(/*Mirror=*/2, /*Clamp=*/1);
+        clearAndDraw(Rectangle(0, 0, 90, 60), Rectangle(0, 0, 5, 2), Color::White, 0.0f, Vector2(0, 0), SpriteEffects::None);
+        Check(CloseTo(ReadPixel(renderer, 9, 15), kTL) && CloseTo(ReadPixel(renderer, 45, 15), kTR),
+              "OOB Mirror: the in-bounds columns are unaffected");
+        Check(CloseTo(ReadPixel(renderer, 63, 15), kTR) && CloseTo(ReadPixel(renderer, 81, 15), kTM),
+              "OOB Mirror: the out-of-bounds columns reflect the texture instead of tiling it");
 
         }
         SDL_DestroyWindow(window);
