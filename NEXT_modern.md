@@ -8,9 +8,15 @@ do not reconstruct the layer's state from the general `NEXT.md`.
 
 ## 1. Where the work stands
 
-**Phase 0 (foundation) — in progress.** Nothing of the orchestration layer
-(`RenderPipeline`, post-process passes, shadows, skybox/IBL, compute) exists yet; see
-`docs/cnaext-engine-layer.md` for the honest capability boundary.
+**Phases 0–15 and 17–19 are complete; Phase 16 is measured rather than implemented** (2026-08-19).
+The whole orchestration layer exists and is verified on EasyGL: `RenderPipeline`, the post-process
+chain, all four shadow types, skybox and IBL, materials, instancing/LOD/culling, compute and
+auto-exposure. See `docs/cnaext-engine-layer.md` for the capability boundary per subsystem and per
+renderer, and §3 below for the measured baselines.
+
+*(This paragraph said "Phase 0 — in progress, nothing of the orchestration layer exists yet" for
+long after that stopped being true, while the table immediately below it listed fifteen completed
+phases. A summary that contradicts its own table is worse than no summary, so it is dated now.)*
 
 | Done | Task |
 |---|---|
