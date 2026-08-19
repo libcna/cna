@@ -755,8 +755,8 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1605 | D3D12 | ⬜ | Compile-verified on Windows only, per precedent. |
 | MOD-1606 | D3D9 | ⬜ | `D3DFMT_A16B16G16R16F`; document the no-blending caveat on old hardware. |
 | MOD-1607 | D3D10 | ⬜ | |
-| MOD-1608 | OpenGL4 | ⬜ | |
-| MOD-1609 | OpenGL2 | ⬜ | Only via `ARB_texture_float`; document if declined. |
+| MOD-1608 | OpenGL4 | 🟨 | **Measured, not implemented.** `cna_test_cnaext_caps` on a real OPENGL4 build reports `FloatRenderTargets: no`, `HalfFloatRenderTargets: no`, so the false-by-default answer stands and `RenderTarget2D` refuses the format rather than substituting `Color`. `GL_RGBA16F` attachments are core in GL 4.x, so this is implementable work rather than a boundary. |
+| MOD-1609 | OpenGL2 | 🟨 | **Measured, not implemented — and this is OpenGL2's only row, so it carries the whole picture.** Both float capabilities `no`; `CustomEffects: yes` with `ExecutesShaderSourceEXT: no` (it accepts an effect and does not run this layer's GLSL, so every shader-based pass reports `isSupported() == false` and copies through); `Instancing: yes` with `MultiStreamVertexInput: no`, the mismatch `MOD-1621`'s fix covers; shadow sampling, IBL and compute all `no`. Engine-layer suites: **406 pass · 85 skip · 0 fail**. `ARB_texture_float` is the route for float targets if it is ever taken; nothing has declined it, it simply has not been done. |
 | MOD-1610 | Magnum | ⬜ | |
 | MOD-1611 | Diligent | ⬜ | Runtime-selected native API — verify on at least two. |
 | MOD-1612 | LLGL | ⬜ | |
@@ -778,7 +778,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1625 | D3D12 | ⬜ | |
 | MOD-1626 | D3D9 | ⬜ | SM3 limits — document any pass that cannot fit. |
 | MOD-1627 | D3D10 | ⬜ | |
-| MOD-1628 | OpenGL4 | ⬜ | |
+| MOD-1628 | OpenGL4 | 🟨 | **Measured, and it is the interesting one.** OPENGL4 answers `CustomEffects: yes` and `ExecutesShaderSourceEXT: no` — it accepts an effect and does not run this layer's GLSL. That is exactly the pair `MOD-1699` exists for, and the two-part question does its job: every shader-based pass reports `isSupported() == false` and copies through, giving **406 pass · 85 skip · 0 fail**. It also answers `Instancing: yes` with `MultiStreamVertexInput: no`, the same mismatch SDL_GPU has, which `MOD-1621`'s fix already covers. |
 | MOD-1629 | Magnum | ⬜ | |
 | MOD-1630 | Diligent | ⬜ | |
 | MOD-1631 | LLGL | ⬜ | |
@@ -801,7 +801,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1645 | D3D12 | ⬜ | |
 | MOD-1646 | D3D9 | ⬜ | |
 | MOD-1647 | D3D10 | ⬜ | |
-| MOD-1648 | OpenGL4 | ⬜ | |
+| MOD-1648 | OpenGL4 | 🟨 | **Measured:** `SupportsShadowSamplingEXT: no`, so all four casters report `isSupported() == false` and the shadow suites skip rather than fail. |
 | MOD-1649 | Magnum | ⬜ | |
 | MOD-1650 | Diligent | ⬜ | |
 | MOD-1651 | LLGL | ⬜ | |
@@ -823,7 +823,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1665 | D3D12 | ⬜ | |
 | MOD-1666 | D3D9 | ⬜ | Cube-mip prefiltering on SM3 — verify feasibility first. |
 | MOD-1667 | D3D10 | ⬜ | |
-| MOD-1668 | OpenGL4 | ⬜ | |
+| MOD-1668 | OpenGL4 | 🟨 | **Measured:** `SupportsImageBasedLightingEXT: no`; `EnvironmentProcessor`'s CPU-side precompute works, the shading half does not. |
 | MOD-1669 | Magnum | ⬜ | |
 | MOD-1670 | Diligent | ⬜ | |
 | MOD-1671 | LLGL | ⬜ | |
@@ -841,7 +841,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1683 | WebGPU | ⬜ | Compute is core in WebGPU; gated on the backend's own maturity. |
 | MOD-1684 | Metal | ⬜ | |
 | MOD-1685 | Diligent | ⬜ | |
-| MOD-1686 | OpenGL4 | ⬜ | |
+| MOD-1686 | OpenGL4 | 🟨 | **Measured:** `SupportsCapability(ComputeShaders): no`, so `ComputeShader` and `StorageBuffer` refuse by name and the compute suites skip. GL 4.3 has compute shaders, so this is implementable rather than a boundary. |
 
 ### 16.6 Documented non-support (2D-only / non-shader renderers)
 

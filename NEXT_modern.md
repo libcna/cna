@@ -428,14 +428,24 @@ how `MOD-1699` got answered wrongly three times. Build it in whichever renderer'
 you are measuring and it prints the answers, `CustomEffects` next to `ExecutesShaderSourceEXT` and
 `Instancing` next to `MultiStreamVertexInput` — the pairs where a renderer says yes and then no.
 
-| | EasyGL (OPENGLES3) | SDL_GPU |
-|---|---|---|
-| ThreeD / CustomEffects | yes / yes | yes / yes |
-| Float / half-float RTs | yes / yes | no / no |
-| ComputeShaders | yes | no |
-| Instancing / MultiStream | yes / yes | **yes / no** |
-| ExecutesShaderSourceEXT | yes | no |
-| ShadowSamplingEXT / IBL | yes / yes | no / no |
+| | EasyGL (GLES3) | SDL_GPU | SDL_Renderer | PortableGL | TinyGL | OpenGL1 | OpenGL2 | OpenGL4 |
+|---|---|---|---|---|---|---|---|---|
+| ThreeD | yes | yes | no | yes | yes | yes | yes | yes |
+| CustomEffects | yes | yes | no | no | no | no | yes | yes |
+| Float / half-float RTs | yes | no | no | no | no | no | no | no |
+| ComputeShaders | yes | no | no | no | no | no | no | no |
+| Instancing / MultiStream | yes / yes | **yes / no** | no / no | no / no | no / no | no / no | **yes / no** | **yes / no** |
+| ExecutesShaderSourceEXT | yes | no | no | no | no | no | no | no |
+| ShadowSamplingEXT / IBL | yes / yes | no / no | no / no | no / no | no / no | no / no | no / no | no / no |
+| Engine-layer suites | 0 fail | 0 fail | 380/111/0 | 348/143/0 | 348/143/0 | 402/89/0 | 406/85/0 | 406/85/0 |
+
+Two columns are worth reading twice. **`CustomEffects: yes` with `ExecutesShaderSourceEXT: no`**
+(SDL_GPU, OpenGL2, OpenGL4) is the pair `MOD-1699` exists for: those renderers accept an effect and
+do not run this layer's GLSL, and only the two-part question tells them apart from EasyGL. And
+**`Instancing: yes` with `MultiStreamVertexInput: no`** is a promise three renderers make and do not
+keep — the base class's `SupportsCapability` defaults `Instancing` to `true` while its
+`DrawInstancedPrimitives` defaults to a refusal. Every one of those is a `default: return true` that
+nobody revisited, which is the same failure mode in a different enum.
 
 There is no `GraphicsDevice::SupportsComputeShadersEXT()`, despite what a reading of the four-query
 rule suggests: compute's device-side answer is `SupportsCapability(ComputeShaders)`, which is
