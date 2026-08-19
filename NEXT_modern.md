@@ -302,6 +302,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-18 | `cmake-build-cnaext`, after Phase 19's API review and renames (`MOD-1900`, `MOD-1902`, `MOD-1742`) | Xvfb :99 | 7942 ran · 7878 pass · 64 skip · **0 fail** |
 | 2026-08-19 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`**, re-verified after the whole Phase 16 sweep and the shared-test-file changes it needed | Xvfb :99 | 7557 ran · 7495 pass · 62 skip · **0 fail** |
 | 2026-08-19 | **`cmake-build-d3d11`** — MinGW-w64 cross-build, run under Wine on a real D3D11 device (`MOD-1624`) | Xvfb :99 + Wine 9.0 | 488 ran · 402 pass · 86 skip · **0 fail** |
+| 2026-08-19 | `cmake-build-cnaext` (EasyGL) — the final regression sweep (`MOD-1906`) | Xvfb :99 | 7944 ran · 7879 pass · 64 skip · **1 fail, load-induced** — see below |
 
 The `CNA_CNAEXT=OFF` row is the one that answers "can this break what already works". It configures,
 builds and passes with the whole engine layer compiled out. Its lower test count is expected and not
@@ -397,6 +398,18 @@ Three things are worth knowing before repeating it:
 Xvfb also dies periodically in this container. A wrapper that checks `xdpyinfo` and restarts it
 before running is worth having; without one, a test run fails with "x11 not available" and looks
 like a regression.
+
+### The one failure in the final sweep, and why it is not a regression
+
+`DynamicSoundEffectInstanceTest.StressSubmitFloatBufferEXTAgainstRepeatedPlayCyclesNeverCorruptsLiveStream`
+failed once, in a run made while a Wine D3D9 test run and a MinGW build were also using the machine.
+It is a race-window test, and it failed on its own **anti-vacuity** assertion — `callsThrown > 0`,
+whose message says that zero *"would mean this test never actually exercised the guard it exists to
+verify"*. Under a three-way load the threads did not interleave and the window never opened.
+
+Re-run alone: **3/3 pass**. `modules/audio` has no diff on this branch at all, so nothing here
+touched it. Recorded rather than quietly re-run, because a test that can fail for want of CPU is a
+real property of the suite, and the next person to see it should not have to rediscover that.
 
 ### Phase 16, as a whole: what measuring fifteen renderers actually bought
 
