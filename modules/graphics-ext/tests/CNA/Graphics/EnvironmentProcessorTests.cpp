@@ -359,6 +359,7 @@ TEST(EnvironmentProcessorTest, PrefilteringKeepsMipZeroSharpAndFlattensTheLast)
     GraphicsDevice gd;
     EnvironmentProcessor processor(gd);
     CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
+    CNA_SKIP_WITHOUT_CUBE_MIP_STORAGE(gd);
 
     auto environment = MakeConstantCube(gd, 8, Color(0, 0, 0, 255));
     const std::vector<Color> bright(64, Color(255, 255, 255, 255));
@@ -459,6 +460,7 @@ TEST(EnvironmentProcessorTest, GenerationCostIsLoadTimeWork)
     GraphicsDevice gd;
     EnvironmentProcessor processor(gd);
     CNA_SKIP_WITHOUT_CUBE_FACE_STORAGE(gd);
+    CNA_SKIP_WITHOUT_CUBE_MIP_STORAGE(gd);
     auto environment = MakeConstantCube(gd, 64, Color(140, 160, 200, 255));
 
     const auto timeOf = [](auto&& work) {

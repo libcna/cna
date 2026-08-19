@@ -138,6 +138,37 @@ namespace CnaTest::EngineLayer {
     }
 
     /**
+     * @brief Whether this renderer stores cube-map face data into a mip level other than zero.
+     *
+     * plan_modern.md `MOD-1625`. A third question, narrower than @ref CanStoreCubeFaces and found
+     * by the renderer that answers the two differently: D3D12 round-trips an unmipped face and
+     * then refuses `SetData` into mip 1 of a mipped cube. The specular prefilter writes one
+     * roughness per mip, so it needs this one and not the other.
+     *
+     * @param device The device to probe.
+     * @return True when a non-zero cube mip level round-trips.
+     */
+    [[nodiscard]] inline bool CanStoreCubeMipLevels(
+        Microsoft::Xna::Framework::Graphics::GraphicsDevice& device)
+    {
+        using namespace Microsoft::Xna::Framework;
+        using namespace Microsoft::Xna::Framework::Graphics;
+        try
+        {
+            TextureCube cube(device, 4, true, SurfaceFormat::Color);
+            const std::vector<Color> mip(4, Color::White);
+            cube.SetData(CubeMapFace::PositiveX, 1, nullptr, mip.data(), 0, 4);
+            std::vector<Color> read(4, Color::Black);
+            cube.GetData(CubeMapFace::PositiveX, 1, nullptr, read.data(), 0, 4);
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
+    /**
      * @brief Whether this renderer really renders into one face of a cube render target.
      *
      * plan_modern.md `MOD-1696`. A separate question from @ref CanStoreCubeFaces: storing texel
@@ -237,6 +268,15 @@ namespace CnaTest::EngineLayer {
         if (!::CnaTest::EngineLayer::CanStoreCubeFaces(device))                                    \
             GTEST_SKIP() << "this renderer does not store cube-map face data, so the cube this "   \
                             "test builds cannot hold what is written to it";                       \
+    } while (false)
+
+    /** @brief Skips the current test when the renderer does not store non-zero cube mip levels. */
+#define CNA_SKIP_WITHOUT_CUBE_MIP_STORAGE(device)                                                  \
+    do {                                                                                           \
+        if (!::CnaTest::EngineLayer::CanStoreCubeMipLevels(device))                                \
+            GTEST_SKIP() << "this renderer does not store cube-map data into a mip level other "   \
+                            "than zero, so the prefiltered chain this test reads cannot be "       \
+                            "written here";                                                        \
     } while (false)
 
     /** @brief Skips the current test when the renderer cannot render into a cube face. */
