@@ -2,9 +2,13 @@
 
 ## ABI identity
 
-The ABI is `0.2.0`; `0.1.0` was the initial one. The minor moved when the routes recorded in
-`plan_binding.md` CBIND-054 through CBIND-058 were added -- every one of them additive, so a
-consumer built against `0.1.0` still links and behaves identically. Its packed representation is
+The ABI is `0.3.0`. `0.1.0` was the initial one; `0.2.0` added the routes recorded in
+`plan_binding.md` CBIND-054 through CBIND-058, every one of them additive. `0.3.0` is **not**
+additive and that is why the minor moved again: `CBIND-067` made all 94 routes taking a `CNA_Bool`
+refuse a byte outside {0, 1}, where 66 of them used to accept one. A caller that passed only
+`CNA_FALSE` and `CNA_TRUE` -- what this document has always required -- is unaffected. A caller
+that passed anything else was already getting a value read as true in some routes and false in
+others, so there was no consistent behaviour to preserve. Its packed representation is
 a `uint32_t`:
 
 ```text
@@ -24,24 +28,23 @@ notes and a regenerated ABI baseline. ABI `1.x` and later permit only additive, 
 changes within a major. Removing or changing an existing function, numeric constant, struct field,
 field meaning, ownership rule, error rule or callback rule requires a new ABI major.
 
-### What a `CNA_Bool` outside {0, 1} actually does
+### What a `CNA_Bool` outside {0, 1} does
 
-The table above states the contract, and `CBIND-066` measured how evenly it is enforced: **94
-routes take a `CNA_Bool` by value, and 29 of them refuse a byte outside {0, 1}** with
-`CNA_RESULT_INVALID_ARGUMENT` — a refusal `EffectTechniqueSmoke.c` asserts as documented
-behaviour. The other 65 accept it, and what happens next is not uniform: the implementation reads a
-`CNA_Bool` as `!= CNA_FALSE` in 97 places and as `== CNA_TRUE` in 77, so a byte of `9` means
-**true** in one route and **false** in another.
+**Every route refuses it**, with `CNA_RESULT_INVALID_ARGUMENT`, naming the parameter. A route on a
+surface a given build compiled out answers `CNA_RESULT_NOT_SUPPORTED` instead, because refusing an
+argument to a route that does not exist there would be the wrong answer.
 
-So: pass only `CNA_FALSE` or `CNA_TRUE`. Anything else is a caller error that some routes catch and
-some do not, and the ones that do not disagree with each other about what it meant. Do not read
-this as a licence to pass `!!x`-style values expecting C's usual any-nonzero-is-true rule — that
-rule holds for barely more than half of it.
+That is `0.3.0` behaviour and it was not always so. `CBIND-066` measured the previous state: of the
+94 routes taking a `CNA_Bool` by value, 28 refused a non-canonical byte and **66 accepted one** --
+then disagreed about what they had accepted, since the implementation read the flag as
+`!= CNA_FALSE` in 97 places and as `== CNA_TRUE` in 77. A byte of `9` therefore meant **true** in
+one route and **false** in another. `CBIND-067` made all 94 uniform.
 
-This paragraph exists because the sentence above it promised a rule the library only partly
-enforces, and a contract that is documented but unevenly enforced is worse than one that says where
-it stops. Making the 94 uniform is a behavioural change to published routes and is recorded as an
-open decision in `plan_binding.md` `CBIND-066`, with the counts to size it.
+The guarantee is held by a **generated** test rather than by 94 hand-written assertions
+(`tools/c-api/generate_bool_contract_test.py`, run as `CApi_BoolContractSmoke`), so a route
+declared with a new flag parameter is covered the moment it is declared. The generator errors on a
+by-value parameter type it has no stand-in for rather than dropping that route, so the covered set
+cannot shrink quietly.
 
 ## Naming and linkage
 

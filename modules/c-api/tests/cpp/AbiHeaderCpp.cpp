@@ -8,7 +8,7 @@
 
 #include <cstddef>
 
-static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 2, 0));
+static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 3, 0));
 static_assert(sizeof(CNA_Result) == sizeof(uint32_t));
 static_assert(sizeof(CNA_Handle) == sizeof(uint64_t));
 static_assert(sizeof(CNA_GraphicsResourceTag) == sizeof(uint64_t));

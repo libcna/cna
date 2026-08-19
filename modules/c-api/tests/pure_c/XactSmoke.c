@@ -615,12 +615,12 @@ int main(void)
             cna_wave_bank_create_streaming(engine, view(WaveBankPath), 0, 64U, &streaming);
         CNA_Handle absent = UINT64_C(9);
         /* CBIND-065, and this is the finding rather than the coverage. The header promised "the
-           same answers as cna_wave_bank_create", and it is not so: the canonical streaming
-           constructor swallows every parse failure (WaveBank.cpp InitStreaming logs and returns),
-           so a missing file yields a live, empty bank and SUCCESS -- where the non-streaming twin
-           answers IO, as the assertion above proves. The header now says that; this pins it, so
-           the day the canonical side stops swallowing, this test says so instead of nobody
-           noticing. */
+           same answers as cna_wave_bank_create", and it is not so: the streaming constructor never
+           reads through the title container, so a missing file yields a live, empty bank and
+           SUCCESS where the non-streaming twin answers IO. That is FNA's own streaming behaviour
+           reproduced, not a failure lost -- see WaveBank.cpp Init's note. The header now says so;
+           this pins it, so the day the canonical side changes, this test says so instead of
+           nobody noticing. */
         if (status == 0 &&
             (cna_wave_bank_create_streaming(
                  engine, view("cna_c_api_xact_missing.xwb"), 0, 64U, &absent) !=
