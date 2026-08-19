@@ -73,6 +73,11 @@ uniform int   uStepCount;
 // plane is already outside anything worth reflecting.
 const float kCnaSkyDepth = 0.999;
 
+// Bisections of the bracket the march ends on. Six halvings take a step down to 1/64 of itself,
+// which is below one texel for every step count this pass accepts -- past that the snapping to
+// texel centres decides the answer and further halving changes nothing.
+const int kCnaRefineSteps = 6;
+
 vec2 cnaSnapToTexel(vec2 uv, vec2 size) {
     return (floor(uv * size) + 0.5) / size;
 }
@@ -103,6 +108,9 @@ void main() {
     float stepLength = uMaxDistance / float(uStepCount);
     vec3 hitColor = vec3(0.0);
     float hit = 0.0;
+    // The last point known to be in *front* of whatever the ray is passing over. Half of the
+    // refinement's bracket, and the reason the loop starts its walk from the surface itself.
+    vec3 lastClear = position;
 
     for (int i = 1; i <= 64; ++i) {
         if (i > uStepCount) break;
@@ -139,10 +147,32 @@ void main() {
         // had. Without it a ray that flew far behind a foreground object would report a hit on it.
         float difference = -samplePosition.z - sceneDepth;
         if (difference > uDepthBias && difference < uThickness) {
-            hitColor = texture(texture1, snappedUv).rgb;
+            // The march has established a bracket: lastClear is in front of the surface and
+            // samplePosition is behind it, so the crossing is somewhere between. Without this the
+            // reflection lands wherever the step happened to fall, so its position depends on the
+            // step count -- a coarse march stair-steps every reflected edge, and halving the step
+            // moves the whole reflection rather than sharpening it.
+            vec3 near = lastClear;
+            vec3 far  = samplePosition;
+            for (int k = 0; k < kCnaRefineSteps; ++k) {
+                vec3 middle = (near + far) * 0.5;
+                vec4 middleClip = uCameraProjection * vec4(middle * uFarPlaneScale, 1.0);
+                if (middleClip.w <= 0.0) break;
+                vec2 middleUv = cnaSnapToTexel((middleClip.xy / middleClip.w) * 0.5 + 0.5, uDepthSize);
+                float middleDepth = cnaDecodeLinearDepth(textureLod(uDepthSampler, middleUv, 0.0));
+                bool behind = middleDepth > 0.0 && middleDepth < kCnaSkyDepth &&
+                              (-middle.z - middleDepth) > uDepthBias;
+                if (behind) far = middle; else near = middle;
+            }
+
+            vec4 hitClip = uCameraProjection * vec4(far * uFarPlaneScale, 1.0);
+            vec2 hitUv = cnaSnapToTexel((hitClip.xy / hitClip.w) * 0.5 + 0.5, uDepthSize);
+            hitColor = texture(texture1, hitUv).rgb;
             hit = 1.0;
             break;
         }
+
+        lastClear = samplePosition;
     }
 
     FragColor = vec4(mix(sourceColor, hitColor, hit * uIntensity), 1.0);

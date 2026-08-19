@@ -25,6 +25,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -140,6 +141,22 @@ const Color kFacingNormal{128, 128, 255, 255};
 /// (0, 0.7071, 0.7071): tilted 45 degrees, which reflects the view ray to (0, 1, 0) -- purely
 /// lateral in view space, so the march travels sideways at a constant distance.
 const Color kTiltedNormal{128, 218, 218, 255};
+
+/// Colour: the band a steep vertical ramp, everything else black. Where in the band a reflection
+/// lands is then legible from the colour it comes back with, which is what makes the refinement
+/// observable at all -- a flat band answers the same colour wherever the ray stops inside it.
+std::unique_ptr<RenderTarget2D> MakeSourceWithGradientBand(GraphicsDevice& gd)
+{
+    return MakeRowImage(gd, [](const int row) {
+        if (!InBand(row)) return Color(0, 0, 0, 255);
+        // The band's rows run from its far edge inward, so the ramp is indexed from the first row
+        // the reflected ray can reach.
+        int depthIntoBand = 0;
+        for (int r = row; r >= 0 && InBand(r); --r) ++depthIntoBand;
+        const int red = std::min(250, 40 + depthIntoBand * 35);
+        return Color(red, 0, 0, 255);
+    });
+}
 
 /// Colour: the band bright red, everything else black. Anything the plane reflects is red.
 std::unique_ptr<RenderTarget2D> MakeSourceWithBrightBand(GraphicsDevice& gd)
@@ -422,6 +439,47 @@ TEST(SsrPassTest, AZeroDepthIsAlsoNotReflective)
     const std::vector<Color> pixels = ReadTarget(destination);
     EXPECT_NEAR(pixels[CentreIndex()].getRProperty(), 90, 6)
         << "the sky reflected something";
+}
+
+TEST(SsrPassTest, TheRefinementMakesTheAnswerIndependentOfTheStepCount)
+{
+    // plan_modern.md MOD-2001. What the bisection buys, stated as the thing a viewer would notice:
+    // without it the reflection stops wherever the step happened to fall, so a coarse march
+    // overshoots the edge it crossed and halving the step *moves* the whole reflection instead of
+    // sharpening it -- reflected edges stair-step, and the pattern changes with the step count. With
+    // it, both marches converge on the same crossing and answer with the same colour.
+    GraphicsDevice gd;
+    SsrPass pass(gd);
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+
+    auto depth   = MakeTiltedPlaneDepth(gd);
+    auto normals = MakeUniformNormals(gd, kTiltedNormal);
+    auto source  = MakeSourceWithGradientBand(gd);
+    RenderTarget2D destination(gd, kSize, kSize);
+
+    const auto redAtStepCount = [&](const int steps) {
+        pass.setMaxDistance(40.0f);
+        pass.setThickness(30.0f);
+        pass.setStepCount(steps);
+        PostProcessContext context = MakeContext(SourceRef(source), destination);
+        context.sourceDepth   = depth.get();
+        context.sourceNormals = normals.get();
+        pass.apply(context);
+        return static_cast<int>(ReadTarget(destination)[CentreIndex()].getRProperty());
+    };
+
+    const int coarse = redAtStepCount(8);
+    const int fine   = redAtStepCount(64);
+
+    // Anti-vacuity: both marches must actually have found the band. Two misses would agree
+    // perfectly at zero and prove nothing at all.
+    ASSERT_GT(coarse, 20) << "the coarse march found no reflection, so nothing was compared";
+    ASSERT_GT(fine, 20) << "the fine march found no reflection, so nothing was compared";
+
+    EXPECT_LE(std::abs(coarse - fine), 12)
+        << "eight steps answered " << coarse << " and sixty-four answered " << fine
+        << ": the reflection still lands where the step count puts it";
 }
 
 // ── The fallback ─────────────────────────────────────────────────────────────
