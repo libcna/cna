@@ -25,7 +25,16 @@ namespace Microsoft::Devices::Detail
 
     void PlatformVibrateBackend::ReleaseService()
     {
-        if (subsystemHeld_ && platform_ != nullptr)
+        // A platform pointer captured earlier is only safe to call through while that same platform
+        // is still the installed one. The DevicesShutdownCoordinator flag alone does not guarantee
+        // that: it is process-global and a test can reset it (ResetForTesting), after which a
+        // backend destroyed at process exit -- VibrateController's function-local static is
+        // destroyed by __run_exit_handlers, long after the platform is gone -- called through a
+        // freed vtable and took the process down with SIGSEGV at address 0. Reproduced
+        // deterministically with `--gtest_filter=*Instanc*`, on every renderer and with
+        // CNA_CNAEXT off, so it is neither renderer- nor engine-layer-specific.
+        if (subsystemHeld_ && platform_ != nullptr && CNA::Platform::HasCurrentPlatform() &&
+            &CNA::Platform::GetCurrentPlatform() == platform_)
         {
             platform_->ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Haptic);
         }
