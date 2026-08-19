@@ -93,10 +93,22 @@ void main()
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec4 aColor;
 uniform mat4 uWorldViewProj;
+// plan_gltf.md GLTF-475: the same two uniforms kColoredTextured3DVertSrc already has, and for the
+// same reason -- `vColor = aColor` unconditionally made this program paint whatever attribute
+// location 1 happens to hold. That is a colour only on the stride-16 and stride-24 records; on the
+// PBR and skinned ones location 1 is the NORMAL, so a BasicEffect draw on a stride-48 buffer
+// rendered the normal vector as the surface colour (measured: rgba(0,0,255) for a normal of
+// (0,0,1) where SOFTWARE, OPENGL2 and LLGL all rendered the effect's red DiffuseColor).
+//
+// Reading the effect's own switch instead is what those three renderers do, and it fixes the whole
+// family rather than one stride: with VertexColorEnabled false the attribute is not read at all.
+// The legacy no-GpuDrawParams route sets white/true, which is exactly today's `vColor = aColor`.
+uniform vec4 uDiffuseColor;
+uniform bool uVertexColorEnabled;
 out vec4 vColor;
 void main()
 {
-    vColor = aColor;
+    vColor = uVertexColorEnabled ? (aColor * uDiffuseColor) : uDiffuseColor;
     gl_Position = uWorldViewProj * vec4(aPos, 1.0);
 }
 )GLSL";
@@ -857,6 +869,9 @@ out vec3 vTangent;
 out float vBitangentSign;
 out vec2 vUV;
 out vec3 vWorldPos;
+// plan_gltf.md GLTF-462/GLTF-463: COLOR_0, carried by the stride-60 and stride-80 records.
+layout(location = 6) in vec4 aColor;
+out vec4 vColor;
 out float vFogFactor;
 float cnaDirectionHandedness(mat3 m)
 {
@@ -874,6 +889,7 @@ void main()
     vTangent = mat3(uWorld) * aTangent.xyz;
     vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(uWorld));
     vUV = aUV;
+    vColor = aColor;
     vWorldPos = (uWorld * vec4(aPos, 1.0)).xyz;
     // REMED-GFX-010: see kColoredParams3DVertSrc's own comment for the fog-vector formula.
     vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), uFogVector), 0.0, 1.0);
@@ -898,6 +914,9 @@ out vec3 vTangent;
 out float vBitangentSign;
 out vec2 vUV;
 out vec3 vWorldPos;
+// plan_gltf.md GLTF-462/GLTF-463: COLOR_0, carried by the stride-60 and stride-80 records.
+layout(location = 6) in vec4 aColor;
+out vec4 vColor;
 out float vFogFactor;
 vec3 cnaSkinNormal(mat3 m, vec3 n)
 {
@@ -931,6 +950,7 @@ void main()
     vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(uWorld))
                                 * cnaDirectionHandedness(mat3(skinMat));
     vUV = aUV;
+    vColor = aColor;
     vWorldPos = (uWorld * skinnedPos).xyz;
     vFogFactor = 1.0 - clamp(dot(skinnedPos, uFogVector), 0.0, 1.0);
 }
@@ -943,6 +963,8 @@ in vec3 vTangent;
 in float vBitangentSign;
 in vec2 vUV;
 in vec3 vWorldPos;
+in vec4 vColor;
+uniform float uVertexColorEnabled;
 in float vFogFactor;
 uniform sampler2D uTexture;
 uniform sampler2D uNormalMap;
@@ -1030,8 +1052,13 @@ void main()
 {
     vec4 baseColorTex = texture(uTexture, cnaPbrTransformUV(vUV, 0));
     vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), uSrgb.x);
-    vec3 albedo = baseColor * uDiffuseColor.rgb;
-    float alpha = baseColorTex.a * uDiffuseColor.a;
+    // plan_gltf.md GLTF-465. §3.7.2.1: COLOR_0 "acts as an additional linear multiplier to base
+    // color". LINEAR is why there is no transfer function here -- the attribute is a normalized
+    // integer already in linear space, unlike the base-colour TEXTURE -- and both RGB and alpha are
+    // multiplied because §3.9.2's base colour is an RGBA product.
+    vec4 cnaVertexColor = uVertexColorEnabled > 0.5 ? vColor : vec4(1.0);
+    vec3 albedo = baseColor * uDiffuseColor.rgb * cnaVertexColor.rgb;
+    float alpha = baseColorTex.a * uDiffuseColor.a * cnaVertexColor.a;
     bool passesAlphaTest = (uAlphaTest.y > 0.0)
         ? (abs(alpha - uAlphaTest.x) < uAlphaTest.y)
         : (alpha < uAlphaTest.x);
@@ -2147,6 +2174,18 @@ void main()
             }
             break;
         case 48:
+        // plan_gltf.md GLTF-462: stride 60 is the rigid PBR record with a second UV set at 48 and a
+        // packed COLOR_0 at 56. Its first four fields are byte-identical to stride 48, and without
+        // this case it reached the position-only default below -- a dual-UV or vertex-coloured PBR
+        // mesh drew with no normal, no tangent and no UV at all. The two trailing slots stay unbound
+        // because this renderer's PBR shader samples one UV set and reads no colour attribute;
+        // GLTF-465 owns consuming them.
+        case 60:
+        // plan_gltf.md GLTF-463: strides 76 and 80 are the skinned PBR record with UV1 and, for 80,
+        // a packed COLOR_0 appended; their first six fields are byte-identical to stride 68, and the
+        // colour is bound below so the shader can multiply it.
+        case 76:
+        case 80:
         case 68:
             // plan_opengl4.md GL4-23: VertexPositionNormalTangentTexture (packed): float3
             // position + float3 normal + float4 tangent (xyz + bitangent-handedness sign in w)
@@ -2162,12 +2201,22 @@ void main()
             gl4_glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, s, (void*)24);
             gl4_glEnableVertexAttribArray(3);
             gl4_glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, s, (void*)40);
-            if (stride == 68)
+            if (stride == 68 || stride == 76 || stride == 80)
             {
                 gl4_glEnableVertexAttribArray(4);
                 gl4_glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, s, (void*)48);
                 gl4_glEnableVertexAttribArray(5);
                 gl4_glVertexAttribIPointer(5, 4, GL_UNSIGNED_BYTE, s, (void*)64);
+            }
+            // plan_gltf.md GLTF-465: the two colour-carrying PBR records bind COLOR_0 at location 6,
+            // which the PBR shaders declare and gate on uVertexColorEnabled. An uncoloured
+            // stride-60/80 buffer has opaque white there -- the multiplier's identity -- so the gate
+            // is the intent and the fill is the safety net.
+            if (stride == 60 || stride == 80)
+            {
+                gl4_glEnableVertexAttribArray(6);
+                gl4_glVertexAttribPointer(6, 4, GL_UNSIGNED_BYTE, GL_TRUE, s,
+                                          (void*)(stride == 60 ? 56 : 76));
             }
             break;
         default:
@@ -3139,12 +3188,29 @@ void main()
         return std::make_unique<OpenGL4IndexBufferRenderer>(index_capacity, /*thirtyTwoBit=*/true);
     }
 
+    /// plan_gltf.md GLTF-475: uploads the colored3d program's tint pair.
+    ///
+    /// @param params The draw's effect state, or null for the legacy colour route, which has none
+    ///        and therefore states the identity (white, attribute enabled).
+    void OpenGL4Renderer::SetColored3DTintEXT(const GpuDrawParams* params)
+    {
+        const float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        const float* diffuse = params != nullptr ? params->diffuseColor : white;
+        const bool vertexColor = params == nullptr || params->vertexColorEnabled;
+        if (colored3DDiffuseLoc_ >= 0)
+            gl4_glUniform4f(colored3DDiffuseLoc_, diffuse[0], diffuse[1], diffuse[2], diffuse[3]);
+        if (colored3DVertexColorLoc_ >= 0)
+            gl4_glUniform1i(colored3DVertexColorLoc_, vertexColor ? 1 : 0);
+    }
+
     void OpenGL4Renderer::EnsureColored3DProgram()
     {
         if (colored3DProgram_.IsValid()) return;
         if (!colored3DProgram_.Compile(kColored3DVertSrc, kColored3DFragSrc))
             throw std::runtime_error("OpenGL4: colored3d program failed to compile: " + colored3DProgram_.GetError());
         colored3DWvpLoc_ = colored3DProgram_.UniformLocation("uWorldViewProj");
+        colored3DDiffuseLoc_ = colored3DProgram_.UniformLocation("uDiffuseColor");
+        colored3DVertexColorLoc_ = colored3DProgram_.UniformLocation("uVertexColorEnabled");
     }
 
     void OpenGL4Renderer::EnsureColoredParams3DProgram()
@@ -3344,10 +3410,16 @@ void main()
             else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_);
         }
 
-        if (params.pbr && (strideInBytes == 48 || strideInBytes == 68))
+        if (params.pbr && (strideInBytes == 48 || strideInBytes == 60 ||
+                           strideInBytes == 68 || strideInBytes == 76 || strideInBytes == 80))
         {
-            OpenGL4RawProgram& prog = (strideInBytes == 68) ? pbrSkinned3DProgram_ : pbr3DProgram_;
-            if (strideInBytes == 68) EnsurePbrSkinned3DProgram(); else EnsurePbr3DProgram();
+            // plan_gltf.md GLTF-463/GLTF-465: the skinned strides are 68, 76 and 80, and the program
+            // must be chosen by the same predicate that compiles it -- picking pbr3DProgram_ for 76
+            // or 80 would run the rigid shader over a skinned record.
+            const bool skinnedPbr = strideInBytes == 68 || strideInBytes == 76 ||
+                                    strideInBytes == 80;
+            OpenGL4RawProgram& prog = skinnedPbr ? pbrSkinned3DProgram_ : pbr3DProgram_;
+            if (skinnedPbr) EnsurePbrSkinned3DProgram(); else EnsurePbr3DProgram();
             prog.Use();
             float worldCol[16];
             world.ToColumnMajor(worldCol);
@@ -3374,6 +3446,12 @@ void main()
                                                  params.diffuseColor[2], params.diffuseColor[3]);
             setV3("uAmbientColor", params.ambientColor);
             setV3("uEmissiveColor", params.emissiveColor);
+            // plan_gltf.md GLTF-465: the stride-60 and stride-80 records always carry a colour
+            // slot, so the PBR shaders must be told whether it means anything. A negative location
+            // is a silent no-op, exactly like every other optional uniform here.
+            const int vertexColorLoc = prog.UniformLocation("uVertexColorEnabled");
+            if (vertexColorLoc >= 0)
+                gl4_glUniform1f(vertexColorLoc, params.vertexColorEnabled ? 1.0f : 0.0f);
             const int metallicLoc = prog.UniformLocation("uMetallicFactor");
             if (metallicLoc >= 0) gl4_glUniform1f(metallicLoc, params.pbrMetallicFactor);
             const int roughnessLoc = prog.UniformLocation("uRoughnessFactor");
@@ -3719,7 +3797,12 @@ void main()
 
         if (!BindProgramForStride(vb.GetStrideInBytes(), world, view, projection, params))
         {
-            DrawColoredPrimitives(vb_in, world, view, projection, primitive, primitiveCount);
+            // plan_gltf.md GLTF-475: this fallback used to call the params-free colour route, which
+            // discarded the effect entirely and made the program paint attribute location 1 -- the
+            // NORMAL on every PBR/skinned record -- as the surface colour. The route name stays
+            // "ordinary-nonindexed" because that is the guard this draw already passed above.
+            DrawColoredPrimitivesInternalEXT(vb_in, world, view, projection, primitive,
+                                             primitiveCount, "ordinary-nonindexed", &params);
             return;
         }
 
@@ -3768,7 +3851,9 @@ void main()
 
         if (!BindProgramForStride(vb.GetStrideInBytes(), world, view, projection, params))
         {
-            DrawIndexedColoredPrimitives(vb_in, ib_in, world, view, projection, primitive, primitiveCount);
+            // plan_gltf.md GLTF-475: see DrawPrimitivesEx's fallback.
+            DrawIndexedColoredPrimitivesInternalEXT(vb_in, ib_in, world, view, projection, primitive,
+                                                    primitiveCount, "ordinary-indexed", &params);
             return;
         }
 
@@ -3887,15 +3972,17 @@ void main()
         if (!BindProgramForStride(vb.GetStrideInBytes(), world, view, projection, params))
         {
             // plan_opengl4.md GL4-33: unrecognized stride, no custom effect -- fall back to the
-            // params-free colored3d program, mirroring DrawIndexedColoredPrimitives's own
-            // fallback shape (matches EasyGLRenderer::SelectProgram's own `default:`
-            // colored-program case, which always succeeds for any stride rather than failing).
+            // colored3d program, mirroring DrawIndexedColoredPrimitives's own fallback shape
+            // (matches EasyGLRenderer::SelectProgram's own `default:` colored-program case, which
+            // always succeeds for any stride rather than failing). plan_gltf.md GLTF-475: the
+            // fallback does read `params` now -- see SetColored3DTintEXT for why it must.
             EnsureColored3DProgram();
             const Matrix wvp = world * view * projection;
             float wvpCol[16];
             wvp.ToColumnMajor(wvpCol);
             colored3DProgram_.Use();
             if (colored3DWvpLoc_ >= 0) gl4_glUniformMatrix4fv(colored3DWvpLoc_, 1, GL_FALSE, wvpCol);
+            SetColored3DTintEXT(&params);
             gl4_glBindVertexArray(vb.VaoHandle());
             gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
             gl4_glDrawElementsInstanced(ToGLPrimitive(primitive), indexCount, idxType, nullptr, instanceCount);
@@ -3919,12 +4006,18 @@ void main()
         return spriteProgram_;
     }
 
-    void OpenGL4Renderer::DrawColoredPrimitives(const IVertexBufferRenderer& vb_in,
-                                                       const Matrix& world, const Matrix& view, const Matrix& projection,
-                                                       PrimitiveType primitive, int primitiveCount)
+    /// plan_gltf.md GLTF-475: the colour route's body, with the draw's effect state when there is
+    /// one. The public override below has none and passes null, which reproduces its old formula
+    /// exactly; the two `*PrimitivesEx` fallbacks now pass theirs instead of dropping it.
+    void OpenGL4Renderer::DrawColoredPrimitivesInternalEXT(const IVertexBufferRenderer& vb_in,
+                                                           const Matrix& world, const Matrix& view,
+                                                           const Matrix& projection,
+                                                           PrimitiveType primitive, int primitiveCount,
+                                                           const char* routeName,
+                                                           const GpuDrawParams* params)
     {
         // REMED-GFX-DECL-GUARD: this route reads the fixed stride-16 position+colour layout.
-        RequireFaithfulDeclarationEXT(vb_in, "colored-nonindexed");
+        RequireFaithfulDeclarationEXT(vb_in, routeName);
         EnsureColored3DProgram();
         const auto& vb = static_cast<const OpenGL4VertexBufferRenderer&>(vb_in);
 
@@ -3935,6 +4028,7 @@ void main()
         colored3DProgram_.Use();
         if (colored3DWvpLoc_ >= 0)
             gl4_glUniformMatrix4fv(colored3DWvpLoc_, 1, GL_FALSE, wvpCol);
+        SetColored3DTintEXT(params);
 
         const int vertexCount = VertexCountForPrimitives(primitive, primitiveCount);
         gl4_glBindVertexArray(vb.VaoHandle());
@@ -3942,12 +4036,23 @@ void main()
         gl4_glBindVertexArray(0);
     }
 
-    void OpenGL4Renderer::DrawIndexedColoredPrimitives(const IVertexBufferRenderer& vb_in, const IIndexBufferRenderer& ib_in,
-                                                              const Matrix& world, const Matrix& view, const Matrix& projection,
-                                                              PrimitiveType primitive, int primitiveCount)
+    void OpenGL4Renderer::DrawColoredPrimitives(const IVertexBufferRenderer& vb_in,
+                                                       const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                       PrimitiveType primitive, int primitiveCount)
+    {
+        DrawColoredPrimitivesInternalEXT(vb_in, world, view, projection, primitive, primitiveCount,
+                                         "colored-nonindexed", nullptr);
+    }
+
+    /// plan_gltf.md GLTF-475: see DrawColoredPrimitivesInternalEXT -- the indexed twin.
+    void OpenGL4Renderer::DrawIndexedColoredPrimitivesInternalEXT(
+        const IVertexBufferRenderer& vb_in, const IIndexBufferRenderer& ib_in,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount, const char* routeName,
+        const GpuDrawParams* params)
     {
         // REMED-GFX-DECL-GUARD: see DrawColoredPrimitives above.
-        RequireFaithfulDeclarationEXT(vb_in, "colored-indexed");
+        RequireFaithfulDeclarationEXT(vb_in, routeName);
         EnsureColored3DProgram();
         const auto& vb = static_cast<const OpenGL4VertexBufferRenderer&>(vb_in);
         const auto& ib = static_cast<const OpenGL4IndexBufferRenderer&>(ib_in);
@@ -3959,6 +4064,7 @@ void main()
         colored3DProgram_.Use();
         if (colored3DWvpLoc_ >= 0)
             gl4_glUniformMatrix4fv(colored3DWvpLoc_, 1, GL_FALSE, wvpCol);
+        SetColored3DTintEXT(params);
 
         const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
         gl4_glBindVertexArray(vb.VaoHandle());
@@ -3967,6 +4073,14 @@ void main()
         const GLenum idxType = ib.IsThirtyTwoBit() ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
         glDrawElements(ToGLPrimitive(primitive), indexCount, idxType, nullptr);
         gl4_glBindVertexArray(0);
+    }
+
+    void OpenGL4Renderer::DrawIndexedColoredPrimitives(const IVertexBufferRenderer& vb_in, const IIndexBufferRenderer& ib_in,
+                                                              const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                              PrimitiveType primitive, int primitiveCount)
+    {
+        DrawIndexedColoredPrimitivesInternalEXT(vb_in, ib_in, world, view, projection, primitive,
+                                                primitiveCount, "colored-indexed", nullptr);
     }
 
     void OpenGL4Renderer::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)

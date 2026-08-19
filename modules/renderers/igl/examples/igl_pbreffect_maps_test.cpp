@@ -98,9 +98,15 @@ class IglPbrEffectMapsTest : public CNA::Examples::PixelTestGame
         indexBuffer_->SetData(indices, 0, 6);
     }
 
+    /// plan_gltf.md GLTF-476: `encodeOutput` selects whether the shaded result is written in sRGB.
+    /// Every check below that measures a MAP passes false, so it reads a linear value and states an
+    /// expectation in the same space the scene is derived in; check F passes true precisely to
+    /// measure the transfer function itself. Before this renderer had colour management the
+    /// distinction did not exist, and the expectations here silently depended on its absence.
     Color DrawAndRead(GraphicsDevice& device, const bool light0Enabled, const Vector3& lightDir,
                       const Vector3& ambient, const Vector3& emissive, Texture2D* normalMap,
-                      Texture2D* occlusionMap, Texture2D* texture)
+                      Texture2D* occlusionMap, Texture2D* texture,
+                      const bool encodeOutput = false)
     {
         device.Clear(Color(static_cast<bytecs>(0), static_cast<bytecs>(0), static_cast<bytecs>(0),
                            static_cast<bytecs>(255)));
@@ -115,6 +121,9 @@ class IglPbrEffectMapsTest : public CNA::Examples::PixelTestGame
         effect.setEmissiveFactorProperty(emissive);
         effect.setMetallicFactorProperty(0.0f);
         effect.setRoughnessFactorProperty(1.0f);
+        effect.setBaseColorTextureIsSrgbEXTProperty(false);
+        effect.setEmissiveTextureIsSrgbEXTProperty(false);
+        effect.setEncodeOutputToSrgbEXTProperty(encodeOutput);
         effect.DirectionalLight0.setEnabledProperty(light0Enabled);
         effect.DirectionalLight0.setDirectionProperty(lightDir);
         effect.DirectionalLight0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
@@ -207,6 +216,22 @@ protected:
                           Color(static_cast<bytecs>(128), static_cast<bytecs>(128),
                                 static_cast<bytecs>(128), static_cast<bytecs>(255)),
                           20));
+
+        // Check F: the same scene with EncodeOutputToSrgbEXT left ON. glTF 2.0 3.9.2 shades in
+        // linear and the result is encoded on the way out, so the identical 0.5 emissive value must
+        // come back as sRGB's own encoding of it -- 1.055 * 0.5^(1/2.4) - 0.055 = 0.7148, or 182 --
+        // rather than the 128 above. This renderer used to answer 128 either way, because it had no
+        // colour management at all: it shaded in linear and wrote the linear value straight out
+        // (plan_gltf.md GLTF-476). The two checks together are what make the transfer function
+        // observable rather than merely present in the source.
+        const Color encodedResult = DrawAndRead(device, false, Vector3(0.0f, 0.0f, -1.0f),
+                                                Vector3::Zero, Vector3(0.5f, 0.5f, 0.5f), nullptr,
+                                                nullptr, nullptr, true);
+        ExpectTrue("EncodeOutputToSrgbEXT writes sRGB rather than the raw linear value",
+                  CloseTo(encodedResult,
+                          Color(static_cast<bytecs>(182), static_cast<bytecs>(182),
+                                static_cast<bytecs>(182), static_cast<bytecs>(255)),
+                          6));
     }
 
 public:

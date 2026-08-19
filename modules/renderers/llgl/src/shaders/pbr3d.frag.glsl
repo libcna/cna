@@ -26,7 +26,7 @@ layout(std140, binding = 1) uniform PbrParams
     vec4 alphaTest;
     vec4 dielectricFresnel;    // xyz = unclamped dielectric F0, w = specular factor
     vec4 textureTransformRows[10];
-    vec4 specularState;        // x = seven-bit TEXCOORD_1 selector mask, y = decode specular colour
+    vec4 specularState;        // x = TEXCOORD_1 selector mask, y = decode specular colour, z = VertexColorEnabled (GLTF-465)
     vec4 specularTextureTransformRows[4];
 };
 
@@ -52,6 +52,7 @@ layout(location = 3) in float vBitangentSign;
 layout(location = 4) in vec3  vWorldPos;
 layout(location = 5) in float vFogFactor;
 layout(location = 6) in vec2  vTexCoord1;
+layout(location = 7) in vec4  vColor;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -125,8 +126,13 @@ void main()
     // albedo and alpha are separate quantities per glTF's own baseColorFactor convention, unlike
     // most other CNA stock effects' DiffuseColor.
     vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), ambientColorPad.w);
-    vec3 albedo = baseColor * diffuseColor.rgb;
-    float alpha = baseColorTex.a * diffuseColor.a;
+    // plan_gltf.md GLTF-465: COLOR_0 multiplies the base colour product, ALPHA INCLUDED -- the alpha
+    // half is where a BLEND-mode vertex-coloured primitive's transparency comes from. specularState.z
+    // is the effect's own VertexColorEnabledEXT, and the variants without a colour attribute pass
+    // opaque white anyway, so this is inert for them either way.
+    vec4 cnaVertexColor = (specularState.z > 0.5) ? vColor : vec4(1.0);
+    vec3 albedo = baseColor * diffuseColor.rgb * cnaVertexColor.rgb;
+    float alpha = baseColorTex.a * diffuseColor.a * cnaVertexColor.a;
     bool passesAlphaTest = (alphaTest.y > 0.0)
         ? (abs(alpha - alphaTest.x) < alphaTest.y)
         : (alpha < alphaTest.x);

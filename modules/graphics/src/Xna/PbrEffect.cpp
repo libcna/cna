@@ -436,6 +436,13 @@ namespace Microsoft::Xna::Framework::Graphics
         p.pbr             = true;
         p.textureEnabled  = true;
         p.lightingEnabled = true;
+        // plan_gltf.md GLTF-462: §3.7.2.1 makes COLOR_0 "an additional linear multiplier to base
+        // color", so a vertex-coloured metallic-roughness primitive is shaded by this effect rather
+        // than downgraded away from it. Set explicitly rather than left at GpuDrawParams' own
+        // default of true, because the stride-60 and stride-80 records always HAVE a colour slot:
+        // an uncoloured primitive fills it with opaque white, and saying so keeps a renderer from
+        // having to rely on that fill being the identity.
+        p.vertexColorEnabled = VertexColorEnabledEXT;
 
         if (texture_)              p.texture0 = &texture_->GetRenderer();
         if (normalMap_)             p.pbrNormalMap = &normalMap_->GetRenderer();

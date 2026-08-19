@@ -21,6 +21,7 @@
 
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
+#include "GltfFixtureCorpus.hpp"
 
 using namespace CNA::Internal::GltfImport;
 
@@ -1019,8 +1020,9 @@ TEST(GltfImportCoreTest, AbsentNormalsAreComputedFromTheFaceRatherThanFabricated
     const MeshOut mesh = ExtractNormalLess({0, 0, 0, 1, 0, 0, 0, 1, 1}, {0, 1, 2});
     ASSERT_EQ(3u, mesh.vertexBytes.size() / static_cast<std::size_t>(mesh.stride));
     EXPECT_TRUE(mesh.generatedNormalsEXT);
-    EXPECT_EQ(0u, mesh.smoothedNormalVertexCountEXT)
-        << "one triangle shares no vertex, so the flat normal is exact and nothing was averaged";
+    EXPECT_EQ(0u, mesh.flatNormalDuplicatedVertexCountEXT)
+        << "one triangle shares no vertex, so the flat normal is exact and nothing had to split";
+    EXPECT_EQ(0u, mesh.flatNormalMergedVertexCountEXT);
 
     const float invSqrt2 = 1.0f / std::sqrt(2.0f);
     for (std::size_t v = 0; v < 3; ++v)
@@ -1047,26 +1049,288 @@ TEST(GltfImportCoreTest, AnAuthoredPlanarTriangleStillGetsExactlyPlusZ)
     EXPECT_NEAR(1.0f, normal[2], 1e-6f);
 }
 
-TEST(GltfImportCoreTest, AVertexSharedAcrossFacesOfDifferentOrientationIsCountedAsApproximated)
+namespace
 {
-    // Two triangles folded along the shared edge (2,3): the first lies in the XY plane, the second
-    // rises out of it. Vertices 2 and 3 belong to both, and flat shading would need each of them
-    // duplicated once per face -- which changes the vertex count and every per-vertex stream, so
-    // this extraction cannot express it. They get the area-weighted average, and the point of this
-    // test is that the approximation is COUNTED rather than assumed.
+    /// The element with the given usage on a packed vertex, read through the canonical stride table.
+    std::array<float, 4> ElementOfVertex(const MeshOut& mesh, std::size_t vertex,
+                                         Microsoft::Xna::Framework::Graphics::VertexElementUsage usage,
+                                         std::size_t floats)
+    {
+        const CNA::Internal::Graphics::InferredVertexLayout layout =
+            CNA::Internal::Graphics::InferredLayoutForStride(
+                mesh.stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+        EXPECT_TRUE(layout.known) << "stride " << mesh.stride << " is not in the canonical table";
+        int offset = -1;
+        for (std::size_t i = 0; layout.known && i < layout.count; ++i)
+        {
+            if (layout.elements[i].usage == usage && layout.elements[i].usageIndex == 0)
+            {
+                offset = layout.elements[i].offset;
+            }
+        }
+        EXPECT_GE(offset, 0);
+        std::array<float, 4> value{};
+        if (offset >= 0)
+        {
+            std::memcpy(value.data(),
+                        mesh.vertexBytes.data() +
+                            vertex * static_cast<std::size_t>(mesh.stride) +
+                            static_cast<std::size_t>(offset),
+                        floats * sizeof(float));
+        }
+        return value;
+    }
+
+    std::array<float, 3> PositionOfVertex(const MeshOut& mesh, std::size_t vertex)
+    {
+        const std::array<float, 4> p = ElementOfVertex(
+            mesh, vertex, Microsoft::Xna::Framework::Graphics::VertexElementUsage::Position, 3);
+        return {p[0], p[1], p[2]};
+    }
+
+    std::size_t VertexCountOf(const MeshOut& mesh)
+    {
+        return mesh.stride > 0 ? mesh.vertexBytes.size() / static_cast<std::size_t>(mesh.stride) : 0u;
+    }
+
+    std::vector<std::uint32_t> IndicesOf(const MeshOut& mesh)
+    {
+        std::vector<std::uint32_t> indices;
+        if (mesh.use32BitIndices)
+        {
+            for (std::size_t i = 0; i + 3 < mesh.indexBytes.size(); i += 4)
+            {
+                std::uint32_t value = 0;
+                std::memcpy(&value, mesh.indexBytes.data() + i, 4);
+                indices.push_back(value);
+            }
+            return indices;
+        }
+        for (std::size_t i = 0; i + 1 < mesh.indexBytes.size(); i += 2)
+        {
+            std::uint16_t value = 0;
+            std::memcpy(&value, mesh.indexBytes.data() + i, 2);
+            indices.push_back(value);
+        }
+        return indices;
+    }
+
+    /// Asserts §3.7.2.1's own definition of flat shading, remap-independently: every corner of
+    /// every emitted triangle carries that triangle's own geometric normal.
+    ///
+    /// Deliberately derived from the EMITTED positions and indices rather than from a hand-computed
+    /// vertex table, so the assertion cannot be satisfied by reproducing whatever numbering the
+    /// split happened to choose. An averaging implementation fails it on any folded mesh; a
+    /// per-face-duplicating one passes whatever order it hands the new vertices out in.
+    void ExpectEveryFaceIsFlat(const MeshOut& mesh)
+    {
+        const std::vector<std::uint32_t> indices = IndicesOf(mesh);
+        const std::size_t vertices = VertexCountOf(mesh);
+        ASSERT_GE(indices.size(), 3u);
+        for (std::size_t f = 0; f + 2 < indices.size(); f += 3)
+        {
+            SCOPED_TRACE("triangle at index " + std::to_string(f));
+            ASSERT_LT(indices[f], vertices);
+            ASSERT_LT(indices[f + 1], vertices);
+            ASSERT_LT(indices[f + 2], vertices);
+            const std::array<float, 3> a = PositionOfVertex(mesh, indices[f]);
+            const std::array<float, 3> b = PositionOfVertex(mesh, indices[f + 1]);
+            const std::array<float, 3> c = PositionOfVertex(mesh, indices[f + 2]);
+            const float e1[3] = {b[0] - a[0], b[1] - a[1], b[2] - a[2]};
+            const float e2[3] = {c[0] - a[0], c[1] - a[1], c[2] - a[2]};
+            const float cross[3] = {e1[1] * e2[2] - e1[2] * e2[1],
+                                    e1[2] * e2[0] - e1[0] * e2[2],
+                                    e1[0] * e2[1] - e1[1] * e2[0]};
+            const float length =
+                std::sqrt(cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]);
+            ASSERT_GT(length, 1e-6f) << "degenerate fixture triangle proves nothing";
+            const std::array<float, 3> expected{cross[0] / length, cross[1] / length,
+                                                cross[2] / length};
+            for (std::size_t k = 0; k < 3; ++k)
+            {
+                SCOPED_TRACE("corner " + std::to_string(k));
+                const std::array<float, 3> normal = NormalOfVertex(mesh, indices[f + k]);
+                EXPECT_NEAR(expected[0], normal[0], 1e-5f);
+                EXPECT_NEAR(expected[1], normal[1], 1e-5f);
+                EXPECT_NEAR(expected[2], normal[2], 1e-5f);
+            }
+        }
+    }
+}
+
+TEST(GltfImportCoreTest, AVertexSharedAcrossFacesOfDifferentOrientationIsSplitSoEveryFaceIsFlat)
+{
+    // plan_gltf.md GLTF-461. Four triangles: (0,1,2) and (0,2,3) are a quad in the XY plane, and
+    // (3,2,4) and (2,5,4) fold up out of it. Vertices 2 and 3 belong to faces of BOTH orientations,
+    // so flat shading needs each of them duplicated once per orientation. GLTF-173 averaged them
+    // instead and counted the approximation; this asserts the split.
+    //
+    // The discrimination is in the two face normals: +Z and (0,-1/sqrt2,1/sqrt2). Their
+    // area-weighted average is neither, so the old behaviour cannot pass ExpectEveryFaceIsFlat by
+    // accident -- and the vertex count it produced (6) is not the one asserted here.
     const MeshOut mesh = ExtractNormalLess(
         {0, 0, 0,   1, 0, 0,   1, 1, 0,   0, 1, 0,   0, 2, 1,   1, 2, 1},
         {0, 1, 2,  0, 2, 3,  3, 2, 4,  2, 5, 4});
     EXPECT_TRUE(mesh.generatedNormalsEXT);
-    EXPECT_GT(mesh.smoothedNormalVertexCountEXT, 0u)
-        << "the fold's shared vertices were treated as if flat shading had been achieved";
-    EXPECT_LT(mesh.smoothedNormalVertexCountEXT, 6u)
-        << "only the shared vertices are approximated -- a count of every vertex would mean the "
-           "disagreement test is not discriminating at all";
+    EXPECT_EQ(2u, mesh.flatNormalDuplicatedVertexCountEXT)
+        << "exactly the two vertices on the fold need a second copy; a larger number means the "
+           "split is not minimal and a smaller one means it did not happen";
+    EXPECT_EQ(8u, VertexCountOf(mesh));
+    EXPECT_EQ(0u, mesh.flatNormalMergedVertexCountEXT)
+        << "no two faces here are parallel-but-not-identical, so nothing may be averaged at all";
+    EXPECT_FALSE(mesh.morphedFlatNormalsEXT) << "there are no morph targets to recompute for";
 
-    // Vertex 0 belongs only to the two coplanar triangles, so its normal is exact.
-    const std::array<float, 3> flat = NormalOfVertex(mesh, 0);
-    EXPECT_NEAR(0.0f, flat[0], 1e-5f);
-    EXPECT_NEAR(0.0f, flat[1], 1e-5f);
-    EXPECT_NEAR(1.0f, flat[2], 1e-5f);
+    ExpectEveryFaceIsFlat(mesh);
+
+    // Every duplicate carries its source vertex's own position: the split renumbers, it does not
+    // move geometry. Vertices 2/3 appear twice, at (1,1,0) and (0,1,0) respectively.
+    int atSharedEdge = 0;
+    for (std::size_t v = 0; v < VertexCountOf(mesh); ++v)
+    {
+        const std::array<float, 3> p = PositionOfVertex(mesh, v);
+        if ((p[0] == 1.0f && p[1] == 1.0f && p[2] == 0.0f) ||
+            (p[0] == 0.0f && p[1] == 1.0f && p[2] == 0.0f))
+        {
+            ++atSharedEdge;
+        }
+    }
+    EXPECT_EQ(4, atSharedEdge) << "the two fold vertices should each appear exactly twice";
+}
+
+TEST(GltfImportCoreTest, CoplanarSharedVerticesAreNotDuplicated)
+{
+    // The minimality control, and the reason the generated corpus barely moved: a quad split into
+    // two coplanar triangles shares two vertices, and both faces want the SAME normal, so no
+    // duplication is needed. An implementation that simply de-indexed every primitive into a
+    // triangle soup would return six vertices here and pass every flat-normal assertion while
+    // inflating every normal-less mesh in the corpus by 50%.
+    const MeshOut mesh = ExtractNormalLess(
+        {0, 0, 0,   1, 0, 0,   1, 1, 0,   0, 1, 0},
+        {0, 1, 2,  0, 2, 3});
+    EXPECT_TRUE(mesh.generatedNormalsEXT);
+    EXPECT_EQ(0u, mesh.flatNormalDuplicatedVertexCountEXT);
+    EXPECT_EQ(4u, VertexCountOf(mesh));
+    const std::vector<std::uint32_t> indices = IndicesOf(mesh);
+    EXPECT_EQ(std::vector<std::uint32_t>({0, 1, 2, 0, 2, 3}), indices)
+        << "an unsplit primitive must keep its own numbering, so its bytes are unchanged";
+    ExpectEveryFaceIsFlat(mesh);
+}
+
+TEST(GltfImportCoreTest, AVertexNoFaceTouchesKeepsItsSlotAndThePlaceholderNormal)
+{
+    // A fourth position no index references. glTF states no normal for such a vertex, and dropping
+    // it would renumber every index for no gain -- so the slot survives and carries the packing
+    // loop's own placeholder, exactly as it did before the split existed.
+    const MeshOut mesh = ExtractNormalLess(
+        {0, 0, 0,   1, 0, 0,   0, 1, 1,   9, 9, 9},
+        {0, 1, 2});
+    EXPECT_EQ(4u, VertexCountOf(mesh));
+    EXPECT_EQ(0u, mesh.flatNormalDuplicatedVertexCountEXT);
+    const std::array<float, 3> orphan = NormalOfVertex(mesh, 3);
+    EXPECT_NEAR(0.0f, orphan[0], 1e-6f);
+    EXPECT_NEAR(0.0f, orphan[1], 1e-6f);
+    EXPECT_NEAR(1.0f, orphan[2], 1e-6f);
+    const std::array<float, 3> position = PositionOfVertex(mesh, 3);
+    EXPECT_FLOAT_EQ(9.0f, position[0]);
+}
+
+TEST(GltfImportCoreTest, ADegenerateFaceNeverForcesADuplicate)
+{
+    // A zero-area triangle has no orientation to disagree with, so it must not open a second group
+    // on a vertex it shares with a real face -- which would duplicate vertices and hand one copy a
+    // fabricated normal. Triangle (0,1,2) is real; (0,1,1) is degenerate and shares two of its
+    // vertices.
+    const MeshOut mesh = ExtractNormalLess(
+        {0, 0, 0,   1, 0, 0,   0, 1, 1},
+        {0, 1, 2,  0, 1, 1});
+    EXPECT_TRUE(mesh.generatedNormalsEXT);
+    EXPECT_EQ(0u, mesh.flatNormalDuplicatedVertexCountEXT);
+    EXPECT_EQ(3u, VertexCountOf(mesh));
+    const float invSqrt2 = 1.0f / std::sqrt(2.0f);
+    for (std::size_t v = 0; v < 3; ++v)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(v));
+        const std::array<float, 3> normal = NormalOfVertex(mesh, v);
+        EXPECT_NEAR(0.0f, normal[0], 1e-5f);
+        EXPECT_NEAR(-invSqrt2, normal[1], 1e-5f);
+        EXPECT_NEAR(invSqrt2, normal[2], 1e-5f);
+    }
+}
+
+
+TEST(GltfImportCoreTest, AnAuthoredTangentIsIgnoredWhenTheFileAuthorsNoNormal)
+{
+    // plan_gltf.md GLTF-464: this was an inline document until the corpus could grow. It is a
+    // conformance statement about the format -- §3.7.2.1's "the provided tangents (if present) MUST
+    // be ignored" -- so `docs/gltf-conformance.md` §3.8 puts it in `tools/gltf_fixtures/`, where the
+    // L3 expectation is derived independently and the four L7 policies render it.
+    //
+    // The fixture's authored tangent is (0,1,0,+1) and the tangent §3.7.2.1 requires a reader to
+    // regenerate is (1,0,0,+1): no shared component, so honouring the authored one is a different
+    // vector rather than a near miss.
+    const std::filesystem::path gltfPath =
+        CnaTest::GltfOracle::CorpusDirectory() / "tangent-without-normal.gltf";
+    ASSERT_TRUE(std::filesystem::is_regular_file(gltfPath)) << gltfPath;
+
+    cgltf_options options{};
+    cgltf_data* data = nullptr;
+    ASSERT_EQ(cgltf_result_success,
+              cgltf_parse_file(&options, gltfPath.string().c_str(), &data));
+    ASSERT_NE(nullptr, data);
+    ASSERT_EQ(cgltf_result_success,
+              cgltf_load_buffers(&options, data, gltfPath.string().c_str()));
+
+    const MeshOut mesh = ExtractMesh(data, data->meshes[0].primitives[0], "probe", nullptr, 1.0f);
+    cgltf_free(data);
+
+    ASSERT_EQ(48, mesh.stride);
+    EXPECT_TRUE(mesh.generatedNormalsEXT);
+    EXPECT_TRUE(mesh.ignoredTangentForGeneratedNormalsEXT)
+        << "§3.7.2.1 requires the authored tangent to be ignored, and dropping it silently is what "
+           "this flag exists to prevent";
+
+    const float invSqrt2 = 1.0f / std::sqrt(2.0f);
+    for (std::size_t v = 0; v < 3; ++v)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(v));
+        const std::array<float, 3> n = NormalOfVertex(mesh, v);
+        EXPECT_NEAR(0.0f, n[0], 1e-5f);
+        EXPECT_NEAR(-invSqrt2, n[1], 1e-5f);
+        EXPECT_NEAR(invSqrt2, n[2], 1e-5f);
+
+        const std::array<float, 4> t = ElementOfVertex(
+            mesh, v, Microsoft::Xna::Framework::Graphics::VertexElementUsage::Tangent, 4);
+        // The generated basis, closed-form from these UVs: (+X, +1). The authored (0,1,0,+1) shares
+        // no component with it, so "used the authored tangent" fails on the first two.
+        EXPECT_NEAR(1.0f, t[0], 1e-5f);
+        EXPECT_NEAR(0.0f, t[1], 1e-5f);
+        EXPECT_NEAR(0.0f, t[2], 1e-5f);
+        EXPECT_FLOAT_EQ(1.0f, t[3]);
+        EXPECT_NEAR(0.0f, t[0] * n[0] + t[1] * n[1] + t[2] * n[2], 1e-5f)
+            << "the authored tangent is not perpendicular to the computed normal, so keeping it "
+               "would show up exactly here";
+    }
+}
+
+TEST(GltfImportCoreTest, TheSplitRewritesTheGeneratedTangentBasisTogetherWithTheNormals)
+{
+    // The split renumbers every per-vertex stream, and the tangent basis is generated AFTER it from
+    // the split arrays -- so each copy's tangent belongs to its own face. The assertion is the
+    // property tangent-space normal mapping depends on: T is unit length and perpendicular to that
+    // copy's N. Reading the tangent through the pre-split numbering would leave the fold's copies
+    // sharing one basis, and the dot product would not be zero on at least one of them.
+    const MeshOut mesh = ExtractNormalLess(
+        {0, 0, 0,   1, 0, 0,   1, 1, 0,   0, 1, 0,   0, 2, 1,   1, 2, 1},
+        {0, 1, 2,  0, 2, 3,  3, 2, 4,  2, 5, 4});
+    ASSERT_EQ(48, mesh.stride) << "a materialless primitive is glTF's default metallic-roughness";
+    for (std::size_t v = 0; v < VertexCountOf(mesh); ++v)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(v));
+        const std::array<float, 3> n = NormalOfVertex(mesh, v);
+        const std::array<float, 4> t = ElementOfVertex(
+            mesh, v, Microsoft::Xna::Framework::Graphics::VertexElementUsage::Tangent, 4);
+        EXPECT_NEAR(1.0f, std::sqrt(t[0] * t[0] + t[1] * t[1] + t[2] * t[2]), 1e-4f);
+        EXPECT_NEAR(0.0f, t[0] * n[0] + t[1] * n[1] + t[2] * n[2], 1e-4f);
+        EXPECT_TRUE(t[3] == 1.0f || t[3] == -1.0f);
+    }
 }

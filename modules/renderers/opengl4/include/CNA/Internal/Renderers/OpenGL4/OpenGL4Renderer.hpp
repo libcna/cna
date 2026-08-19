@@ -756,7 +756,25 @@ namespace CNA::Internal::Renderers::OpenGL4
 
         OpenGL4RawProgram spriteProgram_;
         OpenGL4RawProgram colored3DProgram_;
+        void SetColored3DTintEXT(const GpuDrawParams* params);
+        void DrawColoredPrimitivesInternalEXT(const IVertexBufferRenderer& vb_in,
+                                              const Matrix& world, const Matrix& view,
+                                              const Matrix& projection,
+                                              PrimitiveType primitive, int primitiveCount,
+                                              const char* routeName,
+                                              const GpuDrawParams* params);
+        void DrawIndexedColoredPrimitivesInternalEXT(const IVertexBufferRenderer& vb_in,
+                                                     const IIndexBufferRenderer& ib_in,
+                                                     const Matrix& world, const Matrix& view,
+                                                     const Matrix& projection,
+                                                     PrimitiveType primitive, int primitiveCount,
+                                                     const char* routeName,
+                                                     const GpuDrawParams* params);
         int colored3DWvpLoc_ = -1;
+        /// plan_gltf.md GLTF-475: the effect's own DiffuseColor and VertexColorEnabled, so this
+        /// program stops painting whatever attribute location 1 happens to hold.
+        int colored3DDiffuseLoc_ = -1;
+        int colored3DVertexColorLoc_ = -1;
         OpenGL4RawProgram coloredParams3DProgram_;
         OpenGL4RawProgram textured3DProgram_;
         OpenGL4RawProgram coloredTextured3DProgram_;

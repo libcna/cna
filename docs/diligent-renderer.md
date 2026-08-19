@@ -173,6 +173,14 @@ Not implemented — each **throws with its own name** rather than rendering an a
 
 ## Known limitations
 
+- **The metallic-roughness vertex layouts have only a PBR program.** Strides 48, 60, 68, 76 and 80
+  are the `PbrEffect`/`SkinnedPbrEffect` records, and this renderer selects a metallic-roughness
+  shader variant for them from the stride alone. An application that binds one of those buffers to a
+  non-PBR effect -- a `BasicEffect` on a `VertexPositionNormalTangentTexture` buffer, say -- is
+  refused by name rather than rendered through the PBR shader, which used to answer black
+  (`plan_gltf.md GLTF-475`). Nothing on the glTF path is affected: it drives those five strides
+  through `PbrEffect`/`SkinnedPbrEffect`. Lifting the limitation means adding an unlit program for
+  those layouts, not relaxing the check.
 - **X11 only on Linux.** Diligent's `LinuxNativeWindow` carries an X11 window id and display (or an
   XCB connection) and has no Wayland surface member. CNA therefore requires an X11 native-window
   snapshot on Linux and rejects any other native system at renderer construction, before entering

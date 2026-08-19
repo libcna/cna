@@ -708,7 +708,8 @@ namespace CNA::Internal::Renderers::OpenGL2
                     glVertexAttrib4f(1, 1, 1, 1, 1);
                 }
             }
-            else if (stride == 48 || stride == 68)
+            else if (stride == 48 || stride == 60 || stride == 68 || stride == 76 ||
+                     stride == 80)
             {
                 // VertexPositionNormalTangentTexture(Skinned): float3 pos(0) + float3 normal(12) +
                 // float4 tangent(24, xyz + bitangent handedness in w) + float2 uv(40) [+ float4
@@ -723,7 +724,10 @@ namespace CNA::Internal::Renderers::OpenGL2
                 glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 40));
                 glDisableVertexAttribArray(1);
                 glVertexAttrib4f(1, 1, 1, 1, 1);
-                if (stride == 68)
+                // plan_gltf.md GLTF-463: strides 76 and 80 are the skinned PBR record with UV1 and,
+                // for 80, a packed COLOR_0 appended; their skinning suffix sits at 48/64 exactly as
+                // stride 68's does, so all three share this branch.
+                if (stride == 68 || stride == 76 || stride == 80)
                 {
                     glEnableVertexAttribArray(4);
                     glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 48));
@@ -735,6 +739,31 @@ namespace CNA::Internal::Renderers::OpenGL2
                     glDisableVertexAttribArray(4);
                     glDisableVertexAttribArray(5);
                 }
+                // plan_gltf.md GLTF-465: location 1 is this file's `aColor` for every program, and
+                // the two colour-carrying PBR records bind the real attribute there instead of the
+                // constant white set above. The PBR fragment shader gates it on uVertexColorEnabled,
+                // so an uncoloured stride-60/80 buffer -- whose slot the importer fills with opaque
+                // white -- multiplies by one either way. Applied per draw, like every other branch
+                // here, so nothing leaks into a later draw.
+                if (stride == 60 || stride == 80)
+                {
+                    const std::size_t colorOffset = (stride == 60) ? 56u : 76u;
+                    glEnableVertexAttribArray(1);
+                    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE,
+                                          static_cast<GLsizei>(stride),
+                                          reinterpret_cast<void*>(baseByteOffset + colorOffset));
+                }
+                // plan_gltf.md GLTF-462. Stride 60 is the rigid PBR record with a second UV set at
+                // 48 and a packed COLOR_0 at 56, and it had NO case here at all: it fell into the
+                // `stride >= 32` catch-all below, which reads the TEXCOORD at offset 24 -- inside
+                // the tangent. So a dual-UV PBR mesh (live since GLTF-182) textured itself from the
+                // tangent's bytes, silently, and every vertex-coloured PBR mesh would have joined it
+                // now that GLTF-462 routes those here too.
+                //
+                // GLTF-465 then consumed the colour: it is bound above and multiplied into the base
+                // colour product by the PBR fragment shader. The second UV set at 48 stays unbound --
+                // this renderer's PBR shader samples one UV set, and per-map TEXCOORD_1 selection is
+                // its own capability gap, recorded in docs/gltf-renderer-pbr-fallbacks.md.
             }
             else if (stride >= 32)
             {
@@ -2340,7 +2369,8 @@ namespace CNA::Internal::Renderers::OpenGL2
         // not) -- the fragment shader (the actual BRDF) is shared verbatim.
         const char* pbrFragmentSrc =
             "varying vec3 vNormal;varying vec3 vTangent;varying float vBitangentSign;"
-            "varying vec2 vTex;varying float vFogFactor;varying vec3 vWorldPos;"
+            "varying vec2 vTex;varying float vFogFactor;varying vec3 vWorldPos;varying vec4 vColor;"
+            "uniform float uVertexColorEnabled;"
             "uniform sampler2D uTex;uniform sampler2D uNormalMap;uniform sampler2D uMetallicRoughnessMap;"
             "uniform sampler2D uEmissiveMap;uniform sampler2D uOcclusionMap;"
             "uniform sampler2D uSpecularMap;uniform sampler2D uSpecularColorMap;"
@@ -2384,8 +2414,13 @@ namespace CNA::Internal::Renderers::OpenGL2
             "void main(){"
             "vec4 baseColorTex=texture2D(uTex,cnaPbrTransformUV(vTex,0));"
             "vec3 baseColor=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),vec3(uSrgb.x));"
-            "vec3 albedo=baseColor*uDiffuse.rgb;"
-            "float alpha=baseColorTex.a*uDiffuse.a;"
+            // plan_gltf.md GLTF-465. §3.7.2.1: COLOR_0 "acts as an additional linear multiplier to base color".
+            // LINEAR is why there is no transfer function here -- the attribute is a normalized
+            // integer already in linear space, unlike the base-colour TEXTURE -- and both RGB and
+            // alpha are multiplied because §3.9.2's base colour is an RGBA product.
+            "vec4 cnaVertexColor=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);"
+            "vec3 albedo=baseColor*uDiffuse.rgb*cnaVertexColor.rgb;"
+            "float alpha=baseColorTex.a*uDiffuse.a*cnaVertexColor.a;"
             "vec3 N=normalize(vNormal);"
             "vec3 T=normalize(vTangent-N*dot(N,vTangent));"
             "vec3 B=cross(N,T)*vBitangentSign;"
@@ -2423,14 +2458,17 @@ namespace CNA::Internal::Renderers::OpenGL2
 
         const char* pbrVertexSrc =
             "attribute vec3 aPosition;attribute vec3 aNormal;attribute vec4 aTangent;attribute vec2 aTexCoord;"
+            // plan_gltf.md GLTF-462/GLTF-463: COLOR_0, carried by the stride-60 and stride-80 records.
+            "attribute vec4 aColor;"
             "uniform mat4 uWVP;uniform mat4 uWorld;uniform mat3 uNormalMatrix;"
             "uniform float uFogEnabled;uniform vec4 uFogVector;"
             "varying vec3 vNormal;varying vec3 vTangent;varying float vBitangentSign;"
-            "varying vec2 vTex;varying float vFogFactor;varying vec3 vWorldPos;"
+            "varying vec2 vTex;varying float vFogFactor;varying vec3 vWorldPos;varying vec4 vColor;"
             "float cnaDirectionHandedness(mat3 m){return(dot(m[0],cross(m[1],m[2]))<0.0)?-1.0:1.0;}"
             "void main(){"
             "gl_Position=uWVP*vec4(aPosition,1.0);"
             "vNormal=uNormalMatrix*aNormal;"
+            "vColor=aColor;"
             // Tangent transforms as a plain direction under the World upper-3x3 (not the
             // inverse-transpose uNormalMatrix the normal itself uses) -- correct for
             // uniform-scale World transforms, a documented simplification for non-uniform scale
@@ -2449,11 +2487,13 @@ namespace CNA::Internal::Renderers::OpenGL2
 
         const char* pbrSkinnedVertexSrc =
             "attribute vec3 aPosition;attribute vec3 aNormal;attribute vec4 aTangent;attribute vec2 aTexCoord;"
+            // plan_gltf.md GLTF-462/GLTF-463: COLOR_0, carried by the stride-60 and stride-80 records.
+            "attribute vec4 aColor;"
             "attribute vec4 aBoneWeight;attribute vec4 aBoneIndices;"
             "uniform mat4 uWVP;uniform mat4 uWorld;uniform mat3 uNormalMatrix;uniform mat4 uBones[72];uniform int uWeightsPerVertex;"
             "uniform float uFogEnabled;uniform vec4 uFogVector;"
             "varying vec3 vNormal;varying vec3 vTangent;varying float vBitangentSign;"
-            "varying vec2 vTex;varying float vFogFactor;varying vec3 vWorldPos;"
+            "varying vec2 vTex;varying float vFogFactor;varying vec3 vWorldPos;varying vec4 vColor;"
             "vec3 cnaSkinNormal(mat3 m,vec3 n){"
             "vec3 c0=m[0],c1=m[1],c2=m[2];"
             "vec3 co0=cross(c1,c2),co1=cross(c2,c0),co2=cross(c0,c1);"
@@ -2471,6 +2511,7 @@ namespace CNA::Internal::Renderers::OpenGL2
             "mat3 skinMat3=mat3(skinMat[0].xyz,skinMat[1].xyz,skinMat[2].xyz);"
             "mat3 world3=mat3(uWorld[0].xyz,uWorld[1].xyz,uWorld[2].xyz);"
             "vNormal=normalize(uNormalMatrix*cnaSkinNormal(skinMat3,aNormal));"
+            "vColor=aColor;"
             "vTangent=world3*(skinMat3*aTangent.xyz);"
             "vBitangentSign=aTangent.w*cnaDirectionHandedness(world3)*cnaDirectionHandedness(skinMat3);"
             "vTex=aTexCoord;"
@@ -3155,8 +3196,14 @@ namespace CNA::Internal::Renderers::OpenGL2
             return;
         }
 
-        const bool pbrSkinned = params && params->pbr && params->skinned && vb->stride == 68;
-        const bool pbr = params && params->pbr && !params->skinned && vb->stride == 48;
+        const bool pbrSkinned = params && params->pbr && params->skinned &&
+                                (vb->stride == 68 || vb->stride == 76 || vb->stride == 80);
+        // plan_gltf.md GLTF-465: stride 60 is the rigid PBR record too (dual-UV, and since GLTF-462
+        // vertex-coloured). It was missing here, so a stride-60 PBR draw fell through to `lit` below
+        // and was shaded by the Blinn-Phong program instead of the metallic-roughness one -- the
+        // layout fix alone was not enough to actually get PbrEffect's own shader.
+        const bool pbr = params && params->pbr && !params->skinned &&
+                         (vb->stride == 48 || vb->stride == 60);
         const bool skinned = params && params->skinned && !params->pbr && (vb->stride == 52 || vb->stride == 56);
         const bool envMapped = params && params->envMapping && !skinned && !pbr && !pbrSkinned && vb->stride >= 32;
         const bool lit = params && params->lightingEnabled && !envMapped && !skinned && !pbr && !pbrSkinned && vb->stride >= 32;
@@ -3236,7 +3283,9 @@ namespace CNA::Internal::Renderers::OpenGL2
             // litProgram_/skinnedProgram_ both declare uVertexColorEnabled (see litFragmentSrc's
             // own doc comment above for why BasicEffect needs this too, not just SkinnedEffect);
             // ignored (-1 location, silent no-op) by every other program in this `if` block.
-            if (lit || skinned)
+            // plan_gltf.md GLTF-465 adds the two PBR programs: the stride-60 and stride-80 records
+            // always carry a colour slot, so the shader must be told whether it means anything.
+            if (lit || skinned || pbr || pbrSkinned)
                 glUniform1f(glGetUniformLocation(program, "uVertexColorEnabled"), params->vertexColorEnabled ? 1.0f : 0.0f);
 
             // SkinnedEffect-only uniforms (silently ignored by litProgram_/envMapProgram_).

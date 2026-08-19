@@ -230,6 +230,110 @@ TEST(MagnumVertexLayoutTest, SkinnedStridesResolveToTheirBonePaletteAttributes)
     EXPECT_EQ(StockAttributesForStride(56).size(), 6u);
 }
 
+TEST(MagnumVertexLayoutTest, TheTwoColourCarryingPbrStridesBindCOLOR_0AtLocationSix)
+{
+    // plan_gltf.md GLTF-462/GLTF-463/GLTF-465. Stride 60 is the rigid PBR record with a packed
+    // COLOR_0 at offset 56 and stride 80 the skinned one with the same colour at 76. glTF 2.0 §3.9.2
+    // makes that colour a multiplier on base colour, so it has to reach the shader -- and it has to
+    // reach it at the location the generated PBR source declares (6), past the four rigid PBR
+    // attributes and the two skinning ones, so that one program can serve both strides of its family.
+    const std::vector<MagnumVertexAttribute> rigid = StockAttributesForStride(60);
+    ASSERT_EQ(5u, rigid.size());
+    EXPECT_EQ(6, rigid.back().location);
+    EXPECT_EQ(56, rigid.back().offsetInStream);
+    EXPECT_EQ(4, rigid.back().components);
+    EXPECT_TRUE(rigid.back().normalized) << "a packed Color is UNORM; unnormalized it would arrive "
+                                            "as 0..255 and blow the base-colour product out";
+
+    const std::vector<MagnumVertexAttribute> skinned = StockAttributesForStride(80);
+    ASSERT_EQ(7u, skinned.size());
+    EXPECT_EQ(6, skinned.back().location);
+    EXPECT_EQ(76, skinned.back().offsetInStream);
+    EXPECT_EQ(4, skinned.back().components);
+    EXPECT_TRUE(skinned.back().normalized);
+
+    // Stride 60's prefix must stay byte-identical to stride 48's, and stride 80's to stride 68's --
+    // the same "append, never insert" rule the skinned colour stride already relies on. If the colour
+    // shifted anything before it, both programs would read every earlier attribute from the wrong
+    // offset and the failure would look like corrupt geometry rather than a wrong colour.
+    const std::vector<MagnumVertexAttribute> rigidBase = StockAttributesForStride(48);
+    ASSERT_EQ(4u, rigidBase.size());
+    for (std::size_t i = 0; i < rigidBase.size(); ++i)
+    {
+        SCOPED_TRACE(i);
+        EXPECT_EQ(rigidBase[i].location, rigid[i].location);
+        EXPECT_EQ(rigidBase[i].offsetInStream, rigid[i].offsetInStream);
+        EXPECT_EQ(rigidBase[i].components, rigid[i].components);
+    }
+    const std::vector<MagnumVertexAttribute> skinnedBase = StockAttributesForStride(68);
+    ASSERT_EQ(6u, skinnedBase.size());
+    for (std::size_t i = 0; i < skinnedBase.size(); ++i)
+    {
+        SCOPED_TRACE(i);
+        EXPECT_EQ(skinnedBase[i].location, skinned[i].location);
+        EXPECT_EQ(skinnedBase[i].offsetInStream, skinned[i].offsetInStream);
+        EXPECT_EQ(skinnedBase[i].components, skinned[i].components);
+    }
+}
+
+TEST(MagnumStockProgramTest, TheColourCarryingPbrStridesSelectTheSamePbrProgramsAsTheirBareTwins)
+{
+    // plan_gltf.md GLTF-465: a vertex colour is a term in the metallic-roughness product, not a
+    // different material model, so stride 60 must select the same program as 48 and stride 80 the
+    // same as 68. Selecting nothing (which is what this renderer did before) refuses the draw --
+    // acceptable while the product was unimplemented, and wrong now that it is.
+    MagnumStockSelector selector;
+    selector.pbr = true;
+
+    MagnumStockProgram program{};
+    for (const std::size_t stride : {std::size_t{48}, std::size_t{60}})
+    {
+        SCOPED_TRACE(stride);
+        selector.skinned = false;
+        selector.strideInBytes = stride;
+        ASSERT_TRUE(SelectStockProgram(selector, program));
+        EXPECT_EQ(MagnumStockProgram::Pbr, program);
+    }
+    for (const std::size_t stride : {std::size_t{68}, std::size_t{80}})
+    {
+        SCOPED_TRACE(stride);
+        selector.skinned = true;
+        selector.strideInBytes = stride;
+        ASSERT_TRUE(SelectStockProgram(selector, program));
+        EXPECT_EQ(MagnumStockProgram::PbrSkinned, program);
+    }
+
+    // Stride 76 -- skinned PBR with a second UV set and NO colour -- is still refused, because this
+    // renderer samples one UV set and nothing about GLTF-465 changed that. Refusing it is the
+    // acceptable state; drawing it as if the second set did not exist would not be.
+    selector.skinned = true;
+    selector.strideInBytes = 76;
+    EXPECT_FALSE(SelectStockProgram(selector, program));
+}
+
+TEST(MagnumStockShaderTest, ThePbrProgramsMultiplyCOLOR_0IntoBaseColourAndItsAlphaUnderTheEffectsGate)
+{
+    // The generated source IS the shader here -- there is no offline blob to inspect -- so this
+    // asserts §3.9.2's product in the text that gets compiled: the attribute is declared, carried to
+    // the fragment stage, gated on the effect's own switch, and multiplied into BOTH the albedo and
+    // the alpha. The alpha half is what a BLEND-mode vertex-coloured primitive's transparency is.
+    for (const MagnumStockProgram program : {MagnumStockProgram::Pbr, MagnumStockProgram::PbrSkinned})
+    {
+        const std::string vertex = StockVertexShaderSource(program);
+        const std::string fragment = StockFragmentShaderSource(program);
+        EXPECT_NE(std::string::npos, vertex.find("layout(location=6) in vec4 aColor;"));
+        EXPECT_NE(std::string::npos, vertex.find("out vec4 vColor;"));
+        EXPECT_NE(std::string::npos, vertex.find("vColor = aColor;"));
+        EXPECT_NE(std::string::npos, fragment.find("uniform float uVertexColorEnabled;"));
+        EXPECT_NE(std::string::npos, fragment.find(
+            "vec4 cnaVertexColor = (uVertexColorEnabled > 0.5) ? vColor : vec4(1.0);"));
+        EXPECT_NE(std::string::npos, fragment.find(
+            "vec3 albedo = baseLinear * uDiffuseColor.rgb * cnaVertexColor.rgb;"));
+        EXPECT_NE(std::string::npos, fragment.find(
+            "float alpha = baseColor.a * uDiffuseColor.a * cnaVertexColor.a;"));
+    }
+}
+
 TEST(MagnumVertexLayoutTest, SkinnedStridesShareLocationsZeroToFourByteForByte)
 {
     // Stride 56 appends its colour rather than inserting it, which is the whole reason one skinned
@@ -612,7 +716,13 @@ TEST(MagnumStockShaderTest, PbrShaderImplementsTheGltfMetallicRoughnessBrdf)
     EXPECT_NE(source.find("metallicRoughness.b * uMetallicFactor"), std::string::npos);
     // The diffuse lobe scales away as the surface becomes metallic, and F0 becomes the albedo.
     EXPECT_NE(source.find("albedo * (1.0 - metallic)"), std::string::npos);
-    EXPECT_NE(source.find("mix(vec3(0.04), albedo, metallic)"), std::string::npos);
+    // This used to spell the dielectric endpoint as the literal `vec3(0.04)` and had been failing
+    // silently since KHR_materials_specular/ior made it a transported value: the endpoint is now
+    // `dielectricF0`, computed from uSpecularFresnelInputs and the specular colour texture. The rule
+    // being asserted is unchanged -- F0 interpolates from the dielectric endpoint to the albedo with
+    // metalness -- so only the name of the endpoint moves. Found by running Magnum's own tests, which
+    // this environment had never done (plan_gltf.md GLTF-465).
+    EXPECT_NE(source.find("mix(dielectricF0, albedo, metallic)"), std::string::npos);
 }
 
 TEST(MagnumStockShaderTest, PbrShaderReorthogonalizesTheTangentBeforeBuildingItsBasis)
@@ -630,7 +740,11 @@ TEST(MagnumStockShaderTest, PbrShaderReadsTheOcclusionMapThroughItsOwnFlipFlag)
     // Five sampled units do not fit in uRtFlipV's four components, so the fifth needs its own.
     const std::string source = StockFragmentShaderSource(MagnumStockProgram::Pbr);
     EXPECT_NE(source.find("uniform vec4 uRtFlipVHi"), std::string::npos);
-    EXPECT_NE(source.find("texture(uOcclusionMap, cnaSampleUV(vTexCoord, uRtFlipVHi.x))"),
+    // Also stale rather than wrong: the sample now goes through the map's own KHR_texture_transform
+    // row (`cnaPbrTransformUV(vTexCoord, 4)`) before the flip flag is applied. Both properties are
+    // still asserted, which is the point -- the occlusion unit keeps its own flip component AND its
+    // own transform slot.
+    EXPECT_NE(source.find("texture(uOcclusionMap, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 4), uRtFlipVHi.x))"),
               std::string::npos);
 }
 

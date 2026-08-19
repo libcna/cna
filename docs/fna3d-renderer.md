@@ -3,6 +3,22 @@
 `-DCNA_GRAPHICS_RENDERER=FNA3D` selects CNA's FNA3D renderer: XNA's programming model rendered
 through **FNA3D**, the C graphics library FNA itself renders through.
 
+## glTF metallic-roughness materials are refused
+
+`SelectStockEffect` maps a draw onto one of FNA's own stock effect binaries — Basic, AlphaTest,
+DualTexture, EnvironmentMap, Skinned — and those binaries contain no metallic-roughness shader.
+A draw from `PbrEffect` or `SkinnedPbrEffect` is therefore **refused by name**.
+
+**Until 2026-08-18 it was shaded by the nearest stock effect instead** (`plan_gltf.md GLTF-477`):
+`SelectStockEffect` had no PBR case, so a `PbrEffect` draw fell through to `Basic` and a
+`SkinnedPbrEffect` draw to `Skinned`. An authored glTF material was presented as a different
+material, with no refusal and nothing in this document saying so. This renderer reads none of the
+twenty PBR draw parameters, which is why the fix is a refusal rather than a reduction.
+
+**This refusal is source-verified only.** `FNA3D_CreateDevice` fails on the development host for
+every driver, including a forced `FNA3D_FORCE_DRIVER=OpenGL`, so the guard compiles and is placed
+at all three params-carrying draw entry points but has never executed here.
+
 ## Identity
 
 | Field | Value |

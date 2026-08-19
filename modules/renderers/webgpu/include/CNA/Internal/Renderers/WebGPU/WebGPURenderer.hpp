@@ -2351,6 +2351,8 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
+            /// plan_gltf.md GLTF-465: true for stride 60, the record that carries COLOR_0.
+            bool colored = false;
             bool indexed = false;
             bool index32 = false;
             std::uint32_t vertexCount = 0;
@@ -2360,7 +2362,9 @@ namespace CNA::Internal::Renderers::WebGPU
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> uniforms{};
             std::array<float, 68> lightUniforms{};
-            std::array<float, 56> pbrFactors{};
+            /// plan_gltf.md GLTF-344: 76 floats (304 bytes) -- the base 56 plus specular F0/factor
+            /// and the two specular map transforms.
+            std::array<float, 76> pbrFactors{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2385,6 +2389,9 @@ namespace CNA::Internal::Renderers::WebGPU
             WebGPUSampledTextureEXT metallicRoughnessMap;
             WebGPUSampledTextureEXT emissiveMap;
             WebGPUSampledTextureEXT occlusionMap;
+            /// plan_gltf.md GLTF-344: KHR_materials_specular's strength and colour maps.
+            WebGPUSampledTextureEXT specularMap;
+            WebGPUSampledTextureEXT specularColorMap;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
@@ -2396,7 +2403,8 @@ namespace CNA::Internal::Renderers::WebGPU
         /// PbrEffect leaves an optional map (normal/metallic-roughness/emissive/occlusion)
         /// unbound. Idempotent; safe to call from every QueuePbrDraw().
         void EnsurePbrDefaultTextures();
-        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelinePbr3D(WGPUPrimitiveTopology topology,
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelinePbr3D(bool colored,
+                                                                  WGPUPrimitiveTopology topology,
                                                                     WGPUIndexFormat stripIndexFormat,
                                                                     bool depthTest, bool depthWrite,
                                                                     int depthFunc,
@@ -2410,10 +2418,15 @@ namespace CNA::Internal::Renderers::WebGPU
                               ReplayState& state);
 
         WGPUShaderModule pbrShader_ = nullptr;
+        /// plan_gltf.md GLTF-465: the stride-60 twin, whose vertex input declares COLOR_0.
+        WGPUShaderModule pbrColorShader_ = nullptr;
         WGPUBindGroupLayout pbrBindGroupLayout0_ = nullptr;  ///< group 0: Uniforms + LitLightParams + PbrFactors UBOs
         WGPUBindGroupLayout pbrBindGroupLayout1_ = nullptr;  ///< group 1: sampler + 5 textures
         WGPUPipelineLayout pbrPipelineLayout_ = nullptr;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> pbrPipelines_;
+        /// plan_gltf.md GLTF-465: the stride-60 pipelines; a separate cache because the vertex
+        /// layout and the shader module both differ, so the key alone cannot separate them.
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> pbrColorPipelines_;
         std::vector<PbrDrawCommand> pbrDrawCommands_;
         std::unique_ptr<WebGPUTextureRenderer> pbrDefaultWhiteTexture_;
         std::unique_ptr<WebGPUTextureRenderer> pbrDefaultFlatNormalTexture_;
@@ -2524,6 +2537,8 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
+            /// plan_gltf.md GLTF-463/GLTF-465: true for stride 80.
+            bool colored = false;
             bool indexed = false;
             bool index32 = false;
             std::uint32_t vertexCount = 0;
@@ -2533,7 +2548,9 @@ namespace CNA::Internal::Renderers::WebGPU
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> uniforms{};
             std::array<float, 68> lightUniforms{};
-            std::array<float, 56> pbrFactors{};
+            /// plan_gltf.md GLTF-344: 76 floats (304 bytes) -- the base 56 plus specular F0/factor
+            /// and the two specular map transforms.
+            std::array<float, 76> pbrFactors{};
             std::array<float, 4 + 72 * 16> skinningParams{};
             bool depthTest = false;
             bool depthWrite = false;
@@ -2559,6 +2576,9 @@ namespace CNA::Internal::Renderers::WebGPU
             WebGPUSampledTextureEXT metallicRoughnessMap;
             WebGPUSampledTextureEXT emissiveMap;
             WebGPUSampledTextureEXT occlusionMap;
+            /// plan_gltf.md GLTF-344: KHR_materials_specular's strength and colour maps.
+            WebGPUSampledTextureEXT specularMap;
+            WebGPUSampledTextureEXT specularColorMap;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
@@ -2566,7 +2586,8 @@ namespace CNA::Internal::Renderers::WebGPU
         };
         void CreateSkinnedPbrResources();
         void DestroySkinnedPbrResources();
-        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineSkinnedPbr3D(WGPUPrimitiveTopology topology,
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineSkinnedPbr3D(bool colored,
+                                                                         WGPUPrimitiveTopology topology,
                                                                            WGPUIndexFormat stripIndexFormat,
                                                                            bool depthTest, bool depthWrite,
                                                                            int depthFunc,
@@ -2580,9 +2601,13 @@ namespace CNA::Internal::Renderers::WebGPU
                               ReplayState& state);
 
         WGPUShaderModule skinnedPbrShader_ = nullptr;
+        /// plan_gltf.md GLTF-463/GLTF-465: the stride-80 twin.
+        WGPUShaderModule skinnedPbrColorShader_ = nullptr;
         WGPUBindGroupLayout skinnedPbrBindGroupLayout0_ = nullptr;  ///< group 0: Uniforms + LitLightParams + PbrFactors + SkinningParams UBOs
         WGPUPipelineLayout skinnedPbrPipelineLayout_ = nullptr;     ///< group 0 (above) + group 1 (pbrBindGroupLayout1_ reused)
         std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedPbrPipelines_;
+        /// plan_gltf.md GLTF-463/GLTF-465: the stride-80 pipelines.
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedPbrColorPipelines_;
         std::vector<SkinnedPbrDrawCommand> skinnedPbrDrawCommands_;
     };
 }

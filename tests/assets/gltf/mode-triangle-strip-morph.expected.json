@@ -148,7 +148,7 @@
         "mode": 5,
         "modeName": "TRIANGLE_STRIP",
         "indexed": true,
-        "vertexCount": 4,
+        "vertexCount": 6,
         "positions": [
           [
             0.0,
@@ -158,6 +158,16 @@
           [
             1.0,
             0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
             0.0
           ],
           [
@@ -171,7 +181,38 @@
             0.0
           ]
         ],
-        "normals": [],
+        "normals": [
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
         "tangents": [],
         "texcoords": [],
         "colors": [],
@@ -202,13 +243,28 @@
           "indices": [
             0,
             1,
+            3,
+            4,
             2,
-            2,
-            1,
-            3
+            5
           ],
           "converted": true,
-          "primitiveCount": 2
+          "primitiveCount": 2,
+          "flatNormalSplit": {
+            "policy": "per-corner",
+            "sourceVertex": [
+              0,
+              1,
+              1,
+              2,
+              2,
+              3
+            ],
+            "duplicatedVertices": 2,
+            "mergedVertices": 0,
+            "rule": "\u00a73.7.2.1 requires flat normals when NORMAL is absent, and flat shading gives a vertex one normal PER FACE -- so a vertex shared between differently oriented faces must be duplicated once per orientation, which renumbers every per-vertex stream. New vertices are handed out in source-vertex order, so a primitive that does not split keeps its own numbering.",
+            "perCornerRule": "\u00a73.7.2.2 requires flat normals for each morph target. A POSITION delta can rotate a face, so two faces coplanar at rest need not stay coplanar and a rest-pose split cannot serve every pose; only a fully split primitive can carry an exact per-face normal at any weight."
+          }
         },
         "material": null
       }
@@ -292,8 +348,47 @@
         1,
         3
       ],
-      "vertexCount": 4,
-      "vertexOrderUnchanged": true,
+      "splitIndices": [
+        0,
+        1,
+        3,
+        4,
+        2,
+        5
+      ],
+      "sourceVertex": [
+        0,
+        1,
+        1,
+        2,
+        2,
+        3
+      ],
+      "vertexCount": 6,
+      "authoredVertexCount": 4,
+      "vertexOrderUnchanged": false,
+      "authoredMorphDeltas": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          0.0,
+          2.0
+        ],
+        [
+          0.0,
+          0.0,
+          3.0
+        ],
+        [
+          0.0,
+          0.0,
+          4.0
+        ]
+      ],
       "morphDeltas": [
         [
           0.0,
@@ -304,6 +399,16 @@
           0.0,
           0.0,
           2.0
+        ],
+        [
+          0.0,
+          0.0,
+          2.0
+        ],
+        [
+          0.0,
+          0.0,
+          3.0
         ],
         [
           0.0,
@@ -328,6 +433,16 @@
           2.0
         ],
         [
+          1.0,
+          0.0,
+          2.0
+        ],
+        [
+          0.0,
+          1.0,
+          3.0
+        ],
+        [
           0.0,
           1.0,
           3.0
@@ -338,8 +453,8 @@
           4.0
         ]
       ],
-      "rule": "Converting a strip rewrites the INDEX list and must leave the VERTEX order alone, because morph deltas are addressed per vertex by position in the target accessor. De-duplicating the strip's shared corners -- vertices 1 and 2 appear in both triangles -- would still produce a mesh and a morph, with every delta on the wrong vertex: a plausible deformation of the wrong shape.",
-      "discriminationRule": "The four deltas are all different, so a permutation is a different staircase rather than a subtly different surface. Identical deltas would make a reordering indistinguishable from correctness."
+      "rule": "Converting a strip rewrites the INDEX list and must not renumber vertices on its own -- morph deltas are addressed per vertex by position in the target accessor, and de-duplicating the strip's shared corners would put every delta on the wrong one. What DOES renumber here is \u00a73.7.2.1's flat-normal split (GLTF-461): the primitive authors no NORMAL, so each of the two triangles needs its own normal at every morph weight, and every delta must follow its source vertex through the split. `sourceVertex` states that mapping, so the pairing is checkable rather than assumed.",
+      "discriminationRule": "The four authored deltas are all different, so a permutation is a different staircase rather than a subtly different surface. They also make the two triangles NON-COPLANAR once applied, which is exactly why a rest-pose split cannot serve every pose and the per-corner policy is required."
     }
   },
   "l5": {
@@ -349,7 +464,7 @@
         "mesh": 0,
         "primitive": 0,
         "stride": 48,
-        "vertexCount": 4,
+        "vertexCount": 6,
         "fields": [
           {
             "name": "Position",
@@ -373,13 +488,13 @@
           }
         ],
         "vertexBufferFile": "mode-triangle-strip-morph.vb.bin",
-        "vertexBufferBytes": 192,
-        "vertexBufferSha256": "d45c2a7b330952e43844558a80a8f860e3499d85b41d0a7111c1a964de25ee43",
+        "vertexBufferBytes": 288,
+        "vertexBufferSha256": "f2750df6c7f7975e2bfad610c24c7417ef14d2e499d53a5a99409040852281b2",
         "indexElementSize": 2,
         "indexCount": 6,
         "indexBufferFile": "mode-triangle-strip-morph.ib.bin",
         "indexBufferBytes": 12,
-        "indexBufferSha256": "769df21c80974149d13f85ca9f01b8361bfe89e3fcadf7aac71e3c59c247ef7b",
+        "indexBufferSha256": "331cee88cf9d16fc329fa57a4d5adda0ce9de22133af028b38192e71da9c8230",
         "sourceTopology": "TRIANGLE_STRIP",
         "topology": "TRIANGLES",
         "primitiveCount": 2

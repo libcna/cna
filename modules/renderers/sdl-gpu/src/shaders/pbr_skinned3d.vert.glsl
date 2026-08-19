@@ -9,6 +9,12 @@ layout(location = 2) in vec4  inTangent;
 layout(location = 3) in vec2  inUV;
 layout(location = 4) in vec4  inBoneWeights;
 layout(location = 5) in uvec4 inBoneIndices;
+// plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
+// colour. Declared only in the variants whose pipeline supplies it (strides 60 and 80); the others
+// pass opaque white, the multiplier's identity, so the shared fragment stage has one interface.
+#ifdef CNA_PBR_VERTEX_COLOR
+layout(location = 6) in vec4 inColor;
+#endif
 
 // Interface matches pbr3d.frag.glsl's inputs exactly (same locations/types) -- this shader's
 // fragment stage IS pbr3d.frag.glsl, reused unchanged; SkinnedPbrEffect's BRDF is identical to
@@ -19,6 +25,7 @@ layout(location = 2) out vec3  fragTangent;
 layout(location = 3) out float fragBitangentSign;
 layout(location = 4) out vec3  fragWorldPos;
 layout(location = 5) out vec4 fragFog;    // REMED-GFX-009 xyz=FogColor, w=keep-factor
+layout(location = 6) out vec4  fragColor0;
 
 // 72 * mat4 = 4608 bytes, a real storage buffer rather than a uniform push -- see
 // skinned3d.vert.glsl's own doc comment for why (SDL_gpu's real ~4096-byte push-uniform cap on
@@ -86,6 +93,11 @@ void main() {
     vec4 skinnedPos = skinMat * vec4(inPos, 1.0);
     gl_Position = pc.mvp * skinnedPos;
     fragUV = inUV;
+    #ifdef CNA_PBR_VERTEX_COLOR
+    fragColor0 = inColor;
+    #else
+    fragColor0 = vec4(1.0);
+    #endif
 
     // REMED-GFX-006 (Variant B): the normal takes the inverse-transpose world matrix
     // transpose(inverse(mat3(world))), not raw mat3(lp.world). Raw World is correct only for

@@ -107,6 +107,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             PbrVertex,
             PbrSkinnedVertex,
             PbrFragment,
+            // plan_gltf.md GLTF-462/GLTF-463: stride-60 and stride-80 twins that declare COLOR_0.
+            PbrColorVertex,
+            PbrSkinnedColorVertex,
             Count
         };
 
@@ -1234,6 +1237,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             owner.skinnedColoredFragmentShader_ =
                 shaders[static_cast<std::size_t>(ConstructionShader::SkinnedColoredFragment)];
             owner.pbrVertexShader_ = shaders[static_cast<std::size_t>(ConstructionShader::PbrVertex)];
+            owner.pbrColorVertexShader_ =
+                shaders[static_cast<std::size_t>(ConstructionShader::PbrColorVertex)];
+            owner.pbrSkinnedColorVertexShader_ =
+                shaders[static_cast<std::size_t>(ConstructionShader::PbrSkinnedColorVertex)];
             owner.pbrSkinnedVertexShader_ =
                 shaders[static_cast<std::size_t>(ConstructionShader::PbrSkinnedVertex)];
             owner.pbrFragmentShader_ = shaders[static_cast<std::size_t>(ConstructionShader::PbrFragment)];
@@ -3957,6 +3964,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                                    PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
+        // plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
+        // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
+        // replay keeps every allocation on the queueing side, where a failure still has a
+        // caller to report to.
+        EnsureDefaultPbrTextures();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
 
@@ -4007,6 +4019,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                       const Matrix& world, const Matrix& view, const Matrix& projection,
                                                       PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
+        // plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
+        // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
+        // replay keeps every allocation on the queueing side, where a failure still has a
+        // caller to report to.
+        EnsureDefaultPbrTextures();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         if (sdlGpuVb.Stride() != 32)
             throw std::invalid_argument("CNA SDL_GPU: lit_textured3d requires a stride-32 "
@@ -4607,6 +4624,25 @@ namespace CNA::Internal::Renderers::SdlGpu
             SdlGpuFailurePointEXT::PbrSkinnedVertexShaderCreation, skinnedVsInfo,
             "CNA SDL_GPU: failed to create pbr_skinned3d vertex shader: ");
 
+        // plan_gltf.md GLTF-462/GLTF-465: the stride-60 and stride-80 twins. Same uniform/sampler
+        // shape as the two above -- only the vertex input set differs -- so they are created the same
+        // way and cost nothing until a colour-carrying draw actually selects one.
+        SDL_GPUShaderCreateInfo colorVsInfo = vsInfo;
+        colorVsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kPbr3dColorVertSpv);
+        colorVsInfo.code_size = Shaders::kPbr3dColorVertSpv_size;
+        resources.CreateShader(
+            ConstructionShader::PbrColorVertex,
+            SdlGpuFailurePointEXT::PbrVertexShaderCreation, colorVsInfo,
+            "CNA SDL_GPU: failed to create pbr3d (vertex colour) vertex shader: ");
+
+        SDL_GPUShaderCreateInfo skinnedColorVsInfo = skinnedVsInfo;
+        skinnedColorVsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kPbrSkinned3dColorVertSpv);
+        skinnedColorVsInfo.code_size = Shaders::kPbrSkinned3dColorVertSpv_size;
+        resources.CreateShader(
+            ConstructionShader::PbrSkinnedColorVertex,
+            SdlGpuFailurePointEXT::PbrSkinnedVertexShaderCreation, skinnedColorVsInfo,
+            "CNA SDL_GPU: failed to create pbr_skinned3d (vertex colour) vertex shader: ");
+
         SDL_GPUShaderCreateInfo fsInfo{};
         fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kPbr3dFragSpv);
         fsInfo.code_size = Shaders::kPbr3dFragSpv_size;
@@ -4629,6 +4665,16 @@ namespace CNA::Internal::Renderers::SdlGpu
         for (auto& [key, pipeline] : pbrSkinnedPipelines_)
             ReleaseGraphicsPipeline(pipeline);
         pbrSkinnedPipelines_.clear();
+        // plan_gltf.md GLTF-465: the two colour-carrying caches and their shaders, released the same
+        // way -- a pipeline cache nobody frees is exactly the leak this function exists to prevent.
+        for (auto& [key, pipeline] : pbrColorPipelines_)
+            ReleaseGraphicsPipeline(pipeline);
+        pbrColorPipelines_.clear();
+        for (auto& [key, pipeline] : pbrSkinnedColorPipelines_)
+            ReleaseGraphicsPipeline(pipeline);
+        pbrSkinnedColorPipelines_.clear();
+        ReleaseShader(pbrColorVertexShader_);
+        ReleaseShader(pbrSkinnedColorVertexShader_);
         ReleaseShader(pbrFragmentShader_);
         ReleaseShader(pbrSkinnedVertexShader_);
         ReleaseShader(pbrVertexShader_);
@@ -4649,45 +4695,62 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuRenderer::GetOrCreatePipelinePbr3D(
-        bool skinned, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+        bool skinned, bool colored, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
         SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
         SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState)
     {
         const std::size_t key = PipelineCacheKey(
             topology, depthTest, depthWrite, depthFunc, colorFormat, colorTargetCount, sampleCount,
             depthStencilFormat, renderState);
-        auto& cache = skinned ? pbrSkinnedPipelines_ : pbrPipelines_;
+        auto& cache = skinned ? (colored ? pbrSkinnedColorPipelines_ : pbrSkinnedPipelines_)
+                              : (colored ? pbrColorPipelines_ : pbrPipelines_);
         const auto it = cache.find(key);
         if (it != cache.end())
             return it->second;
 
         SDL_GPUVertexBufferDescription vbDesc{};
         vbDesc.slot = 0;
-        vbDesc.pitch = skinned ? 68 : 48;
+        // plan_gltf.md GLTF-462/GLTF-463: strides 60 and 80 are the same records with TEXCOORD_1 and
+        // a packed COLOR_0 appended. This renderer's PBR shaders sample one UV set, so the second one
+        // stays unbound; the colour does not, because glTF 3.9.2 makes it a term in base colour.
+        vbDesc.pitch = skinned ? (colored ? 80 : 68) : (colored ? 60 : 48);
         vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
 
         // Stride 48 (VertexPositionNormalTangentTexture): pos(12) + normal(12) + tangent(16) +
         // uv(8). Stride 68 (VertexPositionNormalTangentTextureSkinned) appends blendWeight(16) +
         // blendIndices(4) after the same 48-byte prefix, matching EasyGLRenderer::
         // ApplyLayout's stride==48/68 cases exactly.
-        SDL_GPUVertexAttribute attrs[6]{};
+        SDL_GPUVertexAttribute attrs[7]{};
         attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
         attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[1].offset = 12;
         attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4; attrs[2].offset = 24;
         attrs[3].location = 3; attrs[3].buffer_slot = 0; attrs[3].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[3].offset = 40;
         attrs[4].location = 4; attrs[4].buffer_slot = 0; attrs[4].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4; attrs[4].offset = 48;
         attrs[5].location = 5; attrs[5].buffer_slot = 0; attrs[5].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4; attrs[5].offset = 64;
+        // The colour lands at location 4 on the rigid record (nothing else uses it there) and at 6 on
+        // the skinned one, matching the two shader variants' own declarations.
+        if (colored)
+        {
+            const int slot = skinned ? 6 : 4;
+            attrs[slot].location = static_cast<Uint32>(slot);
+            attrs[slot].buffer_slot = 0;
+            attrs[slot].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM;
+            attrs[slot].offset = skinned ? 76 : 56;
+        }
 
         std::array<SDL_GPUColorTargetDescription, 4> colorTargets{};
         FillColorTargetDescriptions(colorTargets, colorTargetCount, colorFormat, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.vertex_shader = skinned ? pbrSkinnedVertexShader_ : pbrVertexShader_;
+        pipelineInfo.vertex_shader = skinned
+            ? (colored ? pbrSkinnedColorVertexShader_ : pbrSkinnedVertexShader_)
+            : (colored ? pbrColorVertexShader_ : pbrVertexShader_);
         pipelineInfo.fragment_shader = pbrFragmentShader_;  // shared unchanged by both variants
         pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
         pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
-        pipelineInfo.vertex_input_state.num_vertex_attributes = skinned ? 6 : 4;
+        pipelineInfo.vertex_input_state.num_vertex_attributes =
+            skinned ? (colored ? 7u : 6u) : (colored ? 5u : 4u);
         pipelineInfo.primitive_type = topology;
         FillRasterizerState(
             pipelineInfo.rasterizer_state, renderState,
@@ -4710,6 +4773,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                     const Matrix& world, const Matrix& view, const Matrix& projection,
                                                     PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
+        // plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
+        // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
+        // replay keeps every allocation on the queueing side, where a failure still has a
+        // caller to report to.
+        EnsureDefaultPbrTextures();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
 
@@ -4902,6 +4970,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                  const Matrix& world, const Matrix& view, const Matrix& projection,
                                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
+        // plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
+        // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
+        // replay keeps every allocation on the queueing side, where a failure still has a
+        // caller to report to.
+        EnsureDefaultPbrTextures();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
         if (stride != 52 && stride != 56)
@@ -4960,18 +5033,25 @@ namespace CNA::Internal::Renderers::SdlGpu
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
         const bool skinned = params.skinned;
-        const std::size_t expectedStride = skinned ? 68u : 48u;
-        if (stride != expectedStride)
+        // plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the same two records with
+        // TEXCOORD_1 and a packed COLOR_0 appended, and glTF 3.9.2 makes that colour a multiplier on
+        // base colour. They select the colour-carrying shader variants; the second UV set stays
+        // unbound, which is this renderer's own separate capability gap.
+        const bool colored = skinned ? (stride == 80u) : (stride == 60u);
+        const bool acceptable = skinned ? (stride == 68u || stride == 80u)
+                                        : (stride == 48u || stride == 60u);
+        if (!acceptable)
             throw std::invalid_argument(skinned
-                ? "CNA SDL_GPU: pbr_skinned3d requires a stride-68 "
-                  "(VertexPositionNormalTangentTextureSkinned) vertex buffer"
-                : "CNA SDL_GPU: pbr3d requires a stride-48 "
-                  "(VertexPositionNormalTangentTexture) vertex buffer");
+                ? "CNA SDL_GPU: pbr_skinned3d requires a stride-68 or stride-80 "
+                  "(VertexPositionNormalTangentTextureSkinned, optionally with COLOR_0) vertex buffer"
+                : "CNA SDL_GPU: pbr3d requires a stride-48 or stride-60 "
+                  "(VertexPositionNormalTangentTexture, optionally with COLOR_0) vertex buffer");
 
         EnsureDefaultPbrTextures();
 
         PbrDrawCommand command;
         command.skinned = skinned;
+        command.colored = colored;
         const int vertexStart = params.vertexStart;
         const auto& shadow = sdlGpuVb.ShadowData();
         const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
@@ -5435,7 +5515,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        samplerBinding.texture = command.texture.texture;
+        // plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
+        // BasicEffect/SkinnedEffect/AlphaTestEffect run untextured, and glTF's own default
+        // material has no baseColorTexture at all. Binding neutral white makes `tex * colour`
+        // collapse to the colour, which is what EasyGL and Vulkan already do; without it this
+        // renderer had to refuse the draw upstream instead.
+        samplerBinding.texture = command.texture ? command.texture.texture
+                                                 : defaultWhiteTexture_->Texture();
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
                                                    "AlphaTest3D");
@@ -5608,7 +5694,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_BindGPUVertexStorageBuffers(pass, 0, &command.uploadedBoneBuffer, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        samplerBinding.texture = command.texture.texture;
+        // plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
+        // BasicEffect/SkinnedEffect/AlphaTestEffect run untextured, and glTF's own default
+        // material has no baseColorTexture at all. Binding neutral white makes `tex * colour`
+        // collapse to the colour, which is what EasyGL and Vulkan already do; without it this
+        // renderer had to refuse the draw upstream instead.
+        samplerBinding.texture = command.texture ? command.texture.texture
+                                                 : defaultWhiteTexture_->Texture();
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
                                                    "Skinned3D");
@@ -5636,7 +5728,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                              SDL_GPUGraphicsPipeline*& boundPipeline)
     {
         SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelinePbr3D(
-            command.skinned, command.topology, command.depthTest, command.depthWrite,
+            command.skinned, command.colored, command.topology, command.depthTest, command.depthWrite,
             command.depthFunc, colorFormat, sampleCount, depthStencilFormat, colorTargetCount, command.renderState);
         if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
         SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
@@ -5666,7 +5758,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUSampler* sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                     command.addressV, command.maxAnisotropy,
                                                     "Pbr3D");
-        samplerBindings[0].texture = command.texture.texture;
+        // plan_gltf.md GLTF-465: slot 0 was the one PBR map with no fallback, so a material
+        // with only a baseColorFactor -- glTF's own default material, and what both COLOR_0
+        // corpus fixtures author -- had to be refused upstream instead of multiplying the
+        // factor by white. Same neutral-white contract as slots 1..6, and as every other
+        // renderer's PBR base-colour bind.
+        samplerBindings[0].texture = command.texture ? command.texture.texture
+                                                    : defaultWhiteTexture_->Texture();
         samplerBindings[0].sampler = sampler;
         samplerBindings[1].texture = command.normalMap ? command.normalMap.texture : defaultFlatNormalTexture_->Texture();
         samplerBindings[1].sampler = sampler;
@@ -5909,7 +6007,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        samplerBinding.texture = command.texture.texture;
+        // plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
+        // BasicEffect/SkinnedEffect/AlphaTestEffect run untextured, and glTF's own default
+        // material has no baseColorTexture at all. Binding neutral white makes `tex * colour`
+        // collapse to the colour, which is what EasyGL and Vulkan already do; without it this
+        // renderer had to refuse the draw upstream instead.
+        samplerBinding.texture = command.texture ? command.texture.texture
+                                                 : defaultWhiteTexture_->Texture();
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
                                                    "Textured3D");
@@ -5952,7 +6056,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        samplerBinding.texture = command.texture.texture;
+        // plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
+        // BasicEffect/SkinnedEffect/AlphaTestEffect run untextured, and glTF's own default
+        // material has no baseColorTexture at all. Binding neutral white makes `tex * colour`
+        // collapse to the colour, which is what EasyGL and Vulkan already do; without it this
+        // renderer had to refuse the draw upstream instead.
+        samplerBinding.texture = command.texture ? command.texture.texture
+                                                 : defaultWhiteTexture_->Texture();
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
                                                    "LitTextured3D");
@@ -6259,7 +6369,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
         const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
         const bool needsSkinned = !needsAlphaTest && !needsDualTexture && !needsEnvMap && !needsPbr && params.skinned;
-        if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
+        // plan_gltf.md GLTF-474: no `params.texture0 != nullptr` here any more. A stock effect's
+        // base-colour map is optional in XNA and absent in glTF's own default material, and the
+        // replay binds neutral white for it -- so requiring one here did not make the draw safe, it
+        // made the draw fall past every branch into the stride-16 colour path and be refused there.
+        if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32))
         {
             QueueAlphaTestDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
@@ -6274,12 +6388,19 @@ namespace CNA::Internal::Renderers::SdlGpu
             QueueEnvMapDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (needsPbr && ((params.skinned && stride == 68) || (!params.skinned && stride == 48)) && params.texture0 != nullptr)
+        // plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the stride-48 and
+        // stride-68 records with TEXCOORD_1 and a packed COLOR_0 appended, and QueuePbrDraw
+        // selects the colour-carrying pipeline for them. They must be listed HERE too: this is
+        // the only route into that queue, and a stride the dispatch omits falls through every
+        // branch below to the stride-16 coloured path, which refuses it.
+        if (needsPbr &&
+            ((params.skinned && (stride == 68 || stride == 80)) ||
+             (!params.skinned && (stride == 48 || stride == 60))))
         {
             QueuePbrDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (needsSkinned && (stride == 52 || stride == 56) && params.texture0 != nullptr)
+        if (needsSkinned && (stride == 52 || stride == 56))
         {
             QueueSkinnedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
@@ -6289,12 +6410,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             QueueColoredDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, &params);
             return;
         }
-        if ((stride == 20 || stride == 24) && params.texture0 != nullptr)
+        if (stride == 20 || stride == 24)
         {
             QueueTexturedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (stride == 32 && params.texture0 != nullptr)
+        if (stride == 32)
         {
             QueueLitTexturedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
@@ -6325,7 +6446,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
         const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
         const bool needsSkinned = !needsAlphaTest && !needsDualTexture && !needsEnvMap && !needsPbr && params.skinned;
-        if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
+        // plan_gltf.md GLTF-474: no `params.texture0 != nullptr` here any more. A stock effect's
+        // base-colour map is optional in XNA and absent in glTF's own default material, and the
+        // replay binds neutral white for it -- so requiring one here did not make the draw safe, it
+        // made the draw fall past every branch into the stride-16 colour path and be refused there.
+        if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32))
         {
             QueueAlphaTestDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
@@ -6340,12 +6465,19 @@ namespace CNA::Internal::Renderers::SdlGpu
             QueueEnvMapDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (needsPbr && ((params.skinned && stride == 68) || (!params.skinned && stride == 48)) && params.texture0 != nullptr)
+        // plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the stride-48 and
+        // stride-68 records with TEXCOORD_1 and a packed COLOR_0 appended, and QueuePbrDraw
+        // selects the colour-carrying pipeline for them. They must be listed HERE too: this is
+        // the only route into that queue, and a stride the dispatch omits falls through every
+        // branch below to the stride-16 coloured path, which refuses it.
+        if (needsPbr &&
+            ((params.skinned && (stride == 68 || stride == 80)) ||
+             (!params.skinned && (stride == 48 || stride == 60))))
         {
             QueuePbrDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (needsSkinned && (stride == 52 || stride == 56) && params.texture0 != nullptr)
+        if (needsSkinned && (stride == 52 || stride == 56))
         {
             QueueSkinnedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
@@ -6355,12 +6487,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount, &params);
             return;
         }
-        if ((stride == 20 || stride == 24) && params.texture0 != nullptr)
+        if (stride == 20 || stride == 24)
         {
             QueueTexturedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (stride == 32 && params.texture0 != nullptr)
+        if (stride == 32)
         {
             QueueLitTexturedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;

@@ -12,6 +12,8 @@
 // the same way the table does would agree with any value at all; these are written out, one
 // assertion per element, so that changing the table is a deliberate act with a diff to review.
 
+#include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -24,6 +26,7 @@
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/GraphicsRendererType.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -34,6 +37,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
 using namespace CNA::Internal::GltfImport;
@@ -222,12 +226,16 @@ TEST(GltfStrideAndBuffer, EveryCanonicalStrideHasExactlyTheElementsSection23Stat
         {VertexElementUsage::BlendIndices, 48, VertexElementFormat::Byte4},
         {VertexElementUsage::Color, 52, VertexElementFormat::Color},
     });
+    // plan_gltf.md GLTF-462: the four bytes GLTF-182 reserved purely to keep this stride distinct
+    // from 56 are the packed COLOR_0 slot now, which is what lets a vertex-coloured primitive keep
+    // its metallic-roughness material instead of being downgraded to a layout with no Normal at all.
     ExpectStrideLayout(60, {
         {VertexElementUsage::Position, 0, VertexElementFormat::Vector3},
         {VertexElementUsage::Normal, 12, VertexElementFormat::Vector3},
         {VertexElementUsage::Tangent, 24, VertexElementFormat::Vector4},
         {VertexElementUsage::TextureCoordinate, 40, VertexElementFormat::Vector2, 0},
         {VertexElementUsage::TextureCoordinate, 48, VertexElementFormat::Vector2, 1},
+        {VertexElementUsage::Color, 56, VertexElementFormat::Color},
     });
     ExpectStrideLayout(68, {
         {VertexElementUsage::Position, 0, VertexElementFormat::Vector3},
@@ -300,11 +308,17 @@ TEST(GltfStrideAndBuffer, EveryImportedGltfStrideCarriesItsCanonicalVertexDeclar
     struct Case { const char* fixture; int stride; };
     const Case cases[] = {
         {"tex-dual-texture-stride", 20},
-        {"normalized-u8-color", 24},
+        // GLTF-462: a rigid vertex-coloured primitive keeps its metallic-roughness material now,
+        // so it takes the rigid PBR layout and its colour rides in stride 60's own colour slot.
+        // Stride 24 is reached only by a coloured primitive whose material declares
+        // KHR_materials_unlit -- `mat-unlit-vertex-color-alpha` is that fixture.
+        {"normalized-u8-color", 60},
         {"mat-unlit", 32},
         {"mat-authored-tangent", 48},
         {"uv1-material", 60},
         {"skin-unlit", 52},
+        // GLTF-463: a SKINNED vertex-coloured primitive is the one combination still without a
+        // colour-carrying PBR stride, so it keeps SkinnedEffect's stride-56 layout.
         {"skin-vertex-color", 56},
         {"skin-parented-joints", 68},
     };
@@ -371,10 +385,234 @@ TEST(RendererStrideConformance, EveryGltfStrideReachesTheNativeDrawBoundary)
     {
         SCOPED_TRACE(fixture);
         Model model = cm.Load<Model>(fixture);
-        EXPECT_NO_THROW(model.Draw(identity, identity, identity));
-        // Deferred renderers submit the draw here. Without Present, a Vulkan command can be
-        // recorded but never reach the driver's input-layout validation.
-        EXPECT_NO_THROW(gd.Present());
+        // plan_gltf.md GLTF-473 replaced the plain EXPECT_NO_THROW here, and it is a STRICTER
+        // requirement rather than a looser one. A fixed-function renderer has no attribute-per-
+        // element freedom: it binds each client array at one literal offset, so a record it was not
+        // written for is not "a stride it cannot reach" -- it is a stride it reaches through the
+        // wrong bytes. OPENGLES1 passed this assertion for six of these eight fixtures by drawing
+        // PBR and skinned records with `glColorPointer` at offset 12, which is their NORMAL. Not
+        // throwing was exactly the symptom. So the rule is now the partition: reach the boundary, or
+        // refuse with a diagnostic that names the layout incompatibility. `GLTF-473` appears only in
+        // the shared fixed-function guard's message, so no other renderer can satisfy this by
+        // accident.
+        std::string failure;
+        try
+        {
+            model.Draw(identity, identity, identity);
+            // Deferred renderers submit the draw here. Without Present, a Vulkan command can be
+            // recorded but never reach the driver's input-layout validation.
+            gd.Present();
+        }
+        catch (const std::exception& error)
+        {
+            failure = error.what();
+        }
+        if (failure.empty()) { continue; }
+        // plan_gltf.md GLTF-477 adds the second legitimate refusal: a renderer with no
+        // metallic-roughness shading path at all, which is a different state from a fixed-function
+        // renderer misreading a layout. Both tokens come from a shared guard nobody can reproduce
+        // by accident, which is the property that made the narrow check worth having.
+        const bool namedRefusal = failure.find("GLTF-473") != std::string::npos ||
+                                  failure.find("GLTF-477") != std::string::npos;
+        EXPECT_TRUE(namedRefusal)
+            << "this renderer refused a canonical glTF stride for a reason other than a named "
+               "layout incompatibility or a named absent shading model: " << failure;
+    }
+}
+
+TEST(RendererStrideConformance, AColourCarryingPbrPrimitiveEitherDrawsOrRefusesByName)
+{
+    // plan_gltf.md GLTF-465, at the draw boundary rather than in shader text. The audit above it
+    // asks whether a renderer DECLARES the stride-60/80 colour; this asks whether a real
+    // vertex-coloured metallic-roughness Model can be drawn through it at all.
+    //
+    // That distinction is not academic. Both of the following shipped with a complete layout row, a
+    // complete shader and a passing source-text audit, and neither could draw the asset:
+    //
+    //   - SDL_GPU built the stride-60/80 pipelines and left `DrawPrimitivesEx` selecting the PBR
+    //     queue for `stride == 48`/`68` only, so the draw fell through to the stride-16 coloured
+    //     path and was refused there as "requires a stride-16 (VertexPositionColor) vertex buffer";
+    //   - DILIGENT chose `SkinnedPbrColor3D` for stride 80 and then refused it nine lines later as
+    //     "needs a skinned PBR vertex layout (stride 68 or 76)".
+    //
+    // So the assertion is the partition itself, in the only form that can tell those two apart from
+    // a real refusal: the draw either SUCCEEDS, or it fails with a diagnostic that names the vertex
+    // colour. A renderer that has not implemented the product calls the shared
+    // `RequireVertexColourPbrSupportEXT`, whose message says `COLOR_0` -- that is a limitation. A
+    // renderer that fails for any other reason is refusing content it has the code to draw, and the
+    // message a caller would have to debug points at the wrong thing entirely.
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+    {
+        GTEST_SKIP() << "renderer has no native 3D draw boundary";
+    }
+
+    ContentManager cm(nullptr, "tests/assets/gltf");
+    cm.setGraphicsDevice(gd);
+    const auto identity = Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+
+    // The rigid stride-60 record and the skinned stride-80 one -- the only two layouts a core glTF
+    // `COLOR_0` on a metallic-roughness material can import to.
+    for (const char* fixture : {"mat-vertex-color-pbr", "skin-vertex-color-pbr"})
+    {
+        SCOPED_TRACE(fixture);
+        Model model = cm.Load<Model>(fixture);
+        std::string failure;
+        try
+        {
+            model.Draw(identity, identity, identity);
+            gd.Present();
+        }
+        catch (const std::exception& error)
+        {
+            failure = error.what();
+        }
+        if (failure.empty()) { continue; }
+        if (failure.find("COLOR_0") != std::string::npos) { continue; }
+
+        // Two other refusals are allowed, and only two. A fixed-function renderer with no PBR path
+        // at all refuses this draw by naming the exact layout incompatibility -- which semantic, at
+        // which offset, where the record really keeps it, and which effect sent the draw there. That
+        // is a more specific answer than "COLOR_0 is unsupported", not a vaguer one.
+        //
+        // `GLTF-477` is the second, and it is a STRONGER answer rather than a weaker one: the
+        // renderer has no metallic-roughness shading model whatsoever, so the draw fails for the
+        // material rather than for one term of it, and saying "this COLOR_0 is unsupported" would
+        // imply the rest of the material was fine. `OPENGL1` is the renderer that reaches here --
+        // it used to emit every record wider than 32 bytes as flat white geometry and report
+        // success.
+        //
+        // LLGL's two "needs Texture bound" messages used to be pinned here as well: it treated
+        // PbrEffect's base-colour map as mandatory, so it could not draw a `baseColorFactor`-only
+        // material -- glTF's own default (§3.9.2), and what both fixtures here author. `GLTF-474`
+        // removed that rule rather than the exception, so the exception is gone too. A pinned
+        // allowance that can no longer fire is a place for a regression to hide.
+        constexpr std::array<const char*, 2> namedPreconditions{{
+            "GLTF-473", "GLTF-477",
+        }};
+        const bool named = std::any_of(
+            namedPreconditions.begin(), namedPreconditions.end(),
+            [&](const char* known) { return failure.find(known) != std::string::npos; });
+        EXPECT_TRUE(named)
+            << "this renderer refused a valid core glTF vertex-coloured metallic-roughness "
+               "primitive without naming either the semantic it cannot honour or a precondition "
+               "of its own, which is what a renderer whose PBR route never learned the "
+               "colour-carrying stride looks like. The diagnostic was: "
+            << failure;
+    }
+}
+
+TEST(RendererStrideConformance, NoPbrOrSkinnedRecordIsEverReadThroughAnIncompatibleLayout)
+{
+    // plan_gltf.md GLTF-473, and the test that fails on the implementation this replaces.
+    //
+    // OPENGLES1 has no programmable pipeline, so PbrEffect, SkinnedEffect and a custom ShaderEffect
+    // are permanent gaps (docs/opengles1-renderer.md). It did not refuse those draws: it routed them
+    // to its colour path, which binds `glColorPointer` at byte offset 12 -- a colour in exactly two
+    // of CNA's canonical records, and the NORMAL in every PBR and skinned one. Six of the eight
+    // canonical glTF fixtures below were therefore drawn on a real ES 1.1 driver with per-vertex
+    // colours read out of the bytes of their own normals: accepted input, incorrect semantics.
+    //
+    // Nothing caught it, and the reason is worth stating: every existing assertion about these
+    // fixtures was `EXPECT_NO_THROW`, and not throwing was the symptom. So this asserts the opposite
+    // for the one renderer that cannot possibly render them -- the draw MUST be refused, by name.
+    // On the old implementation every one of these succeeds silently and every expectation below
+    // fails.
+    //
+    // The strides are the whole PBR and skinned family, not the stride 60 the defect was reported
+    // on. A fix that special-cased stride 60 leaves 48, 52, 56, 68, 76 and 80 reading normals as
+    // colours, and this would still fail.
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+    {
+        GTEST_SKIP() << "renderer has no native 3D draw boundary";
+    }
+
+    ContentManager cm(nullptr, "tests/assets/gltf");
+    cm.setGraphicsDevice(gd);
+    const auto identity = Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+
+    // fixture -> the stride it imports to, so a layout change that moves one is a visible failure
+    // here rather than a silent loss of coverage.
+    struct PbrFamilyFixture { const char* name; int stride; };
+    constexpr std::array<PbrFamilyFixture, 7> fixtures{{
+        {"mat-authored-tangent", 48},     // rigid PBR
+        {"normalized-u8-color", 60},      // rigid PBR + COLOR_0 -- the reported case
+        {"uv1-material", 60},             // rigid PBR + TEXCOORD_1
+        {"mat-vertex-color-pbr", 60},     // rigid PBR + COLOR_0, factor-only material
+        {"skin-unlit", 52},               // skinned, unlit
+        {"skin-vertex-color", 56},        // skinned + COLOR_0
+        {"skin-parented-joints", 68},     // skinned PBR
+    }};
+
+    // A renderer with no fixed-function equivalent for these effects must refuse them. OPENGLES1 is
+    // the only such renderer in the tree, and its own documentation calls PbrEffect and
+    // SkinnedEffect permanent gaps rather than unfinished ones -- so "renders it" is not an outcome
+    // it is allowed to reach, and silence is the defect.
+    const bool mustRefuse = CNA::getCurrentGraphicsRendererName() == "OPENGLES1";
+
+    for (const PbrFamilyFixture& fixture : fixtures)
+    {
+        SCOPED_TRACE(std::string(fixture.name) + " (stride " + std::to_string(fixture.stride) + ")");
+        Model model = cm.Load<Model>(fixture.name);
+
+        // The fixture really is the stride this row claims, so the coverage cannot rot silently.
+        const auto* part = model.getMeshesProperty()[0]->getMeshPartsProperty()[0];
+        ASSERT_NE(nullptr, part->getVertexBufferProperty());
+        EXPECT_EQ(fixture.stride,
+                  part->getVertexBufferProperty()->getVertexDeclarationProperty()
+                      .getVertexStrideProperty())
+            << "this fixture no longer imports to the stride this test was written for";
+
+        std::string failure;
+        try
+        {
+            model.Draw(identity, identity, identity);
+            gd.Present();
+        }
+        catch (const std::exception& error)
+        {
+            failure = error.what();
+        }
+
+        if (!mustRefuse)
+        {
+            // Everywhere else, either outcome is allowed and both are safe: a completed draw means
+            // the renderer describes the record, and a thrown refusal means it declined to read it.
+            // What this test forbids is the third outcome -- reading it through a layout that does
+            // not describe it -- and an exception is proof that did not happen. The QUALITY of these
+            // renderers' refusals is a separate, already-recorded matter: `SDL_GPU`, `LLGL` and
+            // `DILIGENT` each refuse some of these fixtures for a real precondition of their own but
+            // name it poorly, which is `GLTF-474`, not this row.
+            continue;
+        }
+
+        // EXPECT rather than ASSERT, so a regression reports every stride it corrupts rather than
+        // stopping at the first and reading like a single-layout problem.
+        EXPECT_FALSE(failure.empty())
+            << "this renderer has no fixed-function equivalent for this effect and cannot describe "
+               "this record, yet the draw was accepted. That is the GLTF-473 defect: the vertex "
+               "data is being read through a layout that does not describe it, and the result is a "
+               "plausible surface reported as a successful draw.";
+        if (failure.empty()) { continue; }
+        EXPECT_NE(std::string::npos, failure.find("GLTF-473")) << failure;
+        EXPECT_NE(std::string::npos, failure.find("OPENGLES1")) << failure;
+        // The refusal must say what would have been misread, not merely that something was wrong.
+        EXPECT_NE(std::string::npos, failure.find("Normal0"))
+            << "offset 12 is the NORMAL in every record here; a refusal that does not say so is not "
+               "actionable: " << failure;
+
+        // And the refusal has to have happened BEFORE the renderer touched anything -- an
+        // "explicit refusal" that already bound state or submitted work is not a refusal, it is a
+        // half-executed draw with an exception on the end. The observable form of that rule is
+        // recovery: the very next valid draw must still render. This is the same property
+        // `DeclarationGuardTest.AValidDrawAfterARefusedOneStillRenders` pins for the declaration
+        // guard, asserted here for the fixed-function layout guard.
+        Model recovery = cm.Load<Model>("mat-unlit");
+        EXPECT_NO_THROW({
+            recovery.Draw(identity, identity, identity);
+            gd.Present();
+        }) << "a valid draw after a refused one failed, so the refusal left renderer state behind";
     }
 }
 

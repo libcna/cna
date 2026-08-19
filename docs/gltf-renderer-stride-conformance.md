@@ -51,8 +51,35 @@ declaration directly. STUB and HEADLESS keep honest non-rendering capability bou
   and usage indices with the canonical table.
 - `RendererStrideConformance.EveryGltfStrideReachesTheNativeDrawBoundary` draws and presents all
   seven on every renderer with `ThreeD`; STUB's capability skip is deliberate and checked in CI.
+  Since `GLTF-473` its contract is **reach the draw boundary, or refuse with a named layout
+  incompatibility** rather than a plain `EXPECT_NO_THROW` — which is stricter, because a
+  fixed-function renderer's failure mode is not throwing.
+- `RendererStrideConformance.AColourCarryingPbrPrimitiveEitherDrawsOrRefusesByName` (`GLTF-472`)
+  and `RendererStrideConformance.NoPbrOrSkinnedRecordIsEverReadThroughAnIncompatibleLayout`
+  (`GLTF-473`) draw the colour-carrying and the whole PBR/skinned record families through a **live
+  device**. These are standing renderer-conformance gates, not artefacts of the glTF campaign that
+  found the bugs, and the reason to keep them is empirical: between them they found three defects
+  (`SDL_GPU`'s and `DILIGENT`'s unreachable `COLOR_0` shaders and `OPENGLES1`'s misread PBR records)
+  that **every static inventory in this repository reported as correct**, and the search they
+  prompted found two more (`GLTF-475`). A source audit can only see what a renderer declares; only a
+  draw sees what it reads.
+- `CrossRendererContract.NoRendererPaintsAVertexAttributeInsteadOfTheEffectsDiffuseColour`
+  (`GLTF-475`) is the same tier applied one level lower: not "does the draw arrive?" but "is the
+  answer the one the caller asked for?". It draws a plain XNA `VertexPositionNormalTangentTexture`
+  buffer (stride 48) with a `BasicEffect` whose `DiffuseColor` is opaque red, then reads the centre
+  pixel back on every renderer in the build. A renderer may render it -- the answer must be exactly
+  that red -- or refuse it by name; a third answer is a defect. It found two, in two renderers,
+  giving two different wrong colours: `OPENGL4` painted the record's `NORMAL` and `DILIGENT` drew
+  black, where the plan row that opened the investigation had predicted one renderer. It needs a
+  multi-renderer build (`CNA_MULTI_RENDERER`) and colour readback, so it is not in the CI matrix
+  below; it runs in `cmake-build-multi`, which covers eight renderers with `ThreeD`.
+- `FixedFunctionArrayLayout.*` (`GLTF-473`) pins the shared fixed-function layout guard's decision
+  as a table over every canonical stride. It needs no device, so it runs in every build.
 - `.github/workflows/gltf-renderer-stride-ci.yml` builds and runs those tests for `STUB`,
-  `HEADLESS`, `OPENGLES3` and `VULKAN` on every relevant push and pull request.
+  `HEADLESS`, `OPENGLES3`, `VULKAN` and `SOFTWARE` on every relevant push and pull request.
+  **`OPENGLES1` is not in that matrix and cannot be**: the runner's Mesa is built with `gles1`
+  disabled, so the renderer compiles but cannot create a device. It is exercised locally against the
+  side-by-side ES 1.1 Mesa build recorded in `NEXT_gltf.md`, which is where its evidence comes from.
 - `scripts/gltf-renderer-parity.sh` compares each renderer against the same committed L1–L5
   goldens. The 2026-08-14 four-renderer run was byte-identical for all 42 selected L1–L5 tests;
   HEADLESS, OPENGLES3 and Vulkan also had identical outcomes for all 507 tests in `*Gltf*`.

@@ -1629,6 +1629,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::array<float, 56> lightUniforms{};     ///< LitLightParams/SkinnedLightParams (byte-identical)
             std::array<float, 72> pbrParams{};          ///< factors plus 14 affine transform rows
             bool skinned = false;
+            /// plan_gltf.md GLTF-462/GLTF-463: the record carries a packed COLOR_0 (stride 60 or 80).
+            bool colored = false;
             std::array<float, 72 * 16> boneUniforms{}; ///< only used/uploaded when skinned == true
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
@@ -2279,7 +2281,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         void DestroyPbrResources();
         void EnsureDefaultPbrTextures();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelinePbr3D(
-            bool skinned, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            bool skinned, bool colored, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         void QueuePbrDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
@@ -2661,8 +2663,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUShader* pbrVertexShader_ = nullptr;
         SDL_GPUShader* pbrSkinnedVertexShader_ = nullptr;
         SDL_GPUShader* pbrFragmentShader_ = nullptr;
+        // plan_gltf.md GLTF-462/GLTF-463/GLTF-465: the stride-60/80 twins, which declare the packed
+        // COLOR_0 attribute glTF 3.9.2 makes a multiplier on base colour. Separate shaders rather
+        // than a runtime flag because a SPIR-V input with no matching vertex attribute is invalid.
+        SDL_GPUShader* pbrColorVertexShader_ = nullptr;
+        SDL_GPUShader* pbrSkinnedColorVertexShader_ = nullptr;
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> pbrPipelines_;
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> pbrSkinnedPipelines_;
+        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> pbrColorPipelines_;
+        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> pbrSkinnedColorPipelines_;
         std::vector<PbrDrawCommand> pbrDrawCommands_;
         // 1x1 fallback textures for PbrEffect's 6 optional maps when left unbound -- lazily
         // created by EnsureDefaultPbrTextures(). default_white_ makes an absent metallic-

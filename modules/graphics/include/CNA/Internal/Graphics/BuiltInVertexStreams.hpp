@@ -104,28 +104,36 @@ namespace CNA::Internal::Graphics
     static_assert(offsetof(PositionNormalTangentTextureStream, u) == 40);
 
     /**
-     * @brief GPU stream for a rigid PBR vertex carrying two texture-coordinate sets.
+     * @brief GPU stream for a rigid PBR vertex carrying two texture-coordinate sets and a colour.
      *
-     * The useful fields occupy 56 bytes, but stride 56 already identifies the skinned+colour
-     * layout. Four explicit padding bytes keep the stride-keyed renderer ABI unambiguous while
-     * preserving the complete stride-48 PBR record as a byte-for-byte prefix.
+     * The Position/Normal/Tangent/UV0 fields occupy the stride-48 PBR record byte for byte, and
+     * UV1 follows it, which brings the useful data to 56 bytes. Stride 56 already identifies the
+     * skinned+colour layout, so `GLTF-182` padded this record to 60 to keep one meaning per stride.
+     *
+     * plan_gltf.md `GLTF-462` gives those four bytes a job instead of leaving them reserved: they
+     * are the packed `COLOR_0` a metallic-roughness primitive may carry (§3.7.2.1 makes vertex
+     * colour "an additional linear multiplier to base color"). The change is byte-compatible with
+     * every renderer that already binds this stride — offsets 0..55 are untouched and the four
+     * trailing bytes were declared padding a consumer must ignore. A primitive with no `COLOR_0`
+     * writes **opaque white** there, which is the identity multiplier, so a renderer that starts
+     * reading the slot cannot darken anything that used to be correct.
      */
-    struct PositionNormalTangentTexture2PaddedStream
+    struct PositionNormalTangentTexture2ColorStream
     {
         float x, y, z;
         float nx, ny, nz;
         float tx, ty, tz, tw;
         float u0, v0;
         float u1, v1;
-        std::uint32_t padding;
+        std::uint8_t r, g, b, a;
     };
-    static_assert(sizeof(PositionNormalTangentTexture2PaddedStream) == 60);
-    static_assert(offsetof(PositionNormalTangentTexture2PaddedStream, x) == 0);
-    static_assert(offsetof(PositionNormalTangentTexture2PaddedStream, nx) == 12);
-    static_assert(offsetof(PositionNormalTangentTexture2PaddedStream, tx) == 24);
-    static_assert(offsetof(PositionNormalTangentTexture2PaddedStream, u0) == 40);
-    static_assert(offsetof(PositionNormalTangentTexture2PaddedStream, u1) == 48);
-    static_assert(offsetof(PositionNormalTangentTexture2PaddedStream, padding) == 56);
+    static_assert(sizeof(PositionNormalTangentTexture2ColorStream) == 60);
+    static_assert(offsetof(PositionNormalTangentTexture2ColorStream, x) == 0);
+    static_assert(offsetof(PositionNormalTangentTexture2ColorStream, nx) == 12);
+    static_assert(offsetof(PositionNormalTangentTexture2ColorStream, tx) == 24);
+    static_assert(offsetof(PositionNormalTangentTexture2ColorStream, u0) == 40);
+    static_assert(offsetof(PositionNormalTangentTexture2ColorStream, u1) == 48);
+    static_assert(offsetof(PositionNormalTangentTexture2ColorStream, r) == 56);
 
     /** @brief GPU stream for VertexPositionNormalTangentTextureSkinned. */
     struct PositionNormalTangentTextureSkinnedStream
@@ -164,6 +172,42 @@ namespace CNA::Internal::Graphics
     static_assert(offsetof(PositionNormalTangentTextureSkinned2Stream, w0) == 48);
     static_assert(offsetof(PositionNormalTangentTextureSkinned2Stream, i0) == 64);
     static_assert(offsetof(PositionNormalTangentTextureSkinned2Stream, u1) == 68);
+
+    /**
+     * @brief GPU stream for a skinned PBR vertex carrying two UV sets and a packed colour.
+     *
+     * plan_gltf.md `GLTF-463`. §3.7.2.1 makes `COLOR_0` "an additional linear multiplier to base
+     * color", and `GLTF-462` carried that for rigid primitives in the four bytes stride 60 had
+     * reserved as a discriminator. The skinned record has no such bytes -- stride 76 is exactly its
+     * seven fields -- so the skinned combination needs its own stride, and this is it: the whole
+     * stride-76 record as a byte-for-byte prefix with the colour appended, which is the same
+     * "append, never insert" rule strides 56 and 76 were built on.
+     *
+     * `TextureCoordinate1` is present whatever the material samples, exactly as it is at stride 60:
+     * a stride is a layout, not a promise that every slot is used, and the per-map selector mask
+     * already tells a shader which channel to read.
+     */
+    struct PositionNormalTangentTextureSkinned2ColorStream
+    {
+        float x, y, z;
+        float nx, ny, nz;
+        float tx, ty, tz, tw;
+        float u0, v0;
+        float w0, w1, w2, w3;
+        std::uint8_t i0, i1, i2, i3;
+        float u1, v1;
+        std::uint8_t r, g, b, a;
+    };
+    static_assert(sizeof(PositionNormalTangentTextureSkinned2ColorStream) == 80);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2ColorStream, x) == 0);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2ColorStream, nx) == 12);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2ColorStream, tx) == 24);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2ColorStream, u0) == 40);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2ColorStream, w0) == 48);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2ColorStream, i0) == 64);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2ColorStream, u1) == 68);
+    static_assert(offsetof(PositionNormalTangentTextureSkinned2ColorStream, r) == 76);
+
 
     /**
      * @brief Maps a built-in vertex structure to the GPU stream that carries its values.

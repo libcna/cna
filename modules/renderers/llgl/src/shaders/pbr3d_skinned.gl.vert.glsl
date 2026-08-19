@@ -24,7 +24,7 @@ layout(std140, binding = 1) uniform PbrParams
     vec4 alphaTest;
     vec4 dielectricFresnel;    // xyz = unclamped dielectric F0, w = specular factor
     vec4 textureTransformRows[10];
-    vec4 specularState;        // x = seven-bit TEXCOORD_1 selector mask, y = decode specular colour
+    vec4 specularState;        // x = TEXCOORD_1 selector mask, y = decode specular colour, z = VertexColorEnabled (GLTF-465)
     vec4 specularTextureTransformRows[4];
 };
 
@@ -42,6 +42,13 @@ layout(location = 3) in vec3  normal;
 layout(location = 4) in vec4  aBoneWeights;
 layout(location = 5) in uvec4 aBoneIndices;
 layout(location = 6) in vec4  tangent;
+// plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
+// colour. Location 1 is this renderer's colour slot -- the same one the pipeline used to strip
+// from every PBR shader's attribute list. Declared only for the variants whose vertex format
+// supplies it (strides 60 and 80); the others pass opaque white, the multiplier's identity.
+#ifdef CNA_PBR_VERTEX_COLOR
+layout(location = 1) in vec4 color;
+#endif
 
 layout(location = 0) out vec2  vTexCoord;
 layout(location = 1) out vec3  vNormal;
@@ -50,6 +57,7 @@ layout(location = 3) out float vBitangentSign;
 layout(location = 4) out vec3  vWorldPos;
 layout(location = 5) out float vFogFactor;
 layout(location = 6) out vec2  vTexCoord1;
+layout(location = 7) out vec4  vColor;
 
 vec3 cnaSkinNormal(mat3 m, vec3 n)
 {
@@ -75,6 +83,11 @@ void main()
     vec4 skinnedPos = skinMat * vec4(position, 1.0);
     gl_Position = mvpMatrix * skinnedPos;
     vTexCoord   = texCoord;
+    #ifdef CNA_PBR_VERTEX_COLOR
+    vColor = color;
+    #else
+    vColor = vec4(1.0);
+    #endif
 #ifdef CNA_PBR_DUAL_UV
     vTexCoord1  = texCoord1;
 #else

@@ -277,7 +277,7 @@
       {
         "mesh": 0,
         "primitive": 0,
-        "stride": 24,
+        "stride": 60,
         "vertexCount": 3,
         "fields": [
           {
@@ -286,19 +286,34 @@
             "size": 12
           },
           {
-            "name": "Color",
+            "name": "Normal",
             "offset": 12,
-            "size": 4
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
           },
           {
             "name": "TextureCoordinate",
-            "offset": 16,
+            "offset": 40,
             "size": 8
+          },
+          {
+            "name": "TextureCoordinate1",
+            "offset": 48,
+            "size": 8
+          },
+          {
+            "name": "Color",
+            "offset": 56,
+            "size": 4
           }
         ],
         "vertexBufferFile": "normalized-u8-color.vb.bin",
-        "vertexBufferBytes": 72,
-        "vertexBufferSha256": "a9d7469337c7f09463242302b16a6522e3a31f0a1df6ac18047baf83a733de70",
+        "vertexBufferBytes": 180,
+        "vertexBufferSha256": "cf25147f7780cdab4611e6e7cd946ec591e65302800e4419e1e6e8ff22a7389b",
         "indexElementSize": 2,
         "indexCount": 3,
         "indexBufferFile": "normalized-u8-color.ib.bin",

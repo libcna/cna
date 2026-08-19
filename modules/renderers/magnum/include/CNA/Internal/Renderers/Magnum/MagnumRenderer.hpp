@@ -557,7 +557,8 @@ namespace CNA::Internal::Renderers::Magnum
         MagnumProgram* SelectProgram(std::size_t stride, const GpuDrawParams& params);
         void BindDrawParams(MagnumProgram& program,
                             const Matrix& world, const Matrix& view, const Matrix& projection,
-                            const GpuDrawParams& params, bool instanced);
+                            const GpuDrawParams& params, bool instanced,
+                            std::size_t strideInBytes);
 
         // These precede Magnum and renderer GL resources so both contexts outlive those objects.
         std::unique_ptr<PlatformGlContextOwner> platformContext_;

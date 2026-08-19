@@ -328,15 +328,23 @@ namespace CNA::Internal::Graphics
             {VertexElementUsage::Color,             0, 52, VertexElementFormat::Color},
         };
 
-        // GLTF-182 deliberately pads the naturally 56-byte rigid PBR+UV1 record to 60 bytes:
+        // GLTF-182 deliberately padded the naturally 56-byte rigid PBR+UV1 record to 60 bytes:
         // stride 56 already denotes skinned+colour, and keeping one meaning per stride avoids an
         // effect-dependent interpretation of the same vertex declaration.
+        //
+        // GLTF-462 gives those four bytes a job rather than leaving them reserved -- they are the
+        // packed COLOR_0 of a vertex-coloured metallic-roughness primitive, which §3.7.2.1 makes an
+        // additional linear multiplier on base colour. Offsets 0..55 are unchanged, so every
+        // renderer that already binds this stride is unaffected, and a primitive with no COLOR_0
+        // writes opaque white -- the identity multiplier -- so reading the slot can never darken a
+        // draw that used to be right. `GpuDrawParams::vertexColorEnabled` says which it is.
         inline constexpr InferredVertexElement kStride60[] = {
             {VertexElementUsage::Position,          0,  0, VertexElementFormat::Vector3},
             {VertexElementUsage::Normal,            0, 12, VertexElementFormat::Vector3},
             {VertexElementUsage::Tangent,           0, 24, VertexElementFormat::Vector4},
             {VertexElementUsage::TextureCoordinate, 0, 40, VertexElementFormat::Vector2},
             {VertexElementUsage::TextureCoordinate, 1, 48, VertexElementFormat::Vector2},
+            {VertexElementUsage::Color,             0, 56, VertexElementFormat::Color},
         };
 
         inline constexpr InferredVertexElement kStride68[] = {
@@ -357,6 +365,22 @@ namespace CNA::Internal::Graphics
             {VertexElementUsage::BlendIndices,      0, 64, VertexElementFormat::Byte4},
             {VertexElementUsage::TextureCoordinate, 1, 68, VertexElementFormat::Vector2},
         };
+
+        // GLTF-463: the skinned counterpart of stride 60's colour slot. The skinned PBR record has no
+        // reserved bytes to reuse -- stride 76 is exactly its seven fields -- so a skinned,
+        // vertex-coloured metallic-roughness primitive gets its own stride, with the whole stride-76
+        // record as a byte-for-byte prefix and the colour appended.
+        inline constexpr InferredVertexElement kStride80[] = {
+            {VertexElementUsage::Position,          0,  0, VertexElementFormat::Vector3},
+            {VertexElementUsage::Normal,            0, 12, VertexElementFormat::Vector3},
+            {VertexElementUsage::Tangent,           0, 24, VertexElementFormat::Vector4},
+            {VertexElementUsage::TextureCoordinate, 0, 40, VertexElementFormat::Vector2},
+            {VertexElementUsage::BlendWeight,       0, 48, VertexElementFormat::Vector4},
+            {VertexElementUsage::BlendIndices,      0, 64, VertexElementFormat::Byte4},
+            {VertexElementUsage::TextureCoordinate, 1, 68, VertexElementFormat::Vector2},
+            {VertexElementUsage::Color,             0, 76, VertexElementFormat::Color},
+        };
+
 
         // The two fallbacks a renderer uses for a stride the table above does not list. Both are
         // measured behaviours, not guesses: Vulkan's ordinary route renders a position-only
@@ -401,6 +425,7 @@ namespace CNA::Internal::Graphics
             case 60: return detail::Layout(detail::kStride60);
             case 68: return detail::Layout(detail::kStride68);
             case 76: return detail::Layout(detail::kStride76);
+            case 80: return detail::Layout(detail::kStride80);
             default: break;
         }
         switch (fallback)
@@ -413,6 +438,62 @@ namespace CNA::Internal::Graphics
                 break;
         }
         return InferredVertexLayout{};
+    }
+
+    /**
+     * @brief Where the canonical layout for one stride puts one semantic.
+     *
+     * plan_gltf.md `GLTF-473`. `InferredLayoutForStride` answers "what does this stride mean";
+     * this answers the narrower question a **fixed-function** renderer has to ask before it binds a
+     * client array: *at which byte offset does this stride's canonical record carry Normal / Color /
+     * TextureCoordinate 0?* A renderer that hard-codes that offset instead of asking is reading one
+     * layout's bytes through another's rule, and the two agree only by coincidence.
+     *
+     * The two "not found" cases are kept apart on purpose, because a caller must treat them
+     * differently: a stride the table does not list is a layout this file has no opinion about (a
+     * renderer-local record), and abstaining is right; a stride it does list which simply has no such
+     * semantic is a definite answer, and binding an array for it is a defect.
+     *
+     * @param strideInBytes The record stride the renderer strides the buffer by.
+     * @param usage The semantic being looked for.
+     * @param usageIndex The semantic's usage index.
+     * @return The offset, with `strideKnown` false for an unlisted stride and `present` false when
+     *         the listed layout carries no such element.
+     */
+    struct CanonicalSemanticOffsetEXT
+    {
+        /** @brief False when the canonical table lists no layout for the stride at all. */
+        bool strideKnown = false;
+        /** @brief True when the listed layout carries the requested semantic. */
+        bool present = false;
+        /** @brief The byte offset, meaningful only when @c present. */
+        int offset = 0;
+    };
+
+    /**
+     * @brief Looks up @p usage / @p usageIndex in the canonical layout for @p strideInBytes.
+     *
+     * @param strideInBytes The record stride.
+     * @param usage The semantic being looked for.
+     * @param usageIndex The semantic's usage index.
+     * @return Where the semantic lives, or why it could not be answered.
+     */
+    [[nodiscard]] inline CanonicalSemanticOffsetEXT CanonicalOffsetOfSemanticEXT(
+        int strideInBytes,
+        Microsoft::Xna::Framework::Graphics::VertexElementUsage usage,
+        int usageIndex) noexcept
+    {
+        const InferredVertexLayout layout =
+            InferredLayoutForStride(strideInBytes, UnlistedStrideLayout::RendererRefusesIt);
+        if (!layout.known) { return CanonicalSemanticOffsetEXT{false, false, 0}; }
+        for (std::size_t i = 0; i < layout.count; ++i)
+        {
+            if (layout.elements[i].usage == usage && layout.elements[i].usageIndex == usageIndex)
+            {
+                return CanonicalSemanticOffsetEXT{true, true, layout.elements[i].offset};
+            }
+        }
+        return CanonicalSemanticOffsetEXT{true, false, 0};
     }
 
     /**

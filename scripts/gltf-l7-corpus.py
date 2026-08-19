@@ -4,7 +4,7 @@
 The harness launches the production cna-gltf-viewer in two independent processes per asset.  A
 renderable asset must produce byte-identical PNG files in both processes and pixels matching its
 committed same-renderer golden.  A deliberately rejected asset must fail in both processes with the
-policy's stable diagnostic fragment.  This gives all 145 corpus assets an explicit disposition;
+policy's stable diagnostic fragment.  Every corpus asset gets an explicit disposition;
 an exception can never appear merely because the harness skipped a file it could not draw.
 
 Run this below an X server (normally ``xvfb-run -a``).  ``--update-goldens`` is intentionally
@@ -188,8 +188,21 @@ def main() -> int:
     policy = json.loads(policy_path.read_text(encoding="utf-8"))
     assets = corpus_manifest["assets"]
     asset_ids = [asset["id"] for asset in assets]
-    if len(asset_ids) != 145 or len(asset_ids) != len(set(asset_ids)):
-        raise RuntimeError("corpus manifest must contain exactly 145 unique assets")
+    # plan_gltf.md GLTF-463 grew the corpus, and this check had the old size written into it as a
+    # constant -- so the harness refused to run at all rather than covering the new asset. The
+    # strength worth keeping is that the asset list agrees with what the manifest itself declares and
+    # with the campaign's own target, which is what actually catches a truncated or half-regenerated
+    # corpus; the literal count was never the thing being checked.
+    declared = corpus_manifest["distinctAssetCount"]
+    target = corpus_manifest["targetDistinctAssetCount"]
+    if len(asset_ids) != declared or len(asset_ids) != len(set(asset_ids)):
+        raise RuntimeError(
+            f"corpus manifest declares {declared} distinct assets but lists {len(asset_ids)}"
+            f" ({len(set(asset_ids))} unique)")
+    if declared != target:
+        raise RuntimeError(
+            f"corpus is incomplete: {declared} of {target} planned assets are generated")
+    asset_count = len(asset_ids)
     validate_policy(policy, asset_ids)
 
     if policy["renderer"] == "OPENGLES3/EasyGL":
@@ -301,8 +314,17 @@ def main() -> int:
             )
             for output_text in (run_1["output"], run_2["output"]):
                 for line in output_text.splitlines():
-                    if line.startswith(renderer_output_prefix):
-                        renderers.add(line.removeprefix(renderer_output_prefix))
+                    # plan_gltf.md GLTF-467: matched ANYWHERE in the line, not only at its start.
+                    # CNA's own logger prefixes its output with a severity/category tag
+                    # ("[INFO][RENDER] CNA: graphics renderer: SOFTWARE"), and the SOFTWARE and
+                    # DIRECTX11 markers go through that logger while EasyGL's and Vulkan's are
+                    # printed raw -- so a startswith() test made those two policies structurally
+                    # unrunnable the moment the tag was introduced, which is why this harness had
+                    # not been executed for them since. The check itself is unchanged in strength:
+                    # exactly one identity must be observed across both processes.
+                    marker = line.find(renderer_output_prefix)
+                    if marker >= 0:
+                        renderers.add(line[marker + len(renderer_output_prefix):].strip())
                     dxvk = re.match(r"^info:\s+DXVK:\s+(v?[0-9]+\.[0-9.]+)\s*$", line)
                     if dxvk:
                         translation_layers.add(f"DXVK {dxvk.group(1)}")
@@ -337,7 +359,7 @@ def main() -> int:
                     "twoProcessDispositionIdentical": True,
                 })
                 results.append(base_result)
-                print(f"[{index:03d}/145] {asset_id}: deterministic rejection", flush=True)
+                print(f"[{index:03d}/{asset_count}] {asset_id}: deterministic rejection", flush=True)
                 continue
 
             for run_number, run in enumerate((run_1, run_2), 1):
@@ -384,7 +406,7 @@ def main() -> int:
             })
             results.append(base_result)
             print(
-                f"[{index:03d}/145] {asset_id}: deterministic capture "
+                f"[{index:03d}/{asset_count}] {asset_id}: deterministic capture "
                 f"({non_clear} non-clear pixels)", flush=True,
             )
 

@@ -189,6 +189,222 @@ namespace
 
 // --- GLTF-029: base64 buffers, at all three padding lengths -------------------------------------
 
+// --- GLTF-468: the two core attribute storage forms no corpus asset used ------------------------
+
+namespace
+{
+    /// A triangle whose `COLOR_0` is a **VEC3** float accessor, plus a `TEXCOORD_0` whose component
+    /// type is `texcoordComponentType` (0 = FLOAT, otherwise the normalized integer type).
+    ///
+    /// Both forms are ordinary core glTF that the corpus had no asset for: §3.7.2.1's attribute table
+    /// allows `COLOR_n` as **VEC3 or VEC4** and `TEXCOORD_n` as float, unsigned byte normalized or
+    /// unsigned short normalized, and every colour fixture in the corpus is VEC4 while every UV
+    /// fixture is float.
+    std::string ColorAndTexcoordFormDocument(bool colorIsVec3, int texcoordComponentType)
+    {
+        std::vector<std::uint8_t> buffer;
+        AppendFloats(buffer, {0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f});
+        const std::size_t colorOffset = buffer.size();
+        // Deliberately distinct per vertex AND per channel, so a decoder that read four components
+        // from a three-component accessor would smear one vertex's blue into the next vertex's red
+        // and fail differently on every vertex rather than uniformly.
+        if (colorIsVec3)
+        {
+            AppendFloats(buffer, {1.0f, 0.25f, 0.5f,
+                                  0.125f, 1.0f, 0.75f,
+                                  0.375f, 0.625f, 1.0f});
+        }
+        else
+        {
+            AppendFloats(buffer, {1.0f, 0.25f, 0.5f, 0.25f,
+                                  0.125f, 1.0f, 0.75f, 0.5f,
+                                  0.375f, 0.625f, 1.0f, 0.75f});
+        }
+        const std::size_t texcoordOffset = buffer.size();
+        std::size_t texcoordLength = 0;
+        if (texcoordComponentType == 0)
+        {
+            AppendFloats(buffer, {0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f});
+            texcoordLength = 24;
+        }
+        else if (texcoordComponentType == 5121)
+        {
+            // 0, 51/255 = 0.2, 255 -> 1.0. Values chosen so each decodes exactly.
+            const std::uint8_t bytes[] = {0, 0, 255, 0, 0, 255};
+            buffer.insert(buffer.end(), bytes, bytes + sizeof(bytes));
+            texcoordLength = sizeof(bytes);
+            while (buffer.size() % 4 != 0) { buffer.push_back(0); }
+        }
+        else
+        {
+            const std::uint16_t values[] = {0, 0, 65535, 0, 0, 65535};
+            for (const std::uint16_t value : values)
+            {
+                buffer.push_back(static_cast<std::uint8_t>(value & 0xFF));
+                buffer.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFF));
+            }
+            texcoordLength = sizeof(values);
+        }
+        const std::size_t indexOffset = buffer.size();
+        for (const std::uint16_t index : {0, 1, 2})
+        {
+            buffer.push_back(static_cast<std::uint8_t>(index & 0xFF));
+            buffer.push_back(static_cast<std::uint8_t>((index >> 8) & 0xFF));
+        }
+        while (buffer.size() % 4 != 0) { buffer.push_back(0); }
+
+        const std::string colorType = colorIsVec3 ? "VEC3" : "VEC4";
+        const std::size_t colorLength = colorIsVec3 ? 36u : 48u;
+        const std::string texcoordAccessor = texcoordComponentType == 0
+            ? R"({ "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" })"
+            : std::string(R"({ "bufferView": 2, "componentType": )") +
+              std::to_string(texcoordComponentType) +
+              R"(, "count": 3, "type": "VEC2", "normalized": true })";
+
+        return std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "name": "FormTri", "primitives": [ {
+      "attributes": { "POSITION": 0, "COLOR_0": 1, "TEXCOORD_0": 2 },
+      "indices": 3, "mode": 4
+  } ] } ],
+  "buffers": [ { "byteLength": )GLTF") + std::to_string(buffer.size()) +
+               R"GLTF(, "uri": "data:application/octet-stream;base64,)GLTF" + Base64(buffer) +
+               R"GLTF(" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": )GLTF" + std::to_string(colorOffset) +
+               R"GLTF(, "byteLength": )GLTF" + std::to_string(colorLength) + R"GLTF( },
+    { "buffer": 0, "byteOffset": )GLTF" + std::to_string(texcoordOffset) +
+               R"GLTF(, "byteLength": )GLTF" + std::to_string(texcoordLength) + R"GLTF( },
+    { "buffer": 0, "byteOffset": )GLTF" + std::to_string(indexOffset) + R"GLTF(, "byteLength": 6 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+      "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": ")GLTF" + colorType +
+               R"GLTF(" },
+    )GLTF" + texcoordAccessor + R"GLTF(,
+    { "bufferView": 3, "componentType": 5123, "count": 3, "type": "SCALAR" }
+  ]
+})GLTF";
+    }
+
+    int OffsetOfUsage(int stride, Microsoft::Xna::Framework::Graphics::VertexElementUsage usage)
+    {
+        const CNA::Internal::Graphics::InferredVertexLayout layout =
+            CNA::Internal::Graphics::InferredLayoutForStride(
+                stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+        EXPECT_TRUE(layout.known) << "stride " << stride << " is not in the canonical table";
+        for (std::size_t i = 0; layout.known && i < layout.count; ++i)
+        {
+            if (layout.elements[i].usage == usage && layout.elements[i].usageIndex == 0)
+            {
+                return layout.elements[i].offset;
+            }
+        }
+        return -1;
+    }
+}
+
+TEST(GltfBufferAndWeightForm, AVec3Color0GetsAnOpaqueAlphaAndKeepsItsChannelsInOrder)
+{
+    // §3.7.2.1 allows `COLOR_n` as **VEC3 or VEC4**, and a VEC3 colour has no alpha -- the
+    // specification's default is fully opaque. Every colour fixture in the corpus is VEC4, so the
+    // three-component form had no asset behind it at all, and `GLTF-462` made that matter: the packed
+    // colour is now a multiplier on base colour **including alpha**, so a VEC3 colour whose alpha came
+    // back as 0 would turn the whole surface invisible rather than merely mis-tint it.
+    //
+    // The nine channel values are all distinct, which is the discrimination: a decoder that read four
+    // floats per element from a three-float accessor would slide one vertex's blue into the next
+    // vertex's red, and every vertex would then be wrong differently.
+    Parsed parsed;
+    ASSERT_TRUE(Parse(parsed, ColorAndTexcoordFormDocument(true, 0)));
+    const MeshOut out = ExtractMesh(parsed.data, parsed.data->meshes[0].primitives[0], "probe",
+                                    nullptr, 1.0f);
+
+    ASSERT_GT(out.stride, 0);
+    const int colorOffset =
+        OffsetOfUsage(out.stride, Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color);
+    ASSERT_GE(colorOffset, 0);
+    const std::size_t vertices =
+        out.vertexBytes.size() / static_cast<std::size_t>(out.stride);
+    ASSERT_EQ(3u, vertices);
+
+    const float expected[3][3] = {{1.0f, 0.25f, 0.5f},
+                                  {0.125f, 1.0f, 0.75f},
+                                  {0.375f, 0.625f, 1.0f}};
+    for (std::size_t v = 0; v < 3; ++v)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(v));
+        const std::uint8_t* rgba = out.vertexBytes.data() +
+                                   v * static_cast<std::size_t>(out.stride) +
+                                   static_cast<std::size_t>(colorOffset);
+        for (std::size_t c = 0; c < 3; ++c)
+        {
+            const auto want = static_cast<int>(expected[v][c] * 255.0f + 0.5f);
+            EXPECT_EQ(want, static_cast<int>(rgba[c])) << "channel " << c;
+        }
+        EXPECT_EQ(255, static_cast<int>(rgba[3]))
+            << "a VEC3 COLOR_0 has no alpha, and §3.7.2.1's default is fully opaque -- an alpha of 0 "
+               "would make this surface invisible now that the colour multiplies base-colour alpha";
+    }
+}
+
+TEST(GltfBufferAndWeightForm, ANormalizedIntegerTexcoordDecodesToTheSameUvsAsItsFloatTwin)
+{
+    // §3.7.2.1 allows `TEXCOORD_n` as float, **unsigned byte normalized** or **unsigned short
+    // normalized**; every UV in the corpus is a plain float, so two of the three legal storage forms
+    // had no asset. This is not hypothetical -- quantised UVs are what a size-conscious exporter
+    // emits, and the failure mode of reading one as raw integers is a texture coordinate of 255 or
+    // 65535, which wraps to the same texel as 0 and so looks plausible on a tiling texture.
+    //
+    // The float twin is the oracle: all three forms author the same UVs, so the assertion is that the
+    // packed bytes AGREE rather than that they match a restated constant.
+    Parsed floatParsed;
+    ASSERT_TRUE(Parse(floatParsed, ColorAndTexcoordFormDocument(false, 0)));
+    const MeshOut floatOut = ExtractMesh(
+        floatParsed.data, floatParsed.data->meshes[0].primitives[0], "probe", nullptr, 1.0f);
+    const int uvOffset = OffsetOfUsage(
+        floatOut.stride,
+        Microsoft::Xna::Framework::Graphics::VertexElementUsage::TextureCoordinate);
+    ASSERT_GE(uvOffset, 0);
+
+    for (const int componentType : {5121, 5123})
+    {
+        SCOPED_TRACE("componentType " + std::to_string(componentType));
+        Parsed parsed;
+        ASSERT_TRUE(Parse(parsed, ColorAndTexcoordFormDocument(false, componentType)));
+        const MeshOut out = ExtractMesh(parsed.data, parsed.data->meshes[0].primitives[0], "probe",
+                                        nullptr, 1.0f);
+        ASSERT_EQ(floatOut.stride, out.stride)
+            << "the storage form of an attribute must not change the layout it lands in";
+        ASSERT_EQ(floatOut.vertexBytes.size(), out.vertexBytes.size());
+
+        for (std::size_t v = 0; v < 3; ++v)
+        {
+            SCOPED_TRACE("vertex " + std::to_string(v));
+            float wanted[2];
+            float got[2];
+            const std::size_t at = v * static_cast<std::size_t>(out.stride) +
+                                   static_cast<std::size_t>(uvOffset);
+            std::memcpy(wanted, floatOut.vertexBytes.data() + at, sizeof(wanted));
+            std::memcpy(got, out.vertexBytes.data() + at, sizeof(got));
+            EXPECT_NEAR(wanted[0], got[0], kTolerance);
+            EXPECT_NEAR(wanted[1], got[1], kTolerance);
+            // And the values really are the authored 0/1 rather than the raw integers, which is what
+            // separates "decoded" from "copied": 255 or 65535 would pass an agreement test against
+            // another mis-decode but not this one.
+            EXPECT_GE(got[0], 0.0f);
+            EXPECT_LE(got[0], 1.0f);
+            EXPECT_GE(got[1], 0.0f);
+            EXPECT_LE(got[1], 1.0f);
+        }
+    }
+}
+
 TEST(GltfBufferAndWeightForm, ADataUriBufferDecodesAtEveryBase64PaddingLength)
 {
     // A base64 payload ends with zero, one or two `=` depending on the byte count mod 3, and the

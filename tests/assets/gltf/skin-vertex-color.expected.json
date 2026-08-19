@@ -1,6 +1,6 @@
 {
   "id": "skin-vertex-color",
-  "description": "A skinned triangle carrying COLOR_0, which selects the stride-56 layout: the skinned stride-52 record with a packed Color appended. Every colour component is distinct so a mis-offset Color slot cannot pass.",
+  "description": "A skinned triangle carrying COLOR_0 under an unlit material, which selects the stride-56 layout: the skinned stride-52 record with a packed Color appended. Every colour component is distinct so a mis-offset Color slot cannot pass, and the alphas differ per vertex so a dropped alpha channel is visible too.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -30,6 +30,7 @@
     ],
     "features": [
       "COLOR_0 on a skinned mesh",
+      "KHR_materials_unlit",
       "JOINTS_0 / WEIGHTS_0",
       "vertex stride 56"
     ],
@@ -41,7 +42,7 @@
     "sceneCount": 1,
     "nodeCount": 2,
     "meshCount": 1,
-    "materialCount": 0,
+    "materialCount": 1,
     "textureCount": 0,
     "imageCount": 0,
     "samplerCount": 0,
@@ -51,7 +52,9 @@
     "bufferViewCount": 8,
     "bufferCount": 1,
     "bufferByteLength": 276,
-    "extensionsUsed": [],
+    "extensionsUsed": [
+      "KHR_materials_unlit"
+    ],
     "extensionsRequired": [],
     "punctualLightCount": 0
   },
@@ -417,7 +420,32 @@
           "converted": false,
           "primitiveCount": 1
         },
-        "material": null
+        "material": {
+          "index": 0,
+          "name": "UnlitColoredSkin",
+          "model": "unlit",
+          "baseColorFactor": [
+            0.6,
+            0.2,
+            0.9,
+            1.0
+          ],
+          "metallicFactor": 1.0,
+          "roughnessFactor": 1.0,
+          "emissiveFactor": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "alphaMode": "OPAQUE",
+          "alphaCutoff": 0.5,
+          "doubleSided": false,
+          "hasBaseColorTexture": false,
+          "hasNormalTexture": false,
+          "hasMetallicRoughnessTexture": false,
+          "hasOcclusionTexture": false,
+          "hasEmissiveTexture": false
+        }
       }
     ]
   },

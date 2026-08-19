@@ -3,6 +3,22 @@
 Status: **Historical** — a genuine fixed-function implementation of the XNA-facing graphics
 surface on legacy desktop OpenGL, deliberately independent of every shader-based renderer.
 
+## glTF and the wide vertex records
+
+This renderer emits immediate-mode vertices and has cases for the stride-16, 20, 24 and 32 layouts
+only. Every wider canonical CNA record — 48, 52, 56, 60, 68, 76 and 80, which is every PBR and
+skinned layout the glTF importer produces — is **refused by name**, and so is any draw that came
+from `PbrEffect` or `SkinnedPbrEffect`.
+
+**Until 2026-08-18 it drew them instead** (`plan_gltf.md GLTF-477`). `DrawInternal`'s per-vertex
+`emit` ended in `else glColor4f(1,1,1,1)`, so a glTF model rendered as untextured, unlit, flat white
+geometry and the draw reported success. OpenGL 1.x fixed function has no shader stage of any kind,
+so there is nothing here to grow into a metallic-roughness path; refusing is the honest half of the
+renderer partition, and it is what `SOKOL`, `TINYGL`, `GLIDE`, `OPENGLES1` and `PORTABLEGL` already
+did. The refusal happens before `SetupMatrices`, so no GL state is touched and nothing is submitted.
+
+Verified on a live device: `RendererStrideConformance` 3/3 and 600 of 603 `*Gltf*`/`*OpenGL1*` tests.
+
 ## Identity and selection
 
 | Field | Value |

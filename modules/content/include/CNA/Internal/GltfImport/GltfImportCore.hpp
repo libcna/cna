@@ -524,14 +524,18 @@ namespace CNA::Internal::GltfImport
         /**
          * @brief Names the material model this primitive could not be imported with, or empty.
          *
-         * plan_gltf.md `GLTF-241`. A primitive with `COLOR_0` **and** a metallic-roughness material
-         * cannot be imported as PBR: no CNA vertex layout carries a colour alongside a tangent, and
-         * no PBR shader reads a colour stream. It is imported through `BasicEffect` with its vertex
-         * colours intact, and the material's factors and maps are **not applied**.
+         * plan_gltf.md `GLTF-241`, `GLTF-462`, `GLTF-463`. **No attribute combination sets this any
+         * more, and that is the current state rather than an oversight.** It existed for a primitive
+         * carrying `COLOR_0` **and** a metallic-roughness material, which `GLTF-241` imported through
+         * `BasicEffect` because no vertex layout carried a colour alongside a tangent. `GLTF-462` gave
+         * the rigid case stride 60's own colour slot and `GLTF-463` added stride 80 for the skinned
+         * one, so both now keep their material, their authored `NORMAL` and their tangent basis.
          *
-         * That is a downgrade, and the whole point of this field is that it is no longer a *silent*
-         * one: the loaders log it by name, and a test can assert it happened rather than inferring
-         * it from a stride. Empty for every primitive that was imported as the file asked.
+         * The field stays because it is the channel for exactly this class of loss — a material model
+         * a primitive's own attributes prevent CNA from representing — and a caller reading the
+         * structured report should not have to change when the next such case appears. It is empty for
+         * every primitive today; `GltfKnownDefect` asserts that, so a regression that reintroduces the
+         * downgrade fails rather than quietly logging it again.
          */
         std::string unsupportedMaterialModelEXT;
         /**
@@ -674,18 +678,86 @@ namespace CNA::Internal::GltfImport
          */
         bool generatedNormalsEXT = false;
         /**
-         * @brief How many generated normals are averaged rather than truly flat (`GLTF-173`).
+         * @brief How many vertices the flat-normal split duplicated (`GLTF-461`).
          *
          * Flat shading gives a vertex one normal *per face*, so a vertex shared between faces of
-         * different orientation must be duplicated once per face. Duplication changes the vertex
-         * count and every per-vertex stream including morph deltas, and this extraction produces
-         * one vertex array — so such a vertex instead receives the area-weighted average of its
-         * faces' normals, and is counted here.
+         * different orientation has to be duplicated once per orientation — there is no single
+         * value that is both faces' normal. `GLTF-173` averaged such a vertex instead and counted
+         * it; `GLTF-461` splits it, and this is what the split cost.
          *
-         * Zero for the case that matters most: a faceted mesh whose author already split its edges
-         * gets exact flat normals, because no vertex is shared across differing faces.
+         * Zero for the case that matters most: a faceted mesh whose author already split its edges,
+         * and any mesh whose shared vertices lie on coplanar faces, keep their original vertex
+         * count exactly. A morphed primitive without authored normals is split at every corner
+         * instead of minimally, because §3.7.2.2 requires flat normals per morph target and two
+         * faces coplanar at rest need not stay so — see @ref morphedFlatNormalsEXT.
          */
-        std::size_t smoothedNormalVertexCountEXT = 0;
+        std::size_t flatNormalDuplicatedVertexCountEXT = 0;
+        /**
+         * @brief Packed vertex index -> the source vertex it was copied from (`GLTF-461`).
+         *
+         * Empty when the flat-normal split duplicated nothing, which is both the common case and
+         * the exact condition under which the mapping is the identity. Carried because the split is
+         * the one transformation in this importer that changes the vertex NUMBERING: a consumer
+         * comparing CNA's packed stream against the file's own accessors — the conformance oracle
+         * does exactly that — needs the mapping rather than a rule it has to re-derive.
+         */
+        std::vector<std::uint32_t> vertexSourceEXT;
+        /**
+         * @brief How many generated normals still average more than one face normal (`GLTF-461`).
+         *
+         * Faces whose unit normals agree to within ~0.081° share one split group, so a pair of
+         * mathematically coplanar triangles whose cross products differ in the last bits does not
+         * change the vertex *count* — topology decided by float noise would make the generated
+         * corpus non-reproducible. This counts the vertices where that tolerance actually merged
+         * non-identical faces, which is the whole residue of the old averaging behaviour.
+         *
+         * Zero for every asset in CNA's own corpus.
+         */
+        std::size_t flatNormalMergedVertexCountEXT = 0;
+        /**
+         * @brief True when the runtime must recompute this primitive's flat normals per pose.
+         *
+         * plan_gltf.md `GLTF-461`. §3.7.2.2: "When the base mesh primitive does not specify
+         * normals, client implementations MUST calculate flat normals for each morph target." A
+         * `POSITION` delta can rotate a face, so the normals baked at rest are only correct at
+         * weight zero; and §3.7.2.2 also makes an original attribute a precondition for a target
+         * attribute, so such a primitive cannot legally carry `NORMAL` deltas to blend instead.
+         * `BlendMorphTargetsEXT` therefore recomputes the face normals from the morphed positions,
+         * which is exact because the primitive was split at every corner.
+         */
+        bool morphedFlatNormalsEXT = false;
+        /**
+         * @brief True when an authored `TANGENT` (or tangent delta) was ignored (`GLTF-461`).
+         *
+         * §3.7.2.1: "When normals are not specified, client implementations MUST calculate flat
+         * normals and the provided tangents (if present) MUST be ignored", and §3.7.2.2 repeats it
+         * for morph tangent displacements. An authored basis was built against normals the file
+         * then failed to supply, so keeping it pairs a tangent with a normal it is not orthogonal
+         * to. CNA generates a basis from the computed normals instead, and says so here.
+         */
+        bool ignoredTangentForGeneratedNormalsEXT = false;
+        /**
+         * @brief True when a morph target's `NORMAL` deltas were ignored (`GLTF-461`).
+         *
+         * §3.7.2.2 makes an original attribute a precondition for a target attribute, so a base
+         * primitive without `NORMAL` cannot legally carry `NORMAL` deltas at all. When a file does
+         * anyway, the same section's "MUST calculate flat normals for each morph target" wins: the
+         * deltas are dropped rather than blended on top of a recomputed normal.
+         */
+        bool ignoredMorphNormalDeltasForGeneratedNormalsEXT = false;
+        /**
+         * @brief Morph-target attributes CNA decodes nothing for, by semantic name (`GLTF-466`).
+         *
+         * §3.7.2.2 asks a client to support `POSITION`, `NORMAL` and `TANGENT` and says it **MAY**
+         * optionally support morphed `TEXCOORD_n` and `COLOR_n`. CNA does not, which is permitted —
+         * but a file that animates its texture coordinates or its vertex colours through morph
+         * targets used to import as though it had asked for nothing at all. Not supporting a MAY is
+         * a scope decision; not *saying so* is the silent drop this campaign exists to remove.
+         *
+         * One entry per distinct semantic across every target, so a mesh with eight targets that all
+         * carry `TEXCOORD_0` deltas reports it once rather than eight times.
+         */
+        std::vector<std::string> ignoredMorphAttributesEXT;
         /**
          * @brief The largest share of a single vertex's total influence that set truncation
          * discarded, in [0,1].

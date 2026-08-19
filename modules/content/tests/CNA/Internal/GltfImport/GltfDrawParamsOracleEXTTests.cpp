@@ -46,6 +46,7 @@
 
 using CNA::Internal::JsonType;
 using CNA::Internal::JsonValue;
+using CnaTest::GltfOracle::ApplyBonePaletteEXT;
 using CnaTest::GltfOracle::CaptureDrawParamsEXT;
 using CnaTest::GltfOracle::ColumnMajor3x3;
 using CnaTest::GltfOracle::ColumnMajor4x4;
@@ -143,6 +144,126 @@ namespace
 // "A PbrEffect draw yields all 12 §21.1 quantities." Asserted one contract row at a time on the
 // fixture that authors every material property at once, so a row that stopped being captured
 // fails by name instead of by a diff nobody reads.
+// plan_gltf.md GLTF-462. The L6 layer is where "the importer is right" stops being enough: a
+// vertex-coloured metallic-roughness primitive has to arrive at the renderer AS a PBR draw with the
+// colour stream switched ON, or §3.7.2.1's "additional linear multiplier to base color" is a value
+// sitting in a vertex buffer nobody reads.
+//
+// Both halves are asserted because they fail independently and for different reasons. The effect
+// TYPE is the importer's `usePbr` decision reaching `ModelMeshPart`; `vertexColorEnabled` is
+// `PbrEffect::VertexColorEnabledEXT` reaching `GpuDrawParams`, and it defaults to false on the
+// effect while `GpuDrawParams` defaults it to TRUE -- so a loader that forgot to set the property
+// produces a draw that looks enabled from one side and disabled from the other.
+// plan_gltf.md GLTF-463, at the layer where "the importer is right" stops being enough. A skinned
+// vertex-coloured metallic-roughness primitive has to arrive at the renderer as a SKINNED PBR draw
+// with the colour stream on AND every material factor intact -- the combination that used to lose
+// all three at once, because a colour stream sent it to SkinnedEffect on a layout with no tangent
+// slot and `unsupportedMaterialModelEXT` merely named the loss.
+//
+// Every assertion here is a value the old path dropped, and each is authored away from both glTF's
+// default and CNA's own fallback so a dropped field is a different number rather than a coincidence.
+TEST(GltfDrawParamsOracleL6, ASkinnedVertexColouredPbrDrawKeepsItsSkinItsColourAndEveryFactor)
+{
+    const LoadedFixture fixture("skin-vertex-color-pbr");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("skin-vertex-color-pbr");
+
+    // The bone palette is game code's job in XNA, so a capture taken without pushing one reports
+    // boneCount == 0 legitimately. Push a NON-IDENTITY transform, so "skinning still works" is a
+    // value that arrives rather than a flag that is set.
+    const Matrix skin = Matrix::CreateTranslation(7.0f, -3.0f, 11.0f);
+    ASSERT_EQ(1u, ApplyBonePaletteEXT(model, {skin}))
+        << "the palette reached no SkinnedPbrEffect, so the capture below proves nothing";
+
+    const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+        model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+    ASSERT_EQ(1u, captured.size());
+    const DrawParamsDump& d = captured.front();
+    SCOPED_TRACE(ToJson(d));
+
+    // 1. It is a PBR draw, and a SKINNED one.
+    EXPECT_EQ("Microsoft.Xna.Framework.Graphics.SkinnedPbrEffect", d.effectTypeName)
+        << "a colour stream is a multiplier on base colour, not a reason to leave the "
+           "metallic-roughness model";
+    EXPECT_TRUE(d.pbr) << "the draw does not select a PBR shader variant";
+    EXPECT_TRUE(d.skinned) << "the draw does not select the skinning shader variant";
+
+    // 2. The colour stream is switched ON. GpuDrawParams defaults this to true while the effect
+    //    defaults it to false, so a loader that forgot the property produces a draw that looks
+    //    enabled from one side and disabled from the other.
+    EXPECT_TRUE(d.vertexColorEnabled)
+        << "the stride-80 record carries COLOR_0 but the draw tells the renderer to ignore it";
+
+    // 3. Skinning really arrives: the palette the application pushed, not an identity.
+    ASSERT_EQ(1, d.boneCount) << "the bone palette did not reach the draw";
+    ASSERT_EQ(1u, d.boneTransforms.size());
+    float expectedBone[16];
+    skin.ToColumnMajor(expectedBone);
+    for (std::size_t i = 0; i < 16u; ++i)
+    {
+        EXPECT_NEAR(expectedBone[i], d.boneTransforms.front()[i], 1e-5f)
+            << "bone matrix element " << i;
+    }
+
+    // 4. Every material factor the old path dropped.
+    EXPECT_NEAR(0.3f, d.diffuseColor[0], 1e-5f);
+    EXPECT_NEAR(0.7f, d.diffuseColor[1], 1e-5f);
+    EXPECT_NEAR(0.2f, d.diffuseColor[2], 1e-5f);
+    EXPECT_NEAR(0.6f, d.diffuseColor[3], 1e-5f) << "the translucent baseColorFactor's alpha";
+    EXPECT_NEAR(0.65f, d.metallicFactor, 1e-5f);
+    EXPECT_NEAR(0.35f, d.roughnessFactor, 1e-5f);
+    EXPECT_NEAR(0.1f, d.emissiveColor[0], 1e-5f);
+    EXPECT_NEAR(0.05f, d.emissiveColor[1], 1e-5f);
+
+    // 5. Every PBR texture binding. Three DISTINCT 1x1 images, so a binding that reached the wrong
+    //    slot is a different texel rather than the same one twice -- and all three used to be
+    //    dropped with the material.
+    EXPECT_TRUE(d.hasBaseColorMap) << "the base-colour texture was dropped";
+    EXPECT_TRUE(d.hasNormalMap) << "the normal map was dropped";
+    EXPECT_TRUE(d.hasMetallicRoughnessMap) << "the metallic-roughness map was dropped";
+
+    // 6. Alpha semantics. BLEND means the alpha-test vector must pass every fragment -- a MASK
+    //    cutoff leaking in here would clip a translucent surface to a hard edge.
+    ASSERT_EQ(4u, d.alphaTest.size());
+    EXPECT_GE(d.alphaTest[2], 0.0f) << "alphaMode BLEND must not discard on the 'inside' branch";
+    EXPECT_GE(d.alphaTest[3], 0.0f) << "alphaMode BLEND must not discard on the 'outside' branch";
+}
+
+TEST(GltfDrawParamsOracleL6, AVertexColouredPbrDrawArrivesAsPbrWithItsColourStreamEnabled)
+{
+    const LoadedFixture fixture("mat-vertex-color-pbr");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("mat-vertex-color-pbr");
+
+    const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+        model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+    ASSERT_EQ(1u, captured.size());
+    const DrawParamsDump& d = captured.front();
+    SCOPED_TRACE(ToJson(d));
+
+    EXPECT_EQ("Microsoft.Xna.Framework.Graphics.PbrEffect", d.effectTypeName)
+        << "a colour stream is a multiplier on base colour, not a different material model";
+    EXPECT_TRUE(d.pbr) << "the draw does not select a PBR shader variant";
+    EXPECT_TRUE(d.vertexColorEnabled)
+        << "the stride-60 record carries COLOR_0 but the draw tells the renderer to ignore it, so "
+           "the colour reaches the GPU and is discarded there";
+
+    // And the material factor is still the material's own, not replaced by the colour: the two are
+    // multiplied per fragment, so a loader that folded one into the other would pass the checks
+    // above and light the surface wrongly.
+    EXPECT_NEAR(0.2f, d.diffuseColor[0], 1e-5f);
+    EXPECT_NEAR(0.4f, d.diffuseColor[1], 1e-5f);
+    EXPECT_NEAR(0.8f, d.diffuseColor[2], 1e-5f);
+}
+
 TEST(GltfDrawParamsOracleL6, APbrDrawYieldsEverySection211QuantityItCanCarry)
 {
     const LoadedFixture fixture("mat-factor-only-gold");

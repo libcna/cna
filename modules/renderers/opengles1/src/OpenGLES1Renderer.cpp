@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/OpenGLES1/OpenGLES1Renderer.hpp"
+#include "CNA/Internal/Renderers/Common/FixedFunctionArrayLayoutSupport.hpp"
 
 #include <cstdio>
 #include <algorithm>
@@ -1607,6 +1608,62 @@ namespace CNA::Internal::Renderers::OpenGLES1
             glActiveTexture(GL_TEXTURE0);
         }
 
+        /// plan_gltf.md GLTF-473. The twin of SetupClientArraysForStride below, and it deliberately
+        /// takes the SAME arguments: this function states, and the shared guard checks, exactly the
+        /// offsets that one is about to program, so the two cannot drift into disagreeing.
+        ///
+        /// The offsets themselves are not re-derived here -- they are copied from the pointer setup
+        /// verbatim, because what is being audited is what that code does, not what it ought to do.
+        ///
+        /// @param stride The record stride the route strides the buffer by.
+        /// @param wantColor Whether a colour array is about to be enabled.
+        /// @param wantTexture Whether a texture-coordinate array is about to be enabled.
+        /// @param wantNormal Whether a normal array is about to be enabled.
+        /// @param wantDualTexture Whether a second texture unit's array is about to be enabled.
+        /// @param route Name of the draw route, for the diagnostic.
+        /// @param unsupportedSemantic The effect that sent the draw here, or null for a direct call.
+        /// @throws System::NotSupportedException When an array would read the wrong bytes.
+        void RequireClientArraysMatchStrideEXT(std::size_t stride, bool wantColor, bool wantTexture,
+                                               bool wantNormal, bool wantDualTexture,
+                                               const char* route, const char* unsupportedSemantic)
+        {
+            using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+            const auto require = [&](VertexElementUsage usage, int usageIndex, int offset,
+                                     const char* arrayName) {
+                CNA::Internal::Renderers::RequireFixedFunctionClientArrayEXT(
+                    static_cast<int>(stride), usage, usageIndex, offset, arrayName, "OPENGLES1",
+                    route, unsupportedSemantic);
+            };
+
+            // Position is the one array every route binds, and it is at offset 0 in every record
+            // CNA has -- stated rather than assumed, so a record that ever moves it is caught here
+            // instead of drawing from the wrong vertex.
+            require(VertexElementUsage::Position, 0, 0, "glVertexPointer");
+
+            if (wantColor)
+            {
+                require(VertexElementUsage::Color, 0, 12, "glColorPointer");
+            }
+            if (wantTexture)
+            {
+                const bool dualUv = (stride == kStrideDualTexture);
+                require(VertexElementUsage::TextureCoordinate, 0,
+                        dualUv ? 12 : static_cast<int>(stride) - 8, "glTexCoordPointer");
+                if (wantDualTexture)
+                {
+                    // Unit 1 shares unit 0's set on every layout except the dual-UV one, which is
+                    // this renderer's own record and therefore not in the canonical table at all --
+                    // the guard abstains for it, and the usage index stays 0 for the shared case.
+                    require(VertexElementUsage::TextureCoordinate, dualUv ? 1 : 0,
+                            dualUv ? 20 : static_cast<int>(stride) - 8, "glTexCoordPointer(unit 1)");
+                }
+            }
+            if (wantNormal)
+            {
+                require(VertexElementUsage::Normal, 0, 12, "glNormalPointer");
+            }
+        }
+
         void SetupClientArraysForStride(std::size_t stride, bool wantColor, bool wantTexture,
                                         bool wantNormal, bool wantDualTexture = false)
         {
@@ -2001,6 +2058,17 @@ namespace CNA::Internal::Renderers::OpenGLES1
         // the buffer stride alone, so a declaration that stride cannot represent is refused
         // rather than rendered from the wrong bytes.
         RequireFaithfulDeclarationEXT(vb_in, "colored-nonindexed");
+        // plan_gltf.md GLTF-473: this route binds a colour at offset 12, which is where a
+        // colour lives in exactly two of CNA's records (stride 16 and stride 24). Every other
+        // stride keeps something else there -- the NORMAL, in every PBR and skinned one -- so a
+        // buffer bound here that is not one of those two is refused rather than read from the
+        // wrong bytes. `RequireFaithfulDeclarationEXT` above cannot catch it: a stride-60 PBR
+        // record IS faithfully declared, it is simply not a colour record.
+        RequireClientArraysMatchStrideEXT(
+            static_cast<const OpenGLES1VertexBufferRenderer&>(vb_in).Stride(), /*color*/true,
+            /*texture*/false, /*normal*/false, /*dualTexture*/false, "colored-nonindexed",
+            // A direct call names no effect: the caller bound this buffer to this route itself.
+            /*unsupportedSemantic*/nullptr);
         const auto& vb = static_cast<const OpenGLES1VertexBufferRenderer&>(vb_in);
 
         float projCol[16], mvCol[16];
@@ -2037,6 +2105,17 @@ namespace CNA::Internal::Renderers::OpenGLES1
         // the buffer stride alone, so a declaration that stride cannot represent is refused
         // rather than rendered from the wrong bytes.
         RequireFaithfulDeclarationEXT(vb_in, "colored-indexed");
+        // plan_gltf.md GLTF-473: this route binds a colour at offset 12, which is where a
+        // colour lives in exactly two of CNA's records (stride 16 and stride 24). Every other
+        // stride keeps something else there -- the NORMAL, in every PBR and skinned one -- so a
+        // buffer bound here that is not one of those two is refused rather than read from the
+        // wrong bytes. `RequireFaithfulDeclarationEXT` above cannot catch it: a stride-60 PBR
+        // record IS faithfully declared, it is simply not a colour record.
+        RequireClientArraysMatchStrideEXT(
+            static_cast<const OpenGLES1VertexBufferRenderer&>(vb_in).Stride(), /*color*/true,
+            /*texture*/false, /*normal*/false, /*dualTexture*/false, "colored-indexed",
+            // A direct call names no effect: the caller bound this buffer to this route itself.
+            /*unsupportedSemantic*/nullptr);
         const auto& vb = static_cast<const OpenGLES1VertexBufferRenderer&>(vb_in);
         const auto& ib = static_cast<const OpenGLES1IndexBufferRenderer&>(ib_in);
 
@@ -2101,9 +2180,51 @@ namespace CNA::Internal::Renderers::OpenGLES1
         if (params.skinned || params.pbr || params.customEffectRenderer || params.instanceCount > 1
             || (params.dualTexture && !wantDualTexture) || (params.envMapping && !wantEnvMap))
         {
+            // plan_gltf.md GLTF-473. Naming WHY a draw is about to leave the programmable-effect world
+            // matters as much as refusing it: "unsupported vertex stride" sends a reader looking at the
+            // buffer, when the actual missing piece is the effect. PBR is tested first for the same
+            // reason EasyGL's own SelectStockProgram tests it first -- SkinnedPbrEffect sets both flags,
+            // and it is the PBR half that has no fixed-function equivalent.
+            const char* const unsupportedSemantic =
+                  params.pbr                  ? "PbrEffect/SkinnedPbrEffect (ES 1.1 has no programmable "
+                                                "pipeline, so metallic-roughness shading has no "
+                                                "fixed-function equivalent)"
+                : params.skinned              ? "SkinnedEffect (ES 1.1 has no vertex skinning without the "
+                                                "rare GL_OES_matrix_palette extension)"
+                : params.customEffectRenderer ? "a custom ShaderEffect (ES 1.1 has no shader compiler)"
+                : params.instanceCount > 1    ? "hardware instancing (ES 1.1 has no instancing mechanism)"
+                : params.dualTexture          ? "DualTextureEffect on this vertex layout or without a "
+                                                "second texture unit"
+                : params.envMapping           ? "EnvironmentMapEffect on this vertex layout or without "
+                                                "GL_OES_texture_cube_map"
+                :                               "an effect combination this renderer has no "
+                                                "fixed-function equivalent for";
+            // The colour route binds a colour at offset 12. Refuse HERE, where the effect that
+            // forced the fallback is still known, rather than one call later where it is not.
+            RequireClientArraysMatchStrideEXT(stride, /*color*/true, /*texture*/false,
+                                              /*normal*/false, /*dualTexture*/false,
+                                              "ordinary-nonindexed fallback", unsupportedSemantic);
             DrawColoredPrimitives(vb_in, world, view, projection, primitive, primitiveCount);
             return;
         }
+
+        // plan_gltf.md GLTF-473: the ordinary path's own offsets, checked against the same canonical
+        // table. These three are pure predicates and the guard touches nothing, so both sit ABOVE
+        // the first glMatrixMode below rather than beside the pointer setup they describe: a
+        // refusal must leave the context exactly as it found it, or a caller that catches it draws
+        // its next frame through a projection matrix this draw already overwrote.
+        //
+        // The colour and normal arms are already stride-gated above, but the texture arm is not --
+        // it derives its offset as `stride - 8`, which is where UV0 happens to sit in the records
+        // this route was written for and is NOT where it sits in the rigid PBR dual-UV record
+        // (stride 60 keeps UV0 at 40, not 52).
+        const bool wantTexture = params.textureEnabled && params.texture0 != nullptr && stride != kStrideColor;
+        const bool wantNormal = (params.lightingEnabled || wantEnvMap) && stride == kStrideNormalTexture;
+        const bool wantColorArray = params.vertexColorEnabled && (stride == kStrideColor || stride == kStrideColorTexture);
+        RequireClientArraysMatchStrideEXT(stride, wantColorArray,
+                                          wantTexture || wantDualTexture || wantEnvMap, wantNormal,
+                                          wantDualTexture, "ordinary-nonindexed",
+                                          /*unsupportedSemantic*/nullptr);
 
         float projCol[16], viewCol[16], mvCol[16];
         projection.ToColumnMajor(projCol);
@@ -2112,10 +2233,6 @@ namespace CNA::Internal::Renderers::OpenGLES1
 
         glMatrixMode(GL_PROJECTION);
         glLoadMatrixf(projCol);
-
-        const bool wantTexture = params.textureEnabled && params.texture0 != nullptr && stride != kStrideColor;
-        const bool wantNormal = (params.lightingEnabled || wantEnvMap) && stride == kStrideNormalTexture;
-        const bool wantColorArray = params.vertexColorEnabled && (stride == kStrideColor || stride == kStrideColorTexture);
 
         if (params.lightingEnabled)
         {
@@ -2211,9 +2328,51 @@ namespace CNA::Internal::Renderers::OpenGLES1
         if (params.skinned || params.pbr || params.customEffectRenderer || params.instanceCount > 1
             || (params.dualTexture && !wantDualTexture) || (params.envMapping && !wantEnvMap))
         {
+            // plan_gltf.md GLTF-473. Naming WHY a draw is about to leave the programmable-effect world
+            // matters as much as refusing it: "unsupported vertex stride" sends a reader looking at the
+            // buffer, when the actual missing piece is the effect. PBR is tested first for the same
+            // reason EasyGL's own SelectStockProgram tests it first -- SkinnedPbrEffect sets both flags,
+            // and it is the PBR half that has no fixed-function equivalent.
+            const char* const unsupportedSemantic =
+                  params.pbr                  ? "PbrEffect/SkinnedPbrEffect (ES 1.1 has no programmable "
+                                                "pipeline, so metallic-roughness shading has no "
+                                                "fixed-function equivalent)"
+                : params.skinned              ? "SkinnedEffect (ES 1.1 has no vertex skinning without the "
+                                                "rare GL_OES_matrix_palette extension)"
+                : params.customEffectRenderer ? "a custom ShaderEffect (ES 1.1 has no shader compiler)"
+                : params.instanceCount > 1    ? "hardware instancing (ES 1.1 has no instancing mechanism)"
+                : params.dualTexture          ? "DualTextureEffect on this vertex layout or without a "
+                                                "second texture unit"
+                : params.envMapping           ? "EnvironmentMapEffect on this vertex layout or without "
+                                                "GL_OES_texture_cube_map"
+                :                               "an effect combination this renderer has no "
+                                                "fixed-function equivalent for";
+            // The colour route binds a colour at offset 12. Refuse HERE, where the effect that
+            // forced the fallback is still known, rather than one call later where it is not.
+            RequireClientArraysMatchStrideEXT(stride, /*color*/true, /*texture*/false,
+                                              /*normal*/false, /*dualTexture*/false,
+                                              "ordinary-indexed fallback", unsupportedSemantic);
             DrawIndexedColoredPrimitives(vb_in, ib_in, world, view, projection, primitive, primitiveCount);
             return;
         }
+
+        // plan_gltf.md GLTF-473: the ordinary path's own offsets, checked against the same canonical
+        // table. These three are pure predicates and the guard touches nothing, so both sit ABOVE
+        // the first glMatrixMode below rather than beside the pointer setup they describe: a
+        // refusal must leave the context exactly as it found it, or a caller that catches it draws
+        // its next frame through a projection matrix this draw already overwrote.
+        //
+        // The colour and normal arms are already stride-gated above, but the texture arm is not --
+        // it derives its offset as `stride - 8`, which is where UV0 happens to sit in the records
+        // this route was written for and is NOT where it sits in the rigid PBR dual-UV record
+        // (stride 60 keeps UV0 at 40, not 52).
+        const bool wantTexture = params.textureEnabled && params.texture0 != nullptr && stride != kStrideColor;
+        const bool wantNormal = (params.lightingEnabled || wantEnvMap) && stride == kStrideNormalTexture;
+        const bool wantColorArray = params.vertexColorEnabled && (stride == kStrideColor || stride == kStrideColorTexture);
+        RequireClientArraysMatchStrideEXT(stride, wantColorArray,
+                                          wantTexture || wantDualTexture || wantEnvMap, wantNormal,
+                                          wantDualTexture, "ordinary-indexed",
+                                          /*unsupportedSemantic*/nullptr);
 
         float projCol[16], viewCol[16], mvCol[16];
         projection.ToColumnMajor(projCol);
@@ -2222,10 +2381,6 @@ namespace CNA::Internal::Renderers::OpenGLES1
 
         glMatrixMode(GL_PROJECTION);
         glLoadMatrixf(projCol);
-
-        const bool wantTexture = params.textureEnabled && params.texture0 != nullptr && stride != kStrideColor;
-        const bool wantNormal = (params.lightingEnabled || wantEnvMap) && stride == kStrideNormalTexture;
-        const bool wantColorArray = params.vertexColorEnabled && (stride == kStrideColor || stride == kStrideColorTexture);
 
         if (params.lightingEnabled)
         {

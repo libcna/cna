@@ -463,6 +463,23 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const override;
 
+        /**
+         * @brief Gets or sets whether the per-vertex `COLOR_0` stream multiplies the base colour.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. plan_gltf.md `GLTF-462`. Real XNA has no PBR
+         * effect at all, and `BasicEffect`/`SkinnedEffect`'s own `VertexColorEnabled` is the shape
+         * this mirrors. glTF §3.7.2.1 makes `COLOR_0` "an additional linear multiplier to base
+         * color", so the product a fragment sees is
+         * `baseColorFactor × baseColorTexture × COLOR_0`, alpha included — a vertex-coloured
+         * metallic-roughness primitive is shaded by this effect rather than downgraded off the
+         * metallic-roughness model, which is what CNA did before.
+         *
+         * False by default. The stride-60 and stride-80 records always *have* a colour slot, and an
+         * uncoloured primitive fills it with opaque white, so a renderer that reads it regardless is
+         * still correct — but this is what states the intent rather than relying on that fill.
+         */
+        CNAEXT bool VertexColorEnabledEXT = false;
+
     protected:
         /** @brief Applies shader parameters to the graphics device before drawing. */
         void OnApply() override;

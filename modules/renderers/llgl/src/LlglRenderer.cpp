@@ -1567,6 +1567,21 @@ namespace CNA::Internal::Renderers::Llgl
             // byte layout -- the stride-48 PbrGpuVertex layout above with the stride-52 skinning
             // suffix (BlendWeight, BlendIndices) appended, matching
             // modules/renderers/vulkan/examples/vulkan_pbreffect_handderived_test.cpp's own SkinnedPbrGpuVertex.
+            // plan_gltf.md GLTF-462: stride 60 is the rigid PBR record with a second UV set at 48
+            // and a packed COLOR_0 at 56; its first four fields are byte-identical to stride 48.
+            // Without this case it fell to the empty default below and the mesh had no attributes at
+            // all. The two trailing slots stay undeclared because this renderer's PBR shader samples
+            // one UV set and reads no colour attribute -- GLTF-465 owns consuming them.
+            case 60:
+                addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
+                addAttribute("normal", LLGL::Format::RGB32Float, 3, 12);
+                addAttribute("tangent", LLGL::Format::RGBA32Float, 6, 24);
+                addAttribute("texCoord", LLGL::Format::RG32Float, 2, 40);
+                addAttribute("texCoord1", LLGL::Format::RG32Float, 7, 48);
+                // plan_gltf.md GLTF-462/GLTF-465: the packed COLOR_0 glTF 3.9.2 makes a multiplier
+                // on base colour. Location 1 is this renderer's colour slot.
+                addAttribute("color", LLGL::Format::RGBA8UNorm, 1, 56);
+                break;
             case 68:
                 addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
                 addAttribute("normal", LLGL::Format::RGB32Float, 3, 12);
@@ -1574,6 +1589,27 @@ namespace CNA::Internal::Renderers::Llgl
                 addAttribute("texCoord", LLGL::Format::RG32Float, 2, 40);
                 addAttribute("aBoneWeights", LLGL::Format::RGBA32Float, 4, 48);
                 addAttribute("aBoneIndices", LLGL::Format::RGBA8UInt, 5, 64);
+                break;
+            // GLTF-182/183: the skinned PBR record with TEXCOORD_1 appended at 68.
+            case 76:
+                addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
+                addAttribute("normal", LLGL::Format::RGB32Float, 3, 12);
+                addAttribute("tangent", LLGL::Format::RGBA32Float, 6, 24);
+                addAttribute("texCoord", LLGL::Format::RG32Float, 2, 40);
+                addAttribute("aBoneWeights", LLGL::Format::RGBA32Float, 4, 48);
+                addAttribute("aBoneIndices", LLGL::Format::RGBA8UInt, 5, 64);
+                addAttribute("texCoord1", LLGL::Format::RG32Float, 7, 68);
+                break;
+            // plan_gltf.md GLTF-463: stride 76's record with the packed COLOR_0 appended at 76.
+            case 80:
+                addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
+                addAttribute("normal", LLGL::Format::RGB32Float, 3, 12);
+                addAttribute("tangent", LLGL::Format::RGBA32Float, 6, 24);
+                addAttribute("texCoord", LLGL::Format::RG32Float, 2, 40);
+                addAttribute("aBoneWeights", LLGL::Format::RGBA32Float, 4, 48);
+                addAttribute("aBoneIndices", LLGL::Format::RGBA8UInt, 5, 64);
+                addAttribute("texCoord1", LLGL::Format::RG32Float, 7, 68);
+                addAttribute("color", LLGL::Format::RGBA8UNorm, 1, 76);
                 break;
             default:
                 break;
@@ -2768,13 +2804,11 @@ namespace CNA::Internal::Renderers::Llgl
                 "texture coordinates, normals, and a tangent, and this one is missing at least one");
         }
 
-        std::vector<LLGL::VertexAttribute> shaderAttributes;
-        for (const LLGL::VertexAttribute& attribute : attributes)
-        {
-            if (attribute.location == 1) // vertex colour: this shader never reads one
-                continue;
-            shaderAttributes.push_back(attribute);
-        }
+        // plan_gltf.md GLTF-465: the colour attribute used to be stripped here, because this shader
+        // "never reads one". It does now -- glTF 3.9.2 makes COLOR_0 a multiplier on base colour --
+        // and the dual-UV variant is exactly the one whose stride (60) always carries the slot, so
+        // the attribute list is passed through unchanged.
+        const std::vector<LLGL::VertexAttribute>& shaderAttributes = attributes;
 
         const LLGL::RenderingCapabilities& caps = renderer_->GetRenderingCaps();
 
@@ -2848,13 +2882,14 @@ namespace CNA::Internal::Renderers::Llgl
                 "missing at least one");
         }
 
-        std::vector<LLGL::VertexAttribute> shaderAttributes;
+        // plan_gltf.md GLTF-463/GLTF-465: unlike the rigid family, the skinned one has a dual-UV
+        // stride WITHOUT a colour (76) and one WITH (80), so the colour is a third variant rather
+        // than a property of dual-UV -- and the attribute list is passed through either way, since a
+        // shader input with no matching vertex attribute is invalid on the Vulkan module.
+        bool hasVertexColour = false;
         for (const LLGL::VertexAttribute& attribute : attributes)
-        {
-            if (attribute.location == 1) // vertex colour: this shader never reads one
-                continue;
-            shaderAttributes.push_back(attribute);
-        }
+            if (attribute.location == 1) hasVertexColour = true;
+        const std::vector<LLGL::VertexAttribute>& shaderAttributes = attributes;
 
         const LLGL::RenderingCapabilities& caps = renderer_->GetRenderingCaps();
 
@@ -2862,17 +2897,20 @@ namespace CNA::Internal::Renderers::Llgl
         vertexDesc.type = LLGL::ShaderType::Vertex;
         if (SupportsShadingLanguage(caps, LLGL::ShadingLanguage::GLSL))
         {
-            vertexDesc.source = hasTexCoord1 ? Shaders::kPbr3dSkinnedDualUvVertGlsl
-                                             : Shaders::kPbr3dSkinnedVertGlsl;
+            vertexDesc.source = hasVertexColour ? Shaders::kPbr3dSkinnedDualUvColorVertGlsl
+                              : hasTexCoord1    ? Shaders::kPbr3dSkinnedDualUvVertGlsl
+                                                : Shaders::kPbr3dSkinnedVertGlsl;
             vertexDesc.sourceType = LLGL::ShaderSourceType::CodeString;
         }
         else
         {
             vertexDesc.source = reinterpret_cast<const char*>(
-                hasTexCoord1 ? Shaders::kPbr3dSkinnedDualUvVertSpv
-                             : Shaders::kPbr3dSkinnedVertSpv);
-            vertexDesc.sourceSize = hasTexCoord1 ? sizeof(Shaders::kPbr3dSkinnedDualUvVertSpv)
-                                                 : sizeof(Shaders::kPbr3dSkinnedVertSpv);
+                hasVertexColour ? Shaders::kPbr3dSkinnedDualUvColorVertSpv
+              : hasTexCoord1    ? Shaders::kPbr3dSkinnedDualUvVertSpv
+                                : Shaders::kPbr3dSkinnedVertSpv);
+            vertexDesc.sourceSize = hasVertexColour ? sizeof(Shaders::kPbr3dSkinnedDualUvColorVertSpv)
+                                  : hasTexCoord1    ? sizeof(Shaders::kPbr3dSkinnedDualUvVertSpv)
+                                                    : sizeof(Shaders::kPbr3dSkinnedVertSpv);
             vertexDesc.sourceType = LLGL::ShaderSourceType::BinaryBuffer;
             vertexDesc.entryPoint = "main";
         }
@@ -3450,6 +3488,10 @@ namespace CNA::Internal::Renderers::Llgl
                     params.pbrTextureTransformRows[row][component];
         uniforms[132] = static_cast<float>(params.pbrTextureCoordinateSetMask & 0x7fu);
         uniforms[133] = params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f;
+        // plan_gltf.md GLTF-465: specularState.z is the effect's own VertexColorEnabledEXT -- the
+        // gate the PBR fragment stage multiplies COLOR_0 under. It shares this vec4 with the
+        // TEXCOORD_1 selector mask and the specular-colour decode flag, both already packed here.
+        uniforms[134] = params.vertexColorEnabled ? 1.0f : 0.0f;
         for (int row = 0; row < 4; ++row)
             for (int component = 0; component < 4; ++component)
                 uniforms[136 + row * 4 + component] =
@@ -3558,7 +3600,10 @@ namespace CNA::Internal::Renderers::Llgl
             }
         }
 
-        const bool textured = (params != nullptr && params->textureEnabled && params->texture0 != nullptr);
+        // plan_gltf.md GLTF-474: not const any more -- an untextured PBR or skinned draw adopts
+        // the neutral-white default below rather than being refused, which is what makes it a
+        // textured draw from the pipeline's point of view.
+        bool textured = (params != nullptr && params->textureEnabled && params->texture0 != nullptr);
         const bool lit = (params != nullptr && params->lightingEnabled);
         // LLGL-31: lighting without a texture is real now, provided the vertex layout carries
         // colours -- AcquirePrimitiveVertexShader() throws its own clear error otherwise, the same
@@ -3619,24 +3664,22 @@ namespace CNA::Internal::Renderers::Llgl
 
         const bool skinned = (params != nullptr && params->skinned);
         const bool pbr = (params != nullptr && params->pbr);
-        if (skinned && !pbr && params->texture0 == nullptr)
+        // plan_gltf.md GLTF-474. Both of these used to throw "needs Texture bound", on the reading
+        // that a base-colour map is mandatory for SkinnedEffect and PbrEffect the way it is for
+        // DualTextureEffect and EnvironmentMapEffect. That reading does not survive contact with
+        // what PbrEffect actually models: glTF 3.9.2 makes `baseColorTexture` OPTIONAL, and glTF's
+        // own default material -- a bare `baseColorFactor` -- has none. This renderer could
+        // therefore not draw the default material on any stride, which is not a limitation of LLGL
+        // but of this rule; every other renderer in the tree binds a 1x1 white texture, and
+        // `tex * colour` then collapses to the colour exactly as an untextured draw should.
+        //
+        // The same 1x1 white the optional PBR maps already resolve to is used here, so this adds no
+        // new resource and no new lifetime.
+        if ((pbr || skinned) && params->texture0 == nullptr)
         {
-            // No fabricated-white-texture fallback here either, matching the DualTextureEffect/
-            // EnvironmentMapEffect precedent above -- SkinnedEffect is always textured in real
-            // XNA, unlike BasicEffect.
-            throw std::runtime_error(
-                std::string(kRendererName) + " renderer: SkinnedEffect needs Texture bound");
-        }
-        if (pbr && params->texture0 == nullptr)
-        {
-            // Texture (base colour) is the one PbrEffect/SkinnedPbrEffect map that is not optional
-            // -- matches SkinnedEffect's own precedent above. NormalMap/MetallicRoughnessMap/
-            // EmissiveMap/OcclusionMap genuinely CAN be left null in real XNA usage (see
-            // PbrEffect::FillGpuDrawParams()), so unlike this, they resolve to a 1x1 default
-            // texture below instead of throwing.
-            throw std::runtime_error(
-                std::string(kRendererName) + " renderer: " +
-                (skinned ? "SkinnedPbrEffect" : "PbrEffect") + " needs Texture bound");
+            EnsureDefaultPbrTexturesEXT();
+            resolvedTexture.texture = defaultWhitePbrTexture_;
+            textured = true;
         }
         LLGL::Texture* resolvedPbrNormalMap = nullptr;
         LLGL::Texture* resolvedPbrMetallicRoughnessMap = nullptr;

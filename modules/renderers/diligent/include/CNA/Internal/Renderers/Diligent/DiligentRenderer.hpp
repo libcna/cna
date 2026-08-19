@@ -1370,10 +1370,17 @@ namespace CNA::Internal::Renderers::Diligent
             Instanced3D,        ///< position-only vertex + a per-instance world matrix, flat colour
             LitTexturedVertexLit3D, ///< stride 32: LitTextured3D's PreferPerPixelLighting==false sibling
             SkinnedVertexLit3D,     ///< stride 52: Skinned3D's PreferPerPixelLighting==false sibling
+            /// plan_gltf.md GLTF-474: stride 56 is the stride-52 skinned record with a packed
+            /// COLOR_0 appended at 52. It is what a skinned, vertex-coloured
+            /// KHR_materials_unlit primitive imports to, and this renderer had no layout for it
+            /// at all -- `skin-vertex-color` was refused as "unsupported vertex stride 56".
+            SkinnedColored3D,       ///< stride 56: Skinned3D plus the packed COLOR_0 at 52
+            SkinnedColoredVertexLit3D, ///< stride 56: SkinnedVertexLit3D's own colour-carrying twin
             Pbr3D,                  ///< stride 48: PbrEffect's glTF metallic-roughness BRDF
             PbrDualUv3D,            ///< stride 60: Pbr3D plus importer-appended TEXCOORD_1
             SkinnedPbr3D,           ///< stride 68: Pbr3D combined with Skinned3D's bone palette
             SkinnedPbrDualUv3D,     ///< stride 76: skinned PBR plus TEXCOORD_1
+            SkinnedPbrColor3D,      ///< stride 80: skinned PBR plus TEXCOORD_1 and a packed COLOR_0
         };
 
         /** @brief Everything that distinguishes one Diligent pipeline state object from another. */

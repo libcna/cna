@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 
+from .. import flatnormals
 from ..builder import SHORT, TRIANGLES, UNSIGNED_SHORT, GltfBuilder
 from ..manifest import Fixture, l3_primitive, world_positions
 from ..png import encode_png
@@ -447,5 +448,195 @@ def tangent_mirrored() -> Fixture:
     )
 
 
+
+
+#: `tangent-without-normal`'s tilted triangle -- the same geometry `normal-absent` uses, for the
+#: same reason: its computed flat normal `(0, -1/sqrt2, 1/sqrt2)` is not `(0,0,1)`.
+_TANGENT_NO_NORMAL_POSITIONS = _TILTED_POSITIONS
+#: A UV set whose gradient runs along +X, so the tangent §3.7.2.1 requires a reader to GENERATE is
+#: `(1,0,0)` with `w = +1`.
+_TANGENT_NO_NORMAL_UVS = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]
+#: The authored tangent, chosen to share NO component with the generated one. `(0,1,0,+1)` is not
+#: even perpendicular to the flat normal above, so a reader that keeps it hands the shader a skewed
+#: frame -- and the two answers cannot be confused for a rounding difference.
+_AUTHORED_TANGENT = [(0.0, 1.0, 0.0, 1.0)] * 3
+_GENERATED_TANGENT = [(1.0, 0.0, 0.0, 1.0)] * 3
+
+
+def tangent_without_normal() -> Fixture:
+    """``TANGENT`` authored, ``NORMAL`` absent -- the tangent MUST be ignored. Owns **`GLTF-461`**.
+
+    §3.7.2.1 does not stop at "MUST calculate flat normals". It continues "and the provided tangents
+    (if present) **MUST** be ignored", and the reason is not arbitrary: an authored tangent basis was
+    built against the normals the file then failed to supply, so keeping it pairs a tangent with a
+    normal it is not orthogonal to and normal mapping lights the surface through a skewed frame.
+
+    The discrimination is that the authored and the required answers share no component. Authored is
+    ``(0,1,0,+1)``; regenerated from the UVs is ``(1,0,0,+1)``. A reader that honours the authored
+    tangent, and one that follows the specification, cannot produce values close enough to be read as
+    the same result with different rounding.
+
+    Promoted from an inline test document by `GLTF-464`: it is a conformance statement about the
+    file format, which `docs/gltf-conformance.md` §3.8 puts in this corpus rather than in a test.
+    """
+    b = GltfBuilder("tangent-without-normal")
+    position = b.add_packed_accessor(usage="POSITION", values=_TANGENT_NO_NORMAL_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    tangent = b.add_packed_accessor(usage="TANGENT", values=_AUTHORED_TANGENT,
+                                    accessor_type="VEC4")
+    uv = b.add_packed_accessor(usage="TEXCOORD_0", values=_TANGENT_NO_NORMAL_UVS,
+                               accessor_type="VEC2")
+    indices = b.add_packed_accessor(usage="indices", values=[0, 1, 2], accessor_type="SCALAR",
+                                    component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "TANGENT": tangent, "TEXCOORD_0": uv},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="TangentNoNormal")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    l4 = world_positions(b, {mesh: list(_TANGENT_NO_NORMAL_POSITIONS)})
+    l4["ignoredTangent"] = {
+        "authoredTangents": [list(t) for t in _AUTHORED_TANGENT],
+        "requiredTangents": [list(t) for t in _GENERATED_TANGENT],
+        "rule": "§3.7.2.1: when NORMAL is absent the provided tangents MUST be ignored, and the "
+                "basis is regenerated from the positions and UVs instead.",
+        "discriminationRule": "The authored and required tangents share no component, so honouring "
+                              "the authored one is a different vector rather than a near miss.",
+    }
+    return Fixture(
+        id="tangent-without-normal", audit_fixture=None, owning_group="normals",
+        description="A tilted triangle authoring TANGENT and TEXCOORD_0 but no NORMAL. §3.7.2.1 "
+                    "requires the flat normal to be computed AND the authored tangent to be "
+                    "ignored; the authored (0,1,0,+1) and the regenerated (1,0,0,+1) share no "
+                    "component, so the two behaviours cannot be confused.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["absent NORMAL", "authored TANGENT ignored", "regenerated tangent basis"],
+        spec_anchors=["meshes-overview"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="TangentNoNormal", primitive=0, mode=TRIANGLES,
+            positions=_TANGENT_NO_NORMAL_POSITIONS, normals=_EXPECTED_NORMALS,
+            generated_tangents=_GENERATED_TANGENT, texcoords=_TANGENT_NO_NORMAL_UVS,
+            indices=[0, 1, 2])]},
+        l4=l4,
+    )
+
+
+#: `morph-normalless-quad`'s four corners: a unit quad in the XY plane as two triangles.
+_MORPH_QUAD_POSITIONS = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0)]
+#: Triangles (0,1,2) and (0,2,3). Vertices 0 and 2 are shared, and vertex 2 is the one the target
+#: lifts -- so once morphed the two faces genuinely disagree.
+_MORPH_QUAD_INDICES = [0, 1, 2, 0, 2, 3]
+#: The target lifts ONLY the shared vertex. A delta on all four would translate the quad and leave
+#: its normals alone, which is exactly the case a reader that never recomputes still passes.
+_MORPH_QUAD_DELTAS = [(0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 1.0), (0.0, 0.0, 0.0)]
+
+
+def morph_normalless_quad() -> Fixture:
+    """A normal-less quad whose morph target lifts the vertex both triangles share. Owns **`GLTF-461`**.
+
+    §3.7.2.2: "When the base mesh primitive does not specify normals, client implementations **MUST**
+    calculate flat normals for each morph target." Every part of this fixture is load-bearing:
+
+    * **no NORMAL** makes §3.7.2.1's flat normals required in the first place;
+    * **a morph target** makes §3.7.2.2's *per target* clause apply, which forces the per-corner
+      split policy -- two faces coplanar at rest need not stay coplanar, so a rest-pose split cannot
+      serve every reachable pose;
+    * the delta lifts **only the vertex both triangles share**, so at four vertices there is no value
+      that is both faces' normal, and a reader that computed once at rest is wrong at every non-zero
+      weight while still looking plausible at weight 0; and
+    * because the delta is on a *shared* vertex, **both** of its copies must receive it -- a gather
+      that dropped one would tear the surface along the diagonal.
+
+    Promoted from an inline test document by `GLTF-464`, for `docs/gltf-conformance.md` §3.8's rule:
+    this is a statement about the format, not about loader machinery.
+    """
+    b = GltfBuilder("morph-normalless-quad")
+    position = b.add_packed_accessor(usage="POSITION", values=_MORPH_QUAD_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    delta = b.add_packed_accessor(usage="morph POSITION delta 0", values=_MORPH_QUAD_DELTAS,
+                                  accessor_type="VEC3", with_bounds=True)
+    indices = b.add_packed_accessor(usage="indices", values=_MORPH_QUAD_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position},
+        "indices": indices,
+        "targets": [{"POSITION": delta}],
+        "mode": TRIANGLES,
+    }], name="NormallessMorphQuad", weights=[1.0])
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    # Stated from flatnormals.py rather than from CNA, so the golden is a second opinion.
+    split = flatnormals.compute(_MORPH_QUAD_POSITIONS, _MORPH_QUAD_INDICES, per_corner=True)
+    split_positions = flatnormals.gather(_MORPH_QUAD_POSITIONS, split.source_vertex)
+    split_deltas = flatnormals.gather(_MORPH_QUAD_DELTAS, split.source_vertex)
+    morphed = [[p[0] + d[0], p[1] + d[1], p[2] + d[2]]
+               for p, d in zip(split_positions, split_deltas)]
+
+    l4 = world_positions(b, {mesh: list(_MORPH_QUAD_POSITIONS)})
+    # The standard morph block, so this fixture answers the corpus-wide `morph-*` family sweep like
+    # every other member rather than opting out of it. `blendedPositions` is stated in the SPLIT
+    # numbering, because that sweep compares against the IMPORTED buffer and §3.7.2.2 forces this
+    # primitive to be split -- and that is what makes the comparison a real check rather than a
+    # self-agreement: the split comes from `flatnormals.py`, which is an independent implementation
+    # of §3.7.2.1, not a restatement of what CNA produced.
+    l4["morph"] = {
+        "targetCount": 1,
+        "meshWeights": [1.0],
+        "effectiveWeights": [1.0],
+        "targetsWithoutPositions": 0,
+        "targetsWithoutNormals": 1,
+        "targetsWithoutTangents": 1,
+        "blendedPositions": morphed,
+    }
+    l4["morphedFlatNormals"] = {
+        "targetCount": 1,
+        "meshWeights": [1.0],
+        "effectiveWeights": [1.0],
+        "authoredVertexCount": len(_MORPH_QUAD_POSITIONS),
+        "vertexCount": split.vertex_count,
+        "sourceVertex": list(split.source_vertex),
+        "splitIndices": list(split.indices),
+        "authoredMorphDeltas": [list(d) for d in _MORPH_QUAD_DELTAS],
+        "morphDeltas": [list(d) for d in split_deltas],
+        "restFlatNormals": [list(n) for n in split.normals],
+        "fullyMorphedPositions": morphed,
+        # The two faces at weight 1, from the morphed positions rather than restated: (0,1,2) rises
+        # on one diagonal and (0,2,3) on the other, so they disagree exactly as the design intends.
+        "fullyMorphedFaceNormals": [
+            list(n) for n in flatnormals.compute(
+                [tuple(p) for p in morphed], list(split.indices), per_corner=True).normals],
+        "rule": "§3.7.2.2 requires flat normals to be recomputed for EACH morph target, so the "
+                "normal of a normal-less primitive is a function of the WEIGHTS and no buffer can "
+                "hold it. The per-corner split is what makes an exact per-face normal expressible "
+                "at every reachable pose.",
+        "discriminationRule": "Only the shared vertex moves. A delta applied to all four corners "
+                              "would translate the quad and leave both face normals unchanged -- "
+                              "which is precisely the case a reader that never recomputes passes.",
+    }
+    return Fixture(
+        id="morph-normalless-quad", audit_fixture=None, owning_group="normals",
+        description="A quad as two triangles with no NORMAL and a morph target that lifts the one "
+                    "vertex both triangles share. §3.7.2.2 requires flat normals per target, which "
+                    "forces the per-corner split (4 source vertices become 6) and makes the "
+                    "normals a function of the weights rather than of the file.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["absent NORMAL", "morph target", "per-corner flat-normal split",
+                  "delta on a shared vertex"],
+        spec_anchors=["meshes-overview", "morph-targets"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="NormallessMorphQuad", primitive=0, mode=TRIANGLES,
+            positions=_MORPH_QUAD_POSITIONS, indices=_MORPH_QUAD_INDICES,
+            flat_normals="per-corner")]},
+        l4=l4,
+    )
+
+
 FIXTURES = [normal_absent, normal_quantized, tangent_handedness,
-            tangent_absent_generated, normal_nonuniform_scale, tangent_mirrored]
+            tangent_absent_generated, normal_nonuniform_scale, tangent_mirrored,
+            # GLTF-464: promoted from inline test documents.
+            tangent_without_normal, morph_normalless_quad]

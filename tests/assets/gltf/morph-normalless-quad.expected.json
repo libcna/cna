@@ -1,0 +1,608 @@
+{
+  "id": "morph-normalless-quad",
+  "description": "A quad as two triangles with no NORMAL and a morph target that lifts the one vertex both triangles share. \u00a73.7.2.2 requires flat normals per target, which forces the per-corner split (4 source vertices become 6) and makes the normals a function of the weights rather than of the file.",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "meshes-overview",
+    "morph-targets"
+  ],
+  "inventory": {
+    "id": "morph-normalless-quad",
+    "owningGroup": "normals",
+    "referencingGroups": [],
+    "validatedLayers": [
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "L5"
+    ],
+    "features": [
+      "absent NORMAL",
+      "morph target",
+      "per-corner flat-normal split",
+      "delta on a shared vertex"
+    ],
+    "auditFixture": null
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 1,
+    "meshCount": 1,
+    "materialCount": 0,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
+    "skinCount": 0,
+    "animationCount": 0,
+    "accessorCount": 3,
+    "bufferViewCount": 3,
+    "bufferCount": 1,
+    "bufferByteLength": 108,
+    "extensionsUsed": [],
+    "extensionsRequired": [],
+    "punctualLightCount": 0
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 4,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 0,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      {
+        "index": 1,
+        "usage": "morph POSITION delta 0",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 4,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 48,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "index": 2,
+        "usage": "indices",
+        "type": "SCALAR",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 6,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 2,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 96,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          2,
+          0,
+          2,
+          3
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": [
+      {
+        "mesh": 0,
+        "meshName": "NormallessMorphQuad",
+        "primitive": 0,
+        "mode": 4,
+        "modeName": "TRIANGLES",
+        "indexed": true,
+        "vertexCount": 6,
+        "positions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            1.0,
+            0.0
+          ],
+          [
+            1.0,
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "normals": [
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "tangents": [],
+        "texcoords": [],
+        "colors": [],
+        "joints": [],
+        "weights": [],
+        "indices": [
+          0,
+          1,
+          2,
+          0,
+          2,
+          3
+        ],
+        "triangles": [
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            0,
+            2,
+            3
+          ]
+        ],
+        "importPolicy": {
+          "imported": true,
+          "topologyMode": 4,
+          "topologyName": "TRIANGLES",
+          "indices": [
+            0,
+            2,
+            3,
+            1,
+            4,
+            5
+          ],
+          "converted": true,
+          "primitiveCount": 2,
+          "flatNormalSplit": {
+            "policy": "per-corner",
+            "sourceVertex": [
+              0,
+              0,
+              1,
+              2,
+              2,
+              3
+            ],
+            "duplicatedVertices": 2,
+            "mergedVertices": 0,
+            "rule": "\u00a73.7.2.1 requires flat normals when NORMAL is absent, and flat shading gives a vertex one normal PER FACE -- so a vertex shared between differently oriented faces must be duplicated once per orientation, which renumbers every per-vertex stream. New vertices are handed out in source-vertex order, so a primitive that does not split keeps its own numbering.",
+            "perCornerRule": "\u00a73.7.2.2 requires flat normals for each morph target. A POSITION delta can rotate a face, so two faces coplanar at rest need not stay coplanar and a rest-pose split cannot serve every pose; only a fully split primitive can carry an exact per-face normal at any weight."
+          }
+        },
+        "material": null
+      }
+    ]
+  },
+  "l4": {
+    "instances": [
+      {
+        "node": 0,
+        "nodeName": "MeshNode",
+        "mesh": 0,
+        "parentNodePath": [],
+        "worldMatrixColumnMajor": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "worldPositions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      }
+    ],
+    "worldBounds": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        1.0,
+        1.0,
+        0.0
+      ]
+    },
+    "morph": {
+      "targetCount": 1,
+      "meshWeights": [
+        1.0
+      ],
+      "effectiveWeights": [
+        1.0
+      ],
+      "targetsWithoutPositions": 0,
+      "targetsWithoutNormals": 1,
+      "targetsWithoutTangents": 1,
+      "blendedPositions": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ]
+      ]
+    },
+    "morphedFlatNormals": {
+      "targetCount": 1,
+      "meshWeights": [
+        1.0
+      ],
+      "effectiveWeights": [
+        1.0
+      ],
+      "authoredVertexCount": 4,
+      "vertexCount": 6,
+      "sourceVertex": [
+        0,
+        0,
+        1,
+        2,
+        2,
+        3
+      ],
+      "splitIndices": [
+        0,
+        2,
+        3,
+        1,
+        4,
+        5
+      ],
+      "authoredMorphDeltas": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "morphDeltas": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "restFlatNormals": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "fullyMorphedPositions": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "fullyMorphedFaceNormals": [
+        [
+          0.0,
+          -0.7071067811865475,
+          0.7071067811865475
+        ],
+        [
+          -0.7071067811865475,
+          0.0,
+          0.7071067811865475
+        ],
+        [
+          0.0,
+          -0.7071067811865475,
+          0.7071067811865475
+        ],
+        [
+          0.0,
+          -0.7071067811865475,
+          0.7071067811865475
+        ],
+        [
+          -0.7071067811865475,
+          0.0,
+          0.7071067811865475
+        ],
+        [
+          -0.7071067811865475,
+          0.0,
+          0.7071067811865475
+        ]
+      ],
+      "rule": "\u00a73.7.2.2 requires flat normals to be recomputed for EACH morph target, so the normal of a normal-less primitive is a function of the WEIGHTS and no buffer can hold it. The per-corner split is what makes an exact per-face normal expressible at every reachable pose.",
+      "discriminationRule": "Only the shared vertex moves. A delta applied to all four corners would translate the quad and leave both face normals unchanged -- which is precisely the case a reader that never recomputes passes."
+    }
+  },
+  "l5": {
+    "supported": true,
+    "parts": [
+      {
+        "mesh": 0,
+        "primitive": 0,
+        "stride": 48,
+        "vertexCount": 6,
+        "fields": [
+          {
+            "name": "Position",
+            "offset": 0,
+            "size": 12
+          },
+          {
+            "name": "Normal",
+            "offset": 12,
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
+            "size": 8
+          }
+        ],
+        "vertexBufferFile": "morph-normalless-quad.vb.bin",
+        "vertexBufferBytes": 288,
+        "vertexBufferSha256": "e6d70bbaaf21ee5810b7c3efce09ed9cdab293634964e625d0a63683a146b7bc",
+        "indexElementSize": 2,
+        "indexCount": 6,
+        "indexBufferFile": "morph-normalless-quad.ib.bin",
+        "indexBufferBytes": 12,
+        "indexBufferSha256": "f0c9cd064596df166df0d8cd8bb9487875640690aee47b98d77724d40b305ef7",
+        "sourceTopology": "TRIANGLES",
+        "topology": "TRIANGLES",
+        "primitiveCount": 2
+      }
+    ]
+  },
+  "rejection": null,
+  "defects": []
+}

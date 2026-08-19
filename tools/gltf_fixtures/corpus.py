@@ -27,7 +27,9 @@ from .manifest import OPEN_DEFECT_STATUSES, Fixture, dumps
 #: strip, cameras and lights became separate groups with two additional discriminating assets, and
 #: GLTF-316 established that ten (not eleven) animation fixtures are sufficient.  Together with
 #: the 13 morph fixtures housed in the same generator module, plus GLTF-218's deliberately
-#: discriminating factor-times-texture material witness, the reconciled target is 145.
+#: discriminating factor-times-texture material witness, the reconciled target was 145 -- and
+#: GLTF-463 added the skinned vertex-coloured metallic-roughness witness that stride 80 exists for,
+#: making it 146.
 TARGET_ASSET_IDS_BY_GROUP: dict[str, tuple[str, ...]] = {
     "container": (
         "glb-basic",
@@ -81,6 +83,9 @@ TARGET_ASSET_IDS_BY_GROUP: dict[str, tuple[str, ...]] = {
         "tangent-absent-generated",
         "normal-nonuniform-scale",
         "tangent-mirrored",
+        # GLTF-464: promoted from inline test documents -- both are §3.7.2 conformance statements.
+        "tangent-without-normal",
+        "morph-normalless-quad",
     ),
     "transforms": (
         "xf-identity",
@@ -135,6 +140,7 @@ TARGET_ASSET_IDS_BY_GROUP: dict[str, tuple[str, ...]] = {
         "skin-plus-static-mesh",
         "skin-unlit",
         "skin-vertex-color",
+        "skin-vertex-color-pbr",
         "skin-mesh-node-parent-transform",
         "skin-skeleton-hint",
         "skin-unnormalized",

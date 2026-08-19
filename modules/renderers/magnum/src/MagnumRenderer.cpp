@@ -945,7 +945,8 @@ namespace CNA::Internal::Renderers::Magnum
     void MagnumRenderer::BindDrawParams(MagnumProgram& program,
                                                const Matrix& world, const Matrix& view,
                                                const Matrix& projection,
-                                               const GpuDrawParams& params, bool instanced)
+                                               const GpuDrawParams& params, bool instanced,
+                                               std::size_t strideInBytes)
     {
         const Matrix worldViewProjection = world * view * projection;
         float columnMajor[16];
@@ -961,8 +962,14 @@ namespace CNA::Internal::Renderers::Magnum
         program.SetVector4(program.LocationOf("uDiffuseColor"), Mg::Vector4{
             params.diffuseColor[0], params.diffuseColor[1],
             params.diffuseColor[2], params.diffuseColor[3]});
+        // plan_gltf.md GLTF-465: for the PBR programs this flag also decides whether `aColor` is read
+        // at all, and only strides 60 and 80 actually supply that attribute. Raising it on stride
+        // 48/68 would multiply base colour by GL's generic default (0,0,0,1) -- a black surface --
+        // so the PBR family asks the layout as well as the effect.
+        const bool colourAttributeSupplied =
+            !params.pbr || strideInBytes == 60 || strideInBytes == 80;
         program.SetFloat(program.LocationOf("uVertexColorEnabled"),
-                         params.vertexColorEnabled ? 1.0f : 0.0f);
+                         (params.vertexColorEnabled && colourAttributeSupplied) ? 1.0f : 0.0f);
         program.SetFloat(program.LocationOf("uTextureEnabled"),
                          (params.textureEnabled && params.texture0 != nullptr) ? 1.0f : 0.0f);
         program.SetInt(program.LocationOf("uTexture"), 0);
@@ -1246,7 +1253,7 @@ namespace CNA::Internal::Renderers::Magnum
         };
         const GpuVertexStreamBinding* instanceStream = FirstInstanceStream(params);
         BindDrawParams(*program, world, view, projection, params,
-                       instanceStream != nullptr && instanceCount > 1);
+                       instanceStream != nullptr && instanceCount > 1, stride);
 
         const auto* indexBuffer = ib != nullptr
             ? dynamic_cast<const MagnumIndexBufferRenderer*>(ib)

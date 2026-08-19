@@ -2894,6 +2894,8 @@ namespace CNA::Internal::Renderers::Diligent
         bool usesBones = false;
         bool usesPbr = false;
         bool usesDualPbrUv = false;
+        bool usesVertexColour = false;
+        bool usesSkinnedVertexColour = false;
 
         switch (key.variant)
         {
@@ -2979,6 +2981,41 @@ namespace CNA::Internal::Renderers::Diligent
                 };
                 usesTexture = true;
                 usesBones = true;
+                break;
+            // plan_gltf.md GLTF-474: stride 56 is the stride-52 skinned record with a packed,
+            // normalized COLOR_0 appended at 52 -- what a skinned vertex-coloured
+            // KHR_materials_unlit primitive imports to. The five leading elements are byte-for-byte
+            // the stride-52 ones, so the only new thing is ATTRIB5; the explicit stride is stated on
+            // every element because Diligent's automatic stride is the end of the last attribute.
+            case ShaderVariant::SkinnedColored3D:
+                vertexSource = kSkinnedVertexHlsl;
+                pixelSource = kLitPixelHlsl;
+                layout = {
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False, 0,  56}, // Position
+                    Dg::LayoutElement{1, 0, 3, Dg::VT_FLOAT32, Dg::False, 12, 56}, // Normal
+                    Dg::LayoutElement{2, 0, 2, Dg::VT_FLOAT32, Dg::False, 24, 56}, // UV
+                    Dg::LayoutElement{3, 0, 4, Dg::VT_FLOAT32, Dg::False, 32, 56}, // BlendWeights
+                    Dg::LayoutElement{4, 0, 4, Dg::VT_UINT8,   Dg::False, 48, 56}, // BlendIndices
+                    Dg::LayoutElement{5, 0, 4, Dg::VT_UINT8,   Dg::True,  52, 56}, // COLOR_0
+                };
+                usesTexture = true;
+                usesBones = true;
+                usesSkinnedVertexColour = true;
+                break;
+            case ShaderVariant::SkinnedColoredVertexLit3D:
+                vertexSource = kSkinnedVertexLitVertexHlsl;
+                pixelSource = kLitVertexLitPixelHlsl;
+                layout = {
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False, 0,  56},
+                    Dg::LayoutElement{1, 0, 3, Dg::VT_FLOAT32, Dg::False, 12, 56},
+                    Dg::LayoutElement{2, 0, 2, Dg::VT_FLOAT32, Dg::False, 24, 56},
+                    Dg::LayoutElement{3, 0, 4, Dg::VT_FLOAT32, Dg::False, 32, 56},
+                    Dg::LayoutElement{4, 0, 4, Dg::VT_UINT8,   Dg::False, 48, 56},
+                    Dg::LayoutElement{5, 0, 4, Dg::VT_UINT8,   Dg::True,  52, 56},
+                };
+                usesTexture = true;
+                usesBones = true;
+                usesSkinnedVertexColour = true;
                 break;
             case ShaderVariant::EnvironmentMap3D:
                 vertexSource = kLitVertexHlsl;
@@ -3076,10 +3113,16 @@ namespace CNA::Internal::Renderers::Diligent
                     Dg::LayoutElement{2, 0, 4, Dg::VT_FLOAT32, Dg::False, 24, 60}, // Tangent
                     Dg::LayoutElement{3, 0, 2, Dg::VT_FLOAT32, Dg::False, 40, 60}, // UV0
                     Dg::LayoutElement{4, 0, 2, Dg::VT_FLOAT32, Dg::False, 48, 60}, // UV1
+                    // plan_gltf.md GLTF-462/GLTF-465: the four bytes after UV1 are a packed COLOR_0,
+                    // normalized, and glTF 3.9.2 makes it a multiplier on base colour. Every
+                    // stride-60 record carries the slot -- the authored colour, or opaque white --
+                    // so the attribute is unconditional and g_Flags.y decides whether it multiplies.
+                    Dg::LayoutElement{5, 0, 4, Dg::VT_UINT8, Dg::True, 56, 60},   // COLOR_0
                 };
                 usesTexture = true;
                 usesPbr = true;
                 usesDualPbrUv = true;
+                usesVertexColour = true;
                 break;
             case ShaderVariant::SkinnedPbr3D:
                 vertexSource = kSkinnedPbrVertexHlsl;
@@ -3115,12 +3158,64 @@ namespace CNA::Internal::Renderers::Diligent
                 usesBones = true;
                 usesDualPbrUv = true;
                 break;
+            case ShaderVariant::SkinnedPbrColor3D:
+                // plan_gltf.md GLTF-463: stride 80 is the stride-76 record with a packed COLOR_0
+                // appended at 76 -- the skinned counterpart of stride 60's own colour slot.
+                vertexSource = kSkinnedPbrVertexHlsl;
+                pixelSource = kPbrPixelHlsl;
+                layout = {
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False, 0, 80},  // Position
+                    Dg::LayoutElement{1, 0, 3, Dg::VT_FLOAT32, Dg::False, 12, 80}, // Normal
+                    Dg::LayoutElement{2, 0, 4, Dg::VT_FLOAT32, Dg::False, 24, 80}, // Tangent
+                    Dg::LayoutElement{3, 0, 2, Dg::VT_FLOAT32, Dg::False, 40, 80}, // UV0
+                    Dg::LayoutElement{4, 0, 4, Dg::VT_FLOAT32, Dg::False, 48, 80}, // BlendWeights
+                    Dg::LayoutElement{5, 0, 4, Dg::VT_UINT8, Dg::False, 64, 80},   // BlendIndices
+                    Dg::LayoutElement{6, 0, 2, Dg::VT_FLOAT32, Dg::False, 68, 80}, // UV1
+                    Dg::LayoutElement{7, 0, 4, Dg::VT_UINT8, Dg::True, 76, 80},    // COLOR_0
+                };
+                usesTexture = true;
+                usesPbr = true;
+                usesBones = true;
+                usesDualPbrUv = true;
+                usesVertexColour = true;
+                break;
         }
 
         std::string vertexHlsl = std::string(kConstantsHlsl) +
             kVertexLightingHlsl + (usesBones ? kBonesHlsl : "") + vertexSource;
         std::string pixelHlsl = std::string(kConstantsHlsl) +
             kPixelHelpersHlsl + pixelSource;
+        // plan_gltf.md GLTF-474: the skinned stock stages carry the same kind of template marker the
+        // PBR ones do, and for the same reason -- Diligent's HLSL-to-GLSL converter analyses tokens
+        // inside inactive #if branches, so each variant must receive a program containing exactly the
+        // attributes its native input layout supplies. Expanded for EVERY variant, not only the
+        // colour-carrying ones, because the markers live in stages the uncoloured variants share and
+        // an unexpanded marker left behind is a comment that silently means nothing.
+        {
+            const auto Replace = [](std::string& source, const char* marker, const char* text) {
+                const std::size_t markerLength = std::strlen(marker);
+                const std::size_t textLength = std::strlen(text);
+                for (std::size_t at = source.find(marker); at != std::string::npos;
+                     at = source.find(marker, at + textLength))
+                    source.replace(at, markerLength, text);
+            };
+            // g_Flags.y is the effect's own VertexColorEnabled, exactly as it is on the PBR path, so
+            // an application can opt back into the opaque-white identity on coloured geometry.
+            const char* attribute = usesSkinnedVertexColour ? "float4 Color : ATTRIB5;" : "";
+            const char* interpolant = usesSkinnedVertexColour ? "float4 Color : COLOR0;" : "";
+            const char* assignment = usesSkinnedVertexColour ? "psIn.Color = vsIn.Color;" : "";
+            const char* product = usesSkinnedVertexColour
+                ? "if (g_Flags.y > 0.5) baseColor *= psIn.Color;" : "";
+            for (std::string* source : {&vertexHlsl, &pixelHlsl})
+            {
+                Replace(*source, "/* CNA_SKINNED_COLOR_ATTRIBUTE */", attribute);
+                Replace(*source, "/* CNA_SKINNED_COLOR_INTERPOLANT */", interpolant);
+                Replace(*source, "/* CNA_SKINNED_COLOR_ASSIGNMENT */", assignment);
+                Replace(*source, "/* CNA_SKINNED_COLOR_PRODUCT */", product);
+                if (source->find("/* CNA_SKINNED_COLOR") != std::string::npos)
+                    throw std::runtime_error("CNA Diligent: unexpanded skinned-colour shader marker");
+            }
+        }
         if (usesPbr)
         {
             // Diligent's HLSL-to-GLSL converter analyses tokens inside inactive #if branches.
@@ -3134,6 +3229,24 @@ namespace CNA::Internal::Renderers::Diligent
                      at = source.find(marker, at + replacementLength))
                     source.replace(at, markerLength, replacement);
             };
+            // plan_gltf.md GLTF-465: the colour follows the same expand-the-template rule as UV1 --
+            // one clean HLSL program per variant containing exactly the attributes its native input
+            // layout supplies, because Diligent's HLSL-to-GLSL converter reads inactive #if branches.
+            const char* colorRigidAttribute = usesVertexColour ? "float4 Color : ATTRIB5;" : "";
+            const char* colorSkinnedAttribute = usesVertexColour ? "float4 Color : ATTRIB7;" : "";
+            const char* colorInterpolant = usesVertexColour ? "float4 Color : COLOR0;" : "";
+            const char* colorAssignment = usesVertexColour ? "psIn.Color = vsIn.Color;" : "";
+            // COLOR_0 is linear and multiplies the WHOLE base-colour product, alpha included --
+            // the alpha half is where a BLEND-mode vertex-coloured primitive's transparency is.
+            // g_Flags.y is the effect's own VertexColorEnabledEXT, so a caller can opt back into the
+            // opaque-white identity deliberately.
+            const char* colorProduct = usesVertexColour
+                ? "if (g_Flags.y > 0.5)\n"
+                  "    {\n"
+                  "        albedo *= psIn.Color.rgb;\n"
+                  "        alpha  *= psIn.Color.a;\n"
+                  "    }"
+                : "";
             const char* rigidAttribute = usesDualPbrUv ? "float2 UV1 : ATTRIB4;" : "";
             const char* skinnedAttribute = usesDualPbrUv ? "float2 UV1 : ATTRIB6;" : "";
             const char* interpolant = usesDualPbrUv ? "float2 UV1 : TEX_COORD1;" : "";
@@ -3149,8 +3262,14 @@ namespace CNA::Internal::Renderers::Diligent
                 ReplaceAll(*source, "/* CNA_PBR_UV1_INTERPOLANT */", interpolant);
                 ReplaceAll(*source, "/* CNA_PBR_UV1_ASSIGNMENT */", assignment);
                 ReplaceAll(*source, "/* CNA_PBR_UV_SELECTOR */", selector);
-                if (source->find("/* CNA_PBR_UV") != std::string::npos)
-                    throw std::runtime_error("CNA Diligent: unexpanded PBR UV shader marker");
+                ReplaceAll(*source, "/* CNA_PBR_COLOR_RIGID_ATTRIBUTE */", colorRigidAttribute);
+                ReplaceAll(*source, "/* CNA_PBR_COLOR_SKINNED_ATTRIBUTE */", colorSkinnedAttribute);
+                ReplaceAll(*source, "/* CNA_PBR_COLOR_INTERPOLANT */", colorInterpolant);
+                ReplaceAll(*source, "/* CNA_PBR_COLOR_ASSIGNMENT */", colorAssignment);
+                ReplaceAll(*source, "/* CNA_PBR_COLOR_PRODUCT */", colorProduct);
+                if (source->find("/* CNA_PBR_UV") != std::string::npos ||
+                    source->find("/* CNA_PBR_COLOR") != std::string::npos)
+                    throw std::runtime_error("CNA Diligent: unexpanded PBR shader marker");
             }
         }
 
@@ -3779,20 +3898,55 @@ namespace CNA::Internal::Renderers::Diligent
                     ? ShaderVariant::SkinnedVertexLit3D
                     : ShaderVariant::Skinned3D;
                 break;
+            // plan_gltf.md GLTF-474: the same selection, on the record that also carries a colour.
+            case 56:
+                variant = (params != nullptr && params->lightingEnabled && !params->preferPerPixelLighting)
+                    ? ShaderVariant::SkinnedColoredVertexLit3D
+                    : ShaderVariant::SkinnedColored3D;
+                break;
             case 48: variant = ShaderVariant::Pbr3D; break;
             case 60: variant = ShaderVariant::PbrDualUv3D; break;
             case 68: variant = ShaderVariant::SkinnedPbr3D; break;
             case 76: variant = ShaderVariant::SkinnedPbrDualUv3D; break;
+            // plan_gltf.md GLTF-463: the skinned record with a packed COLOR_0 at 76.
+            case 80: variant = ShaderVariant::SkinnedPbrColor3D; break;
             default:
                 throw std::runtime_error("CNA Diligent: unsupported vertex stride " +
                                          std::to_string(stride));
         }
+        // plan_gltf.md GLTF-475: the switch above picks a metallic-roughness variant from the
+        // stride ALONE, so a BasicEffect draw on a stride-48 record -- a legitimate XNA
+        // VertexPositionNormalTangentTexture buffer -- selected the PBR shader and rendered the
+        // surface BLACK (measured against SOFTWARE, OPENGL2, OPENGL4 and LLGL, which all rendered
+        // the effect's red DiffuseColor). A different wrong picture from OPENGL4's old one, but
+        // the same defect: the program is chosen from the layout instead of from the effect.
+        //
+        // This renderer has no unlit solid-colour program for those layouts, so the honest
+        // answer is the second of the two permitted states -- refuse by name, before any GPU
+        // state is touched -- rather than a third one that reports a wrong image as a successful
+        // draw. MAGNUM and SDL_GPU already refuse this same input. The glTF path is unaffected:
+        // it drives these strides through PbrEffect/SkinnedPbrEffect, which set `pbr`.
+        if ((stride == 48 || stride == 60 || stride == 68 || stride == 76 || stride == 80) &&
+            (params == nullptr || !params->pbr))
+            throw std::runtime_error(
+                "CNA Diligent: a stride-" + std::to_string(stride) +
+                " vertex record is a metallic-roughness layout, and this renderer only has a PBR "
+                "program for it. The draw did not come from PbrEffect/SkinnedPbrEffect, so it is "
+                "refused rather than rendered through the PBR shader, which would produce a "
+                "visibly wrong surface reported as a successful draw (plan_gltf.md GLTF-475). Use "
+                "PbrEffect for this layout, or a renderer with an unlit program for it "
+                "(SOFTWARE, OPENGL2, OPENGL4, LLGL).");
         if (dualTexture && stride != 20 && stride != 24)
             throw std::runtime_error(
                 "CNA Diligent: DualTextureEffect needs a textured vertex layout (stride 20 or 24)");
-        if (params != nullptr && params->skinned && !params->pbr && stride != 52)
+        // plan_gltf.md GLTF-474: stride 56 is stride 52 with a packed COLOR_0 appended, and the
+        // switch above already selects a SkinnedColored variant for it. This is the third time in
+        // this renderer that a layout existed and a stride list one branch later refused it
+        // (GLTF-472 was the stride-80 PBR twin), which is why the route-acceptance predicates are
+        // now pinned by EveryStrideGatedPbrRouteAdmitsBothColourCarryingStrides.
+        if (params != nullptr && params->skinned && !params->pbr && stride != 52 && stride != 56)
             throw std::runtime_error(
-                "CNA Diligent: SkinnedEffect needs a skinned vertex layout (stride 52)");
+                "CNA Diligent: SkinnedEffect needs a skinned vertex layout (stride 52 or 56)");
         if (params != nullptr && params->envMapping && stride != 32)
             throw std::runtime_error(
                 "CNA Diligent: EnvironmentMapEffect needs a position/normal/UV vertex layout "
@@ -3801,9 +3955,14 @@ namespace CNA::Internal::Renderers::Diligent
             throw std::runtime_error(
                 "CNA Diligent: PbrEffect needs a position/normal/tangent/UV vertex layout "
                 "(stride 48 or 60)");
-        if (params != nullptr && params->pbr && params->skinned && stride != 68 && stride != 76)
+        // plan_gltf.md GLTF-463: stride 80 is the stride-76 record with a packed COLOR_0
+        // appended, and the switch above already selects SkinnedPbrColor3D for it. Omitting it
+        // here refused the layout this renderer has, one line after choosing it.
+        if (params != nullptr && params->pbr && params->skinned && stride != 68 &&
+            stride != 76 && stride != 80)
             throw std::runtime_error(
-                "CNA Diligent: SkinnedPbrEffect needs a skinned PBR vertex layout (stride 68 or 76)");
+                "CNA Diligent: SkinnedPbrEffect needs a skinned PBR vertex layout "
+                "(stride 68, 76 or 80)");
 
         SyncSwapChainSize();
         EnsureRenderTargetsBound();
@@ -3874,15 +4033,24 @@ namespace CNA::Internal::Renderers::Diligent
             constants.flags[1] = 1.0f;
         }
         UploadConstants(constants);
+        // plan_gltf.md GLTF-474: the stride-56 twins belong in this list too. This renderer
+        // enumerates its skinned variants in several places, and a new one that is added to the
+        // layout switch but not to THIS list gets a pipeline that declares a bone buffer nobody
+        // maps -- which Diligent catches as "dynamic allocation ... is out-of-date" rather than
+        // drawing wrongly, but only in a debug build.
         if ((variant == ShaderVariant::Skinned3D ||
              variant == ShaderVariant::SkinnedVertexLit3D ||
+             variant == ShaderVariant::SkinnedColored3D ||
+             variant == ShaderVariant::SkinnedColoredVertexLit3D ||
              variant == ShaderVariant::SkinnedPbr3D ||
-             variant == ShaderVariant::SkinnedPbrDualUv3D) &&
+             variant == ShaderVariant::SkinnedPbrDualUv3D ||
+             variant == ShaderVariant::SkinnedPbrColor3D) &&
             params != nullptr)
             UploadBoneTransforms(*params);
         if ((variant == ShaderVariant::Pbr3D || variant == ShaderVariant::PbrDualUv3D ||
              variant == ShaderVariant::SkinnedPbr3D ||
-             variant == ShaderVariant::SkinnedPbrDualUv3D) &&
+             variant == ShaderVariant::SkinnedPbrDualUv3D ||
+             variant == ShaderVariant::SkinnedPbrColor3D) &&
             params != nullptr)
             UploadPbrConstants(*params);
 

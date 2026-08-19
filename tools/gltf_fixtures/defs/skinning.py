@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from ..builder import FLOAT, TRIANGLES, UNSIGNED_BYTE, UNSIGNED_SHORT, GltfBuilder, pack
 from ..l5 import unsupported as l5_unsupported
+from ..png import encode_png
 from ..manifest import (Defect, Fixture, l3_primitive, mat_identity, mat_scale, mat_translation,
                         mat_mul, world_positions)
 from .common import TRIANGLE_INDICES, TRIANGLE_NORMALS, TRIANGLE_POSITIONS
@@ -955,12 +956,18 @@ def skin_unlit() -> Fixture:
 
 
 def skin_vertex_color() -> Fixture:
-    """A skinned, vertex-coloured primitive -- the fixture that reaches vertex stride 56.
+    """A skinned, vertex-coloured, **unlit** primitive -- the fixture that reaches vertex stride 56.
 
-    plan_gltf.md `GLTF-149`. Stride 56 is the skinned layout with a packed Color appended, and it
-    is the one stride with no C++ stream struct behind it (`GLTF-156`): the importer writes those
-    bytes itself. That makes a golden more valuable here than anywhere else, not less -- there is
-    no `offsetof` to catch a mistake in it.
+    plan_gltf.md `GLTF-149`/`GLTF-463`. Stride 56 is the skinned layout with a packed Color appended,
+    and it is the one stride with no C++ stream struct behind it (`GLTF-156`): the importer writes
+    those bytes itself. That makes a golden more valuable here than anywhere else, not less -- there
+    is no ``offsetof`` to catch a mistake in it.
+
+    The material declares ``KHR_materials_unlit``, and since `GLTF-463` that is what keeps the
+    primitive on this stride at all: a skinned vertex-coloured primitive whose material uses the
+    metallic-roughness model now takes the stride-80 PBR layout instead
+    (``skin-vertex-color-pbr``). Unlit is the honest way to reach stride 56, because stride 56 has no
+    tangent slot and an unlit surface has no use for one.
     """
     b = GltfBuilder("skin-vertex-color")
     position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
@@ -975,10 +982,17 @@ def skin_vertex_color() -> Fixture:
     indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
                                     accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
     joint0, ibm = _single_joint_skin(b)
+    material = b.add_material({
+        "name": "UnlitColoredSkin",
+        "pbrMetallicRoughness": {"baseColorFactor": [0.6, 0.2, 0.9, 1.0]},
+        "extensions": {"KHR_materials_unlit": {}},
+    })
+    b.declare_extensions(used=["KHR_materials_unlit"])
     mesh = b.add_mesh([{
         "attributes": {"POSITION": position, "NORMAL": normal, "TEXCOORD_0": texcoord,
                        "COLOR_0": color, "JOINTS_0": joints, "WEIGHTS_0": weights},
         "indices": indices,
+        "material": material,
         "mode": TRIANGLES,
     }], name="ColoredSkinnedTri")
     mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
@@ -986,18 +1000,171 @@ def skin_vertex_color() -> Fixture:
     b.add_scene([joint0, mesh_node], name="Scene")
     b.set_default_scene(0)
 
+    expected_material = {
+        "index": material,
+        "name": "UnlitColoredSkin",
+        "model": "unlit",
+        "baseColorFactor": [0.6, 0.2, 0.9, 1.0],
+        "metallicFactor": 1.0,
+        "roughnessFactor": 1.0,
+        "emissiveFactor": [0.0, 0.0, 0.0],
+        "alphaMode": "OPAQUE",
+        "alphaCutoff": 0.5,
+        "doubleSided": False,
+        "hasBaseColorTexture": False,
+        "hasNormalTexture": False,
+        "hasMetallicRoughnessTexture": False,
+        "hasOcclusionTexture": False,
+        "hasEmissiveTexture": False,
+    }
     return Fixture(
         id="skin-vertex-color", audit_fixture=None, owning_group="skinning",
-        description="A skinned triangle carrying COLOR_0, which selects the stride-56 layout: the "
-                    "skinned stride-52 record with a packed Color appended. Every colour component "
-                    "is distinct so a mis-offset Color slot cannot pass.",
+        description="A skinned triangle carrying COLOR_0 under an unlit material, which selects the "
+                    "stride-56 layout: the skinned stride-52 record with a packed Color appended. "
+                    "Every colour component is distinct so a mis-offset Color slot cannot pass, and "
+                    "the alphas differ per vertex so a dropped alpha channel is visible too.",
         builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
-        features=["COLOR_0 on a skinned mesh", "JOINTS_0 / WEIGHTS_0", "vertex stride 56"],
+        features=["COLOR_0 on a skinned mesh", "KHR_materials_unlit", "JOINTS_0 / WEIGHTS_0",
+                  "vertex stride 56"],
         spec_anchors=["skins", "skinned-mesh-attributes"],
         l3={"primitives": [l3_primitive(
             mesh=mesh, mesh_name="ColoredSkinnedTri", primitive=0, mode=TRIANGLES,
             positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, texcoords=_STRIDE_TEXCOORDS,
-            colors=_STRIDE_COLORS, joints=_JOINTS, weights=_WEIGHTS, indices=TRIANGLE_INDICES)]},
+            colors=_STRIDE_COLORS, joints=_JOINTS, weights=_WEIGHTS, indices=TRIANGLE_INDICES,
+            material=expected_material)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
+#: `skin-vertex-color-pbr`'s authored tangent basis. Authored rather than generated on purpose: the
+#: generator refuses to model CNA's angle-weighted tangent algorithm (see `l5._tangents_for`), and a
+#: fixture whose whole point is that stride 80 carries a tangent slot correctly should state the
+#: tangent it expects rather than depend on a reproduction of an algorithm. The `w` is -1 so a
+#: handedness that is dropped or defaulted to +1 is visible in the bytes.
+_SKINNED_PBR_TANGENTS = [(0.0, 1.0, 0.0, -1.0)] * 3
+
+#: The material factors for `skin-vertex-color-pbr`, every one away from both glTF's default and
+#: CNA's own fallback, so a dropped factor is a different number rather than a coincidence.
+_SKINNED_PBR_BASE_COLOR = [0.3, 0.7, 0.2, 0.6]
+_SKINNED_PBR_METALLIC = 0.65
+_SKINNED_PBR_ROUGHNESS = 0.35
+
+
+def skin_vertex_color_pbr() -> Fixture:
+    """Skinning + `COLOR_0` + metallic-roughness -- the fixture that reaches vertex stride 80.
+
+    Owns **`GLTF-463`**. This was the last combination CNA refused to shade: `GLTF-462` carried a
+    rigid vertex-coloured metallic-roughness primitive in the four bytes stride 60 had reserved as a
+    discriminator, but the skinned PBR record (stride 76) is exactly its seven fields and has no
+    such bytes -- so a skinned vertex-coloured primitive kept `SkinnedEffect` and lost every
+    metallic-roughness factor and map, which `MeshOut::unsupportedMaterialModelEXT` named.
+
+    Stride 80 is the answer: the whole stride-76 record as a byte-for-byte prefix with the colour
+    appended, which is the same "append, never insert" rule strides 56 and 76 were built on. The
+    fixture authors **every** stream and factor that used to be dropped, each away from its default:
+    an authored NORMAL, an authored TANGENT with ``w = -1``, distinct per-vertex colours with
+    distinct alphas, a translucent ``baseColorFactor``, non-default metallic and roughness, an
+    emissive factor, ``alphaMode: BLEND`` and ``doubleSided``. A downgrade to any other layout loses
+    at least one of them, and the L5 golden is byte-compared.
+    """
+    b = GltfBuilder("skin-vertex-color-pbr")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    tangent = b.add_packed_accessor(usage="TANGENT", values=_SKINNED_PBR_TANGENTS,
+                                    accessor_type="VEC4")
+    texcoord = b.add_packed_accessor(usage="TEXCOORD_0", values=_STRIDE_TEXCOORDS,
+                                     accessor_type="VEC2")
+    color = b.add_packed_accessor(usage="COLOR_0", values=_STRIDE_COLORS, accessor_type="VEC4")
+    joints = b.add_packed_accessor(usage="JOINTS_0", values=_JOINTS, accessor_type="VEC4",
+                                   component_type=UNSIGNED_BYTE)
+    weights = b.add_packed_accessor(usage="WEIGHTS_0", values=_WEIGHTS, accessor_type="VEC4")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    joint0, ibm = _single_joint_skin(b)
+    # Three distinct 1x1 images rather than one shared texture, so a binding that reached the wrong
+    # slot is a different TEXEL rather than the same one twice. Base colour is sRGB-encoded data,
+    # the normal map is a tangent-space vector and the metallic-roughness map is linear packed
+    # channels -- three different colour-space roles, which is the other thing a mis-slotted binding
+    # gets wrong.
+    base_color_image = b.add_image(encode_png(1, 1, [[(200, 100, 50, 255)]]), name="SkinBaseColor")
+    normal_image = b.add_image(encode_png(1, 1, [[(128, 128, 255, 255)]]), name="SkinNormal")
+    metallic_image = b.add_image(encode_png(1, 1, [[(0, 90, 180, 255)]]), name="SkinMetallicRough")
+    base_color_texture = b.add_texture(source=base_color_image, name="SkinBaseColorTexture")
+    normal_texture = b.add_texture(source=normal_image, name="SkinNormalTexture")
+    metallic_texture = b.add_texture(source=metallic_image, name="SkinMetallicRoughTexture")
+    material = b.add_material({
+        "name": "ColoredSkinnedMetal",
+        "pbrMetallicRoughness": {
+            "baseColorFactor": list(_SKINNED_PBR_BASE_COLOR),
+            "metallicFactor": _SKINNED_PBR_METALLIC,
+            "roughnessFactor": _SKINNED_PBR_ROUGHNESS,
+            "baseColorTexture": {"index": base_color_texture},
+            "metallicRoughnessTexture": {"index": metallic_texture},
+        },
+        "normalTexture": {"index": normal_texture},
+        "emissiveFactor": [0.1, 0.05, 0.0],
+        "alphaMode": "BLEND",
+        "doubleSided": True,
+    })
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal, "TANGENT": tangent,
+                       "TEXCOORD_0": texcoord, "COLOR_0": color,
+                       "JOINTS_0": joints, "WEIGHTS_0": weights},
+        "indices": indices,
+        "material": material,
+        "mode": TRIANGLES,
+    }], name="ColoredSkinnedMetalTri")
+    mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
+    b.add_skin({"name": "Skin", "joints": [joint0], "inverseBindMatrices": ibm})
+    b.add_scene([joint0, mesh_node], name="Scene")
+    b.set_default_scene(0)
+
+    expected_material = {
+        "index": material,
+        "name": "ColoredSkinnedMetal",
+        "baseColorFactor": list(_SKINNED_PBR_BASE_COLOR),
+        "metallicFactor": _SKINNED_PBR_METALLIC,
+        "roughnessFactor": _SKINNED_PBR_ROUGHNESS,
+        "emissiveFactor": [0.1, 0.05, 0.0],
+        "alphaMode": "BLEND",
+        "alphaCutoff": 0.5,
+        "doubleSided": True,
+        "hasBaseColorTexture": True,
+        "hasNormalTexture": True,
+        "hasMetallicRoughnessTexture": True,
+        "hasOcclusionTexture": False,
+        "hasEmissiveTexture": False,
+        # GLTF-463: what CNA does with this combination, stated so the behaviour is a value a test
+        # asserts rather than a sentence in a comment.
+        "unsupportedMaterialModel": None,
+        "importedEffect": "SkinnedPbrEffect",
+        "vertexColorsPreserved": True,
+        "materialPropertiesApplied": True,
+        "baseColorProduct": "baseColorFactor * baseColorTexture * COLOR_0, alpha included",
+    }
+    return Fixture(
+        id="skin-vertex-color-pbr", audit_fixture=None, owning_group="skinning",
+        description="Skinning, COLOR_0 and a metallic-roughness material on one primitive -- the "
+                    "last combination CNA refused to shade. It selects the stride-80 layout (the "
+                    "stride-76 skinned PBR record with a packed Color appended) and keeps its "
+                    "authored normal, its authored tangent including w = -1, every material factor, "
+                    "all three of its distinct texture maps, its blend mode and its per-vertex "
+                    "colours with per-vertex alphas.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["COLOR_0 with a PBR material", "COLOR_0 on a skinned mesh",
+                  "vertex stride 80", "authored TANGENT with w = -1",
+                  "translucent baseColorFactor", "alphaMode BLEND", "doubleSided",
+                  "baseColorTexture", "normalTexture", "metallicRoughnessTexture",
+                  "JOINTS_0 / WEIGHTS_0"],
+        spec_anchors=["skins", "skinned-mesh-attributes", "metallic-roughness-material",
+                      "meshes-overview"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="ColoredSkinnedMetalTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS,
+            tangents=_SKINNED_PBR_TANGENTS, texcoords=_STRIDE_TEXCOORDS, colors=_STRIDE_COLORS,
+            joints=_JOINTS, weights=_WEIGHTS, indices=TRIANGLE_INDICES,
+            material=expected_material)]},
         l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
     )
 
@@ -1430,7 +1597,8 @@ def skin_ushort_joint_indices() -> Fixture:
 
 
 FIXTURES = [skin_armature_ancestor, skin_mesh_node_transform, skin_plus_static_mesh,
-            skin_unlit, skin_vertex_color, skin_mesh_node_parent_transform,
+            skin_unlit, skin_vertex_color, skin_vertex_color_pbr,
+            skin_mesh_node_parent_transform,
             skin_skeleton_hint, skin_unnormalized, skin_73_joints, skin_eight_influences,
             skin_two_weighted, skin_four_weighted, skin_no_ibm, skin_nonuniform_joint_scale,
             skin_parented_joints, skin_ushort_joint_indices]

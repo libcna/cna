@@ -56,6 +56,7 @@
 #include <vector>
 
 #include "CNA/Internal/CnjMorphSidecarEXT.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/Internal/Json.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
@@ -1597,7 +1598,11 @@ TEST(GltfToCnjToolTest, EvaluatesCubicSplineWithRealHermiteBasis)
     EXPECT_TRUE(foundForeignTime);
 }
 
-TEST(GltfToCnjToolTest, ExtractsVertexColorAndEnablesItOnBasicEffect)
+// plan_gltf.md GLTF-462: this document has no material, so glTF's own default metallic-roughness
+// applies and its COLOR_0 no longer costs it the material model. It therefore round-trips through
+// the offline path as a stride-60 PbrEffect part with the colour in stride 60's own colour slot --
+// the case that used to become a stride-24 BasicEffect with no Normal slot at all.
+TEST(GltfToCnjToolTest, ExtractsVertexColorAndEnablesItOnThePbrEffect)
 {
     ScratchDir gltfDir;
     ScratchDir contentRoot;
@@ -1612,11 +1617,26 @@ TEST(GltfToCnjToolTest, ExtractsVertexColorAndEnablesItOnBasicEffect)
     ASSERT_TRUE(std::filesystem::exists(vertsPath));
     std::ifstream f(vertsPath, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    ASSERT_EQ(bytes.size(), 3u * 24u); // stride 24 (VertexPositionColorTexture): pos12+color4+uv8
+    // stride 60: pos12 + normal12 + tangent16 + uv8 + uv1_8 + color4.
+    ASSERT_EQ(bytes.size(), 3u * 60u);
 
+    const CNA::Internal::Graphics::InferredVertexLayout layout =
+        CNA::Internal::Graphics::InferredLayoutForStride(
+            60, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+    ASSERT_TRUE(layout.known);
+    int colorOffset = -1;
+    for (std::size_t e = 0; e < layout.count; ++e)
+    {
+        if (layout.elements[e].usage == VertexElementUsage::Color &&
+            layout.elements[e].usageIndex == 0)
+        {
+            colorOffset = layout.elements[e].offset;
+        }
+    }
+    ASSERT_GE(colorOffset, 0);
     auto readRgba = [&](std::size_t vertexIndex) {
         std::uint8_t rgba[4];
-        std::memcpy(rgba, bytes.data() + vertexIndex * 24 + 12, 4);
+        std::memcpy(rgba, bytes.data() + vertexIndex * 60 + static_cast<std::size_t>(colorOffset), 4);
         return std::array<std::uint8_t, 4>{rgba[0], rgba[1], rgba[2], rgba[3]};
     };
     EXPECT_EQ(readRgba(0), (std::array<std::uint8_t, 4>{255, 0, 0, 255}));
@@ -1634,9 +1654,12 @@ TEST(GltfToCnjToolTest, ExtractsVertexColorAndEnablesItOnBasicEffect)
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("colortest");
     ModelMesh* mesh = model.getMeshesProperty()[0];
-    auto* basicFx = dynamic_cast<BasicEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
-    ASSERT_NE(basicFx, nullptr);
-    EXPECT_TRUE(basicFx->VertexColorEnabled);
+    auto* pbrFx = dynamic_cast<PbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(pbrFx, nullptr)
+        << "glTF's default material is metallic-roughness, and a colour stream is a multiplier on "
+           "its base colour rather than a different material model (GLTF-462)";
+    EXPECT_TRUE(pbrFx->VertexColorEnabledEXT)
+        << "the colour reached the GPU record but the effect was not told to read it";
 }
 
 // plan_gltf.md GLTF-139/GLTF-130: the offline path has to produce the SAME Model shape as the
@@ -2054,10 +2077,16 @@ TEST(GltfToCnjToolTest, BaseColorAndOcclusionTexturesImportThroughPbrEffectWithA
     EXPECT_EQ(255, occlusionPixel.getAProperty());
 }
 
-// CNB-66/67/68: a skinned mesh with a COLOR_0 attribute must import through the new stride-56
-// (skinned + Color) layout, wiring "vertexColorEnabled": true to SkinnedEffect's new CNAEXT
-// VertexColorEnabled property, and the loaded vertex buffer must carry the real per-vertex colors.
-TEST(GltfToCnjToolTest, ExtractsVertexColorOnASkinnedMeshAndEnablesItOnSkinnedEffect)
+// plan_gltf.md GLTF-463. This document is a skinned primitive with COLOR_0 and no material, so
+// glTF's own default metallic-roughness applies -- and that used to cost it the material model
+// entirely: CNB-66/67/68 imported it through SkinnedEffect on the stride-56 layout, which has no
+// tangent slot, and `MeshOut::unsupportedMaterialModelEXT` named the loss.
+//
+// GLTF-463 carries it on stride 80: the whole stride-76 skinned PBR record with the packed COLOR_0
+// appended. This test is the end-to-end witness on the OFFLINE path -- the colour has to survive
+// BuildMorphBytes' sibling, the `.cnj` mesh entry's `vertexColorEnabled` flag and
+// `SkinnedPbrEffect::VertexColorEnabledEXT`, and the skinning has to survive with it.
+TEST(GltfToCnjToolTest, ASkinnedVertexColouredPrimitiveKeepsItsPbrMaterialThroughTheOfflineCnjPath)
 {
     ScratchDir gltfDir;
     ScratchDir contentRoot;
@@ -2071,15 +2100,59 @@ TEST(GltfToCnjToolTest, ExtractsVertexColorOnASkinnedMeshAndEnablesItOnSkinnedEf
     const std::filesystem::path vertsPath = contentRoot.path() / "skincolor_mesh0_verts.bin";
     std::ifstream f(vertsPath, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    ASSERT_EQ(bytes.size(), 3u * 56u); // stride 56, skinned + Color
+    ASSERT_EQ(bytes.size(), 3u * 80u)
+        << "a skinned vertex-coloured metallic-roughness primitive belongs on the stride-80 layout, "
+           "not on a layout that drops its material";
 
-    // Color is appended after BlendIndices (offset 52); vertex 0 was authored fully-opaque red.
+    // Every slot read through the canonical stride table rather than at a hardcoded offset
+    // (GLTF-278): a test carrying its own copy of an ABI asserts the copy.
+    const CNA::Internal::Graphics::InferredVertexLayout layout =
+        CNA::Internal::Graphics::InferredLayoutForStride(
+            80, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+    ASSERT_TRUE(layout.known);
+    const auto offsetOf = [&](VertexElementUsage usage, int usageIndex) {
+        for (std::size_t i = 0; i < layout.count; ++i)
+        {
+            if (layout.elements[i].usage == usage &&
+                layout.elements[i].usageIndex == usageIndex)
+            {
+                return layout.elements[i].offset;
+            }
+        }
+        return -1;
+    };
+    const int colorOffset = offsetOf(VertexElementUsage::Color, 0);
+    const int normalOffset = offsetOf(VertexElementUsage::Normal, 0);
+    const int weightOffset = offsetOf(VertexElementUsage::BlendWeight, 0);
+    const int indicesOffset = offsetOf(VertexElementUsage::BlendIndices, 0);
+    ASSERT_GE(colorOffset, 0);
+    ASSERT_GE(normalOffset, 0);
+    ASSERT_GE(weightOffset, 0);
+    ASSERT_GE(indicesOffset, 0);
+
+    // The colour survives -- vertex 0 was authored fully-opaque red.
     unsigned char color0[4];
-    std::memcpy(color0, bytes.data() + 0 * 56 + 52, sizeof(color0));
-    EXPECT_EQ(static_cast<int>(color0[0]), 255);
-    EXPECT_EQ(static_cast<int>(color0[1]), 0);
-    EXPECT_EQ(static_cast<int>(color0[2]), 0);
-    EXPECT_EQ(static_cast<int>(color0[3]), 255);
+    std::memcpy(color0, bytes.data() + 0 * 80 + colorOffset, sizeof(color0));
+    EXPECT_EQ(255, static_cast<int>(color0[0]));
+    EXPECT_EQ(0, static_cast<int>(color0[1]));
+    EXPECT_EQ(0, static_cast<int>(color0[2]));
+    EXPECT_EQ(255, static_cast<int>(color0[3]));
+
+    // The authored NORMAL survives -- the stride-56 layout it used to land on had no slot for one.
+    float normal0[3];
+    std::memcpy(normal0, bytes.data() + 0 * 80 + normalOffset, sizeof(normal0));
+    EXPECT_NEAR(0.0f, normal0[0], 1e-5f);
+    EXPECT_NEAR(0.0f, normal0[1], 1e-5f);
+    EXPECT_NEAR(1.0f, normal0[2], 1e-5f);
+
+    // And so does the skinning, which is the half a colour must not cost.
+    float weights0[4];
+    std::memcpy(weights0, bytes.data() + 0 * 80 + weightOffset, sizeof(weights0));
+    EXPECT_NEAR(1.0f, weights0[0] + weights0[1] + weights0[2] + weights0[3], 1e-5f)
+        << "the joint weights did not survive the layout change";
+    unsigned char joints0[4];
+    std::memcpy(joints0, bytes.data() + 0 * 80 + indicesOffset, sizeof(joints0));
+    EXPECT_EQ(0, static_cast<int>(joints0[0]));
 
     GraphicsDevice gd;
     // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
@@ -2094,9 +2167,23 @@ TEST(GltfToCnjToolTest, ExtractsVertexColorOnASkinnedMeshAndEnablesItOnSkinnedEf
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
     ModelMesh* mesh = model.getMeshesProperty()[0];
 
-    auto* skinnedFx = dynamic_cast<SkinnedEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
-    ASSERT_NE(skinnedFx, nullptr);
-    EXPECT_TRUE(skinnedFx->VertexColorEnabled);
+    auto* skinnedPbr =
+        dynamic_cast<SkinnedPbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(nullptr, skinnedPbr)
+        << "a colour stream is a multiplier on base colour, not a reason to leave the "
+           "metallic-roughness model (GLTF-463)";
+    EXPECT_TRUE(skinnedPbr->VertexColorEnabledEXT)
+        << "the colour reached the GPU record but the effect was not told to read it";
+
+    // The direct path must agree: the two loaders load the same content and several tests in this
+    // file exist only to assert exactly that.
+    ContentManager directCm(nullptr, gltfDir.path().string());
+    directCm.setGraphicsDevice(gd);
+    Model direct = directCm.Load<Model>("skincolor");
+    auto* directSkinnedPbr = dynamic_cast<SkinnedPbrEffect*>(
+        direct.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(nullptr, directSkinnedPbr);
+    EXPECT_TRUE(directSkinnedPbr->VertexColorEnabledEXT);
 }
 
 // plan_gltf.md GLTF-236/GLTF-237: every core material field must survive the offline .cnj path,
@@ -2593,6 +2680,7 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsSkinnedPbrMaterialThroughTheOfflineC
 // "morphTargets"/"morphWeights"/"morphWeightTrack" JSON fields, and ModelTypeReader's own .cnj
 // JSON path must reconstruct the same MorphTargetDataEXT the runtime glTF path already builds
 // directly (formerly a documented scope cut -- CNB-64/Phase 13B -- that only emitted a warning).
+
 TEST(GltfToCnjToolTest, SerializesAndReloadsMorphTargetsThroughTheOfflineCnjPath)
 {
     ScratchDir gltfDir;
@@ -2663,6 +2751,144 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsMorphTargetsThroughTheOfflineCnjPath
     const auto midWeights = EvaluateMorphWeightsEXT(morph->WeightTrack, 0.5);
     ASSERT_EQ(midWeights.size(), 1u);
     EXPECT_NEAR(midWeights[0], 0.5f, 1e-5f);
+}
+
+
+TEST(GltfToCnjToolTest, MorphedFlatNormalsAreRecomputedIdenticallyOnBothLoadPaths)
+{
+    // plan_gltf.md GLTF-461, end to end on both loaders. What has to survive the .cnj is not the
+    // normals themselves -- they are a function of the weights, so no buffer can hold them -- but
+    // the DECISION to recompute them, plus the connectivity the recomputation needs. The offline
+    // path carries the decision as a mesh-entry field and rebuilds the connectivity from the index
+    // sidecar it already loads; if either were lost, the reloaded model would light its deformed
+    // surface with its rest-pose normals and nothing would say so.
+    //
+    // The assertion is derived from the blended POSITIONS rather than stated, so it cannot be
+    // satisfied by writing back a hardcoded expectation: each of the two morphed faces must carry
+    // exactly its own geometric normal, and the two must differ.
+    // plan_gltf.md GLTF-464: this was an inline document until the corpus could grow. It is a
+    // conformance statement about the format -- §3.7.2.2's "MUST calculate flat normals for each
+    // morph target" -- so it lives in `tools/gltf_fixtures/` now, where `flatnormals.py` derives the
+    // per-corner split independently and all four L7 policies render it.
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath =
+        CnaTest::GltfOracle::CorpusDirectory() / "morph-normalless-quad.gltf";
+    ASSERT_TRUE(std::filesystem::is_regular_file(gltfPath)) << gltfPath;
+
+    ASSERT_EQ(0, RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(),
+                                  "normallessmorph"));
+
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
+    const auto morphOf = [](Model& model) {
+        ModelMesh* mesh = model.getMeshesProperty()[0];
+        ModelMeshPart* part = mesh->getMeshPartsProperty()[0];
+        return dynamic_cast<MorphTargetDataEXT*>(part->getTagProperty());
+    };
+
+    ContentManager offlineCm(nullptr, contentRoot.path().string());
+    offlineCm.setGraphicsDevice(gd);
+    Model offline = offlineCm.Load<Model>("normallessmorph");
+    // The direct glTF path loads the same asset straight from the corpus, so both loaders read one
+    // file rather than two copies that could drift.
+    ContentManager directCm(nullptr, gltfPath.parent_path().string());
+    directCm.setGraphicsDevice(gd);
+    Model direct = directCm.Load<Model>("morph-normalless-quad");
+
+    MorphTargetDataEXT* offlineMorph = morphOf(offline);
+    MorphTargetDataEXT* directMorph = morphOf(direct);
+    ASSERT_NE(nullptr, offlineMorph);
+    ASSERT_NE(nullptr, directMorph);
+
+    for (const auto& [name, morph] : {std::pair{std::string("direct .gltf"), directMorph},
+                                      std::pair{std::string(".cnj"), offlineMorph}})
+    {
+        SCOPED_TRACE(name);
+        EXPECT_TRUE(morph->RecomputeFlatNormalsEXT)
+            << "the primitive authors no NORMAL and carries morph targets, which is exactly the "
+               "case §3.7.2.2 makes pose-dependent";
+        EXPECT_EQ(6u, morph->TriangleIndicesEXT.size())
+            << "the recomputation needs the connectivity of both triangles";
+        ASSERT_EQ(1u, morph->PositionDeltas.size());
+        // Four source vertices, six after the per-corner split -- and the delta on the shared
+        // vertex reaches BOTH of its copies, so exactly two of the six deltas are non-zero.
+        ASSERT_EQ(6u, morph->PositionDeltas[0].size());
+        int lifted = 0;
+        for (const Vector3& delta : morph->PositionDeltas[0])
+        {
+            if (delta.Z != 0.0f) { ++lifted; }
+        }
+        EXPECT_EQ(2, lifted) << "the shared vertex's delta did not follow it through the split";
+
+        const std::vector<std::uint8_t> blended =
+            BlendMorphTargetsEXT(*morph, std::vector<float>{1.0f});
+        const int stride = morph->Stride;
+        ASSERT_EQ(48, stride) << "a materialless primitive is glTF's default metallic-roughness";
+        const CNA::Internal::Graphics::InferredVertexLayout layout =
+            CNA::Internal::Graphics::InferredLayoutForStride(
+                stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+        ASSERT_TRUE(layout.known);
+        int normalOffset = -1;
+        for (std::size_t i = 0; i < layout.count; ++i)
+        {
+            if (layout.elements[i].usage == VertexElementUsage::Normal &&
+                layout.elements[i].usageIndex == 0)
+            {
+                normalOffset = layout.elements[i].offset;
+            }
+        }
+        ASSERT_GE(normalOffset, 0);
+
+        const auto positionOf = [&](std::uint32_t index) {
+            float p[3];
+            std::memcpy(p, blended.data() +
+                              static_cast<std::size_t>(index) * static_cast<std::size_t>(stride),
+                        sizeof(p));
+            return Vector3(p[0], p[1], p[2]);
+        };
+        const auto normalOf = [&](std::uint32_t index) {
+            float n[3];
+            std::memcpy(n, blended.data() +
+                              static_cast<std::size_t>(index) * static_cast<std::size_t>(stride) +
+                              static_cast<std::size_t>(normalOffset),
+                        sizeof(n));
+            return Vector3(n[0], n[1], n[2]);
+        };
+
+        std::vector<Vector3> faceNormals;
+        for (std::size_t f = 0; f + 2 < morph->TriangleIndicesEXT.size(); f += 3)
+        {
+            const Vector3 a = positionOf(morph->TriangleIndicesEXT[f]);
+            const Vector3 b = positionOf(morph->TriangleIndicesEXT[f + 1]);
+            const Vector3 c = positionOf(morph->TriangleIndicesEXT[f + 2]);
+            const Vector3 cross = Vector3::Cross(b - a, c - a);
+            const float length = cross.Length();
+            ASSERT_GT(length, 1e-6f);
+            const Vector3 expected(cross.X / length, cross.Y / length, cross.Z / length);
+            faceNormals.push_back(expected);
+            for (std::size_t k = 0; k < 3; ++k)
+            {
+                SCOPED_TRACE("face " + std::to_string(f / 3) + " corner " + std::to_string(k));
+                const Vector3 actual = normalOf(morph->TriangleIndicesEXT[f + k]);
+                EXPECT_NEAR(expected.X, actual.X, 1e-5f);
+                EXPECT_NEAR(expected.Y, actual.Y, 1e-5f);
+                EXPECT_NEAR(expected.Z, actual.Z, 1e-5f);
+            }
+        }
+        ASSERT_EQ(2u, faceNormals.size());
+        EXPECT_GT((faceNormals[0] - faceNormals[1]).Length(), 0.1f)
+            << "the fixture is not discriminating: the two morphed faces face the same way, so a "
+               "single shared normal would have been correct and the split proves nothing";
+    }
+
+    // The two loaders must agree byte for byte on the blended pose, which is the property every
+    // other offline/runtime parity sweep in this file also asserts.
+    EXPECT_EQ(BlendMorphTargetsEXT(*directMorph, std::vector<float>{1.0f}),
+              BlendMorphTargetsEXT(*offlineMorph, std::vector<float>{1.0f}));
+    EXPECT_EQ(directMorph->TriangleIndicesEXT, offlineMorph->TriangleIndicesEXT);
 }
 
 // GLTF-289: the original CNB-82 sidecar carried only position and normal deltas. Tangent xyz now

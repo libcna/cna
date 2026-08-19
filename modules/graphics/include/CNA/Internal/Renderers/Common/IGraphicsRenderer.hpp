@@ -1140,8 +1140,11 @@ namespace CNA::Internal::Renderers
         /// KHR_materials_ior and the factor-only part of KHR_materials_specular. Core glTF's
         /// default is 0.04 in every channel. Kept separate from the metallic F0, which remains the
         /// material's base colour, and from F90 below because specularFactor can reduce grazing
-        /// reflectance independently. Every PBR-capable renderer consumes both endpoints; the
-        /// repository-wide renderer audit keeps those CPU uploads and Schlick terms in lockstep.
+        /// reflectance independently. Every PBR-capable renderer consumes both endpoints -- as of
+        /// plan_gltf.md GLTF-476, which found that claim had been written while `IGL` consumed
+        /// neither and hard-coded 0.04 in its shader. It is now machine-checked by
+        /// `GltfRendererPbrFallbackPolicy.EveryPbrRendererConsumesEveryUniversalPbrDrawParameter`
+        /// rather than asserted here.
         float pbrDielectricF0[3] = {0.04f, 0.04f, 0.04f};
         /// Dielectric grazing reflectance after KHR_materials_specular's scalar strength (default 1).
         float pbrDielectricF90 = 1.0f;

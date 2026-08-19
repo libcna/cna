@@ -32,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 
 using CNA::Internal::JsonValue;
@@ -46,6 +47,7 @@ using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::Model;
+using Microsoft::Xna::Framework::Graphics::PbrEffect;
 using Microsoft::Xna::Framework::Graphics::SkinnedEffect;
 
 namespace
@@ -132,12 +134,18 @@ TEST(GltfUnlitMaterial, ALitMaterialStillGetsTheDefaultLightingRig)
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("mat-vertex-color-pbr");
 
-    auto* basic = dynamic_cast<BasicEffect*>(FirstEffect(model));
-    ASSERT_NE(nullptr, basic) << "a vertex-coloured metallic-roughness primitive imports through "
-                                 "BasicEffect (GLTF-241) -- and must still be LIT, which is why "
-                                 "unlitEXT is its own flag rather than 'not usePbr'";
-    EXPECT_TRUE(basic->getLightingEnabledProperty());
-    EXPECT_TRUE(basic->getDirectionalLight0Property().getEnabledProperty());
+    // plan_gltf.md GLTF-462: this primitive is vertex-coloured AND metallic-roughness, which used to
+    // put it on BasicEffect; it arrives as a PbrEffect now, with its colour multiplying base colour.
+    // The control's point is unchanged and is the reason `unlitEXT` is its own flag rather than "not
+    // usePbr": a LIT material must still get the lighting rig, whichever effect carries it.
+    auto* pbr = dynamic_cast<PbrEffect*>(FirstEffect(model));
+    ASSERT_NE(nullptr, pbr) << "a vertex-coloured metallic-roughness primitive imports through "
+                               "PbrEffect (GLTF-462) -- and must still be LIT";
+    EXPECT_TRUE(pbr->VertexColorEnabledEXT)
+        << "the colour stream is present in the stride-60 record, so the effect has to be told to "
+           "read it -- otherwise COLOR_0 arrives on the GPU and is ignored";
+    EXPECT_TRUE(pbr->getLightingEnabledProperty());
+    EXPECT_TRUE(pbr->getDirectionalLight0Property().getEnabledProperty());
 }
 
 // --- GLTF-338: unlit combined with vertex colour and alpha ---------------------------------------

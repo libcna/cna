@@ -386,7 +386,7 @@ pass for its fixture. Implemented so far:
 | **L4** | world-space vertex positions after node composition | implemented — `EvaluateWorldPositionsEXT` | `GLTF-006` |
 | **L5** | byte-exact generated vertex/index buffers | implemented — `CompareVertexBytesEXT` / `CompareIndexBytesEXT` | `GLTF-007` |
 | **L6** | effect parameters actually bound for a draw | implemented — `CaptureDrawParamsEXT` | `GLTF-008` |
-| **L7** | rendered pixels vs a golden PNG | 145 explicit EasyGL dispositions: 137 PNGs + 8 safe rejections | `GLTF-009` |
+| **L7** | rendered pixels vs a golden PNG | 148 explicit EasyGL dispositions: 140 PNGs + 8 safe rejections | `GLTF-009` |
 
 The helpers are **test scope only** — they live under `modules/content/tests/CNA/Internal/GltfImport/`
 in namespace `CnaTest::GltfOracle`, are compiled only into `CnaTests`, and are not part of the CNA
@@ -611,7 +611,7 @@ tests.
 The production OPENGLES3 viewer registers `CnaGltfConformanceL7` under the same
 `gltf-conformance` label. It runs after the numerical CNA build in CI because the viewer is a
 separate repository and executable, but it is still a named final rung rather than an unlabelled
-screenshot side job. It gives all 145 canonical assets an explicit outcome; see §5.3.
+screenshot side job. It gives all 148 canonical assets an explicit outcome; see §5.3.
 
 #### Reading a failure: the layer, the fixture, the field, the delta (`GLTF-402`)
 
@@ -791,7 +791,7 @@ produced them.
 
 ### 4.3 Coverage today
 
-**137 of the 145** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
+**140 of the 148** fixtures carry a golden, covering strides 48, 24, 68 and 80, all seven primitive topologies
 with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
 width-selection rule. Eight do not carry one. Seven are fixtures the importer must **refuse**
 (`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`);
@@ -879,7 +879,7 @@ every value non-default so an omitted field cannot accidentally agree through de
 the L6 half of `GLTF-244`.
 
 The L7 half is now equally directory-driven on two independent shader implementations. EasyGL's
-and Vulkan's complete 145-asset two-process oracles include all 14 material fixtures. The focused Vulkan runner
+and Vulkan's complete 148-asset two-process oracles include all 14 material fixtures. The focused Vulkan runner
 `scripts/gltf-l7-vulkan-materials.py` discovers the same 14 `mat-*` inputs, launches the production
 viewer twice per asset on an explicitly selected lavapipe ICD, rejects a clear capture and requires
 exact RGBA equality both between processes and against `tests/gltf-l7/vulkan-materials/`. All 14
@@ -925,9 +925,9 @@ Two entries in the table are honest boundaries rather than coverage:
 
 `GLTF-009`'s acceptance is *deterministic PNGs across two runs on `OPENGLES3`*. The committed
 `scripts/gltf-l7-corpus.py` now launches the production viewer in **two independent processes for
-every one of the 145 canonical assets**. The result is 137 byte-identical 512×512 PNG pairs and
+every one of the 148 canonical assets**. The result is 140 byte-identical 512×512 PNG pairs and
 eight byte-identical, non-zero safe rejections whose stable diagnostic and lower-layer owning task
-are both recorded. The corresponding 137 goldens live in `tests/gltf-l7/easygl/`; policy and the
+are both recorded. The corresponding 138 goldens live in `tests/gltf-l7/easygl/`; policy and the
 two camera/culling rig exceptions live in `tests/gltf-l7/easygl-policy.json`; the complete input,
 binary, commit, image, classification and hash evidence is
 `docs/gltf-l7-corpus-report.json`. `cna-gltf-viewer` registers the runner as
@@ -983,7 +983,7 @@ visible at `(83,38,127)` on both EasyGL profiles.
 `EasyGL_Gltf_TextureTransformPerMap` adds the generated `texture-transform-per-map` witness: one
 authored UV stream drives base-colour and normal maps through deliberately different affine rows,
 and both OPENGLES2 and OPENGLES3 select the expected blue base texel and +Z normal texel. The first
-complete viewer retake after the affine rows reached every PBR shader remained 145/145: all 137
+complete viewer retake after the affine rows reached every PBR shader remained 146/146: all 138
 accepted assets were byte-identical between their two new processes and all eight rejections kept
 their diagnostic. Ten texture-bearing goldens were deliberately rebaselined. The target fixture is
 the only material image change; ordinary linear-filtered cases move by at most four byte levels,
@@ -1044,7 +1044,7 @@ the render pass or exposing generated mip levels. The shared winding oracle is 1
 EasyGL and Vulkan and green on SOFTWARE; HEADLESS also passes its explicit non-rasterising
 boundary. It covers both windings under all three cull modes, ordinary/MSAA targets, every draw
 entry point, stock textured effects, mirrored transforms and SpriteBatch. The later whole-corpus
-L7 campaign is complete at 137 deterministic captures plus eight deterministic safe rejections;
+L7 campaign is complete at 140 deterministic captures plus eight deterministic safe rejections;
 its two additional renderer-boundary findings and exact evidence are in §5.5.
 
 `GLTF-396` records the adjacent clip/depth boundary in `docs/gltf-conventions.md`. CNA projection
@@ -1103,7 +1103,7 @@ The same `scripts/gltf-l7-corpus.py` protocol now has an independently measured 
 runs the production viewer twice for every canonical asset with
 `VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json`, records the concrete llvmpipe/lavapipe
 device identity, and compares only against renderer-owned `tests/gltf-l7/vulkan/` goldens. The
-result is 137 byte-identical 512×512 PNG pairs at exact RGB/alpha tolerance 0 and eight
+result is 138 byte-identical 512×512 PNG pairs at exact RGB/alpha tolerance 0 and eight
 byte-identical non-zero safe rejections. Policy and exception reasons live in
 `tests/gltf-l7/vulkan-policy.json`; complete input, viewer, executable and PNG hashes live in
 `docs/gltf-l7-vulkan-corpus-report.json`.
@@ -1115,11 +1115,11 @@ stride 48 and every fragment sample used UV0. That corrupted one triangle and le
 foreground pixels. Vulkan now keys separate 48/60 and 68/76 PBR pipelines, binds UV1 at byte 48 or
 68, and compiles dedicated dual-UV rigid/skinned SPIR-V variants which consume the selector. The
 legacy single-UV shader blobs remain bit-identical. Two independent corrected captures render the
-complete 45,644-pixel numbered quad and agree byte-for-byte; the subsequent 145-asset campaign has
+complete 45,644-pixel numbered quad and agree byte-for-byte; the subsequent 146-asset campaign has
 zero active divergence.
 
 `GltfFixtureCorpus.VulkanCorpusL7ReportIsCompleteExactAndReproducible` makes the evidence portable
-to an ordinary no-display test: it re-hashes all 145 canonical sources and all 137 PNGs, requires
+to an ordinary no-display test: it re-hashes all 146 canonical sources and all 138 PNGs, requires
 the golden directory to equal the captured disposition set exactly, and locks the two-process,
 single-device and zero-tolerance policy. The focused 14-material Vulkan runner remains useful as a
 fast subsystem gate; its narrower report is not used to inflate the whole-corpus claim.
@@ -1132,7 +1132,7 @@ records the renderer identity emitted by the application and compares only again
 `tests/gltf-l7/software/` goldens. The viewer still creates an SDL window for its application
 shell, so the recorded capture environment uses X11/Xvfb and dummy audio; all mesh transformation,
 clipping, depth, shading and framebuffer pixels are nevertheless produced by CNA's CPU rasteriser,
-not by the display server or a graphics API. The result is 137 byte-identical 512×512 PNG pairs at
+not by the display server or a graphics API. The result is 138 byte-identical 512×512 PNG pairs at
 exact RGB/alpha tolerance 0 and eight deterministic non-zero safe rejections. Policy and exception
 reasons live in `tests/gltf-l7/software-policy.json`; complete input, viewer, executable and PNG
 hashes live in `docs/gltf-l7-software-corpus-report.json`.
@@ -1160,7 +1160,7 @@ xvfb-run -a python3 scripts/gltf-l7-corpus.py \
 ```
 
 `GltfFixtureCorpus.SoftwareCorpusL7ReportIsCompleteExactAndReproducible` makes the recorded evidence
-portable to a no-display unit test: it re-hashes all 145 canonical sources and all 137 goldens,
+portable to a no-display unit test: it re-hashes all 146 canonical sources and all 138 goldens,
 requires the golden directory to equal the captured disposition set, verifies each safe rejection,
 and locks the two-process, single-renderer and zero-tolerance policy.
 
@@ -1200,7 +1200,7 @@ coverage was pixel-aligned. Alpha differences remain in the report as diagnostic
 disposable; [`gltf-reference-comparison.json`](gltf-reference-comparison.json) retains every asset,
 camera, state, environment, input/output hash and metric needed to audit the result without adding
 an external renderer or browser to CNA's CI/runtime dependency graph. This 13-asset cross-check is
-the independent implementation check; the 145-asset EasyGL gate in §5.3 is the broad regression
+the independent implementation check; the 146-asset EasyGL gate in §5.3 is the broad regression
 oracle. Neither is substituted for the other.
 
 ### 5.7 Final viewer retake matrix (`GLTF-429`)
@@ -1380,6 +1380,8 @@ written for this document: two descriptions of the same fixture are two things t
 | `tangent-absent-generated` | normals | L1, L2, L3, L4, L5 | absent TANGENT; angle-weighted tangent generation; Gram-Schmidt; unit generated tangent; generated handedness +1 |
 | `normal-nonuniform-scale` | normals | L1, L2, L3, L4, L5 | rotated non-uniform scale; inverse-transpose normal matrix; slanted authored normal; normal renormalisation after transform |
 | `tangent-mirrored` | normals | L1, L2, L3, L4, L5 | negative-determinant placement; shared tangent vertex buffer; per-draw handedness sign; mirrored tangent direction; normal map with non-zero tangent-space Y |
+| `tangent-without-normal` | normals | L1, L2, L3, L4 | absent NORMAL; authored TANGENT ignored; regenerated tangent basis |
+| `morph-normalless-quad` | normals | L1, L2, L3, L4, L5 | absent NORMAL; morph target; per-corner flat-normal split; delta on a shared vertex |
 | `xf-identity` | transforms | L1, L2, L3, L4 | node without transform; single scene root |
 | `xf-translation` | transforms | L1, L2, L3, L4 | node translation |
 | `xf-scale-uniform` | transforms | L1, L2, L3, L4 | uniform node scale; normal matrix agrees with the world 3x3 |
@@ -1398,11 +1400,11 @@ written for this document: two descriptions of the same fixture are two things t
 | `xf-transform-only` | transforms | L1, L2, L3, L4 | transform-only node; mesh on a child |
 | `xf-multi-root` | transforms | L1, L2, L3, L4 | three scene roots; multi-root scene |
 | `mat-default` | materials | L1, L2, L3 | no material; glTF default material; metallic-roughness by default |
-| `mat-factor-only-gold` | materials | L1, L2, L3 | pbrMetallicRoughness factors; baseColorFactor; alphaMode BLEND; doubleSided; no texture maps |
+| `mat-factor-only-gold` | materials | L1, L2, L3 | pbrMetallicRoughness factors; baseColorFactor; alphaMode BLEND; doubleSided; KHR_materials_ior; KHR_materials_specular; factor-only dielectric F0; no texture maps |
 | `mat-basecolor-factor-times-texture` | materials | L1, L2, L3, L4, L5 | baseColorFactor times baseColorTexture; sRGB mid-grey sample; linear-space material multiplication; analytic L7 byte 92 |
 | `mat-emissive-factor` | materials | L1, L2, L3 | emissiveFactor without the strength extension; dark base colour |
 | `mat-emissive-strength` | materials | L1, L2, L3 | KHR_materials_emissive_strength; emissiveFactor; HDR emissive above 1; no texture maps |
-| `mat-vertex-color-pbr` | materials | L1, L2, L3 | COLOR_0 with a PBR material; unsupported material model; import report |
+| `mat-vertex-color-pbr` | materials | L1, L2, L3, L5 | COLOR_0 with a PBR material; vertex colour as a base-colour multiplier; vertex stride 60 colour slot; import report |
 | `mat-normal-occlusion-scale` | materials | L1, L2, L3 | normalTexture.scale; occlusionTexture.strength; schema-valid shared linear map |
 | `mat-alpha-mask-cutoff` | materials | L1, L2, L3 | alphaMode MASK; non-default alphaCutoff; alpha test reaches the shader; no texture maps |
 | `mat-unimplemented-extensions` | materials | L1, L2, L3 | KHR_materials_clearcoat; KHR_materials_sheen; KHR_materials_volume; ignored extension reporting |
@@ -1425,7 +1427,8 @@ written for this document: two descriptions of the same fixture are two things t
 | `skin-mesh-node-transform` | skinning | L1, L2, L3, L4 | skinned mesh node transform; mesh-space cancellation; skin.inverseBindMatrices; JOINTS_0 / WEIGHTS_0 |
 | `skin-plus-static-mesh` | skinning | L1, L2, L3, L4 | two mesh groups; skinned and unskinned mesh in one file; skin.joints; skin.inverseBindMatrices |
 | `skin-unlit` | skinning | L1, L2, L3, L4, L5 | KHR_materials_unlit; JOINTS_0 / WEIGHTS_0; vertex stride 52 |
-| `skin-vertex-color` | skinning | L1, L2, L3, L4, L5 | COLOR_0 on a skinned mesh; JOINTS_0 / WEIGHTS_0; vertex stride 56 |
+| `skin-vertex-color` | skinning | L1, L2, L3, L4, L5 | COLOR_0 on a skinned mesh; KHR_materials_unlit; JOINTS_0 / WEIGHTS_0; vertex stride 56 |
+| `skin-vertex-color-pbr` | skinning | L1, L2, L3, L4, L5 | COLOR_0 with a PBR material; COLOR_0 on a skinned mesh; vertex stride 80; authored TANGENT with w = -1; translucent baseColorFactor; alphaMode BLEND; doubleSided; JOINTS_0 / WEIGHTS_0 |
 | `skin-mesh-node-parent-transform` | skinning | L1, L2, L3, L4 | skinned mesh node transform; mesh-space cancellation; transformed ancestor above the mesh node; JOINTS_0 / WEIGHTS_0 |
 | `skin-skeleton-hint` | skinning | L1, L2, L3, L4 | skin.skeleton; declared root below a transform-bearing ancestor; declared root above the joints' common ancestor; two joints |
 | `skin-unnormalized` | skinning | L1, L2, L3 | unnormalized WEIGHTS_0; zero-weight vertex; renormalisation policy |
@@ -1435,11 +1438,11 @@ written for this document: two descriptions of the same fixture are two things t
 | `skin-four-weighted` | skinning | L1, L2, L3, L4, L5 | four-influence weight blending; JOINTS_0 / WEIGHTS_0 |
 | `skin-no-ibm` | skinning | L1, L2, L3, L4, L5 | skin without inverseBindMatrices; identity bind pose by omission |
 | `skin-nonuniform-joint-scale` | skinning | L1, L2, L3, L4, L5 | non-uniform joint scale; normal inverse-transpose rule; JOINTS_0 / WEIGHTS_0 |
-| `skin-parented-joints` | skinning | L1, L2, L3, L4, L5 | joint parented to joint; global joint transform; per-vertex joint binding |
+| `skin-parented-joints` | skinning | L1, L2, L3, L4, L5 | joint parented to joint; non-topological skin.joints order; global joint transform; per-vertex joint binding |
 | `skin-ushort-joint-indices` | skinning | L1, L2, L3, L4, L5 | UNSIGNED_SHORT JOINTS_0; joint index component conversion |
 | `morph-position-only` | animation | L1, L2, L3 | one morph target; POSITION deltas only |
 | `morph-position-normal` | animation | L1, L2, L3 | POSITION and NORMAL deltas; normal renormalisation |
-| `morph-position-normal-tangent` | animation | L1, L2, L3 | POSITION, NORMAL and TANGENT deltas; tangent handedness preserved; direct/offline sidecar parity |
+| `morph-position-normal-tangent` | animation | L1, L2, L3 | POSITION, NORMAL and TANGENT deltas; tangent handedness preserved; direct/offline morph sidecar parity |
 | `morph-two-targets` | animation | L1, L2, L3 | two morph targets; weighted accumulation |
 | `morph-eight-targets` | animation | L1, L2, L3 | eight morph targets; interleaved zero weights |
 | `morph-zero-weights` | animation | L1, L2, L3 | zero weight; rest pose is exact |

@@ -43,12 +43,15 @@ STRIDE_LAYOUTS: dict[int, list[tuple[str, int, int]]] = {
          ("BlendWeight", 32, 16), ("BlendIndices", 48, 4), ("Color", 52, 4)],
     60: [("Position", 0, 12), ("Normal", 12, 12), ("Tangent", 24, 16),
          ("TextureCoordinate", 40, 8), ("TextureCoordinate1", 48, 8),
-         ("Padding", 56, 4)],
+         ("Color", 56, 4)],
     68: [("Position", 0, 12), ("Normal", 12, 12), ("Tangent", 24, 16),
          ("TextureCoordinate", 40, 8), ("BlendWeight", 48, 16), ("BlendIndices", 64, 4)],
     76: [("Position", 0, 12), ("Normal", 12, 12), ("Tangent", 24, 16),
          ("TextureCoordinate", 40, 8), ("BlendWeight", 48, 16),
          ("BlendIndices", 64, 4), ("TextureCoordinate1", 68, 8)],
+    80: [("Position", 0, 12), ("Normal", 12, 12), ("Tangent", 24, 16),
+         ("TextureCoordinate", 40, 8), ("BlendWeight", 48, 16),
+         ("BlendIndices", 64, 4), ("TextureCoordinate1", 68, 8), ("Color", 76, 4)],
 }
 
 #: What ExtractMesh writes into a slot whose attribute the source file does not author. These are
@@ -61,6 +64,13 @@ STRIDE_LAYOUTS: dict[int, list[tuple[str, int, int]]] = {
 #: can tell the computed normal from the fabricated one.
 DEFAULT_NORMAL = (0.0, 0.0, 1.0)
 DEFAULT_TEXCOORD = (0.0, 0.0)
+#: The colour a vertex gets when the primitive authors no ``COLOR_0`` but its layout has the slot.
+#:
+#: plan_gltf.md `GLTF-462`: strides 60 and 80 always carry a colour, because those four bytes were
+#: stride 60's reserved discriminator and are now the packed ``COLOR_0``. §3.7.2.1 makes vertex
+#: colour a linear MULTIPLIER on base colour, so the identity value is opaque white -- a zero fill
+#: would multiply an uncoloured surface to black on any renderer that read the slot.
+DEFAULT_COLOR = (1.0, 1.0, 1.0, 1.0)
 
 #: The tangent every vertex of a primitive with **no UV channel** receives, exactly.
 #:
@@ -121,12 +131,26 @@ def select_stride(primitive: dict[str, Any]) -> int:
         return 20
     skinned = bool(primitive.get("joints")) and bool(primitive.get("weights"))
     colored = bool(primitive.get("colors"))
-    use_pbr = (not colored) and (not non_pbr_model)
+    # plan_gltf.md GLTF-462: a vertex-coloured primitive is no longer excluded from the
+    # metallic-roughness model. §3.7.2.1 makes COLOR_0 an additional linear multiplier on base
+    # colour, which is a TERM in that model rather than a reason to leave it -- so the layout is the
+    # PBR one and the colour rides in the four bytes stride 60 had reserved as its discriminator
+    # (skinned: stride 80, which appends the slot to the whole stride-76 record).
+    # GLTF-463 closed the last exclusion: a SKINNED vertex-coloured primitive keeps its material too,
+    # on stride 80 -- the whole stride-76 record with the colour appended, because stride 76 is
+    # exactly its seven fields and has no reserved bytes a colour could occupy the way stride 60 did.
+    use_pbr = not non_pbr_model
     if skinned:
-        return 56 if colored else ((76 if primitive.get("texcoords1") else 68)
-                                   if use_pbr else 52)
-    return 24 if colored else ((60 if primitive.get("texcoords1") else 48)
-                               if use_pbr else 32)
+        if not use_pbr:
+            return 56 if colored else 52
+        if colored:
+            return 80
+        return 76 if primitive.get("texcoords1") else 68
+    if not use_pbr:
+        return 24 if colored else 32
+    if colored or primitive.get("texcoords1"):
+        return 60
+    return 48
 
 
 def _tangents_for(primitive: dict[str, Any], count: int) -> list[tuple[float, float, float, float]]:
@@ -190,7 +214,7 @@ def pack_vertex_buffer(primitive: dict[str, Any], stride: int) -> bytes:
             elif name == "Padding":
                 field = bytes(size)
             elif name == "Color":
-                rgba = list(colors[v]) if v < len(colors) else [0.0, 0.0, 0.0, 1.0]
+                rgba = list(colors[v]) if v < len(colors) else list(DEFAULT_COLOR)
                 # A VEC3 COLOR_0 has no alpha; the specification's default is fully opaque.
                 while len(rgba) < 4:
                     rgba.append(1.0)

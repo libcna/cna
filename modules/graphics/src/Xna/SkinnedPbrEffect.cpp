@@ -494,6 +494,9 @@ namespace Microsoft::Xna::Framework::Graphics
         p.skinned         = true;
         p.textureEnabled  = true;
         p.lightingEnabled = true;
+        // plan_gltf.md GLTF-462: see PbrEffect::FillGpuDrawParams. Stride 80 is the skinned
+        // counterpart of stride 60's colour slot, and this is what says whether it means anything.
+        p.vertexColorEnabled = VertexColorEnabledEXT;
 
         if (texture_)              p.texture0 = &texture_->GetRenderer();
         if (normalMap_)             p.pbrNormalMap = &normalMap_->GetRenderer();

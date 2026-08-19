@@ -10,6 +10,9 @@ layout(location = 3) in vec2 aUV;
 #ifdef CNA_PBR_DUAL_UV
 layout(location = 4) in vec2 aUV1;
 #endif
+#ifdef CNA_PBR_VERTEX_COLOR
+layout(location = 5) in vec4  aColor;
+#endif
 
 layout(location = 0) out vec3  vNormal;
 layout(location = 1) out vec3  vTangent;
@@ -20,12 +23,15 @@ layout(location = 5) out vec3  vWorldPos;
 #ifdef CNA_PBR_DUAL_UV
 layout(location = 6) out vec2  vUV1;
 #endif
+#ifdef CNA_PBR_VERTEX_COLOR
+layout(location = 7) out vec4  vColor;
+#endif
 
 // 128-byte push constant block (shared with every other 3D variant — see FillExtPushConst).
 // diffuseColor -> PBR base color factor; ambientColor -> PBR ambient; light0Dir/light0Diffuse ->
-// PBR's own DirectionalLight0. lightingEnabled/textureEnabled/vertexColorEnabled are unused here
-// (PbrEffect::FillGpuDrawParams always sets lightingEnabled=textureEnabled=true, and PbrEffect has
-// no vertex-color concept).
+// PBR's own DirectionalLight0. lightingEnabled/textureEnabled are unused here
+// (PbrEffect::FillGpuDrawParams always sets lightingEnabled=textureEnabled=true);
+// vertexColorEnabled gates the COLOR_0 multiply in the fragment stage (plan_gltf.md GLTF-465).
 layout(push_constant) uniform PC {
     mat4  mvp;
     vec4  diffuseColor;
@@ -85,6 +91,9 @@ void main() {
     vUV = aUV;
 #ifdef CNA_PBR_DUAL_UV
     vUV1 = aUV1;
+#endif
+#ifdef CNA_PBR_VERTEX_COLOR
+    vColor = aColor;
 #endif
     vWorldPos = (pbr.world * vec4(aPos, 1.0)).xyz;
     vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), pbr.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector

@@ -107,6 +107,33 @@ namespace CNA::Internal::Renderers::DirectX9
         // (stride 68), used by the CNA CNAEXT "PbrSkinned3D" custom shader (SkinnedPbrEffect). The
         // stride-48 PBR layout above with the stride-52/56 skinning suffix (BlendWeight, BlendIndices)
         // appended, matching EasyGLRenderer.cpp's own ApplyLayout() `case 68:` exactly.
+        // plan_gltf.md GLTF-465: the two colour-carrying PBR records. Stride 60 is the stride-48
+        // rigid record with TEXCOORD_1 at 48 and a packed COLOR_0 at 56; stride 80 is the skinned
+        // record with TEXCOORD_1 at 68 and its own COLOR_0 at 76. D3DDECLTYPE_D3DCOLOR is the
+        // right type for both -- it is the BGRA-ordered, normalized four-byte element D3D9 reads
+        // into a float4 COLOR register, which is exactly what the importer packs. The second UV set
+        // stays undeclared: this renderer's PBR shaders sample one set, which is a separate
+        // capability gap (GLTF-344) and unchanged here.
+        constexpr D3DVERTEXELEMENT9 kStride60Color[] = {
+            {0, 0,  D3DDECLTYPE_FLOAT3,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION,     0},
+            {0, 12, D3DDECLTYPE_FLOAT3,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,       0},
+            {0, 24, D3DDECLTYPE_FLOAT4,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TANGENT,      0},
+            {0, 40, D3DDECLTYPE_FLOAT2,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD,     0},
+            {0, 56, D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR,        0},
+            D3DDECL_END()
+        };
+
+        constexpr D3DVERTEXELEMENT9 kStride80Color[] = {
+            {0, 0,  D3DDECLTYPE_FLOAT3,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION,     0},
+            {0, 12, D3DDECLTYPE_FLOAT3,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,       0},
+            {0, 24, D3DDECLTYPE_FLOAT4,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TANGENT,      0},
+            {0, 40, D3DDECLTYPE_FLOAT2,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD,     0},
+            {0, 48, D3DDECLTYPE_FLOAT4,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_BLENDWEIGHT,  0},
+            {0, 64, D3DDECLTYPE_UBYTE4,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_BLENDINDICES, 0},
+            {0, 76, D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR,        0},
+            D3DDECL_END()
+        };
+
         constexpr D3DVERTEXELEMENT9 kStride68[] = {
             {0, 0,  D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION,     0},
             {0, 12, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,       0},
@@ -128,9 +155,18 @@ namespace CNA::Internal::Renderers::DirectX9
             case 28: count = 3; return kStride28;
             case 32: count = 3; return kStride32;
             case 48: count = 4; return kStride48;
+            // plan_gltf.md GLTF-462: stride 60's first four fields are byte-identical to stride 48,
+            // and a D3D9 declaration carries element OFFSETS while the stride travels with
+            // SetStreamSource -- so the stride-48 element list describes a stride-60 record exactly,
+            // minus the second UV set and the packed colour this renderer's PBR shader does not
+            // read. Without this row the declaration was null and the draw was refused outright.
+            // GLTF-465 now consumes the colour slot: stride 60 declares it, so the PBR shader's
+            // stride-60 variant receives the authored COLOR_0 instead of the opaque-white identity.
+            case 60: count = 5; return kStride60Color;
             case 52: count = 5; return kStride52;
             case 56: count = 6; return kStride56;
             case 68: count = 6; return kStride68;
+            case 80: count = 7; return kStride80Color;
             default: count = 0; return nullptr;
         }
     }

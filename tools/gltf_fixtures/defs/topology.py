@@ -25,6 +25,7 @@ from __future__ import annotations
 from ..builder import (LINE_LOOP, LINE_STRIP, LINES, MODE_NAMES, POINTS, TRIANGLE_FAN,
                        TRIANGLE_STRIP, TRIANGLES, UNSIGNED_SHORT, GltfBuilder)
 from ..manifest import Defect, Fixture, l3_primitive, world_positions
+from .. import flatnormals
 from .common import QUAD_STRIP_POSITIONS
 
 #: D5's owning tasks, in the order they landed: read the mode, convert what converts, then give the
@@ -301,28 +302,47 @@ def mode_triangle_strip_morph() -> Fixture:
     b.add_scene([node], name="Scene")
     b.set_default_scene(0)
 
+    # GLTF-461: the primitive authors no NORMAL and carries a morph target, so §3.7.2.2 requires
+    # flat normals PER TARGET and every corner becomes its own vertex. The remap is stated
+    # independently here so the delta pairing can be checked against it rather than against CNA.
+    split = flatnormals.compute(QUAD_STRIP_POSITIONS, [0, 1, 2, 2, 1, 3], per_corner=True)
+    split_positions = flatnormals.gather(QUAD_STRIP_POSITIONS, split.source_vertex)
+    split_deltas = flatnormals.gather(_STRIP_MORPH_DELTAS, split.source_vertex)
     fully_morphed = [
         [p[0] + d[0], p[1] + d[1], p[2] + d[2]]
-        for p, d in zip(QUAD_STRIP_POSITIONS, _STRIP_MORPH_DELTAS)
+        for p, d in zip(split_positions, split_deltas)
     ]
+    # l4.worldPositions stays in AUTHORED numbering: it is the spec's own reading of the file, and
+    # the CNA comparison maps through `importPolicy.flatNormalSplit.sourceVertex` rather than being
+    # handed a pre-split answer. Stating the split here as well would make the comparison agree with
+    # itself.
     l4 = world_positions(b, {mesh: list(QUAD_STRIP_POSITIONS)})
     l4["topologyMorph"] = {
         "sourceTopology": "TRIANGLE_STRIP",
         "importedTopology": "TRIANGLES",
         "authoredIndices": [0, 1, 2, 3],
         "convertedIndices": [0, 1, 2, 2, 1, 3],
-        "vertexCount": len(QUAD_STRIP_POSITIONS),
-        "vertexOrderUnchanged": True,
-        "morphDeltas": [list(d) for d in _STRIP_MORPH_DELTAS],
+        "splitIndices": list(split.indices),
+        "sourceVertex": list(split.source_vertex),
+        "vertexCount": split.vertex_count,
+        "authoredVertexCount": len(QUAD_STRIP_POSITIONS),
+        "vertexOrderUnchanged": False,
+        "authoredMorphDeltas": [list(d) for d in _STRIP_MORPH_DELTAS],
+        "morphDeltas": [list(d) for d in split_deltas],
         "fullyMorphedPositions": fully_morphed,
-        "rule": "Converting a strip rewrites the INDEX list and must leave the VERTEX order "
-                "alone, because morph deltas are addressed per vertex by position in the target "
-                "accessor. De-duplicating the strip's shared corners -- vertices 1 and 2 appear in "
-                "both triangles -- would still produce a mesh and a morph, with every delta on the "
-                "wrong vertex: a plausible deformation of the wrong shape.",
-        "discriminationRule": "The four deltas are all different, so a permutation is a different "
-                              "staircase rather than a subtly different surface. Identical deltas "
-                              "would make a reordering indistinguishable from correctness.",
+        "rule": "Converting a strip rewrites the INDEX list and must not renumber vertices on its "
+                "own -- morph deltas are addressed per vertex by position in the target accessor, "
+                "and de-duplicating the strip's shared corners would put every delta on the wrong "
+                "one. What DOES renumber here is §3.7.2.1's flat-normal split (GLTF-461): the "
+                "primitive authors no NORMAL, so each of the two triangles needs its own normal at "
+                "every morph weight, and every delta must follow its source vertex through the "
+                "split. `sourceVertex` states that mapping, so the pairing is checkable rather "
+                "than assumed.",
+        "discriminationRule": "The four authored deltas are all different, so a permutation is a "
+                              "different staircase rather than a subtly different surface. They "
+                              "also make the two triangles NON-COPLANAR once applied, which is "
+                              "exactly why a rest-pose split cannot serve every pose and the "
+                              "per-corner policy is required.",
     }
     return Fixture(
         id="mode-triangle-strip-morph", audit_fixture=None, owning_group="topology",
@@ -336,7 +356,8 @@ def mode_triangle_strip_morph() -> Fixture:
         spec_anchors=["meshes-overview", "morph-targets"],
         l3={"primitives": [l3_primitive(
             mesh=mesh, mesh_name="MorphedStripQuad", primitive=0, mode=TRIANGLE_STRIP,
-            positions=QUAD_STRIP_POSITIONS, indices=[0, 1, 2, 3])]},
+            positions=QUAD_STRIP_POSITIONS, indices=[0, 1, 2, 3],
+            flat_normals="per-corner")]},
         l4=l4,
     )
 

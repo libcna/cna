@@ -79,6 +79,11 @@ namespace CNA::Internal::Renderers::Igl
     vec4 uAlphaTest;
     vec4 uEnvMapSpecular;
     vec4 uPbrFactors;
+    vec4 uPbrScales;
+    vec4 uPbrDielectricFresnel;
+    vec4 uPbrSpecularInputs;
+    vec4 uPbrTextureTransform[10];
+    vec4 uPbrSpecularTextureTransform[4];
     vec4 uLightDirection[3];
     vec4 uLightDiffuse[3];
     vec4 uLightSpecular[3];
@@ -117,6 +122,29 @@ const int CNA_NORMAL_MAP            = 4096;
 const int CNA_METALLIC_ROUGHNESS_MAP = 8192;
 const int CNA_EMISSIVE_MAP          = 16384;
 const int CNA_OCCLUSION_MAP         = 32768;
+const int CNA_SPECULAR_MAP          = 65536;
+const int CNA_SPECULAR_COLOR_MAP    = 131072;
+const int CNA_BASE_COLOR_SRGB       = 262144;
+const int CNA_EMISSIVE_SRGB         = 524288;
+const int CNA_SPECULAR_COLOR_SRGB   = 1048576;
+const int CNA_ENCODE_OUTPUT_SRGB    = 2097152;
+
+// glTF 2.0 3.9.2: sRGB-encoded texture samples are decoded before lighting; the FACTORS
+// they multiply are already linear and must not be decoded, or the transfer is applied
+// twice to one of them.
+vec3 cnaSrgbToLinear(vec3 c)
+{
+    vec3 lo = c / 12.92;
+    vec3 hi = pow((c + 0.055) / 1.055, vec3(2.4));
+    return mix(lo, hi, step(vec3(0.04045), c));
+}
+
+vec3 cnaLinearToSrgb(vec3 c)
+{
+    vec3 lo = c * 12.92;
+    vec3 hi = 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
+    return mix(lo, hi, step(vec3(0.0031308), c));
+}
 
 // Blinn-Phong contribution of the three XNA directional lights, in FNA's own formulation:
 // a light's diffuse term is gated by step(0, dot(N, L)) so a back-facing surface contributes
@@ -294,11 +322,37 @@ layout(location = 7) in vec4 vWorldTangent;
                                          "uMetallicRoughnessMap");
             source += SamplerDeclaration(vulkan, TextureUnit::EmissiveMap, "sampler2D", "uEmissiveMap");
             source += SamplerDeclaration(vulkan, TextureUnit::OcclusionMap, "sampler2D", "uOcclusionMap");
+            source += SamplerDeclaration(vulkan, TextureUnit::SpecularMap, "sampler2D", "uSpecularMap");
+            source += SamplerDeclaration(vulkan, TextureUnit::SpecularColorMap, "sampler2D",
+                                         "uSpecularColorMap");
             source += "\n";
             source += kFeatureHelpers;
 
             source += R"(
 const float CNA_PI = 3.14159265358979;
+
+// plan_gltf.md GLTF-182/GLTF-183/GLTF-184. glTF gives every texture reference its own `texCoord`
+// index and its own optional KHR_texture_transform, so one interpolated coordinate cannot serve
+// all seven PBR slots. Slot order is base colour, normal, metallic-roughness, emissive, occlusion,
+// then the two KHR_materials_specular maps, which live in their own row block.
+vec2 cnaPbrUv(int slot)
+{
+    vec2 uv = ((cna.uFlags.w & (1 << slot)) != 0) ? vTexCoord1 : vTexCoord0;
+    vec4 r0;
+    vec4 r1;
+    if (slot < 5)
+    {
+        r0 = cna.uPbrTextureTransform[slot * 2];
+        r1 = cna.uPbrTextureTransform[slot * 2 + 1];
+    }
+    else
+    {
+        r0 = cna.uPbrSpecularTextureTransform[(slot - 5) * 2];
+        r1 = cna.uPbrSpecularTextureTransform[(slot - 5) * 2 + 1];
+    }
+    vec3 h = vec3(uv, 1.0);
+    return vec2(dot(h, r0.xyz), dot(h, r1.xyz));
+}
 
 float cnaDistributionGGX(float nDotH, float roughness)
 {
@@ -317,17 +371,24 @@ float cnaGeometrySmith(float nDotV, float nDotL, float roughness)
     return gv * gl;
 }
 
-vec3 cnaFresnelSchlick(float cosTheta, vec3 f0)
+// KHR_materials_specular replaces Schlick's implicit grazing endpoint of 1 with a weighted one,
+// so F90 is a parameter rather than a constant. With the extension absent the CPU sends 1 and this
+// is exactly the core formula.
+vec3 cnaFresnelSchlick(float cosTheta, vec3 f0, vec3 f90)
 {
-    return f0 + (1.0 - f0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+    return f0 + (f90 - f0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
 // glTF metallic-roughness BRDF over the same three directional lights the Blinn-Phong path uses,
 // so a PbrEffect and a BasicEffect lit by the same scene agree on where the light comes from.
-vec3 cnaShadePbr(vec3 baseColor, vec3 normal, vec3 eyeVector, float metallic, float roughness)
+vec3 cnaShadePbr(vec3 baseColor, vec3 normal, vec3 eyeVector, float metallic, float roughness,
+                 vec3 dielectricF0, float specularWeight)
 {
     roughness = clamp(roughness, 0.04, 1.0);
-    vec3 f0 = mix(vec3(0.04), baseColor, metallic);
+    // The dielectric endpoint carries KHR_materials_ior and KHR_materials_specular; the metallic
+    // one is the base colour in every case, which is why the two are kept apart.
+    vec3 f0 = mix(dielectricF0, baseColor, metallic);
+    vec3 f90 = mix(vec3(specularWeight), vec3(1.0), metallic);
     vec3 diffuseColor = baseColor * (1.0 - metallic);
     float nDotV = max(dot(normal, eyeVector), 1e-4);
 
@@ -344,7 +405,7 @@ vec3 cnaShadePbr(vec3 baseColor, vec3 normal, vec3 eyeVector, float metallic, fl
 
         float d = cnaDistributionGGX(nDotH, roughness);
         float g = cnaGeometrySmith(nDotV, nDotL, roughness);
-        vec3 f = cnaFresnelSchlick(vDotH, f0);
+        vec3 f = cnaFresnelSchlick(vDotH, f0, f90);
 
         vec3 specular = (d * g * f) / max(4.0 * nDotV * nDotL, 1e-5);
         vec3 kd = (vec3(1.0) - f) * (1.0 - metallic);
@@ -358,7 +419,15 @@ void main()
     vec4 color = vColor;
 
     if (cnaHas(CNA_TEXTURE_ENABLED))
-        color *= texture(uTexture0, vTexCoord0);
+    {
+        // The base-colour slot is the one texture both paths share, so its coordinate is chosen
+        // per slot only on the PBR path -- a BasicEffect has no glTF texture reference behind it.
+        vec4 baseSample = cnaHas(CNA_PBR) ? texture(uTexture0, cnaPbrUv(0))
+                                          : texture(uTexture0, vTexCoord0);
+        if (cnaHas(CNA_BASE_COLOR_SRGB))
+            baseSample.rgb = cnaSrgbToLinear(baseSample.rgb);
+        color *= baseSample;
+    }
 
     if (cnaHas(CNA_DUAL_TEXTURE))
         color *= texture(uTexture1, vTexCoord1) * 2.0;
@@ -370,7 +439,10 @@ void main()
     {
         vec3 tangent = normalize(vWorldTangent.xyz - normal * dot(normal, vWorldTangent.xyz));
         vec3 bitangent = cross(normal, tangent) * vWorldTangent.w;
-        vec3 sampled = texture(uNormalMap, vTexCoord0).xyz * 2.0 - 1.0;
+        vec3 sampled = texture(uNormalMap, cnaPbrUv(1)).xyz * 2.0 - 1.0;
+        // glTF normalTexture.scale: scales x and y before the basis is applied, so 0 flattens the
+        // map to the geometric normal and the specification puts no upper bound on it.
+        sampled.xy *= cna.uPbrScales.x;
         normal = normalize(mat3(tangent, bitangent, normal) * sampled);
     }
 
@@ -380,20 +452,51 @@ void main()
         float roughness = cna.uPbrFactors.y;
         if (cnaHas(CNA_METALLIC_ROUGHNESS_MAP))
         {
-            vec4 mr = texture(uMetallicRoughnessMap, vTexCoord0);
+            vec4 mr = texture(uMetallicRoughnessMap, cnaPbrUv(2));
             roughness *= mr.g;
             metallic *= mr.b;
         }
 
+        float specularWeight = cna.uPbrSpecularInputs.w;
+        if (cnaHas(CNA_SPECULAR_MAP))
+            specularWeight *= texture(uSpecularMap, cnaPbrUv(5)).a;
+        vec3 specularColor = vec3(1.0);
+        if (cnaHas(CNA_SPECULAR_COLOR_MAP))
+        {
+            specularColor = texture(uSpecularColorMap, cnaPbrUv(6)).rgb;
+            if (cnaHas(CNA_SPECULAR_COLOR_SRGB))
+                specularColor = cnaSrgbToLinear(specularColor);
+        }
+        // KHR_materials_specular clamps the PRODUCT, which is why the unclamped F0 is transported
+        // separately from the already-clamped factor-only value beside it.
+        vec3 dielectricF0 =
+            min(cna.uPbrSpecularInputs.rgb * specularColor, vec3(1.0)) * specularWeight;
+
         float occlusion = 1.0;
         if (cnaHas(CNA_OCCLUSION_MAP))
-            occlusion = texture(uOcclusionMap, vTexCoord0).r;
+        {
+            // glTF occlusionTexture.strength: 1 + strength * (sampled - 1). At 0 the result is 1
+            // whatever the map holds, and at 1 it is the map unchanged.
+            float sampled = texture(uOcclusionMap, cnaPbrUv(4)).r;
+            occlusion = 1.0 + cna.uPbrScales.y * (sampled - 1.0);
+        }
 
-        vec3 shaded = cnaShadePbr(color.rgb, normal, eyeVector, metallic, roughness);
+        vec3 shaded = cnaShadePbr(color.rgb, normal, eyeVector, metallic, roughness,
+                                  dielectricF0, specularWeight);
         shaded += cna.uAmbientColor.rgb * color.rgb * occlusion;
-        shaded += cna.uEmissiveColor.rgb;
+        // glTF 3.9.2: emissive is the FACTOR TIMES the texture, not the two added. Adding them
+        // makes an emissiveFactor of zero glow anyway, and a black emissive texel emit the factor.
+        vec3 emissive = cna.uEmissiveColor.rgb;
         if (cnaHas(CNA_EMISSIVE_MAP))
-            shaded += texture(uEmissiveMap, vTexCoord0).rgb;
+        {
+            vec3 emissiveSample = texture(uEmissiveMap, cnaPbrUv(3)).rgb;
+            if (cnaHas(CNA_EMISSIVE_SRGB))
+                emissiveSample = cnaSrgbToLinear(emissiveSample);
+            emissive *= emissiveSample;
+        }
+        shaded += emissive;
+        if (cnaHas(CNA_ENCODE_OUTPUT_SRGB))
+            shaded = cnaLinearToSrgb(shaded);
         color = vec4(shaded, color.a);
     }
     else if (cnaHas(CNA_LIGHTING_ENABLED) && cnaHas(CNA_PER_PIXEL_LIGHTING))
@@ -501,6 +604,8 @@ void main()
             case TextureUnit::MetallicRoughnessMap: return "uMetallicRoughnessMap";
             case TextureUnit::EmissiveMap:          return "uEmissiveMap";
             case TextureUnit::OcclusionMap:         return "uOcclusionMap";
+            case TextureUnit::SpecularMap:          return "uSpecularMap";
+            case TextureUnit::SpecularColorMap:     return "uSpecularColorMap";
             default:                                return "";
         }
     }

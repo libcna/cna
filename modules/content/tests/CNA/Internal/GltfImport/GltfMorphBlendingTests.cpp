@@ -12,6 +12,8 @@
 // under test is the blend arithmetic over a stated base buffer: an end-to-end fixture would prove
 // the same sum while making it far harder to say which term was wrong.
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -320,6 +322,511 @@ TEST(GltfMorphBlending, ABlendedNormalAndTangentComeBackUnitLength)
     EXPECT_NEAR(1.0f, tangentLength, 1e-4f) << "the blended tangent is not unit length";
     EXPECT_FLOAT_EQ(-1.0f, tangent[3])
         << "renormalisation rewrote the handedness sign, which is not a length at all";
+}
+
+// --- GLTF-466: a morph target attribute CNA does not carry is named ------------------------------
+
+namespace
+{
+    // Two morph targets over one triangle. Target 0 carries POSITION (which CNA morphs) together with
+    // TEXCOORD_0 and COLOR_0 (which it does not); target 1 repeats TEXCOORD_0 alone, so the report has
+    // to name each SEMANTIC once rather than once per target.
+    const char* kMorphedExtraSemanticsGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "name": "ExtraSemanticMorph", "weights": [1.0, 0.0], "primitives": [ {
+      "attributes": { "POSITION": 0, "TEXCOORD_0": 1, "COLOR_0": 2 },
+      "indices": 3,
+      "mode": 4,
+      "targets": [
+        { "POSITION": 4, "TEXCOORD_0": 5, "COLOR_0": 2 },
+        { "TEXCOORD_0": 5 }
+      ]
+  } ] } ],
+  "buffers": [ { "byteLength": 176,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AAABAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgD8AAAA/AAAAPwAAAD8AAAA/AAAAPwAAAD8=" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 60,  "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 108, "byteLength": 6 },
+    { "buffer": 0, "byteOffset": 116, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 152, "byteLength": 24 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+      "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 3, "componentType": 5123, "count": 3, "type": "SCALAR" },
+    { "bufferView": 4, "componentType": 5126, "count": 3, "type": "VEC3",
+      "min": [0,0,0], "max": [0,0,1] },
+    { "bufferView": 5, "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
+}
+
+TEST(GltfMorphBlending, AMorphTargetAttributeCnaDoesNotCarryIsNamedRatherThanIgnoredInSilence)
+{
+    // plan_gltf.md GLTF-466. §3.7.2.2 asks a client to support POSITION, NORMAL and TANGENT and makes
+    // morphed TEXCOORD_n and COLOR_n a MAY -- so not carrying them is permitted. Importing as though
+    // the file had asked for nothing is not: a mesh that animates its UVs through morph targets
+    // arrived visually static with nothing anywhere to point at, which is the exact class of silent
+    // drop this campaign exists to remove.
+    //
+    // The fixture carries the two optional semantics on target 0 and repeats TEXCOORD_0 on target 1,
+    // because the report must name each SEMANTIC once -- a per-target count would say "3" for two
+    // distinct losses and read as though something were carried partially.
+    cgltf_options options{};
+    cgltf_data* data = nullptr;
+    const std::string json(kMorphedExtraSemanticsGltf);
+    ASSERT_EQ(cgltf_result_success, cgltf_parse(&options, json.data(), json.size(), &data));
+    ASSERT_NE(nullptr, data);
+    ASSERT_EQ(cgltf_result_success, cgltf_load_buffers(&options, data, "."));
+
+    const CNA::Internal::GltfImport::MeshOut out = CNA::Internal::GltfImport::ExtractMesh(
+        data, data->meshes[0].primitives[0], "probe", nullptr, 1.0f);
+    cgltf_free(data);
+
+    // POSITION is still morphed -- naming the losses must not cost the semantics CNA does carry.
+    ASSERT_EQ(2u, out.morphPositionDeltas.size());
+    EXPECT_FALSE(out.morphPositionDeltas[0].empty());
+    EXPECT_TRUE(out.morphPositionDeltas[1].empty())
+        << "target 1 authors no POSITION, so its delta array must stay empty (GLTF-292)";
+
+    std::vector<std::string> named = out.ignoredMorphAttributesEXT;
+    std::sort(named.begin(), named.end());
+    EXPECT_EQ(std::vector<std::string>({"COLOR_0", "TEXCOORD_0"}), named)
+        << "each optional semantic must be named exactly once across every target";
+}
+
+// --- GLTF-461: flat normals for a primitive whose base authors none ------------------------------
+
+namespace
+{
+    /// A base buffer over the given positions, every normal +Z and every tangent `(+X, w = -1)`.
+    ///
+    /// The rest normal is deliberately the value the OLD behaviour left in place, so a test that
+    /// expects the morphed face normal cannot pass by the buffer simply not being rewritten. The
+    /// handedness is not the default +1 for the same reason it is not in `BaseVertices`.
+    std::vector<std::uint8_t> BaseVerticesAt(const std::vector<Vector3>& positions, int stride)
+    {
+        const CNA::Internal::Graphics::InferredVertexLayout layout =
+            CNA::Internal::Graphics::InferredLayoutForStride(
+                stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+        EXPECT_TRUE(layout.known) << "stride " << stride << " is not in the canonical table";
+        int positionOffset = -1;
+        int normalOffset = -1;
+        int tangentOffset = -1;
+        for (std::size_t i = 0; layout.known && i < layout.count; ++i)
+        {
+            if (layout.elements[i].usageIndex != 0) { continue; }
+            if (layout.elements[i].usage == VertexElementUsage::Position)
+            { positionOffset = layout.elements[i].offset; }
+            else if (layout.elements[i].usage == VertexElementUsage::Normal)
+            { normalOffset = layout.elements[i].offset; }
+            else if (layout.elements[i].usage == VertexElementUsage::Tangent &&
+                     layout.elements[i].format == VertexElementFormat::Vector4)
+            { tangentOffset = layout.elements[i].offset; }
+        }
+        EXPECT_GE(positionOffset, 0);
+        EXPECT_GE(normalOffset, 0);
+
+        std::vector<std::uint8_t> bytes(positions.size() * static_cast<std::size_t>(stride), 0);
+        for (std::size_t v = 0; v < positions.size(); ++v)
+        {
+            const std::size_t base = v * static_cast<std::size_t>(stride);
+            const float position[3] = {positions[v].X, positions[v].Y, positions[v].Z};
+            const float normal[3] = {0.0f, 0.0f, 1.0f};
+            const float tangent[4] = {1.0f, 0.0f, 0.0f, -1.0f};
+            std::memcpy(bytes.data() + base + static_cast<std::size_t>(positionOffset), position,
+                        sizeof(position));
+            std::memcpy(bytes.data() + base + static_cast<std::size_t>(normalOffset), normal,
+                        sizeof(normal));
+            if (tangentOffset >= 0)
+            {
+                std::memcpy(bytes.data() + base + static_cast<std::size_t>(tangentOffset), tangent,
+                            sizeof(tangent));
+            }
+        }
+        return bytes;
+    }
+
+    /// The right answer, computed from the blended positions rather than restated: the normalised
+    /// cross product of the triangle the three given vertices form.
+    Vector3 FaceNormalOf(const std::vector<std::uint8_t>& bytes, int stride,
+                         std::uint32_t i0, std::uint32_t i1, std::uint32_t i2)
+    {
+        const auto positionAt = [&](std::uint32_t index) {
+            float p[3];
+            std::memcpy(p, bytes.data() + static_cast<std::size_t>(index) *
+                                              static_cast<std::size_t>(stride), sizeof(p));
+            return Vector3(p[0], p[1], p[2]);
+        };
+        const Vector3 a = positionAt(i0), b = positionAt(i1), c = positionAt(i2);
+        const Vector3 cross = Vector3::Cross(b - a, c - a);
+        const float length = cross.Length();
+        EXPECT_GT(length, 1e-6f);
+        return Vector3(cross.X / length, cross.Y / length, cross.Z / length);
+    }
+
+    std::vector<float> ReadAt(const std::vector<std::uint8_t>& bytes, int stride, int vertex,
+                              int offset, std::size_t count)
+    {
+        std::vector<float> out(count);
+        std::memcpy(out.data(),
+                    bytes.data() + static_cast<std::size_t>(vertex) *
+                                       static_cast<std::size_t>(stride) +
+                        static_cast<std::size_t>(offset),
+                    count * sizeof(float));
+        return out;
+    }
+}
+
+TEST(GltfMorphBlending, AFlatNormalFollowsTheMorphedGeometryRatherThanTheRestPose)
+{
+    // plan_gltf.md GLTF-461. §3.7.2.2: "When the base mesh primitive does not specify normals,
+    // client implementations MUST calculate flat normals for each morph target."
+    //
+    // The defect this replaces: CNA computed the flat normal once, at import, from the REST
+    // positions, and then only ever changed it if a target authored NORMAL deltas -- which
+    // §3.7.2.2 forbids such a primitive from having, because a target attribute requires an
+    // original attribute. So a normal-less morphed surface deformed with the normals of its
+    // undeformed shape, at every weight, and nothing could have fixed it.
+    //
+    // One triangle, and the delta moves ONE vertex out of the plane, which is what makes the test
+    // discriminate: a delta applied to all three vertices equally translates the triangle and
+    // leaves its normal alone, so the old behaviour would have passed. Here the rest normal is
+    // +Z and the morphed one is (0, -1/sqrt2, 1/sqrt2) -- and the rest normal is what the base
+    // buffer already contains, so "did not recompute" and "recomputed wrongly" fail differently.
+    MorphTargetDataEXT morph;
+    morph.BaseVertexBytes = BaseVerticesAt(
+        {Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 0.0f, 0.0f), Vector3(0.0f, 1.0f, 0.0f)}, kStride);
+    morph.Stride = kStride;
+    morph.PositionDeltas.push_back(
+        {Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 1.0f)});
+    morph.NormalDeltas.push_back({});
+    morph.TangentDeltas.push_back({});
+    morph.RecomputeFlatNormalsEXT = true;
+    morph.TriangleIndicesEXT = {0, 1, 2};
+
+    for (const float weight : {0.0f, 0.5f, 1.0f})
+    {
+        SCOPED_TRACE("weight " + std::to_string(weight));
+        const std::vector<std::uint8_t> blended = BlendMorphTargetsEXT(morph, {weight});
+        ASSERT_EQ(morph.BaseVertexBytes.size(), blended.size());
+        const Vector3 expected = FaceNormalOf(blended, kStride, 0, 1, 2);
+        for (int v = 0; v < 3; ++v)
+        {
+            SCOPED_TRACE("vertex " + std::to_string(v));
+            const std::vector<float> normal =
+                ReadAt(blended, kStride, v, OffsetOf(VertexElementUsage::Normal), 3);
+            EXPECT_NEAR(expected.X, normal[0], kTolerance);
+            EXPECT_NEAR(expected.Y, normal[1], kTolerance);
+            EXPECT_NEAR(expected.Z, normal[2], kTolerance);
+        }
+    }
+
+    // And the three weights really do produce three different normals, so the loop above is not
+    // three copies of one assertion.
+    const auto normalAt = [&](float weight) {
+        const std::vector<std::uint8_t> blended = BlendMorphTargetsEXT(morph, {weight});
+        return ReadAt(blended, kStride, 0, OffsetOf(VertexElementUsage::Normal), 3);
+    };
+    const std::vector<float> rest = normalAt(0.0f);
+    const std::vector<float> half = normalAt(0.5f);
+    const std::vector<float> full = normalAt(1.0f);
+    EXPECT_NEAR(1.0f, rest[2], kTolerance) << "at weight zero the rest pose's own +Z must survive";
+    EXPECT_NEAR(0.0f, rest[1], kTolerance);
+    const float invSqrt2 = 1.0f / std::sqrt(2.0f);
+    EXPECT_NEAR(-invSqrt2, full[1], kTolerance);
+    EXPECT_NEAR(invSqrt2, full[2], kTolerance);
+    EXPECT_LT(half[1], rest[1] - 1e-3f) << "the intermediate weight must lie between the two";
+    EXPECT_GT(half[1], full[1] + 1e-3f);
+}
+
+TEST(GltfMorphBlending, WithoutTheFlagAnAuthoredNormalSurvivesAMorphedPositionUntouched)
+{
+    // The control, and the reason the recomputation is a flag rather than a policy: a primitive
+    // that AUTHORS normals must keep them. §3.7.2.2 blends its NORMAL deltas and states nothing
+    // about deriving anything, so recomputing here would overwrite what the file said with a
+    // geometric guess -- which is the mirror image of the defect above.
+    MorphTargetDataEXT morph;
+    morph.BaseVertexBytes = BaseVerticesAt(
+        {Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 0.0f, 0.0f), Vector3(0.0f, 1.0f, 0.0f)}, kStride);
+    morph.Stride = kStride;
+    morph.PositionDeltas.push_back(
+        {Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 1.0f)});
+    morph.NormalDeltas.push_back({});
+    morph.TangentDeltas.push_back({});
+    morph.RecomputeFlatNormalsEXT = false;
+    morph.TriangleIndicesEXT = {0, 1, 2};
+
+    const std::vector<std::uint8_t> blended = BlendMorphTargetsEXT(morph, {1.0f});
+    for (int v = 0; v < 3; ++v)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(v));
+        const std::vector<float> normal =
+            ReadAt(blended, kStride, v, OffsetOf(VertexElementUsage::Normal), 3);
+        EXPECT_FLOAT_EQ(0.0f, normal[0]);
+        EXPECT_FLOAT_EQ(0.0f, normal[1]);
+        EXPECT_FLOAT_EQ(1.0f, normal[2]);
+    }
+}
+
+TEST(GltfMorphBlending, TwoSplitFacesSharingASourceVertexEachKeepTheirOwnMorphedFlatNormal)
+{
+    // Why the importer splits EVERY corner of a normal-less morphed primitive rather than only the
+    // ones that disagree at rest. This quad's two triangles are coplanar at rest, so a minimal
+    // rest-pose split would leave their shared corners undivided -- and then a POSITION delta that
+    // moves one shared corner out of the plane would make the two faces disagree with no way to
+    // express it. Fully split, each face owns its three vertices and both answers fit.
+    //
+    // Source quad (0,0,0) (1,0,0) (1,1,0) (0,1,0) with triangles [0,1,2] and [0,2,3]; source
+    // vertices 0 and 2 appear in both, so the split emits 6 vertices in source order:
+    // 0 -> {0,1}, 1 -> {2}, 2 -> {3,4}, 3 -> {5}. The delta moves source vertex 2, so BOTH of its
+    // copies move -- a split that dropped a delta on one copy would tear the surface.
+    MorphTargetDataEXT morph;
+    morph.BaseVertexBytes = BaseVerticesAt({
+        Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 0.0f),   // copies of source vertex 0
+        Vector3(1.0f, 0.0f, 0.0f),                              // source vertex 1
+        Vector3(1.0f, 1.0f, 0.0f), Vector3(1.0f, 1.0f, 0.0f),   // copies of source vertex 2
+        Vector3(0.0f, 1.0f, 0.0f),                              // source vertex 3
+    }, kStride);
+    morph.Stride = kStride;
+    const Vector3 zero(0.0f, 0.0f, 0.0f);
+    const Vector3 lift(0.0f, 0.0f, 1.0f);
+    morph.PositionDeltas.push_back({zero, zero, zero, lift, lift, zero});
+    morph.NormalDeltas.push_back({});
+    morph.TangentDeltas.push_back({});
+    morph.RecomputeFlatNormalsEXT = true;
+    morph.TriangleIndicesEXT = {0, 2, 3, 1, 4, 5};
+
+    const std::vector<std::uint8_t> blended = BlendMorphTargetsEXT(morph, {1.0f});
+    const Vector3 firstFace = FaceNormalOf(blended, kStride, 0, 2, 3);
+    const Vector3 secondFace = FaceNormalOf(blended, kStride, 1, 4, 5);
+    ASSERT_GT((firstFace - secondFace).Length(), 0.1f)
+        << "the fixture is not discriminating: the two morphed faces face the same way";
+
+    const int normalOffset = OffsetOf(VertexElementUsage::Normal);
+    for (const std::uint32_t v : {0u, 2u, 3u})
+    {
+        SCOPED_TRACE("first face vertex " + std::to_string(v));
+        const std::vector<float> normal =
+            ReadAt(blended, kStride, static_cast<int>(v), normalOffset, 3);
+        EXPECT_NEAR(firstFace.X, normal[0], kTolerance);
+        EXPECT_NEAR(firstFace.Y, normal[1], kTolerance);
+        EXPECT_NEAR(firstFace.Z, normal[2], kTolerance);
+    }
+    for (const std::uint32_t v : {1u, 4u, 5u})
+    {
+        SCOPED_TRACE("second face vertex " + std::to_string(v));
+        const std::vector<float> normal =
+            ReadAt(blended, kStride, static_cast<int>(v), normalOffset, 3);
+        EXPECT_NEAR(secondFace.X, normal[0], kTolerance);
+        EXPECT_NEAR(secondFace.Y, normal[1], kTolerance);
+        EXPECT_NEAR(secondFace.Z, normal[2], kTolerance);
+    }
+}
+
+TEST(GltfMorphBlending, ARecomputedFlatNormalLeavesTheTangentPerpendicularAndItsHandednessAlone)
+{
+    // §3.7.2.2's tangent clause is a SHOULD -- recompute with MikkTSpace against the updated
+    // positions, normals and UVs -- and CNA approximates it by re-orthogonalising the generated
+    // basis against the new normal (docs/gltf-limitations.md). The property that matters is the one
+    // asserted here: tangent-space normal mapping reads T, N and cross(N,T)*w as an orthonormal
+    // frame, so a T left pointing out of the new tangent plane skews every sampled normal.
+    MorphTargetDataEXT morph;
+    morph.BaseVertexBytes = BaseVerticesAt(
+        {Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 0.0f, 0.0f), Vector3(0.0f, 1.0f, 0.0f)}, kStride);
+    morph.Stride = kStride;
+    morph.PositionDeltas.push_back(
+        {Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 1.0f)});
+    morph.NormalDeltas.push_back({});
+    morph.TangentDeltas.push_back({});
+    morph.RecomputeFlatNormalsEXT = true;
+    morph.TriangleIndicesEXT = {0, 1, 2};
+
+    const std::vector<std::uint8_t> blended = BlendMorphTargetsEXT(morph, {1.0f});
+    for (int v = 0; v < 3; ++v)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(v));
+        const std::vector<float> normal =
+            ReadAt(blended, kStride, v, OffsetOf(VertexElementUsage::Normal), 3);
+        const std::vector<float> tangent =
+            ReadAt(blended, kStride, v, OffsetOf(VertexElementUsage::Tangent), 4);
+        const float length = std::sqrt(tangent[0] * tangent[0] + tangent[1] * tangent[1] +
+                                       tangent[2] * tangent[2]);
+        EXPECT_NEAR(1.0f, length, 1e-4f);
+        EXPECT_NEAR(0.0f,
+                    tangent[0] * normal[0] + tangent[1] * normal[1] + tangent[2] * normal[2],
+                    1e-4f)
+            << "the tangent is not in the recomputed normal's tangent plane";
+        EXPECT_FLOAT_EQ(-1.0f, tangent[3])
+            << "handedness describes the UV winding, not the pose, and is never rewritten";
+    }
+}
+
+TEST(GltfMorphBlending, ARecomputedFlatNormalReachesTheNormalSlotOfASkinnedLayoutToo)
+{
+    // The recomputation finds its slot through the canonical stride table, not through a literal
+    // list of strides -- GLTF-278's lesson, which cost every PBR morph target its normals once
+    // already. Stride 68 is the skinned PBR layout, where Normal sits at the same offset but
+    // Tangent, BlendWeight and BlendIndices follow it; morphing happens on the CPU before the
+    // shader skins anything, so a skinned normal-less primitive needs exactly this.
+    constexpr int kSkinnedStride = 68;
+    MorphTargetDataEXT morph;
+    morph.BaseVertexBytes = BaseVerticesAt(
+        {Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 0.0f, 0.0f), Vector3(0.0f, 1.0f, 0.0f)},
+        kSkinnedStride);
+    morph.Stride = kSkinnedStride;
+    morph.PositionDeltas.push_back(
+        {Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 1.0f)});
+    morph.NormalDeltas.push_back({});
+    morph.TangentDeltas.push_back({});
+    morph.RecomputeFlatNormalsEXT = true;
+    morph.TriangleIndicesEXT = {0, 1, 2};
+
+    const std::vector<std::uint8_t> blended = BlendMorphTargetsEXT(morph, {1.0f});
+    const Vector3 expected = FaceNormalOf(blended, kSkinnedStride, 0, 1, 2);
+    const CNA::Internal::Graphics::InferredVertexLayout layout =
+        CNA::Internal::Graphics::InferredLayoutForStride(
+            kSkinnedStride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+    ASSERT_TRUE(layout.known);
+    int normalOffset = -1;
+    for (std::size_t i = 0; i < layout.count; ++i)
+    {
+        if (layout.elements[i].usage == VertexElementUsage::Normal &&
+            layout.elements[i].usageIndex == 0)
+        {
+            normalOffset = layout.elements[i].offset;
+        }
+    }
+    ASSERT_GE(normalOffset, 0);
+    for (int v = 0; v < 3; ++v)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(v));
+        const std::vector<float> normal = ReadAt(blended, kSkinnedStride, v, normalOffset, 3);
+        EXPECT_NEAR(expected.X, normal[0], kTolerance);
+        EXPECT_NEAR(expected.Y, normal[1], kTolerance);
+        EXPECT_NEAR(expected.Z, normal[2], kTolerance);
+    }
+}
+
+TEST(GltfMorphBlending, AMorphedStride80RecordKeepsItsPackedVertexColourByteForByte)
+{
+    // plan_gltf.md GLTF-463/GLTF-465. Stride 80 is the skinned PBR record with a packed COLOR_0 at
+    // offset 76, and a morphed skinned vertex-coloured metallic-roughness primitive is an ordinary
+    // combination now rather than a corner case. The blend rewrites position, normal and tangent in
+    // place, so the risk is not that the colour is blended wrongly -- it is that a writer built for a
+    // 76-byte record walks off the end of each vertex and lands in the next one's colour. That
+    // corruption is invisible in a normal assertion, because the normals would still be right.
+    //
+    // The colours here are deliberately three DIFFERENT values with no channel in common, so a
+    // one-vertex slide, a truncation to 76 bytes and an opaque-white overwrite each produce a
+    // different wrong answer.
+    constexpr int kStride = 80;
+    const CNA::Internal::Graphics::InferredVertexLayout layout =
+        CNA::Internal::Graphics::InferredLayoutForStride(
+            kStride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+    ASSERT_TRUE(layout.known) << "stride 80 is not in the canonical table";
+    int colorOffset = -1;
+    for (std::size_t i = 0; i < layout.count; ++i)
+    {
+        if (layout.elements[i].usage == VertexElementUsage::Color &&
+            layout.elements[i].usageIndex == 0)
+        {
+            colorOffset = layout.elements[i].offset;
+        }
+    }
+    ASSERT_EQ(76, colorOffset);
+
+    MorphTargetDataEXT morph;
+    morph.BaseVertexBytes = BaseVerticesAt(
+        {Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 0.0f, 0.0f), Vector3(0.0f, 1.0f, 0.0f)}, kStride);
+    morph.Stride = kStride;
+    const std::array<std::array<std::uint8_t, 4>, 3> colors{{
+        {{255, 0, 64, 255}}, {{0, 128, 255, 191}}, {{64, 191, 0, 128}},
+    }};
+    for (int v = 0; v < 3; ++v)
+    {
+        for (int c = 0; c < 4; ++c)
+        {
+            morph.BaseVertexBytes[static_cast<std::size_t>(v) * kStride +
+                                  static_cast<std::size_t>(colorOffset) + c] = colors[v][c];
+        }
+    }
+    morph.PositionDeltas.push_back(
+        {Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 1.0f)});
+    morph.NormalDeltas.push_back({});
+    morph.TangentDeltas.push_back({});
+    morph.RecomputeFlatNormalsEXT = true;
+    morph.TriangleIndicesEXT = {0, 1, 2};
+
+    const std::vector<std::uint8_t> blended = BlendMorphTargetsEXT(morph, {1.0f});
+    ASSERT_EQ(3u * static_cast<std::size_t>(kStride), blended.size());
+
+    // The normal really was recomputed -- otherwise this test could pass over a blend that did
+    // nothing at all, which would also leave the colours alone.
+    const Vector3 expected = FaceNormalOf(blended, kStride, 0, 1, 2);
+    int normalOffset = -1;
+    for (std::size_t i = 0; i < layout.count; ++i)
+    {
+        if (layout.elements[i].usage == VertexElementUsage::Normal &&
+            layout.elements[i].usageIndex == 0)
+        {
+            normalOffset = layout.elements[i].offset;
+        }
+    }
+    ASSERT_GE(normalOffset, 0);
+    for (int v = 0; v < 3; ++v)
+    {
+        SCOPED_TRACE("normal of vertex " + std::to_string(v));
+        const std::vector<float> normal = ReadAt(blended, kStride, v, normalOffset, 3);
+        EXPECT_NEAR(expected.X, normal[0], kTolerance);
+        EXPECT_NEAR(expected.Y, normal[1], kTolerance);
+        EXPECT_NEAR(expected.Z, normal[2], kTolerance);
+        EXPECT_GT(std::abs(expected.Z), 0.1f) << "the target did not rotate the face at all";
+    }
+
+    for (int v = 0; v < 3; ++v)
+    {
+        SCOPED_TRACE("colour of vertex " + std::to_string(v));
+        for (int c = 0; c < 4; ++c)
+        {
+            EXPECT_EQ(colors[v][c],
+                      blended[static_cast<std::size_t>(v) * kStride +
+                              static_cast<std::size_t>(colorOffset) + c])
+                << "channel " << c << " of the packed COLOR_0 did not survive the blend";
+        }
+    }
+}
+
+TEST(GltfMorphBlending, AVertexNoTriangleReachesKeepsWhateverTheBasePoseGaveIt)
+{
+    // glTF states no normal for a vertex no face touches, so the recomputation must leave it alone
+    // rather than invent a direction. Writing a zero vector there would be worse than useless: it
+    // lights as black and passes any "was it rewritten" check.
+    MorphTargetDataEXT morph;
+    morph.BaseVertexBytes = BaseVerticesAt(
+        {Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 0.0f, 0.0f), Vector3(0.0f, 1.0f, 0.0f),
+         Vector3(9.0f, 9.0f, 9.0f)}, kStride);
+    morph.Stride = kStride;
+    morph.PositionDeltas.push_back({Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 0.0f),
+                                    Vector3(0.0f, 0.0f, 1.0f), Vector3(0.0f, 0.0f, 0.0f)});
+    morph.NormalDeltas.push_back({});
+    morph.TangentDeltas.push_back({});
+    morph.RecomputeFlatNormalsEXT = true;
+    morph.TriangleIndicesEXT = {0, 1, 2};
+
+    const std::vector<std::uint8_t> blended = BlendMorphTargetsEXT(morph, {1.0f});
+    const std::vector<float> orphan =
+        ReadAt(blended, kStride, 3, OffsetOf(VertexElementUsage::Normal), 3);
+    EXPECT_FLOAT_EQ(0.0f, orphan[0]);
+    EXPECT_FLOAT_EQ(0.0f, orphan[1]);
+    EXPECT_FLOAT_EQ(1.0f, orphan[2]);
 }
 
 // --- GLTF-287 / GLTF-290 / GLTF-291: the importer side of morphing ---------------------------------

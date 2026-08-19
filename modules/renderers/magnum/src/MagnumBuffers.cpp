@@ -137,6 +137,17 @@ namespace CNA::Internal::Renderers::Magnum
                         MakeAttribute(1, 12, 3, false, 2),
                         MakeAttribute(2, 24, 4, false, 3),
                         MakeAttribute(3, 40, 2, false, 1)};
+            // plan_gltf.md GLTF-462/GLTF-465: stride 60 is the rigid PBR record with a second UV set
+            // at 48 and a packed COLOR_0 at 56; its first four fields are byte-identical to stride
+            // 48. The colour is bound at location 6 and multiplied into base colour by the PBR
+            // fragment stage. The second UV set at 48 stays unlisted: this renderer's PBR shader
+            // samples one UV set, which is its own separate capability gap.
+            case 60:
+                return {MakeAttribute(0,  0, 3, false, 2),
+                        MakeAttribute(1, 12, 3, false, 2),
+                        MakeAttribute(2, 24, 4, false, 3),
+                        MakeAttribute(3, 40, 2, false, 1),
+                        MakeAttribute(6, 56, 4, true,  4)};
             case 68:
                 return {MakeAttribute(0,  0, 3, false, 2),
                         MakeAttribute(1, 12, 3, false, 2),
@@ -144,6 +155,17 @@ namespace CNA::Internal::Renderers::Magnum
                         MakeAttribute(3, 40, 2, false, 1),
                         MakeAttribute(4, 48, 4, false, 3),
                         MakeAttribute(5, 64, 4, false, 5, true)};
+            // plan_gltf.md GLTF-463: stride 80 is stride 68's skinned PBR record with the second UV
+            // set at 68 and the packed COLOR_0 at 76 appended -- the skinned counterpart of stride
+            // 60 above, and bound the same way.
+            case 80:
+                return {MakeAttribute(0,  0, 3, false, 2),
+                        MakeAttribute(1, 12, 3, false, 2),
+                        MakeAttribute(2, 24, 4, false, 3),
+                        MakeAttribute(3, 40, 2, false, 1),
+                        MakeAttribute(4, 48, 4, false, 3),
+                        MakeAttribute(5, 64, 4, false, 5, true),
+                        MakeAttribute(6, 76, 4, true,  4)};
             default:
                 return {};
         }

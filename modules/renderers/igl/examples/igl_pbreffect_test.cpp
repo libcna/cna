@@ -83,6 +83,15 @@ protected:
         effect.setMetallicFactorProperty(0.0f);
         effect.setRoughnessFactorProperty(0.5f);
         effect.setAmbientLightColorProperty(Vector3::Zero);
+        // plan_gltf.md GLTF-476: the value derived above is LINEAR, and it is the value the
+        // reference re-derivation (vulkan_pbreffect_handderived_test.cpp) measures -- with the
+        // same three switches turned off, for the same reason. This test used to omit them and
+        // still read 91 only because this renderer had no colour management at all; once it
+        // gained one, an unqualified expectation would have measured the transfer function
+        // instead of the BRDF.
+        effect.setBaseColorTextureIsSrgbEXTProperty(false);
+        effect.setEmissiveTextureIsSrgbEXTProperty(false);
+        effect.setEncodeOutputToSrgbEXTProperty(false);
         effect.DirectionalLight0.setEnabledProperty(true);
         effect.DirectionalLight0.setDirectionProperty(Vector3(0.0f, 0.0f, -1.0f));
         effect.DirectionalLight0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
@@ -130,6 +139,28 @@ protected:
                     Color(static_cast<bytecs>(91), static_cast<bytecs>(91),
                           static_cast<bytecs>(91), static_cast<bytecs>(255)),
                     /*tolerance=*/14);
+
+        // plan_gltf.md GLTF-476, the same scene with KHR_materials_specular's scalar strength at 0.
+        // The extension weights BOTH Fresnel endpoints, so F0 = 0.04 * 0 = 0 and F90 = 0, and at
+        // VdotH = 1 the Schlick term is exactly F0 -- the specular lobe vanishes and kd rises to 1:
+        //   Lo = (1 * 1 / pi + 0) * 1 * 1 = 0.318310 -> round(0.318310 * 255) = 81
+        // against the 91 above. That ten-code difference is the whole of the extension's factor-only
+        // effect on this scene, and this renderer used to answer 91 for both, because it hard-coded
+        // 0.04 in the shader and transported neither endpoint.
+        device.Clear(Color(static_cast<bytecs>(0), static_cast<bytecs>(0), static_cast<bytecs>(0),
+                           static_cast<bytecs>(255)));
+        effect.setSpecularFactorEXTProperty(0.0f);
+        for (EffectPass& pass : effect.getCurrentTechniqueProperty()->getPassesProperty())
+        {
+            pass.Apply();
+            device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+        }
+
+        ExpectPixel("KHR_materials_specular's scalar strength weights both Fresnel endpoints",
+                    Rectangle(kSize / 2, kSize / 2, 1, 1),
+                    Color(static_cast<bytecs>(81), static_cast<bytecs>(81),
+                          static_cast<bytecs>(81), static_cast<bytecs>(255)),
+                    /*tolerance=*/6);
     }
 
 public:

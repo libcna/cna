@@ -290,11 +290,24 @@ TEST(GltfConformanceLadder, RequiredCiRunsEveryCampaignRendererForEveryCommitAnd
     const std::string source((std::istreambuf_iterator<char>(file)),
                              std::istreambuf_iterator<char>());
 
-    // Exact matrix ownership: omitting the non-rasterising controls or either real API turns a
+    // Matrix ownership: omitting the non-rasterising controls or either real API turns a
     // differential gate into a single-backend smoke test. Vulkan remains useful extra evidence;
     // GLTF-398's minimum is the first three entries.
-    EXPECT_NE(std::string::npos,
-              source.find("renderer: [STUB, HEADLESS, OPENGLES3, VULKAN]"));
+    //
+    // Stated as a REQUIRED SET rather than as an exact string (`GLTF-473`). The exact string forbade
+    // widening the gate as well as narrowing it, which is the wrong half to forbid: `SOFTWARE` joined
+    // the matrix because it is a CPU rasteriser that needs no driver on the runner, and the exact
+    // match rejected it even though it strictly increases coverage. Each required entry is checked
+    // individually inside the matrix line, so removing one still fails and adding one does not.
+    const std::size_t matrixAt = source.find("renderer: [");
+    ASSERT_NE(std::string::npos, matrixAt) << "the stride-conformance matrix is gone entirely";
+    const std::string matrixLine = source.substr(matrixAt, source.find(']', matrixAt) - matrixAt + 1);
+    for (const char* required : {"STUB", "HEADLESS", "OPENGLES3", "VULKAN"})
+    {
+        EXPECT_NE(std::string::npos, matrixLine.find(required))
+            << required << " left the required-CI matrix, which turns the differential gate into a "
+                           "narrower one: " << matrixLine;
+    }
     EXPECT_NE(std::string::npos,
               source.find("xvfb-run -a ctest --test-dir build -L gltf-conformance "
                           "--output-on-failure"));

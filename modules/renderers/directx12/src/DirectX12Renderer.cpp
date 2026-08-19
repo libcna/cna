@@ -1732,11 +1732,11 @@ namespace CNA::Internal::Renderers::DirectX12
             throw std::runtime_error(
                 "DirectX12Renderer::DrawPrimitivesEx: PbrEffect (pbr3d) requires stride 48 or 60 "
                 "(VertexPositionNormalTangentTexture with optional TEXCOORD_1)");
-        if (needsPbr && params.skinned && stride != 68 && stride != 76)
+        if (needsPbr && params.skinned && stride != 68 && stride != 76 && stride != 80)
             throw std::runtime_error(
                 "DirectX12Renderer::DrawPrimitivesEx: SkinnedPbrEffect (pbr_skinned3d) requires "
-                "stride 68 or 76 (VertexPositionNormalTangentTextureSkinned with optional "
-                "TEXCOORD_1)");
+                "stride 68, 76 or 80 (VertexPositionNormalTangentTextureSkinned with optional "
+                "TEXCOORD_1 and COLOR_0)");
 
         D3DShaderVariant variant;
         bool hasTexture;
@@ -1776,8 +1776,13 @@ namespace CNA::Internal::Renderers::DirectX12
         else if (needsPbr)
         {
             // Mirrors DirectX11Renderer::DrawPrimitivesExImpl's own needsPbr branch exactly.
+            // plan_gltf.md GLTF-463: stride 80 is the skinned dual-UV record with a packed COLOR_0
+            // appended, so it needs the variant that declares the colour input; stride 76 has no
+            // colour slot to bind. The rigid dual-UV variant always declares one because every
+            // stride-60 record carries the slot (GLTF-462).
             variant = params.skinned
-                ? ((stride == 76) ? D3DShaderVariant::PbrSkinned3dDualUv
+                ? ((stride == 80) ? D3DShaderVariant::PbrSkinned3dDualUvColor
+                : (stride == 76)  ? D3DShaderVariant::PbrSkinned3dDualUv
                                   : D3DShaderVariant::PbrSkinned3d)
                 : ((stride == 60) ? D3DShaderVariant::Pbr3dDualUv
                                   : D3DShaderVariant::Pbr3d);
@@ -2056,6 +2061,9 @@ namespace CNA::Internal::Renderers::DirectX12
             std::memcpy(perDraw.SpecularTextureTransformRows,
                         params.pbrSpecularTextureTransformRows,
                         sizeof(perDraw.SpecularTextureTransformRows));
+            // plan_gltf.md GLTF-465: §3.9.2's COLOR_0 multiplier switch. Only the stride-60 and
+            // stride-80 variants declare a colour input, so this is inert for the others.
+            perDraw.VertexColorFlags[0] = params.vertexColorEnabled ? 1.0f : 0.0f;
 
             D3DPbrLightConstants lights{};
             lights.EyePosWeights[0] = params.eyePositionWorld[0];

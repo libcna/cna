@@ -14,6 +14,9 @@ layout(location = 5) in vec3  vWorldPos;
 #ifdef CNA_PBR_DUAL_UV
 layout(location = 6) in vec2  vUV1;
 #endif
+#ifdef CNA_PBR_VERTEX_COLOR
+layout(location = 7) in vec4  vColor;
+#endif
 
 layout(location = 0) out vec4 outColor;
 
@@ -117,6 +120,18 @@ void main() {
     vec3 baseColor = mix(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), pbr.srgbFlags.x);
     vec3 albedo = baseColor * pc.diffuseColor.rgb;
     float alpha = baseColorTex.a * pc.diffuseColor.a;
+#ifdef CNA_PBR_VERTEX_COLOR
+    // plan_gltf.md GLTF-465: glTF 2.0 §3.9.2 -- COLOR_0 is an additional linear multiplier on the
+    // base colour product, its alpha included. pc.vertexColorEnabled is the effect's own switch, so
+    // a primitive that has the slot but no authored colour (or an effect that opted out) keeps the
+    // opaque-white identity. Kept inside the ifdef so the variants without a colour slot compile to
+    // byte-identical SPIR-V.
+    if (pc.vertexColorEnabled > 0.5)
+    {
+        albedo *= vColor.rgb;
+        alpha  *= vColor.a;
+    }
+#endif
     bool passesAlphaTest = (pbr.alphaTest.y > 0.0)
         ? (abs(alpha - pbr.alphaTest.x) < pbr.alphaTest.y)
         : (alpha < pbr.alphaTest.x);

@@ -29,7 +29,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        renderer: [STUB, HEADLESS, OPENGLES3, VULKAN]
+        # SOFTWARE joined on 2026-08-18 (plan_gltf.md GLTF-473): it is a CPU rasteriser, so it
+        # needs no driver on the runner, and it is one of the four L7 golden policies -- which
+        # makes it the cheapest way to widen the live draw-boundary gate below.
+        # OPENGLES1 deliberately is NOT here: the runner's Mesa ships with `gles1` disabled, so
+        # the renderer builds but cannot create a device. It is exercised locally against the
+        # side-by-side ES 1.1 Mesa build recorded in NEXT_gltf.md, and that limitation is
+        # stated rather than papered over.
+        renderer: [STUB, HEADLESS, OPENGLES3, VULKAN, SOFTWARE]
     env:
       CC: gcc-14
       CXX: g++-14
@@ -111,7 +118,7 @@ jobs:
             export VK_ICD_FILENAMES="${lvp_icd}"
           fi
           xvfb-run -a ./build/CnaTests \
-            --gtest_filter='GltfStrideAndBuffer.EveryImportedGltfStrideCarriesItsCanonicalVertexDeclaration:RendererStrideConformance.EveryGltfStrideReachesTheNativeDrawBoundary'
+            --gtest_filter='GltfStrideAndBuffer.EveryImportedGltfStrideCarriesItsCanonicalVertexDeclaration:RendererStrideConformance.*'
 
   l7-corpus:
     name: glTF conformance (OPENGLES3 L7)

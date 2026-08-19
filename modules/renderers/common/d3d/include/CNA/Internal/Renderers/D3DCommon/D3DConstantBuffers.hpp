@@ -242,8 +242,13 @@ namespace CNA::Internal::Renderers::D3DCommon
         float SpecularFresnelInputs[4]; ///< offset 400: xyz = unclamped F0, w = specular factor
         float SpecularMapFlags[4]; ///< offset 416: x = decode specular-colour sample from sRGB
         float SpecularTextureTransformRows[4][4]; ///< offset 432: two rows per specular map
+        /// plan_gltf.md GLTF-465: offset 496, x = COLOR_0 multiplier enable
+        /// (PbrEffect/SkinnedPbrEffect::VertexColorEnabledEXT). Declared for every PBR variant so
+        /// the cbuffer stays one shape; only the variants whose vertex record carries a colour slot
+        /// read it.
+        float VertexColorFlags[4];
     };
-    static_assert(sizeof(D3DPbrPerDrawConstants) == 496, "D3DPbrPerDrawConstants must match pbr3d's real 496-byte PerDraw cbuffer size");
+    static_assert(sizeof(D3DPbrPerDrawConstants) == 512, "D3DPbrPerDrawConstants must match pbr3d's real 512-byte PerDraw cbuffer size");
     static_assert(offsetof(D3DPbrPerDrawConstants, World) == 64, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DPbrPerDrawConstants, DiffuseColor) == 128, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DPbrPerDrawConstants, AmbientMetallic) == 144, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
@@ -256,6 +261,7 @@ namespace CNA::Internal::Renderers::D3DCommon
     static_assert(offsetof(D3DPbrPerDrawConstants, SpecularFresnelInputs) == 400, "D3DPbrPerDrawConstants specular-Fresnel offset mismatch vs HLSL");
     static_assert(offsetof(D3DPbrPerDrawConstants, SpecularMapFlags) == 416, "D3DPbrPerDrawConstants specular-map-flags offset mismatch vs HLSL");
     static_assert(offsetof(D3DPbrPerDrawConstants, SpecularTextureTransformRows) == 432, "D3DPbrPerDrawConstants specular-transform offset mismatch vs HLSL");
+    static_assert(offsetof(D3DPbrPerDrawConstants, VertexColorFlags) == 496, "D3DPbrPerDrawConstants vertex-colour-flag offset mismatch vs HLSL");
     static_assert(sizeof(D3DPbrPerDrawConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
 
     /// plan_cnj.md CNB-58 follow-up: matches pbr3d.vert.hlsl/pbr3d.frag.hlsl's shared

@@ -231,11 +231,20 @@ TEST(GltfUvChannel, TwoSampledTexcoordSetsAreBothPackedExactlyAndMappedPerTextur
         EXPECT_NEAR(kUv1[vertex * 2], uv1[0], kTolerance);
         EXPECT_NEAR(kUv1[vertex * 2 + 1], uv1[1], kTolerance);
 
-        float padding = 1.0f;
-        std::memcpy(&padding,
+        // plan_gltf.md GLTF-462: those four bytes stopped being padding and became the packed
+        // COLOR_0 slot. This primitive authors no COLOR_0, and the fill has to be the MULTIPLIER'S
+        // IDENTITY -- opaque white -- because §3.7.2.1 makes vertex colour a linear multiplier on
+        // base colour. The zero fill that used to be here would multiply an uncoloured surface to
+        // transparent black on any renderer that started reading the slot, which is precisely the
+        // silent failure a deterministic-but-wrong default invites.
+        std::uint8_t color[4] = {0, 0, 0, 0};
+        std::memcpy(color,
                     mesh.vertexBytes.data() + vertex * static_cast<std::size_t>(mesh.stride) + 56,
-                    sizeof(padding));
-        EXPECT_FLOAT_EQ(0.0f, padding) << "the stride discriminator padding must be deterministic";
+                    sizeof(color));
+        EXPECT_EQ(255, static_cast<int>(color[0]));
+        EXPECT_EQ(255, static_cast<int>(color[1]));
+        EXPECT_EQ(255, static_cast<int>(color[2]));
+        EXPECT_EQ(255, static_cast<int>(color[3]));
     }
 }
 

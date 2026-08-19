@@ -427,3 +427,36 @@ TEST_F(PbrEffectDefaultsTest, FillGpuDrawParamsCarriesFactorsAndFogState)
     EXPECT_FLOAT_EQ(params.fogVector[2], -1.0f / 6.0f);
     EXPECT_FLOAT_EQ(params.fogVector[3], -1.0f / 3.0f);
 }
+
+TEST_F(PbrEffectDefaultsTest, VertexColorEnabledDefaultsOffAndOverridesTheDrawParamDefault)
+{
+    // plan_gltf.md GLTF-465. §3.7.2.1: a COLOR_0 attribute "acts as an additional linear multiplier
+    // to base color", so a renderer needs to know whether the colour slot in the vertex record means
+    // anything. Since GLTF-462 the rigid PBR record (stride 60) and since GLTF-463 the skinned one
+    // (stride 80) ALWAYS carry that slot -- filled with the authored colour, or with opaque white --
+    // and this flag is the only thing that distinguishes the two cases at the renderer boundary.
+    //
+    // The two defaults deliberately disagree, and that is the property worth pinning:
+    // GpuDrawParams::vertexColorEnabled defaults TRUE (BasicEffect's own XNA-visible default reaches
+    // it that way), while PbrEffect::VertexColorEnabledEXT defaults FALSE. So a PBR draw that never
+    // touched this flag would inherit "enabled" from the draw-params default and multiply by whatever
+    // the colour slot happened to hold -- which is exactly why FillGpuDrawParams must WRITE it rather
+    // than leave it, and why this asserts the false case as hard as the true one.
+    EXPECT_FALSE(fx.VertexColorEnabledEXT);
+
+    GpuDrawParams defaults;
+    EXPECT_TRUE(defaults.vertexColorEnabled)
+        << "the draw-param default changed; the disagreement this test pins no longer exists";
+
+    GpuDrawParams params;
+    params.vertexColorEnabled = true;
+    fx.FillGpuDrawParams(params);
+    EXPECT_FALSE(params.vertexColorEnabled)
+        << "the effect's own switch was left off but the draw still says the colour is enabled";
+
+    fx.VertexColorEnabledEXT = true;
+    GpuDrawParams enabled;
+    enabled.vertexColorEnabled = false;
+    fx.FillGpuDrawParams(enabled);
+    EXPECT_TRUE(enabled.vertexColorEnabled);
+}
