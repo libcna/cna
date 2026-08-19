@@ -147,6 +147,31 @@ namespace CNA::Graphics {
         /** @brief Sets how wide the fade at the edge of the screen is, in screen fractions. */
         void setSSREdgeFade(float value);
 
+        /** @brief Returns true if depth of field is enabled. */
+        [[nodiscard]] bool isDOFEnabled() const;
+        /** @brief Enables or disables the depth-of-field pass. */
+        void setDOFEnabled(bool value);
+
+        /** @brief Returns the distance the lens is focused at, in world units. */
+        [[nodiscard]] float getDOFFocusDistance() const;
+        /** @brief Sets the distance the lens is focused at, in world units. */
+        void setDOFFocusDistance(float value);
+
+        /** @brief Returns the focal length in millimetres. */
+        [[nodiscard]] float getDOFFocalLength() const;
+        /** @brief Sets the focal length in millimetres. */
+        void setDOFFocalLength(float value);
+
+        /** @brief Returns the f-number. */
+        [[nodiscard]] float getDOFFNumber() const;
+        /** @brief Sets the f-number; smaller opens the aperture and shortens the field. */
+        void setDOFFNumber(float value);
+
+        /** @brief Returns the largest blur radius the pass will use, in screen fractions. */
+        [[nodiscard]] float getDOFMaxRadius() const;
+        /** @brief Sets the largest blur radius the pass will use, in screen fractions. */
+        void setDOFMaxRadius(float value);
+
         /** @brief Returns how far a fully-rough surface spreads its reflection, in screen fractions. */
         [[nodiscard]] float getSSRRoughnessBlur() const;
         /** @brief Sets how far a fully-rough surface spreads its reflection, in screen fractions. */
@@ -278,6 +303,11 @@ namespace CNA::Graphics {
         float           ssrEdgeFade_     = 0.1f;
         float           ssrRoughnessBlur_ = 0.02f;
         float           ssrIntensity_    = 1.0f;
+        bool            dofEnabled_      = false;
+        float           dofFocusDistance_ = 10.0f;
+        float           dofFocalLength_   = 50.0f;
+        float           dofFNumber_       = 5.6f;
+        float           dofMaxRadius_     = 0.02f;
         float           fxaaEdgeThreshold_ = 0.125f;
 
         bool            fxaaEnabled_     = false;

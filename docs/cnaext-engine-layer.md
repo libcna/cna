@@ -525,6 +525,49 @@ in front of the surface and the first behind it — and six bisections close it,
 count sharpens what is found rather than shifting where it is found. Without that, a coarse march
 stair-steps every reflected edge and halving the step moves the whole reflection.
 
+### Depth of field, in the units a photographer uses
+
+`plan_modern.md` `MOD-2010`–`MOD-2015`. `DepthOfFieldPass` blurs each pixel by the **circle of
+confusion** a thin lens would produce at its distance, so the settings mean what they mean on a
+camera: a 135 mm lens at f/1.4 focused two metres away has a shallow depth of field here for the
+reason it does in the world.
+
+```cpp
+pipeline.setCamera(view, projection, nearPlane, farPlane);
+pipeline.setDepthNormalInputs(prepass.getDepthTexture(), prepass.getNormalTexture());
+auto& settings = pipeline.getSettings();
+settings.setDOFEnabled(true);
+settings.setDOFFocusDistance(2.0f);   // world units
+settings.setDOFFocalLength(135.0f);   // millimetres
+settings.setDOFFNumber(1.4f);
+```
+
+**Units, and the assumption inside them.** Focal length is in millimetres, as printed on a lens.
+Focus distance is in world units, and the pass assumes **one world unit is one metre**. A game
+measuring in centimetres wants a focus distance a hundred times larger — not a different setting,
+and not a different focal length.
+
+**The circle is smaller than it feels.** The same optics that make f/1.4 dramatic on a camera
+produce, for a 50 mm lens focused at 5 m, a background circle around 0.7% of the frame height. That
+is fifteen pixels at 1080p and *under half a pixel* at 64 — which is why this pass's own tests use a
+long lens, and why a game that sees "no blur" should check its frame size before its f-number.
+`DepthOfFieldPass::circleOfConfusionMillimetres` is public so the number can be computed rather than
+guessed at.
+
+**Where it sits: before bloom, and that is a decision.** An out-of-focus highlight should bloom as
+the spread circle it became, not as the point it was. Blooming first and blurring the glow afterwards
+is wrong in the same way tonemapping before bloom would be.
+
+**What keeps a focused subject's silhouette.** A gather weighted only by the centre pixel's blur
+pulls the sharp half's colour into the soft one, and an in-focus subject visibly smears into the
+background beside it. A tap contributes here only if its **own** circle of confusion is wide enough
+to reach the pixel doing the gathering, which is what scattering light onto a neighbour actually
+means. It is the difference between depth of field and a depth-weighted blur.
+
+`maxRadius` caps the gather. It is a budget rather than a look: raising it costs nothing until
+something is far enough out of focus to reach it, and lowering it below what the optics ask for
+makes the frame sharper than the lens would.
+
 ### Bloom: what the numbers mean, and what they do not
 
 `plan_modern.md` `MOD-417`, `MOD-405`, `MOD-409`.

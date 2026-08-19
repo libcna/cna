@@ -365,6 +365,45 @@ TEST(RenderPipelineTest, SsrSitsBetweenSsaoAndBloom)
     EXPECT_EQ(pipeline.getLastFramePassCount(), 5);   // ssao, ssr, bloom, tonemap, fxaa
 }
 
+TEST(RenderPipelineTest, DepthOfFieldSitsBeforeBloomBecauseItBelongsToTheLens)
+{
+    // plan_modern.md MOD-2011. An out-of-focus highlight should bloom as the spread circle it
+    // became, not as the point it was. Blooming first and blurring the glow afterwards is wrong in
+    // the same way tonemapping before bloom would be, so the lens runs first.
+    GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+
+    auto& settings = pipeline.getSettings();
+    settings.setDOFEnabled(true);
+    settings.setBloomEnabled(true);
+    settings.setTonemappingMode(TonemappingMode::Aces);
+
+    pipeline.begin(Color::Black);
+    pipeline.end();
+
+    EXPECT_EQ(pipeline.getLastFramePassCount(), 3);   // dof, bloom, tonemap
+}
+
+TEST(RenderPipelineTest, DepthOfFieldAloneIsEnoughToNeedASceneTarget)
+{
+    GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    RenderPipeline pipeline(gd);
+    pipeline.resize(kWidth, kHeight);
+
+    pipeline.begin(Color::Black);
+    pipeline.end();
+    EXPECT_EQ(pipeline.getGpuMemoryEstimateBytes(), 0u);
+
+    pipeline.getSettings().setDOFEnabled(true);
+    pipeline.begin(Color::Black);
+    pipeline.end();
+    EXPECT_GT(pipeline.getGpuMemoryEstimateBytes(), 0u)
+        << "enabling depth of field did not take the pipeline off the back buffer";
+}
+
 TEST(RenderPipelineTest, SsrAloneIsEnoughToNeedASceneTarget)
 {
     // A pass that reads the frame cannot run against the back buffer, so enabling it must take the

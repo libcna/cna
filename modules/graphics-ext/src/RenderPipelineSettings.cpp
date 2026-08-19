@@ -86,6 +86,21 @@ namespace CNA::Graphics {
     float           RenderPipelineSettings::getSSREdgeFade()      const { return ssrEdgeFade_; }
     void            RenderPipelineSettings::setSSREdgeFade(float v)     { ssrEdgeFade_ = std::clamp(v, 0.0f, 0.5f); }
 
+    bool            RenderPipelineSettings::isDOFEnabled()        const { return dofEnabled_; }
+    void            RenderPipelineSettings::setDOFEnabled(bool v)       { dofEnabled_ = v; }
+
+    float           RenderPipelineSettings::getDOFFocusDistance() const { return dofFocusDistance_; }
+    void            RenderPipelineSettings::setDOFFocusDistance(float v) { dofFocusDistance_ = AtLeast(v, 0.0f); }
+
+    float           RenderPipelineSettings::getDOFFocalLength()   const { return dofFocalLength_; }
+    void            RenderPipelineSettings::setDOFFocalLength(float v)  { dofFocalLength_ = AtLeast(v, 0.0f); }
+
+    float           RenderPipelineSettings::getDOFFNumber()       const { return dofFNumber_; }
+    void            RenderPipelineSettings::setDOFFNumber(float v)      { dofFNumber_ = AtLeast(v, 0.0f); }
+
+    float           RenderPipelineSettings::getDOFMaxRadius()     const { return dofMaxRadius_; }
+    void            RenderPipelineSettings::setDOFMaxRadius(float v)    { dofMaxRadius_ = std::clamp(v, 0.0f, 0.25f); }
+
     float           RenderPipelineSettings::getSSRRoughnessBlur() const { return ssrRoughnessBlur_; }
     void            RenderPipelineSettings::setSSRRoughnessBlur(float v) { ssrRoughnessBlur_ = std::clamp(v, 0.0f, 0.25f); }
 

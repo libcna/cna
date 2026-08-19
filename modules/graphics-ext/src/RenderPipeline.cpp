@@ -8,6 +8,7 @@
 #include "CNA/Graphics/ShadowMap.hpp"
 #include "CNA/Graphics/Skybox.hpp"
 #include "CNA/Graphics/SsaoPass.hpp"
+#include "CNA/Graphics/DepthOfFieldPass.hpp"
 #include "CNA/Graphics/SsrPass.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
@@ -34,7 +35,8 @@ namespace CNA::Graphics {
           tonemapPass_(std::make_unique<TonemapPass>(device)),
           fxaaPass_(std::make_unique<FxaaPass>(device)),
           ssaoPass_(std::make_unique<SsaoPass>(device)),
-          ssrPass_(std::make_unique<SsrPass>(device))
+          ssrPass_(std::make_unique<SsrPass>(device)),
+          dofPass_(std::make_unique<DepthOfFieldPass>(device))
     {
         // plan_modern.md MOD-715. After a context loss every GPU object this pipeline holds names
         // storage the driver has already destroyed; rendering into one is undefined rather than
@@ -69,7 +71,7 @@ namespace CNA::Graphics {
         if (settings_.getTonemappingMode() != TonemappingMode::None)
             return true;
         if (settings_.isBloomEnabled() || settings_.isSSAOEnabled() || settings_.isFXAAEnabled() ||
-            settings_.isSSREnabled())
+            settings_.isSSREnabled() || settings_.isDOFEnabled())
             return true;
         return !userPasses_.empty();
     }
@@ -237,6 +239,12 @@ namespace CNA::Graphics {
         // because what a mirror shows should be the shaded scene, not the unshaded one.
         if (settings_.isSSREnabled())
             chain_.addPass(ssrPass_.get());
+        // Depth of field belongs to the lens, so it happens before anything the lens feeds: a
+        // highlight that is out of focus should bloom as the spread circle it became, not as the
+        // point it was. Putting it after bloom would bloom the point and then blur the glow, which
+        // is the wrong order in the same way tonemapping before bloom would be.
+        if (settings_.isDOFEnabled())
+            chain_.addPass(dofPass_.get());
         // Bloom reads scene-referred values -- its threshold separates genuinely bright pixels
         // from merely white ones -- so it runs before the tonemapper compresses that range away.
         if (settings_.isBloomEnabled())

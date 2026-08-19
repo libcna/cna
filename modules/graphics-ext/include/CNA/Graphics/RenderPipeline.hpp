@@ -40,6 +40,7 @@ namespace CNA::Graphics {
     class Skybox;
     class SsaoPass;
     class SsrPass;
+    class DepthOfFieldPass;
     class TonemapPass;
 
     /**
@@ -360,6 +361,7 @@ namespace CNA::Graphics {
         std::unique_ptr<FxaaPass> fxaaPass_;
         std::unique_ptr<SsaoPass> ssaoPass_;
         std::unique_ptr<SsrPass>  ssrPass_;
+        std::unique_ptr<DepthOfFieldPass> dofPass_;
         Skybox* skybox_ = nullptr;
         Microsoft::Xna::Framework::Matrix skyboxView_{};
         Microsoft::Xna::Framework::Matrix skyboxProjection_{};
