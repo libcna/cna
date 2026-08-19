@@ -272,6 +272,41 @@ be drawn. It is also the measurement behind `MOD-1553`'s refusal of a compute bl
 roughly 0.5 ms per megabyte, bringing a 720p downsample result back costs about ninety times the
 0.020 ms fullscreen raster pass it would have replaced.
 
+## Clustered forward lighting
+
+`plan_modern.md` `MOD-2048`. Four light counts, 256×256, the default 16×8×24 grid, all 256 lights
+packed close to a wall that fills the frame — deliberately the *worst* arrangement for a cluster
+grid, because every light is inside the frustum and the busiest cluster holds 69 of them.
+
+| Lights | Sort (CPU) | Sort (GPU) | Upload | Shade |
+|---|---|---|---|---|
+| 1 | **0.579 ms** | 2.101 ms | 0.428 ms | **2.771 ms** |
+| 16 | **1.017 ms** | 2.386 ms | 0.668 ms | **7.214 ms** |
+| 64 | **1.791 ms** | 2.449 ms | 0.990 ms | **22.043 ms** |
+| 256 | 3.186 ms | **2.560 ms** | 1.771 ms | **87.194 ms** |
+
+Source: `cna_test_cnaext_clustered_lights --benchmark`.
+
+- **The GPU sort is flat and the CPU sort is not**, which is the whole shape of the result: the
+  compute path costs about 2.4 ms whether it is sorting one light or two hundred and fifty-six,
+  because every cluster is being visited either way and the light loop inside it is short. The two
+  cross somewhere between 128 and 256 lights on this machine. Below that the CPU path is faster and
+  is not a fallback but the better choice.
+- **Shading dominates everything else** past a handful of lights, and it scales with
+  *lights per fragment* rather than with lights in the scene — 69 in the busiest cluster here. A
+  scene whose lights are spread through a level rather than piled on one wall pays a fraction of
+  this for the same count, which is the property clustering exists to provide and the reason this
+  measurement uses the arrangement that defeats it.
+- **`shade` excludes the read-back that forces it to complete.** A draw submitted is not a draw
+  done: timing the call alone reported 0.06 ms for work that had not happened. The frame is read
+  back inside the timed block and the read-back's own cost measured separately and subtracted, after
+  three discarded warm-up frames — without the warm-up the one-light row came out an order of
+  magnitude *slower* than the sixteen-light one, which is texture upload and pipeline state, not
+  shading.
+- **The CPU sort was 73 ms for 256 lights before this benchmark existed.** It recomputed a cluster's
+  bounds once per light, so the frame's most expensive arithmetic was multiplied by the light count;
+  caching the bounds lazily inside one `assign` took it to 3.2 ms. The measurement is what found it.
+
 ## Not measured yet
 
 **Corrected 2026-08-19 (`MOD-1906`).** This section used to say bloom, tonemapping, SSAO and FXAA

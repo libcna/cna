@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 #include <stdexcept>
 
 namespace CNA::Graphics {
@@ -76,6 +77,14 @@ namespace CNA::Graphics {
 
         std::vector<std::vector<int>> perCluster(static_cast<std::size_t>(clusterCount_));
 
+        // A cluster's bounds depend on the grid alone, so recomputing them once per light -- which
+        // is what the first version did -- multiplies the frame's most expensive arithmetic by the
+        // light count. The benchmark is what showed it: sorting 256 lights cost 73 ms, and almost
+        // all of it was 256 recomputations of the same 3072 boxes. Cached lazily rather than
+        // eagerly, so a scene with one light still visits only the clusters that light reaches.
+        std::vector<BoundingBox> bounds(static_cast<std::size_t>(clusterCount_));
+        std::vector<char> known(static_cast<std::size_t>(clusterCount_), 0);
+
         for (int light = 0; light < lightCount_; ++light)
         {
             const BoundingSphere& sphere = lights[static_cast<std::size_t>(light)];
@@ -97,10 +106,15 @@ namespace CNA::Graphics {
                 for (int y = 0; y < grid.getTilesY(); ++y)
                     for (int x = 0; x < grid.getTilesX(); ++x)
                     {
-                        const BoundingBox bounds = grid.clusterBounds(x, y, slice);
-                        if (SquaredDistanceToBox(bounds, centre) > radiusSquared) continue;
-                        perCluster[static_cast<std::size_t>(grid.clusterIndex(x, y, slice))]
-                            .push_back(light);
+                        const std::size_t cluster =
+                            static_cast<std::size_t>(grid.clusterIndex(x, y, slice));
+                        if (!known[cluster])
+                        {
+                            bounds[cluster] = grid.clusterBounds(x, y, slice);
+                            known[cluster] = 1;
+                        }
+                        if (SquaredDistanceToBox(bounds[cluster], centre) > radiusSquared) continue;
+                        perCluster[cluster].push_back(light);
                     }
         }
 

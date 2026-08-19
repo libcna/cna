@@ -839,6 +839,69 @@ hard to see:
   after a throw does not look like an error — the frame simply stops updating, because everything
   drawn afterwards goes into your intermediate.
 
+### Many lights: clustered forward shading
+
+`plan_modern.md` `MOD-2040`–`MOD-2048`. The XNA lit effects carry three directional lights plus one
+shadowed punctual light, and that is a budget rather than an implementation limit. Clustered forward
+lifts it: the view frustum is cut into a grid of cells, each light is sorted into the cells its
+volume touches, and a fragment shades with the handful its own cell holds.
+
+```cpp
+CNA::Graphics::ClusteredLightSetEXT lights;          // the app's lights, with stable indices
+lights.add(pointLight);
+lights.add(spotLight);
+
+CNA::Graphics::ClusteredLightGrid grid;              // 16 x 8 x 24 by default
+grid.setProjection(projection, nearPlane, farPlane);
+
+CNA::Graphics::ClusteredLightAssignment assignment;  // or ClusteredLightCompute, on the GPU
+assignment.assign(grid, view, lights.collectBounds());
+
+CNA::Graphics::ClusteredLightBuffer buffer(device);
+buffer.upload(lights, grid, assignment);
+
+effect.begin(world, view, projection, cameraPosition, buffer);
+effect.getEffect()->Apply();
+device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, triangles);
+```
+
+- **Clustered, not deferred**, and the reason is this layer's own history: `DepthNormalPrepass`
+  needs two targets and still carries a hand-written two-pass fallback, because
+  `MultipleRenderTargets` is a capability some renderers advertise and then refuse — it is probed by
+  doing. A G-buffer wants three or four targets, so on such a renderer the fallback becomes three or
+  four full geometry passes. Clustered draws the geometry once, keeps transparency lit and keeps
+  MSAA working. What it does not buy is deferred's decoupling of shading from geometry, so heavy
+  overdraw shades more than once.
+- **Slices are spaced exponentially.** Every slice has the same ratio of far to near distance, so
+  the near clusters — where geometry is dense and lights are close — are the thin ones. Even spacing
+  would put almost every slice past the middle distance, in cells large enough to hold the scene.
+- **A cluster's bounds are a box around a frustum shape, and a light's reach is a sphere.** Both
+  approximations err the same way: a light may be assigned to a cell it only nearly touches, which
+  costs an iteration of the shader's light loop. Neither can drop a light, which would be a hole in
+  the lighting.
+- **The light list reaches the shader as three textures** — the light data, the cluster table, and
+  the index list — with every value stored as the four bytes of its IEEE representation and read
+  back with `texelFetch` and `uintBitsToFloat`. That is forced, not chosen: this renderer's textures
+  are 8-bit only, and uniform arrays cannot hold 256 lights inside GL ES 3.0's limits. A storage
+  buffer would be the natural answer and is not available here, because an SSBO in a *fragment*
+  shader needs GLSL ES 3.10 and this layer's shader floor is 3.00.
+- **`ClusteredLightCompute` sorts on the GPU and produces the identical list**, element for element,
+  not a similar one — everything downstream refers to a light by index. It falls back to the CPU
+  where compute is absent and says so. Its per-cluster capacity is fixed, since a GPU cannot grow an
+  array; a fuller cluster raises `hasOverflowed()` rather than truncating in silence. The GPU path
+  is flat in the light count and the CPU path is not, and the two cross around 128–256 lights on
+  this machine — see `docs/cnaext-perf.md`.
+- **Shadows are still a small budget.** Clustering removed the limit on how many lights can *light*
+  a scene and nothing at all about how many can *shadow* one: a shadow map is a render target and a
+  geometry pass, six of them for a point light. `ClusteredShadowPolicyEXT` spends that budget on a
+  stated rule — among the lights that asked and are visible, the brightest at the camera win — and
+  keeps the selection sticky so a shadow does not blink between two lights whose scores cross.
+- **`ClusteredForwardEffect` is a separate effect, not an extension of `PbrEffect`.** `PbrEffect`
+  owns no shader source: it fills a `GpuDrawParams` and the renderer generates the program, so a
+  light loop there would be a change to EasyGL's built-in effect family — code compiled into every
+  game whether `CNA_CNAEXT` is on or off. What a game gives up by using this instead is
+  `PbrEffect`'s texture set and its shadowed punctual light; what it gains is the light count.
+
 ### Shadows, and the contract they put on the app
 
 Shadows cost the app something no library can pay on its behalf: **the scene has to be drawable

@@ -147,6 +147,11 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_register_renderer_test(NAME CNAEXT_ComputeParticles COMMAND cna_test_cnaext_compute_particles
         TIMEOUT 180 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_modern.md MOD-2048: clustered forward, end to end, with its cost per light count.
+    cna_graphics_ext_test(cna_test_cnaext_clustered_lights cnaext_clustered_lights_test.cpp)
+    cna_register_renderer_test(NAME CNAEXT_ClusteredLights COMMAND cna_test_cnaext_clustered_lights
+        TIMEOUT 180 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_graphics_ext_test(cna_test_cnaext_bloom cnaext_bloom_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_BloomInTenLines COMMAND cna_test_cnaext_bloom
         TIMEOUT 90 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
