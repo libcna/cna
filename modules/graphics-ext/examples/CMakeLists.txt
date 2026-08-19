@@ -255,6 +255,20 @@ if(CNA_BUILD_TESTS)
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "CnaExt")
     endif()
 
+    # plan_modern.md Phase 16: every renderer descriptor must at least parse. Three of them
+    # (OpenGL1, LLGL, bgfx) were left syntactically broken by one merge and nobody noticed, because
+    # a renderer identity is only compiled when someone selects it -- each was found by building
+    # that renderer, one at a time. This checks all 44 at once, in milliseconds, with no renderer
+    # selected and no compiler involved.
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME CNAEXT_RendererDescriptorsParse
+                 COMMAND ${Python3_EXECUTABLE}
+                         "${CMAKE_SOURCE_DIR}/scripts/check_renderer_descriptors.py"
+                         "${CMAKE_SOURCE_DIR}")
+        set_tests_properties(CNAEXT_RendererDescriptorsParse PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "CnaExt")
+    endif()
+
     # plan_modern.md MOD-7: the layer builds one Doxygen module page and has no undocumented public
     # member. SKIPs (77) where doxygen is not installed, since the check is about these headers and
     # not about the container.

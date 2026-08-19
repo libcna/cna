@@ -396,6 +396,26 @@ Xvfb also dies periodically in this container. A wrapper that checks `xdpyinfo` 
 before running is worth having; without one, a test run fails with "x11 not available" and looks
 like a regression.
 
+### Three renderer identities that had never compiled
+
+`OPENGL1`, `LLGL` and `BGFX` could not be selected at all. Each of their descriptors carried
+syntactic damage from one merge, `2f00c201`: OpenGL1 had a stray `} }` pair, LLGL had a
+`namespace { return 0; } }` block left after the PLAT-8 merge deleted the enclosing function's
+signature, and bgfx had one closing brace too many after `ResolvedWindowKind()`. All three are on
+`next`, and all three were invisible because **a renderer identity is only compiled when someone
+selects it** — nothing in a normal build touches the other 43 descriptors.
+
+Each was found by trying to build that renderer, one at a time, which is the slowest way to learn
+it. `scripts/check_renderer_descriptors.py` is the fast way, and now runs as the
+`CNAEXT_RendererDescriptorsParse` ctest: a brace-balance and structure check over all 44
+descriptors, no compiler, no renderer selected, milliseconds. It cannot prove a descriptor is
+*correct* — only a build does that — but it catches exactly the damage that merge left, and it was
+verified against a planted stray brace.
+
+The general point is worth keeping past this plan: **a build configuration nobody selects is a
+build configuration nobody compiles**, and 49 renderer identities means 48 of them are unbuilt in
+any given build. Cheap structural checks over the whole set are worth more than they look.
+
 ### Measuring a third renderer, and the two bugs it found (SDL_GPU)
 
 `cmake-build-sdlgpu` is a real SDL_GPU build of the engine layer (`-DCNA_CNAEXT=ON
