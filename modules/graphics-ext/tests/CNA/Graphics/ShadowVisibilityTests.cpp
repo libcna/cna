@@ -945,6 +945,114 @@ TEST_F(ShadowVisibilityTest, ASkinnedCasterCastsThePoseItIsIn)
     EXPECT_NEAR(gotY, posedY, 2.0f);
 }
 
+TEST_F(ShadowVisibilityTest, ASkinnedMeshShadowsItself)
+{
+    // MOD-854. The row asked for a golden image of a skinned character self-shadowing; this is the
+    // property that image would have been evidence for, measured instead -- the same trade the rest
+    // of this plan made (see MOD-1703).
+    //
+    // What makes it *self*-shadowing rather than the MOD-837 case again: there is **one** mesh and
+    // one draw. Twelve vertices, two bones -- bone 0 leaves its six where they are, bone 1 lifts
+    // its six to kCasterHeight -- so the raised half is the caster and the flat half is the
+    // receiver, and both go into the shadow map in a single applySkinnedCaster draw and come back
+    // out of a single SkinnedEffect draw. Nothing in the scene occludes the mesh except the mesh.
+    //
+    // The sun is straight down, so the raised half lands on the flat half exactly beneath it: the
+    // flat half must be darker where it is covered than where it is not. That comparison is inside
+    // one surface with one material and one light, which is what rules out every explanation other
+    // than the shadow.
+    ShadowMap shadowMap(device, ShadowQuality::Medium);
+    if (shadowMap.getSkinnedCasterEffect() == nullptr)
+        GTEST_SKIP() << "this renderer cannot compile the skinned caster";
+
+    RenderTarget2D target(device, kFrame, kFrame, false, SurfaceFormat::Color,
+                          DepthFormat::Depth24);
+
+    // Bone 1 raises its half; bone 0 is identity. One palette, one mesh, two poses.
+    const std::vector<Matrix> bones{
+        Matrix::getIdentityProperty(),
+        Matrix::CreateTranslation(0.0f, kCasterHeight, 0.0f),
+    };
+
+    // The receiver: the full ground-sized quad, bound to bone 0. The caster: a smaller quad in the
+    // middle of it, bound to bone 1 and therefore lifted. Both are one vertex buffer.
+    const auto flat   = Quad(0.0f, kGroundHalfExtent);
+    const auto raised = Quad(0.0f, kCasterHalfExtent);
+    std::array<GpuSkinnedVertex, 12> mesh{};
+    for (std::size_t i = 0; i < 6; ++i)
+    {
+        const Vector3& p = flat[i].Position;
+        mesh[i] = GpuSkinnedVertex{p.X, p.Y, p.Z, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+                                   1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0};
+    }
+    for (std::size_t i = 0; i < 6; ++i)
+    {
+        const Vector3& p = raised[i].Position;
+        mesh[6 + i] = GpuSkinnedVertex{p.X, p.Y, p.Z, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+                                       1.0f, 0.0f, 0.0f, 0.0f, 1, 0, 0, 0};
+    }
+
+    VertexBuffer meshBuffer(device, 12);
+    meshBuffer.SetDataRaw(mesh.data(), 12, static_cast<int>(sizeof(GpuSkinnedVertex)));
+
+    SkinnedEffect effect(device);
+    effect.SetBoneTransforms(bones);
+    effect.setWeightsPerVertexProperty(1);
+    effect.setPreferPerPixelLightingProperty(true);
+    effect.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+    effect.setSpecularColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+    effect.setAmbientLightColorProperty(Vector3(0.15f, 0.15f, 0.15f));
+    auto& light = effect.getDirectionalLight0Property();
+    light.setEnabledProperty(true);
+    light.setDirectionProperty(Vector3(0.0f, -1.0f, 0.0f));
+    light.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+    light.setSpecularColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+    effect.getDirectionalLight1Property().setEnabledProperty(false);
+    effect.getDirectionalLight2Property().setEnabledProperty(false);
+    effect.setViewProperty(TopDownView());
+    effect.setProjectionProperty(FitToGround());
+    effect.setWorldProperty(Matrix::getIdentityProperty());
+    effect.setShadowMapEXT(shadowMap.getShadowTexture());
+    effect.setShadowsEnabledEXT(true);
+
+    // Two frames, as everywhere else here: the first produces the light matrix, the second draws
+    // with it.
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::Default);
+        device.setBlendStateProperty(BlendState::Opaque);
+
+        shadowMap.begin(Sun(), SceneBounds());
+        shadowMap.applySkinnedCaster(bones, 1);
+        device.SetVertexBuffer(&meshBuffer);
+        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 4);
+        device.SetVertexBuffer(nullptr);
+        shadowMap.end();
+        effect.setLightViewProjectionEXT(shadowMap.getLightViewProjection());
+
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        effect.Apply();
+        device.SetVertexBuffer(&meshBuffer);
+        // Only the flat half is drawn to the screen: the raised half is the occluder, and drawing
+        // it here would put its own lit face over the region being measured.
+        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        device.SetVertexBuffer(nullptr);
+        device.SetRenderTarget(nullptr);
+    }
+
+    const Frame lit = Capture(target);
+    const int covered   = lit.BrightnessAt(kFrame / 2, kFrame / 2);
+    const int uncovered = lit.BrightnessAt(3, 3);
+    EXPECT_LT(covered, uncovered)
+        << "the raised half of the mesh did not shadow the flat half of the same mesh (covered "
+        << covered << ", uncovered " << uncovered << ")";
+    EXPECT_GT(covered, 0)
+        << "the self-shadowed region went black, so ambient was attenuated along with the direct "
+           "term";
+}
+
 TEST_F(ShadowVisibilityTest, TheSkinnedCasterRejectsAPaletteItCannotUse)
 {
     ShadowMap shadowMap(device, ShadowQuality::Low);
