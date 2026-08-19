@@ -158,6 +158,46 @@ TEST(PbrMaterialExtensionsTest, TheTransmissionAndVolumeFieldsRoundTripAndAreVal
         << "zero has to switch it off with its maps still bound";
 }
 
+TEST(PbrMaterialExtensionsTest, TheIridescenceFieldsRoundTripAndAreValidated)
+{
+    GraphicsDevice gd;
+    Texture2D strength(gd, 1, 1);
+    Texture2D thickness(gd, 1, 1);
+
+    PbrMaterialExtensions extensions;
+    EXPECT_FALSE(extensions.isIridescenceEnabled());
+    EXPECT_FLOAT_EQ(extensions.getIridescenceIor(), 1.3f) << "glTF's default film";
+    EXPECT_FLOAT_EQ(extensions.getIridescenceThicknessMinimum(), 100.0f);
+    EXPECT_FLOAT_EQ(extensions.getIridescenceThicknessMaximum(), 400.0f);
+
+    extensions.setIridescenceFactor(0.9f);
+    extensions.setIridescenceIor(1.8f);
+    extensions.setIridescenceThicknessMinimum(50.0f);
+    extensions.setIridescenceThicknessMaximum(900.0f);
+    extensions.setIridescenceTexture(&strength);
+    extensions.setIridescenceThicknessTexture(&thickness);
+
+    EXPECT_TRUE(extensions.isIridescenceEnabled());
+    EXPECT_FALSE(extensions.isNeutral());
+    EXPECT_FLOAT_EQ(extensions.getIridescenceFactor(), 0.9f);
+    EXPECT_FLOAT_EQ(extensions.getIridescenceIor(), 1.8f);
+    EXPECT_FLOAT_EQ(extensions.getIridescenceThicknessMinimum(), 50.0f);
+    EXPECT_FLOAT_EQ(extensions.getIridescenceThicknessMaximum(), 900.0f);
+    EXPECT_EQ(extensions.getIridescenceTexture(), &strength);
+    EXPECT_EQ(extensions.getIridescenceThicknessTexture(), &thickness);
+
+    extensions.setIridescenceFactor(2.0f);
+    EXPECT_FLOAT_EQ(extensions.getIridescenceFactor(), 1.0f);
+    extensions.setIridescenceIor(0.4f);
+    EXPECT_FLOAT_EQ(extensions.getIridescenceIor(), 1.8f) << "a vacuum is the floor";
+    extensions.setIridescenceThicknessMaximum(-1.0f);
+    EXPECT_FLOAT_EQ(extensions.getIridescenceThicknessMaximum(), 900.0f)
+        << "a negative thickness is nonsense and must be ignored";
+
+    extensions.setIridescenceFactor(0.0f);
+    EXPECT_FALSE(extensions.isIridescenceEnabled());
+}
+
 TEST(PbrMaterialExtensionsTest, EqualityComparesEveryFieldIncludingTheTextures)
 {
     GraphicsDevice gd;
@@ -228,6 +268,25 @@ TEST(PbrMaterialExtensionsTest, EqualityComparesEveryFieldIncludingTheTextures)
     a.setThicknessTexture(&second);
     EXPECT_NE(a, b);
     b.setThicknessTexture(&second);
+
+    a.setIridescenceFactor(0.6f);
+    EXPECT_NE(a, b);
+    b.setIridescenceFactor(0.6f);
+    a.setIridescenceIor(1.7f);
+    EXPECT_NE(a, b);
+    b.setIridescenceIor(1.7f);
+    a.setIridescenceThicknessMinimum(20.0f);
+    EXPECT_NE(a, b);
+    b.setIridescenceThicknessMinimum(20.0f);
+    a.setIridescenceThicknessMaximum(800.0f);
+    EXPECT_NE(a, b);
+    b.setIridescenceThicknessMaximum(800.0f);
+    a.setIridescenceTexture(&first);
+    EXPECT_NE(a, b);
+    b.setIridescenceTexture(&first);
+    a.setIridescenceThicknessTexture(&second);
+    EXPECT_NE(a, b);
+    b.setIridescenceThicknessTexture(&second);
     EXPECT_EQ(a, b) << "every field has now been set on both, so they must agree again";
 }
 
@@ -266,7 +325,15 @@ TEST(PbrMaterialExtensionsTest, EqualSetsHashEqually)
     hashes.insert(b.GetHashCode());
     b.setAttenuationColor(Vector3(0.3f, 0.3f, 0.3f));
     hashes.insert(b.GetHashCode());
-    EXPECT_EQ(hashes.size(), 10u) << "a field is missing from the hash";
+    b.setIridescenceFactor(0.4f);
+    hashes.insert(b.GetHashCode());
+    b.setIridescenceIor(1.9f);
+    hashes.insert(b.GetHashCode());
+    b.setIridescenceThicknessMinimum(30.0f);
+    hashes.insert(b.GetHashCode());
+    b.setIridescenceThicknessMaximum(700.0f);
+    hashes.insert(b.GetHashCode());
+    EXPECT_EQ(hashes.size(), 14u) << "a field is missing from the hash";
 }
 
 TEST(PbrMaterialExtensionsTest, ToStringNamesOnlyTheLobesThatAreOn)
@@ -308,6 +375,14 @@ TEST(PbrMaterialExtensionsTest, ToStringNamesOnlyTheLobesThatAreOn)
               "{Transmission:{Factor:0.75 Thickness:2 AttenuationDistance:4 Textures:0} "
               "Sheen:{Color:{X:0.5 Y:0.25 Z:0} Roughness:0.5 Textures:0} "
               "Clearcoat:{Factor:0.5 Roughness:0.25 Textures:2}}");
+
+    extensions.setIridescenceFactor(0.5f);
+    EXPECT_EQ(extensions.ToString(),
+              "{Iridescence:{Factor:0.5 Ior:1.3 Thickness:100..400 Textures:0} "
+              "Transmission:{Factor:0.75 Thickness:2 AttenuationDistance:4 Textures:0} "
+              "Sheen:{Color:{X:0.5 Y:0.25 Z:0} Roughness:0.5 Textures:0} "
+              "Clearcoat:{Factor:0.5 Roughness:0.25 Textures:2}}")
+        << "four lobes at once must read as four entries, in a stable order";
 }
 
 } // namespace

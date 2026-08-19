@@ -231,6 +231,68 @@ namespace CNA::Graphics {
          */
         void setAttenuationColor(const Microsoft::Xna::Framework::Vector3& value);
 
+        // ── KHR_materials_iridescence ────────────────────────────────────────
+
+        /** @brief Returns how strongly the thin-film colour replaces the ordinary Fresnel, 0 to 1. */
+        [[nodiscard]] float getIridescenceFactor() const;
+        /**
+         * @brief Sets how strongly the thin-film colour replaces the ordinary Fresnel.
+         *
+         * @param value 0 disables the film; 1 is the full interference. Clamped to [0, 1].
+         */
+        void setIridescenceFactor(float value);
+
+        /** @brief Returns the film's own index of refraction; 1.3 is glTF's default. */
+        [[nodiscard]] float getIridescenceIor() const;
+        /**
+         * @brief Sets the film's own index of refraction.
+         *
+         * @param value At least 1; smaller values are ignored, as a vacuum is the floor.
+         */
+        void setIridescenceIor(float value);
+
+        /** @brief Returns the film's thickness in nanometres where its map reads black. */
+        [[nodiscard]] float getIridescenceThicknessMinimum() const;
+        /**
+         * @brief Sets the film's thickness in nanometres where its thickness map reads black.
+         *
+         * @param value Non-negative nanometres; negatives are ignored.
+         */
+        void setIridescenceThicknessMinimum(float value);
+
+        /** @brief Returns the film's thickness in nanometres where its map reads white. */
+        [[nodiscard]] float getIridescenceThicknessMaximum() const;
+        /**
+         * @brief Sets the film's thickness in nanometres where its thickness map reads white.
+         *
+         * With no map bound this is the thickness used everywhere, which is what glTF specifies --
+         * so it is the one number that decides a uniformly iridescent surface's colour.
+         *
+         * @param value Non-negative nanometres; negatives are ignored.
+         */
+        void setIridescenceThicknessMaximum(float value);
+
+        /** @brief Returns the iridescence strength map, or null. */
+        [[nodiscard]] Microsoft::Xna::Framework::Graphics::Texture2D*
+        getIridescenceTexture() const;
+        /**
+         * @brief Sets the iridescence strength map, multiplied by the factor (R channel).
+         *
+         * @param texture The map, or null. Borrowed, never owned.
+         */
+        void setIridescenceTexture(Microsoft::Xna::Framework::Graphics::Texture2D* texture);
+
+        /** @brief Returns the film thickness map, or null. */
+        [[nodiscard]] Microsoft::Xna::Framework::Graphics::Texture2D*
+        getIridescenceThicknessTexture() const;
+        /**
+         * @brief Sets the film thickness map, interpolating minimum to maximum (G channel).
+         *
+         * @param texture The map, or null. Borrowed, never owned.
+         */
+        void setIridescenceThicknessTexture(
+            Microsoft::Xna::Framework::Graphics::Texture2D* texture);
+
         // ── Value semantics ──────────────────────────────────────────────────
 
         /**
@@ -266,6 +328,9 @@ namespace CNA::Graphics {
          */
         [[nodiscard]] std::string ToString() const;
 
+        /** @brief Returns whether the thin film is on, which is whether its factor is above zero. */
+        [[nodiscard]] bool isIridescenceEnabled() const;
+
         /** @brief Returns whether the surface transmits, which is whether its factor is above zero. */
         [[nodiscard]] bool isTransmissionEnabled() const;
 
@@ -277,6 +342,13 @@ namespace CNA::Graphics {
 
     private:
         using Tex2D = Microsoft::Xna::Framework::Graphics::Texture2D;
+
+        float iridescenceFactor_           = 0.0f;
+        float iridescenceIor_              = 1.3f;
+        float iridescenceThicknessMinimum_ = 100.0f;
+        float iridescenceThicknessMaximum_ = 400.0f;
+        Tex2D* iridescenceTexture_          = nullptr;
+        Tex2D* iridescenceThicknessTexture_ = nullptr;
 
         float transmissionFactor_  = 0.0f;
         float thicknessFactor_     = 0.0f;

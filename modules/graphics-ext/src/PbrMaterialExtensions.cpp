@@ -76,6 +76,53 @@ namespace CNA::Graphics {
         if (value >= 0.0f) clearcoatNormalScale_ = value;
     }
 
+    float PbrMaterialExtensions::getIridescenceFactor() const { return iridescenceFactor_; }
+    void  PbrMaterialExtensions::setIridescenceFactor(const float value)
+    {
+        iridescenceFactor_ = std::clamp(value, 0.0f, 1.0f);
+    }
+
+    float PbrMaterialExtensions::getIridescenceIor() const { return iridescenceIor_; }
+    void  PbrMaterialExtensions::setIridescenceIor(const float value)
+    {
+        if (value >= 1.0f) iridescenceIor_ = value;
+    }
+
+    float PbrMaterialExtensions::getIridescenceThicknessMinimum() const
+    {
+        return iridescenceThicknessMinimum_;
+    }
+    void PbrMaterialExtensions::setIridescenceThicknessMinimum(const float value)
+    {
+        if (value >= 0.0f) iridescenceThicknessMinimum_ = value;
+    }
+
+    float PbrMaterialExtensions::getIridescenceThicknessMaximum() const
+    {
+        return iridescenceThicknessMaximum_;
+    }
+    void PbrMaterialExtensions::setIridescenceThicknessMaximum(const float value)
+    {
+        if (value >= 0.0f) iridescenceThicknessMaximum_ = value;
+    }
+
+    Microsoft::Xna::Framework::Graphics::Texture2D*
+    PbrMaterialExtensions::getIridescenceTexture() const { return iridescenceTexture_; }
+    void PbrMaterialExtensions::setIridescenceTexture(Tex2D* texture)
+    {
+        iridescenceTexture_ = texture;
+    }
+
+    Microsoft::Xna::Framework::Graphics::Texture2D*
+    PbrMaterialExtensions::getIridescenceThicknessTexture() const
+    {
+        return iridescenceThicknessTexture_;
+    }
+    void PbrMaterialExtensions::setIridescenceThicknessTexture(Tex2D* texture)
+    {
+        iridescenceThicknessTexture_ = texture;
+    }
+
     float PbrMaterialExtensions::getTransmissionFactor() const { return transmissionFactor_; }
     void  PbrMaterialExtensions::setTransmissionFactor(const float value)
     {
@@ -146,7 +193,13 @@ namespace CNA::Graphics {
 
     bool PbrMaterialExtensions::operator==(const PbrMaterialExtensions& other) const
     {
-        return transmissionFactor_ == other.transmissionFactor_ &&
+        return iridescenceFactor_ == other.iridescenceFactor_ &&
+               iridescenceIor_ == other.iridescenceIor_ &&
+               iridescenceThicknessMinimum_ == other.iridescenceThicknessMinimum_ &&
+               iridescenceThicknessMaximum_ == other.iridescenceThicknessMaximum_ &&
+               iridescenceTexture_ == other.iridescenceTexture_ &&
+               iridescenceThicknessTexture_ == other.iridescenceThicknessTexture_ &&
+               transmissionFactor_ == other.transmissionFactor_ &&
                thicknessFactor_ == other.thicknessFactor_ &&
                attenuationDistance_ == other.attenuationDistance_ &&
                attenuationColor_.X == other.attenuationColor_.X &&
@@ -176,6 +229,12 @@ namespace CNA::Graphics {
     std::size_t PbrMaterialExtensions::GetHashCode() const
     {
         std::size_t seed = 0;
+        Combine(seed, HashFloat(iridescenceFactor_));
+        Combine(seed, HashFloat(iridescenceIor_));
+        Combine(seed, HashFloat(iridescenceThicknessMinimum_));
+        Combine(seed, HashFloat(iridescenceThicknessMaximum_));
+        Combine(seed, std::hash<const void*>{}(iridescenceTexture_));
+        Combine(seed, std::hash<const void*>{}(iridescenceThicknessTexture_));
         Combine(seed, HashFloat(transmissionFactor_));
         Combine(seed, HashFloat(thicknessFactor_));
         Combine(seed, HashFloat(attenuationDistance_));
@@ -205,6 +264,8 @@ namespace CNA::Graphics {
                sheenColorFactor_.Z > 0.0f;
     }
 
+    bool PbrMaterialExtensions::isIridescenceEnabled() const { return iridescenceFactor_ > 0.0f; }
+
     bool PbrMaterialExtensions::isTransmissionEnabled() const
     {
         return transmissionFactor_ > 0.0f;
@@ -212,14 +273,27 @@ namespace CNA::Graphics {
 
     bool PbrMaterialExtensions::isNeutral() const
     {
-        return clearcoatFactor_ <= 0.0f && !isSheenEnabled() && !isTransmissionEnabled();
+        return clearcoatFactor_ <= 0.0f && !isSheenEnabled() && !isTransmissionEnabled() &&
+               !isIridescenceEnabled();
     }
 
     std::string PbrMaterialExtensions::ToString() const
     {
         std::string text = "{";
+        if (isIridescenceEnabled())
+        {
+            int maps = 0;
+            if (iridescenceTexture_ != nullptr) ++maps;
+            if (iridescenceThicknessTexture_ != nullptr) ++maps;
+            text += "Iridescence:{Factor:" + Trimmed(iridescenceFactor_) + " Ior:" +
+                    Trimmed(iridescenceIor_) + " Thickness:" +
+                    Trimmed(iridescenceThicknessMinimum_) + ".." +
+                    Trimmed(iridescenceThicknessMaximum_) + " Textures:" +
+                    std::to_string(maps) + "}";
+        }
         if (isTransmissionEnabled())
         {
+            if (text.size() > 1) text += " ";
             int maps = 0;
             if (transmissionTexture_ != nullptr) ++maps;
             if (thicknessTexture_ != nullptr) ++maps;

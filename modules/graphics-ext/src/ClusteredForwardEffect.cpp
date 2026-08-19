@@ -9,6 +9,7 @@
 #include "CNA/Graphics/ClusteredLightBuffer.hpp"
 #include "CNA/Graphics/ClusteredLightEXT.hpp"
 #include "CNA/Graphics/PbrMaterialExtensions.hpp"
+#include "CNA/Graphics/ThinFilmIridescence.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AreaLightEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -91,6 +92,9 @@ uniform float uClearcoat;
 uniform float uClearcoatRoughness;
 uniform vec3  uSheenColor;
 uniform float uSheenRoughness;
+uniform float uIridescence;
+uniform float uIridescenceIor;
+uniform float uIridescenceThickness;
 uniform float uTransmission;
 uniform float uThickness;
 uniform float uAttenuationDistance;
@@ -141,6 +145,12 @@ vec3 cnaShade(CnaClusteredLight light, vec3 surface, vec3 normal, vec3 viewDirec
 
     vec3 f0 = mix(vec3(0.04), baseColor, metallic);
     vec3 fresnel = cnaFresnel(VoH, f0);
+    // KHR_materials_iridescence replaces the Fresnel term itself rather than adding a lobe: what a
+    // thin film changes is *which wavelengths* the surface reflects, not how much it reflects.
+    if (uIridescence > 0.0) {
+        vec3 film = cnaThinFilmIridescence(1.0, uIridescenceIor, NoV, uIridescenceThickness, f0);
+        fresnel = mix(fresnel, film, uIridescence);
+    }
     vec3 specular = fresnel * cnaDistribution(NoH, roughness) * cnaGeometry(NoV, NoL, roughness)
                   / max(4.0 * NoV * NoL, 1e-7);
     vec3 diffuse = (vec3(1.0) - fresnel) * (1.0 - metallic) * baseColor / kCnaPi;
@@ -234,6 +244,7 @@ void main() {
             source += "const int kCnaMaxLightsPerFragment = " +
                       std::to_string(ClusteredForwardEffect::kMaxLightsPerFragment) + ";\n";
             source += ClusteredLightBuffer::getLightLookupGlsl();
+            source += ThinFilmIridescence::getGlsl();
             source += AreaLightBrdfTable::getLookupGlsl();
             source += AreaLightShading::getShadingGlsl();
             source += kShadingGlsl;
@@ -295,6 +306,18 @@ void main() {
         effect_->SetUniformVec3("uSheenColor", sheen.X, sheen.Y, sheen.Z);
         effect_->SetUniformFloat("uSheenRoughness",
                                  extensions_ != nullptr ? extensions_->getSheenRoughness() : 0.0f);
+
+        effect_->SetUniformFloat("uIridescence",
+                                 extensions_ != nullptr ? extensions_->getIridescenceFactor()
+                                                        : 0.0f);
+        effect_->SetUniformFloat("uIridescenceIor",
+                                 extensions_ != nullptr ? extensions_->getIridescenceIor() : 1.3f);
+        // With no thickness map bound, glTF uses the maximum everywhere -- so this one number is
+        // what decides a uniformly iridescent surface's colour.
+        effect_->SetUniformFloat("uIridescenceThickness",
+                                 extensions_ != nullptr
+                                     ? extensions_->getIridescenceThicknessMaximum()
+                                     : 400.0f);
 
         const bool transmits = extensions_ != nullptr && extensions_->isTransmissionEnabled();
         if (transmits && opaqueFrame_ == nullptr)
@@ -426,7 +449,9 @@ void main() {
     {
         return contribution(light, surface, normal, cameraPosition, baseColor, metallic, roughness,
                             extensions.getClearcoatFactor(), extensions.getClearcoatRoughness(),
-                            extensions.getSheenColorFactor(), extensions.getSheenRoughness());
+                            extensions.getSheenColorFactor(), extensions.getSheenRoughness(),
+                            extensions.getIridescenceFactor(), extensions.getIridescenceIor(),
+                            extensions.getIridescenceThicknessMaximum());
     }
 
     Vector3 ClusteredForwardEffect::contribution(const ClusteredLightEXT& light,
@@ -436,7 +461,10 @@ void main() {
                                                  const float roughness, const float clearcoat,
                                                  const float clearcoatRoughness,
                                                  const Vector3& sheenColor,
-                                                 const float sheenRoughness)
+                                                 const float sheenRoughness,
+                                                 const float iridescence,
+                                                 const float iridescenceIor,
+                                                 const float iridescenceThickness)
     {
         const Vector3 toLight(light.Position.X - surface.X, light.Position.Y - surface.Y,
                               light.Position.Z - surface.Z);
@@ -513,14 +541,25 @@ void main() {
                                 std::max(4.0f * NoV * NoL, 1e-7f);
         }
 
+        Vector3 baseFresnel0(0.0f, 0.0f, 0.0f);
+        for (int channel = 0; channel < 3; ++channel)
+            (&baseFresnel0.X)[channel] = 0.04f + ((&baseColor.X)[channel] - 0.04f) * metallic;
+
+        Vector3 film(0.0f, 0.0f, 0.0f);
+        if (iridescence > 0.0f)
+            film = ThinFilmIridescence::evaluate(1.0f, iridescenceIor, NoV, iridescenceThickness,
+                                                 baseFresnel0);
+
         Vector3 result(0.0f, 0.0f, 0.0f);
         float* out = &result.X;
         const float* base = &baseColor.X;
         const float* emitted = &light.Color.X;
         for (int channel = 0; channel < 3; ++channel)
         {
-            const float f0 = 0.04f + (base[channel] - 0.04f) * metallic;
-            const float fresnel = f0 + (1.0f - f0) * schlick;
+            const float f0 = (&baseFresnel0.X)[channel];
+            float fresnel = f0 + (1.0f - f0) * schlick;
+            if (iridescence > 0.0f)
+                fresnel += ((&film.X)[channel] - fresnel) * iridescence;
             const float specular = fresnel * distributionTerm * geometryTerm /
                                    std::max(4.0f * NoV * NoL, 1e-7f);
             const float diffuse = (1.0f - fresnel) * (1.0f - metallic) * base[channel] /

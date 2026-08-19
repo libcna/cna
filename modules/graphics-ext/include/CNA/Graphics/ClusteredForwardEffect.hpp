@@ -224,6 +224,9 @@ namespace CNA::Graphics {
          * @param clearcoatRoughness The clearcoat layer's own roughness.
          * @param sheenColor     The sheen lobe's colour; black disables it.
          * @param sheenRoughness The sheen lobe's roughness.
+         * @param iridescence    How strongly a thin film replaces the Fresnel term.
+         * @param iridescenceIor The film's own index of refraction.
+         * @param iridescenceThickness The film's thickness in nanometres.
          * @return The contribution, unbounded above; zero when the point is out of range.
          */
         [[nodiscard]] static Microsoft::Xna::Framework::Vector3 contribution(
@@ -234,7 +237,8 @@ namespace CNA::Graphics {
             const Microsoft::Xna::Framework::Vector3& baseColor, float metallic, float roughness,
             float clearcoat = 0.0f, float clearcoatRoughness = 0.0f,
             const Microsoft::Xna::Framework::Vector3& sheenColor = {0.0f, 0.0f, 0.0f},
-            float sheenRoughness = 0.0f);
+            float sheenRoughness = 0.0f, float iridescence = 0.0f, float iridescenceIor = 1.3f,
+            float iridescenceThickness = 400.0f);
 
         /**
          * @brief The same contribution, with the extra lobes taken from an extension set.

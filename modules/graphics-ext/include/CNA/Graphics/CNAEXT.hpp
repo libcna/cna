@@ -69,6 +69,7 @@
 #include "CNA/Graphics/ShaderEffectFactory.hpp"
 #include "CNA/Graphics/SsaoPass.hpp"
 #include "CNA/Graphics/SsrPass.hpp"
+#include "CNA/Graphics/ThinFilmIridescence.hpp"
 #include "CNA/Graphics/TonemapPass.hpp"
 
 // ---- Shadows ---------------------------------------------------------------------------------
