@@ -352,12 +352,26 @@ geometry a second time costs a pass and is identical everywhere — the trade th
 throughout.
 
 **What a game must do, and what happens if it does not.** SSAO reads what the pipeline was given. If
-`setDepthNormalInputs` was never called, or was given nulls, `SsaoPass` reports
-`isSupported() == false` and the chain copies its input through: **the frame renders, without
-ambient occlusion**. It does not throw, and it does not draw a black screen. That is deliberate and
-matches every other pass in the layer — but it also means a missing prepass looks like "SSAO is not
-doing much" rather than like an error, so an app that expects AO and does not see it should check
-here first.
+`setDepthNormalInputs` was never called, or was given nulls, `SsaoPass::apply` copies its input
+through: **the frame renders, without ambient occlusion**. It does not throw, and it does not draw a
+black screen. That is deliberate and matches every other pass in the layer — but it also means a
+missing prepass looks like "SSAO is not doing much" rather than like an error, so an app that
+expects AO and does not see it should check here first.
+
+**`isSupported()` will not tell you.** This paragraph used to say the pass answers
+`isSupported() == false` without its inputs, and that was never true: the method takes a
+`GraphicsDevice` and nothing else, so it cannot see a frame's inputs at all
+(`plan_modern.md` `MOD-2006`). The division is worth stating plainly, because a game that gates its
+prepass on `isSupported()` gets `true` and then wonders why the effect does nothing:
+
+| Question | Asked of | Answered by |
+|---|---|---|
+| Can this renderer run the pass at all? | the device | `isSupported(device)` — false, and the pass is skipped |
+| Does this frame carry what the pass needs? | the `PostProcessContext` | `apply()` — the input is copied through |
+
+The same split applies to every pass that reads the prepass, `SsrPass` included, and to `SsrPass`'s
+camera: a pipeline that never called `setCamera` still reports the pass as supported, and the frame
+comes back unreflected.
 
 **The loop is not decoration.** With `MultipleRenderTargets` the prepass writes both images in one
 pass and `getPassCount()` is 1; without, it writes them in two passes over the same geometry and the
@@ -457,6 +471,59 @@ much less quality than the pixel count suggests — but thin contact shadows los
 exactly where AO earns its keep. Both paths are asserted to produce occlusion rather than only the
 default one, since a half-resolution path that silently produced nothing would look like AO merely
 being weak.
+
+### Screen-space reflections, and the two things they cannot do
+
+`plan_modern.md` `MOD-2000`–`MOD-2009`. `SsrPass` reflects the scene in itself: it walks the
+reflected ray forward in view space, projects each step back to a screen position, and asks the
+depth image whether anything is standing there. It reads the same two images SSAO does and needs one
+more thing SSAO does not — a camera, supplied by `RenderPipeline::setCamera`.
+
+```cpp
+pipeline.setCamera(view, projection, nearPlane, farPlane);
+pipeline.setDepthNormalInputs(prepass.getDepthTexture(), prepass.getNormalTexture());
+pipeline.getSettings().setSSREnabled(true);
+```
+
+**Only what is already on screen can be reflected.** A surface facing away from the camera, an
+object outside the viewport, and anything hidden behind nearer geometry have no colour in the source
+image, so they have no reflection. This is the defining limit of the technique, not a shortcoming of
+this implementation, and no amount of tuning moves it: a scene that needs to reflect off-screen
+content wants an environment map — `ImageBasedLightEXT`, which this pass does not replace and is
+not a fallback for.
+
+**The second limit is the depth image's silence about thickness.** It records where a surface is and
+nothing about how deep the object behind it goes, so `thickness` stands in for that. Too small and
+rays pass through everything; too large and a ray reflects off a surface it flew well behind.
+
+Where the pass sits, and why: **after SSAO, before the tonemapper.** After SSAO because what a
+mirror shows should be the shaded scene rather than the unshaded one; before tonemapping because a
+reflection carries scene-referred colour, and mixing it in after the range is compressed makes a
+reflected highlight indistinguishable from a reflected white wall.
+
+| Setting | Meaning | Failure when set wrong |
+|---|---|---|
+| `SSRMaxDistance` | how far a ray travels, in world units | short: reflections stop mid-surface |
+| `SSRStepCount` | steps the ray is marched in | low: thin objects are stepped over entirely |
+| `SSRThickness` | how far behind a surface a hit still counts | see above |
+| `SSRDepthBias` | how far past a surface a hit must be | too small: **every mirror reflects its own colour** |
+| `SSREdgeFade` | fade width at the frame border, in screen fractions | zero: reflections stop along a hard line down the screen edge |
+| `SSRRoughnessBlur` | widest spread at roughness 1, in screen fractions | — |
+| `SSRIntensity` | how strongly the reflection is mixed in | — |
+
+**Roughness comes from the prepass, and its default is a mirror.** A rough surface reflects a cone
+rather than a point, and roughness lives in the material rather than in the geometry, so
+`DepthNormalPrepass::setRoughness` carries it — in the alpha of the normal target, which held
+nothing before. Set it between draws inside an open pass, the way a scene with more than one
+material describes itself. Its default is **0**, not glTF's fully-rough 1, so an app that never
+calls it gets sharp reflections rather than a silently blurred frame. The spread itself is four taps
+widened by roughness: the difference between a mirror and a brushed floor, not the BRDF integral a
+real cone asks for.
+
+**The step count does not move the reflection.** The march ends holding a bracket — the last point
+in front of the surface and the first behind it — and six bisections close it, so raising the step
+count sharpens what is found rather than shifting where it is found. Without that, a coarse march
+stair-steps every reflected edge and halving the step moves the whole reflection.
 
 ### Bloom: what the numbers mean, and what they do not
 

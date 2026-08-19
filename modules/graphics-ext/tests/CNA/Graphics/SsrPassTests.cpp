@@ -777,6 +777,68 @@ TEST(SsrPassTest, TheNameIsStable)
     EXPECT_EQ(pass.getName(), "SSR");
 }
 
+TEST(SsrPassTest, SupportAnswersAboutTheRendererAndNotAboutTheFrame)
+{
+    // plan_modern.md MOD-2006. `isSupported` takes a device and nothing else, so it cannot see a
+    // frame's inputs -- a pass with no depth image, no normals and no camera is still *supported*,
+    // and it is `apply` that copies the input through. The engine-layer document claimed the
+    // opposite for SSAO until this task, which matters: a game that gates its prepass on
+    // `isSupported()` gets true and then wonders why the effect does nothing. Pinned here so the
+    // sentence and the code cannot drift apart again.
+    GraphicsDevice gd;
+    SsrPass pass(gd);
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+
+    EXPECT_TRUE(pass.isSupported(gd))
+        << "a renderer that runs shader source must report the pass as supported";
+
+    RenderTarget2D source(gd, kSize, kSize);
+    RenderTarget2D destination(gd, kSize, kSize);
+    FillSourceFlat(gd, source, Color(120, 40, 20, 255));
+
+    PostProcessContext context = MakeContext(source, destination);
+    context.sourceDepth   = nullptr;
+    context.sourceNormals = nullptr;
+    pass.apply(context);
+
+    EXPECT_TRUE(pass.isSupported(gd))
+        << "a frame without inputs changed what the pass says about the renderer";
+    const std::vector<Color> pixels = ReadTarget(destination);
+    EXPECT_NEAR(pixels[CentreIndex()].getRProperty(), 120, 4)
+        << "apply did not copy the input through";
+}
+
+TEST(SsrPassTest, AFrameWithNoCameraIsCopiedThroughRatherThanGuessedAt)
+{
+    // The camera is as much an input as the two images. A pipeline that never called `setCamera`
+    // leaves the far plane at zero, and a pass that carried on would reflect the scene through an
+    // invented lens -- a frame that renders and is wrong, which is worse than one that renders
+    // unchanged.
+    GraphicsDevice gd;
+    SsrPass pass(gd);
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+
+    auto depth   = MakeTiltedPlaneDepth(gd);
+    auto normals = MakeSceneNormals(gd);
+    auto source  = MakeSourceWithBrightBand(gd);
+    RenderTarget2D destination(gd, kSize, kSize);
+
+    PostProcessContext context = MakeContext(SourceRef(source), destination);
+    context.sourceDepth   = depth.get();
+    context.sourceNormals = normals.get();
+    context.farPlane      = 0.0f;      // never told
+    context.nearPlane     = 0.0f;
+    pass.apply(context);
+
+    // The centre of the source is inside the black plane, so a copy-through leaves it black and a
+    // guessed camera would have found the band and turned it red.
+    const std::vector<Color> pixels = ReadTarget(destination);
+    EXPECT_LT(pixels[CentreIndex()].getRProperty(), 8)
+        << "the pass marched a reflection without being told a camera";
+}
+
 TEST(SsrPassTest, SupportAsksTheTwoPartQuestion)
 {
     // MOD-1699: CustomEffects alone means the renderer *accepts* an effect. A pass that believed it
