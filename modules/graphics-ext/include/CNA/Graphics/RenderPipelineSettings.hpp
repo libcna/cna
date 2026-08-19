@@ -147,6 +147,21 @@ namespace CNA::Graphics {
         /** @brief Sets how wide the fade at the edge of the screen is, in screen fractions. */
         void setSSREdgeFade(float value);
 
+        /** @brief Returns the brightness a pixel must reach before it feeds a light shaft. */
+        [[nodiscard]] float getLightShaftThreshold() const;
+        /** @brief Sets the brightness a pixel must reach before it feeds a light shaft. */
+        void setLightShaftThreshold(float value);
+
+        /** @brief Returns how strongly light shafts are added to the frame; 0 disables them. */
+        [[nodiscard]] float getLightShaftIntensity() const;
+        /** @brief Sets how strongly light shafts are added to the frame. */
+        void setLightShaftIntensity(float value);
+
+        /** @brief Returns how quickly a shaft fades along its length. */
+        [[nodiscard]] float getLightShaftDecay() const;
+        /** @brief Sets a shaft's per-step survival, clamped to [0, 1]. */
+        void setLightShaftDecay(float value);
+
         /** @brief Returns the height fog's density at its base height; 0 disables it. */
         [[nodiscard]] float getHeightFogDensity() const;
         /** @brief Sets the height fog's density at its base height. */
@@ -368,6 +383,9 @@ namespace CNA::Graphics {
         float           dofFocalLength_   = 50.0f;
         float           dofFNumber_       = 5.6f;
         float           dofMaxRadius_     = 0.02f;
+        float           lightShaftThreshold_ = 0.7f;
+        float           lightShaftIntensity_ = 0.0f;
+        float           lightShaftDecay_ = 0.92f;
         float           heightFogDensity_ = 0.0f;
         float           heightFogFalloff_ = 0.1f;
         float           heightFogBaseHeight_ = 0.0f;

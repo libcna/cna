@@ -441,6 +441,23 @@ sends SIGHUP to therefore ignores it, exits 0 rather than dying from the signal,
 under `nohup`: it fails every time, and passes every time without it. **Do not run this suite under
 `nohup`**; use a foreground run, or `setsid`, when a long run has to survive the shell.
 
+### A third load-induced failure, and what the three have in common
+
+`GamePlatformTimingTest.MillisecondTicksAdvanceOverARealDelay` failed once in a full-suite run and
+passes 3/3 alone; `modules/platform` has no diff on this branch. That is the third of its kind, after
+the audio stress test and `TerminalRestoration.SighupGivesTheTerminalBack`, and the pattern across
+them is worth naming rather than re-diagnosing each time.
+
+All three assert something about **wall-clock time or process scheduling** — a race window opening, a
+signal being delivered, a millisecond counter advancing — and all three are correct assertions about
+a machine that is not also compiling something. They are not flaky tests in the usual sense of a
+wrong assertion; they are tests whose subject is the scheduler, run on a shared one. Re-running the
+failing test alone is the diagnosis, and it is the *only* diagnosis that distinguishes them from a
+real regression, so it is worth doing every time rather than assuming.
+
+What would remove the ambiguity is a label separating scheduler-dependent tests from the rest, so a
+full run could report them apart. That has not been done, and this note is here instead of it.
+
 ### `MOD-1906`: every renderer the layer could be measured on, in one table
 
 Same engine-layer filter throughout. Pass and skip counts differ between renderers because the
