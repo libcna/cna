@@ -1264,6 +1264,10 @@ CNA_C_API CNA_Result cna_effect_create_compiled(
  * Which of the three an asset is decides which failures are possible, so branch on the result
  * rather than on the file name: only the compiled shape depends on the compiled-effect capability,
  * and `cna_graphics_device_supports_capability` answers that in advance.
+ *
+ * The uncompilable-shader failure above is this route's and does **not** generalize to
+ * @ref cna_shader_effect_create just below, which succeeds for source no renderer can run. This
+ * route owns the compile; that one does not.
  */
 CNA_C_API CNA_Result cna_content_manager_load_effect(
     CNA_Handle content_manager,
@@ -1291,6 +1295,14 @@ CNA_C_API CNA_Result cna_content_manager_load_effect(
  * So ask @ref cna_shader_effect_is_valid after creating, and read its answer the way that route
  * documents it. The one case this ABI does settle is both sources empty, which is refused
  * identically everywhere rather than left to the renderer.
+ *
+ * **Do not carry the contract over from @ref cna_content_manager_load_effect.** It is the nearest
+ * route in this header and it makes the opposite promise about the same input: a shader the
+ * renderer cannot compile is among *its* documented failures. That route owns the whole load,
+ * including the compile, so it can answer for it; this one hands source to a renderer that decides
+ * for itself. Two adjacent routes, two different answers -- and reading the wrong one is a mistake
+ * a binding author has already made here, which is why it is called out rather than left to the
+ * failure lists to imply.
  *
  * `CNA_GRAPHICS_CAPABILITY_CUSTOM_EFFECTS` gates whether this route is usable at all, and is a
  * different capability from `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`: a renderer can support
