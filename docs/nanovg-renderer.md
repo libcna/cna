@@ -333,14 +333,24 @@ an error, because neither NanoVG nor GL reports them on its own:
 - **A texture larger than the device can allocate.** `GL_MAX_TEXTURE_SIZE` is queried once at
   construction and enforced by `NanoVgTextureRenderer`.
 - **A texture from another renderer instance.** Handles collide across contexts; see the capability
-  table above.
+  table above. This is the renderer-seam backstop: `SpriteBatch::Draw` refuses a cross-device
+  texture before it is ever queued, which is what keeps the batch itself consistent (a refusal
+  raised from `flushBatch()` would throw out of `End()` and leave the batch wedged with the
+  offending sprite still queued). Covered through the public API, for both sort modes, by
+  `SpriteBatchCrossDeviceTest` in the shared graphics tests.
 
-Not covered by an explicit check: the *granted* GL context attributes. The renderer requests a 2.1
-compatibility context with an 8-bit stencil plane, and if the platform grants less, `nvgCreateGL2()`
-fails its own shader compilation and this renderer throws
-`"CreateNanoVgGL2Context (nvgCreateGL2) failed"`. That is already a loud, specific failure, and
-`CNA::Platform::GlContextDescription` has no granted-attribute readback that would let the renderer
-say more without widening a shared platform interface every GL family uses.
+- **A GL context that does not meet NanoVG's requirements.** `PlatformGlContextOwner::GetAttributes()`
+  reports what the driver actually granted, and construction refuses a context below OpenGL 2.0 (no
+  shader objects for the GL2 backend) or with fewer than 8 stencil bits. The stencil check is the
+  one that earns its place: a missing shader stage at least fails loudly inside `nvgCreateGL2()`,
+  whereas a missing stencil plane does not fail there at all — NanoVG's own README requires a
+  stencil-capable render target, and its stencil-based paths would simply produce wrong output
+  later. Both checks are fail-open: a value is refused only when it was positively read and is
+  positively too small, so a platform whose attribute query fails is not locked out of a renderer
+  it could run.
+
+A texture belonging to another `GraphicsDevice` is refused one layer earlier still, by
+`SpriteBatch::Draw` itself, before the sprite is queued — see the capability table above.
 
 ## Dependency and build
 

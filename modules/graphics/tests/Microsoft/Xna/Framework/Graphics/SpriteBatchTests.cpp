@@ -15,6 +15,10 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include "RecordingSpriteBatchRenderer.hpp"
 
@@ -1258,4 +1262,66 @@ TEST(SpriteEffectsOperatorsTest, AndAssignMasksInPlace)
     SpriteEffects effects = SpriteEffects::FlipHorizontally | SpriteEffects::FlipVertically;
     effects &= SpriteEffects::FlipHorizontally;
     EXPECT_EQ(effects, SpriteEffects::FlipHorizontally);
+}
+
+
+using Microsoft::Xna::Framework::Graphics::BlendState;
+using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+// -----------------------------------------------------------------------
+// A texture belongs to the GraphicsDevice that created it. Drawing one through another device's
+// SpriteBatch has to be refused at Draw(), before the sprite is queued -- not at the renderer seam.
+// A renderer-side refusal is reached from flushBatch(), i.e. from inside End(), which leaves
+// `begun` true AND the offending sprite in the queue: the next End() refuses it again and the
+// SpriteBatch is unusable for good. On NANOVG the same mistake is worse than a lost draw, because
+// its per-NVGcontext image handles collide across contexts and a foreign texture names a valid but
+// different image, so an unchecked draw silently paints the wrong picture.
+// -----------------------------------------------------------------------
+
+TEST(SpriteBatchCrossDeviceTest, ImmediateRefusesATextureFromAnotherDeviceAndStaysUsable)
+{
+    GraphicsDevice owning;
+    GraphicsDevice other;
+    Texture2D foreign(owning, 4, 4, false, SurfaceFormat::Color);
+    Texture2D own(other, 4, 4, false, SurfaceFormat::Color);
+
+    SpriteBatch batch(other);
+    batch.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend);
+    EXPECT_THROW(batch.Draw(foreign, Vector2(0.0f, 0.0f), Color::White),
+                 System::InvalidOperationException);
+    // The batch is still open and still works: the refusal happened before anything was queued.
+    EXPECT_NO_THROW(batch.Draw(own, Vector2(0.0f, 0.0f), Color::White));
+    EXPECT_NO_THROW(batch.End());
+    // And it can be begun again, which a wedged batch could not.
+    EXPECT_NO_THROW(batch.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend));
+    EXPECT_NO_THROW(batch.End());
+}
+
+TEST(SpriteBatchCrossDeviceTest, DeferredRefusesAtDrawRatherThanWedgingTheBatchAtEnd)
+{
+    GraphicsDevice owning;
+    GraphicsDevice other;
+    Texture2D foreign(owning, 4, 4, false, SurfaceFormat::Color);
+    Texture2D own(other, 4, 4, false, SurfaceFormat::Color);
+
+    SpriteBatch batch(other);
+    batch.Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend);
+    EXPECT_THROW(batch.Draw(foreign, Vector2(0.0f, 0.0f), Color::White),
+                 System::InvalidOperationException);
+    EXPECT_NO_THROW(batch.Draw(own, Vector2(0.0f, 0.0f), Color::White));
+    // The decisive one: End() must not rediscover the refused sprite, because it was never queued.
+    EXPECT_NO_THROW(batch.End());
+    EXPECT_NO_THROW(batch.Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend));
+    EXPECT_NO_THROW(batch.End());
+}
+
+TEST(SpriteBatchCrossDeviceTest, ATextureFromTheSameDeviceIsUnaffected)
+{
+    GraphicsDevice device;
+    Texture2D texture(device, 4, 4, false, SurfaceFormat::Color);
+    SpriteBatch batch(device);
+    batch.Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend);
+    EXPECT_NO_THROW(batch.Draw(texture, Vector2(0.0f, 0.0f), Color::White));
+    EXPECT_NO_THROW(batch.End());
 }

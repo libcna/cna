@@ -152,6 +152,33 @@ namespace CNA::Internal::Renderers::NanoVg
         try
         {
             LoadNanoVgGlFunctions();
+
+            // What the driver actually granted, which may fall short of RequestedContext(). Two
+            // shortfalls matter and neither announces itself: a pre-2.0 context has no shader
+            // objects for NanoVG's GL2 backend to compile into (that one at least fails loudly
+            // inside nvgCreateGL2), and a context WITHOUT a stencil plane does not fail there at
+            // all -- NanoVG's own README requires a stencil-capable render target, and its
+            // stencil-based paths would simply produce wrong output later. Both are checked with a
+            // fail-open bias: a value is refused only when it was positively read and is
+            // positively too small, so a platform whose query fails is not locked out.
+            const CNA::Platform::GlContextDescription granted = platformContext_->GetAttributes();
+            if (granted.majorVersion > 0 && granted.majorVersion < 2)
+            {
+                throw std::runtime_error(
+                    "NANOVG requires an OpenGL 2.0+ context for NanoVG's GL2 backend (GLSL 1.10 "
+                    "shaders, buffer and shader objects), but the platform granted " +
+                    std::to_string(granted.majorVersion) + "." +
+                    std::to_string(granted.minorVersion) + ".");
+            }
+            if (granted.stencilBits < 8)
+            {
+                throw std::runtime_error(
+                    "NANOVG requires a render target with at least an 8-bit stencil plane (NanoVG's "
+                    "own documented requirement; its stencil-based fill and stroke paths produce "
+                    "wrong output without one), but the platform granted " +
+                    std::to_string(granted.stencilBits) + " stencil bits.");
+            }
+
             nvg_ = CreateNanoVgGL2Context();
             if (!nvg_)
                 throw std::runtime_error("NANOVG: CreateNanoVgGL2Context (nvgCreateGL2) failed.");

@@ -521,7 +521,13 @@ namespace
                   "a texture from another NanoVgRenderer is refused rather than silently drawn as "
                   "whichever image shares its handle");
 
-            // The batch is still usable with its own renderer's texture immediately afterwards.
+            // This seam is the last line of defence, not the first: SpriteBatch refuses a
+            // cross-device texture at Draw() before it is ever queued (see
+            // SpriteBatchCrossDeviceTest in the shared graphics tests, which covers Immediate and
+            // Deferred through the public API). Here the batch is closed properly first -- the
+            // throw left it open -- and only then reused, so what is asserted is that the refusal
+            // damaged no renderer state, not that an abandoned batch somehow recovers.
+            batchOn2->End();
             renderer2->Clear(0.0f, 0.0f, 1.0f, 1.0f);
             renderer2->ApplyBlendState(0, 0, 1, 1, 0, 0, BlendWriteState{});
             batchOn2->Begin();
@@ -530,15 +536,16 @@ namespace
                            0.0f);
             batchOn2->End();
             Check(CloseTo(ReadPixel(*renderer2, 16, 16), kYellow),
-                  "the refusal leaves the batch usable with its own renderer's texture");
+                  "the refusal leaves the renderer's own next batch working normally");
         }
 
         renderer1.reset();
         SDL_DestroyWindow(window1);
 
         // The second instance is unaffected by the first's destruction.
-        Check(CloseTo(ReadPixel(*renderer2, 32, 32), kBlue) ||
-                  CloseTo(ReadPixel(*renderer2, 32, 32), Color(0, 0, 255, 255)),
+        // The last thing drawn into renderer2 above was the yellow sprite over a blue clear, so
+        // this samples a corner the 32x32 sprite never reached.
+        Check(CloseTo(ReadPixel(*renderer2, 60, 60), kBlue),
               "destroying the first instance leaves the second fully functional");
 
         renderer2.reset();

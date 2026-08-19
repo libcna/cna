@@ -10,9 +10,9 @@
 # working GL context on those runners first, and claiming CI coverage without it would be the same
 # kind of overstatement this renderer's audit spent four passes removing.
 #
-# The pure BlendState -> NVGblendFactor mapping tests (NanoVgBlendStateMapping.*) live in CnaTests
-# rather than in these focused executables, so they are not covered here -- building the whole
-# gtest corpus for four assertions is not worth the CI minutes. They need no GL context and run in
+# The pure BlendState -> NVGblendFactor mapping tests (NanoVgBlendStateMapping.*, nine cases) live
+# in CnaTests rather than in these focused executables, so they are not covered here -- building
+# the whole gtest corpus for them is not worth the CI minutes. They need no GL context and run in
 # any ordinary local build.
 name: nanovg-ci
 

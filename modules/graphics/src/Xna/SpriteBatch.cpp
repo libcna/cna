@@ -17,6 +17,7 @@
 #include "CNA/Internal/Utf8Decode.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/Collections/Generic/KeyNotFoundException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -252,6 +253,28 @@ namespace Microsoft::Xna::Framework::Graphics
         std::shared_ptr<ITextureRenderer> textureRenderer = texture.GetRendererWeak().lock();
         if (!textureRenderer)
             throw System::ObjectDisposedException(texture.getNameProperty());
+        // A texture belongs to the GraphicsDevice that created it, and its renderer-side handle
+        // usually means nothing to another device's renderer -- on NANOVG it means something
+        // WORSE than nothing, because NanoVG image handles are small per-context integers that
+        // collide across contexts, so a foreign texture names a valid but different image and
+        // draws the wrong picture in silence.
+        //
+        // Rejected here, at Draw(), rather than left to the renderer seam. A renderer-side refusal
+        // reached from flushBatch() would throw out of End(), which leaves `begun` true AND the
+        // offending sprite in the queue: the next End() refuses it again and the SpriteBatch is
+        // unusable for good. Refusing before the sprite is queued keeps the batch consistent in
+        // both sort modes -- Immediate forwards straight through, Deferred never queues it.
+        //
+        // Both sides must be known before this can mean anything: a Texture2D built through
+        // CreateWithRendererForTests has no device, and a SpriteBatch may be constructed without
+        // one, so an unknown device is not treated as a mismatch.
+        if (graphicsDevice_ != nullptr && texture.getGraphicsDeviceProperty() != nullptr &&
+            texture.getGraphicsDeviceProperty() != graphicsDevice_)
+        {
+            throw System::InvalidOperationException(
+                "SpriteBatch.Draw: the texture belongs to a different GraphicsDevice than this "
+                "SpriteBatch. A resource may only be drawn by the device that created it.");
+        }
         SpriteInfo info;
         info.texture    = std::move(textureRenderer);
         info.destRect   = dest;
