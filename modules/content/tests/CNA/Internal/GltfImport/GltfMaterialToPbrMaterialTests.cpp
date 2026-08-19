@@ -13,6 +13,8 @@
 
 #include <gtest/gtest.h>
 
+#include "CNA/GraphicsCapability.hpp"
+
 #include "CNA/Graphics/GltfMaterialBridge.hpp"
 #include "CNA/Graphics/MaterialBinding.hpp"
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
@@ -137,6 +139,13 @@ TEST(GltfMaterialToPbrMaterialTest, TheMaterialDetourReproducesTheImporterDrawPa
     using CNA::Internal::Renderers::GpuDrawParams;
 
     GraphicsDevice gd;
+    // plan_modern.md MOD-1690: importing a model builds a vertex buffer, which a 2D-only renderer
+    // refuses outright ("SDL_Renderer does not support 3D: CreateVertexBuffer"). Without this the
+    // test fails there instead of skipping, and reads as a defect rather than as the renderer's
+    // documented boundary.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "this renderer has no 3D pipeline, so a model cannot be imported onto it";
+
     ContentManager cm(nullptr, CnaTest::GltfOracle::CorpusDirectory().string());
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("mat-factor-only-gold");

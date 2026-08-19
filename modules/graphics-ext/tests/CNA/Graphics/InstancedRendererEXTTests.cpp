@@ -61,6 +61,14 @@ namespace {
 
         void SetUp() override
         {
+            // plan_modern.md MOD-1690. A vertex buffer is 3D work, and a 2D-only renderer refuses
+            // to create one -- SDL_Renderer throws "does not support 3D: CreateVertexBuffer" from
+            // this very line. Without this gate the whole fixture fails there rather than skipping,
+            // which reads as seven engine-layer defects instead of one documented boundary.
+            if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+                GTEST_SKIP() << "this renderer has no 3D pipeline, so it cannot create the vertex "
+                                "buffer every test in this fixture needs";
+
             const std::vector<VertexPositionColor> data{
                 VertexPositionColor(Vector3(0.0f, 0.0f, 0.0f), Color::White),
                 VertexPositionColor(Vector3(1.0f, 0.0f, 0.0f), Color::White),
