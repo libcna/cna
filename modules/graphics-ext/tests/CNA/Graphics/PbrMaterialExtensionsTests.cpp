@@ -16,6 +16,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
+#include <functional>
 #include <string>
 #include <unordered_set>
 
@@ -404,6 +405,121 @@ TEST(PbrMaterialExtensionsTest, ToStringNamesOnlyTheLobesThatAreOn)
     EXPECT_EQ(extensions.ToString().substr(0, 56),
               "{Subsurface:{Color:{X:0.4 Y:0.1 Z:0.05} Wrap:0.75} Iride")
         << "the subsurface term must appear, and first";
+}
+
+// ── Completeness (MOD-2075) ──────────────────────────────────────────────────
+
+namespace {
+
+/// Every field, as a mutator that moves it away from the fully-populated value. A field added later
+/// and forgotten in operator== or GetHashCode fails here rather than in a game six months on --
+/// which is the whole reason PbrMaterial has a test of this shape, and why this one mirrors it.
+std::vector<std::pair<std::string, std::function<void(PbrMaterialExtensions&)>>> EveryField()
+{
+    return {
+        {"clearcoatFactor", [](PbrMaterialExtensions& e) { e.setClearcoatFactor(0.11f); }},
+        {"clearcoatRoughness", [](PbrMaterialExtensions& e) { e.setClearcoatRoughness(0.12f); }},
+        {"clearcoatNormalScale", [](PbrMaterialExtensions& e) { e.setClearcoatNormalScale(3.5f); }},
+        {"clearcoatTexture", [](PbrMaterialExtensions& e) { e.setClearcoatTexture(nullptr); }},
+        {"clearcoatRoughnessTexture",
+         [](PbrMaterialExtensions& e) { e.setClearcoatRoughnessTexture(nullptr); }},
+        {"clearcoatNormalTexture",
+         [](PbrMaterialExtensions& e) { e.setClearcoatNormalTexture(nullptr); }},
+        {"sheenColorFactor",
+         [](PbrMaterialExtensions& e) { e.setSheenColorFactor(Vector3(0.13f, 0.14f, 0.15f)); }},
+        {"sheenRoughness", [](PbrMaterialExtensions& e) { e.setSheenRoughness(0.16f); }},
+        {"sheenColorTexture", [](PbrMaterialExtensions& e) { e.setSheenColorTexture(nullptr); }},
+        {"sheenRoughnessTexture",
+         [](PbrMaterialExtensions& e) { e.setSheenRoughnessTexture(nullptr); }},
+        {"transmissionFactor", [](PbrMaterialExtensions& e) { e.setTransmissionFactor(0.17f); }},
+        {"transmissionTexture",
+         [](PbrMaterialExtensions& e) { e.setTransmissionTexture(nullptr); }},
+        {"thicknessFactor", [](PbrMaterialExtensions& e) { e.setThicknessFactor(7.5f); }},
+        {"thicknessTexture", [](PbrMaterialExtensions& e) { e.setThicknessTexture(nullptr); }},
+        {"attenuationDistance", [](PbrMaterialExtensions& e) { e.setAttenuationDistance(9.5f); }},
+        {"attenuationColor",
+         [](PbrMaterialExtensions& e) { e.setAttenuationColor(Vector3(0.18f, 0.19f, 0.21f)); }},
+        {"iridescenceFactor", [](PbrMaterialExtensions& e) { e.setIridescenceFactor(0.22f); }},
+        {"iridescenceIor", [](PbrMaterialExtensions& e) { e.setIridescenceIor(2.1f); }},
+        {"iridescenceThicknessMinimum",
+         [](PbrMaterialExtensions& e) { e.setIridescenceThicknessMinimum(23.0f); }},
+        {"iridescenceThicknessMaximum",
+         [](PbrMaterialExtensions& e) { e.setIridescenceThicknessMaximum(24.0f); }},
+        {"iridescenceTexture", [](PbrMaterialExtensions& e) { e.setIridescenceTexture(nullptr); }},
+        {"iridescenceThicknessTexture",
+         [](PbrMaterialExtensions& e) { e.setIridescenceThicknessTexture(nullptr); }},
+        {"subsurfaceColor",
+         [](PbrMaterialExtensions& e) { e.setSubsurfaceColor(Vector3(0.25f, 0.26f, 0.27f)); }},
+        {"subsurfaceWrap", [](PbrMaterialExtensions& e) { e.setSubsurfaceWrap(0.28f); }},
+    };
+}
+
+PbrMaterialExtensions FullyPopulated(Texture2D& first, Texture2D& second)
+{
+    PbrMaterialExtensions extensions;
+    extensions.setClearcoatFactor(0.9f);
+    extensions.setClearcoatRoughness(0.8f);
+    extensions.setClearcoatNormalScale(1.7f);
+    extensions.setClearcoatTexture(&first);
+    extensions.setClearcoatRoughnessTexture(&second);
+    extensions.setClearcoatNormalTexture(&first);
+    extensions.setSheenColorFactor(Vector3(0.7f, 0.6f, 0.5f));
+    extensions.setSheenRoughness(0.45f);
+    extensions.setSheenColorTexture(&second);
+    extensions.setSheenRoughnessTexture(&first);
+    extensions.setTransmissionFactor(0.55f);
+    extensions.setTransmissionTexture(&second);
+    extensions.setThicknessFactor(1.5f);
+    extensions.setThicknessTexture(&first);
+    extensions.setAttenuationDistance(2.5f);
+    extensions.setAttenuationColor(Vector3(0.35f, 0.45f, 0.65f));
+    extensions.setIridescenceFactor(0.85f);
+    extensions.setIridescenceIor(1.65f);
+    extensions.setIridescenceThicknessMinimum(75.0f);
+    extensions.setIridescenceThicknessMaximum(650.0f);
+    extensions.setIridescenceTexture(&first);
+    extensions.setIridescenceThicknessTexture(&second);
+    extensions.setSubsurfaceColor(Vector3(0.55f, 0.35f, 0.3f));
+    extensions.setSubsurfaceWrap(0.65f);
+    return extensions;
+}
+
+}  // namespace
+
+TEST(PbrMaterialExtensionsTest, EveryFieldParticipatesInEqualityAndInTheHash)
+{
+    GraphicsDevice gd;
+    Texture2D first(gd, 1, 1);
+    Texture2D second(gd, 1, 1);
+
+    const PbrMaterialExtensions populated = FullyPopulated(first, second);
+    ASSERT_EQ(populated, populated);
+
+    for (const auto& [name, mutate] : EveryField())
+    {
+        PbrMaterialExtensions changed = populated;
+        mutate(changed);
+        EXPECT_NE(populated, changed) << name << " is missing from operator==";
+        EXPECT_NE(populated.GetHashCode(), changed.GetHashCode())
+            << name << " is missing from GetHashCode";
+    }
+}
+
+TEST(PbrMaterialExtensionsTest, CopyingCarriesEveryField)
+{
+    GraphicsDevice gd;
+    Texture2D first(gd, 1, 1);
+    Texture2D second(gd, 1, 1);
+
+    const PbrMaterialExtensions populated = FullyPopulated(first, second);
+    const PbrMaterialExtensions copy = populated;
+    EXPECT_EQ(copy, populated);
+    EXPECT_EQ(copy.GetHashCode(), populated.GetHashCode());
+    EXPECT_EQ(copy.ToString(), populated.ToString());
+
+    PbrMaterialExtensions assigned;
+    assigned = populated;
+    EXPECT_EQ(assigned, populated);
 }
 
 } // namespace

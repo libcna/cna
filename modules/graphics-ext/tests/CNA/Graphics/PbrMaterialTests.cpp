@@ -176,6 +176,22 @@ TEST_F(PbrMaterialTest, EveryFieldSurvivesTheRoundTripThroughSkinnedPbrEffect)
     EXPECT_EQ(extractMaterial(effect), original);
 }
 
+TEST_F(PbrMaterialTest, TheExtensionLobesAreDeliberatelyOutsideThisRoundTrip)
+{
+    // plan_modern.md MOD-2070/MOD-2075. The lobes beyond glTF core -- clearcoat, sheen,
+    // transmission, iridescence, subsurface -- are carried by PbrMaterialExtensions and *not* by
+    // this type, because PbrEffect has no state for them: a field here would be silently dropped by
+    // the round trip above and two materials would compare unequal for a reason nothing in the type
+    // explains. This test exists so that the boundary is asserted rather than merely intended: the
+    // round trip stays exact, and it stays exact because there is nothing extra in it.
+    const PbrMaterial original = fullyPopulated();
+    PbrEffect effect(gd);
+    applyMaterial(original, effect);
+    const PbrMaterial recovered = extractMaterial(effect);
+    EXPECT_EQ(recovered, original);
+    EXPECT_EQ(recovered.GetHashCode(), original.GetHashCode());
+}
+
 TEST_F(PbrMaterialTest, TheRoundTripIsExactForEveryEightBitAlbedoValue)
 {
     // The albedo factor is the one field that changes representation (Color to Vector3 and back),
