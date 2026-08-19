@@ -306,6 +306,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                     ${_abi_baseline_flags})
         endif()
 
+        # CBIND-076: the baseline above compares the export list with a recorded baseline, so export
+        # drift is caught -- but a header declaring a route the library never exports leaves both
+        # halves self-consistent while a consumer written against the header fails at its call site.
+        # A count cannot see that; the set difference can. Reported by the C# binding, which runs
+        # the same comparison on its own side.
+        if(TARGET cna_c_api AND UNIX AND NOT APPLE)
+            add_test(NAME CApiDeclaredExports
+                COMMAND Python3::Interpreter
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_declared_exports.py"
+                    --library $<TARGET_FILE:cna_c_api>)
+        endif()
+
         # plan_runtimerenderer.md RTR-P1-6/P3-17/P12-15: renderer-specific production
         # decisions stay behind descriptors or virtuals, and every renderer family keeps exactly
         # one descriptor translation unit.
