@@ -2,7 +2,8 @@
 
 ## ABI identity
 
-The ABI is `0.3.0`. `0.1.0` was the initial one; `0.2.0` added the routes recorded in
+The ABI is `0.4.0`, which adds `cna_content_manager_register_cnj_loader_ext` and is otherwise
+`0.3.0`. `0.1.0` was the initial one; `0.2.0` added the routes recorded in
 `plan_binding.md` CBIND-054 through CBIND-058, every one of them additive. `0.3.0` is **not**
 additive and that is why the minor moved again: `CBIND-067` made all 94 routes taking a `CNA_Bool`
 refuse a byte outside {0, 1}, where 66 of them used to accept one. A caller that passed only
@@ -154,6 +155,6 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-All four build configurations export the same 2,852 symbols. That is itself part of the contract:
+All four build configurations export the same 2,853 symbols. That is itself part of the contract:
 the ABI **surface** does not vary with the renderer or with `CNA_DEVICES` — only the answers do. A
 route whose backend is absent exists and refuses, rather than disappearing from the library.

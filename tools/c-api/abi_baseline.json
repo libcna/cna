@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 768,
+  "encoded": 1024,
   "major": 0,
-  "minor": 3,
+  "minor": 4,
   "patch": 0,
-  "runtime": 768
+  "runtime": 1024
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -1290,6 +1290,7 @@
   "cna_content_manager_load_texture_cube",
   "cna_content_manager_refresh_content_manifest",
   "cna_content_manager_register_builtin_loaders",
+  "cna_content_manager_register_cnj_loader_ext",
   "cna_content_manager_set_graphics_device",
   "cna_content_manager_set_root_directory",
   "cna_content_manager_unload",
@@ -3709,9 +3710,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 768,
+  "CNA_ABI_VERSION": 1024,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 3,
+  "CNA_ABI_VERSION_MINOR": 4,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
