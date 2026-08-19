@@ -43,6 +43,7 @@
 #include "CNA/Graphics/TonemappingMode.hpp"
 
 // ---- Post-process infrastructure -----------------------------------------------------------
+#include "CNA/Graphics/AtmosphericSky.hpp"
 #include "CNA/Graphics/BlitPass.hpp"
 #include "CNA/Graphics/ColorGradePass.hpp"
 #include "CNA/Graphics/ChromaticAberrationPass.hpp"
