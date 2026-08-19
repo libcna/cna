@@ -119,6 +119,19 @@ namespace CNA::Graphics {
          */
         void setDepthBias(float value);
 
+        /** @brief Returns how far a fully-rough surface spreads its reflection, in screen fractions. */
+        [[nodiscard]] float getRoughnessBlur() const;
+        /**
+         * @brief Sets how far a fully-rough surface spreads its reflection, in screen fractions.
+         *
+         * A rough surface does not reflect one point but a cone, and this is the widest that cone
+         * gets -- at roughness 1. A surface the prepass was never told a roughness for reads 0 and
+         * reflects sharply, whatever this is set to.
+         *
+         * @param value The spread as a fraction of the frame, clamped to [0, 0.25].
+         */
+        void setRoughnessBlur(float value);
+
         /** @brief Returns how wide the fade at the edge of the screen is, in screen fractions. */
         [[nodiscard]] float getEdgeFade() const;
         /**
@@ -156,6 +169,7 @@ namespace CNA::Graphics {
         float thickness_   = 0.5f;
         float depthBias_   = 0.05f;
         float edgeFade_    = 0.1f;
+        float roughnessBlur_ = 0.02f;
         float intensity_   = 1.0f;
     };
 

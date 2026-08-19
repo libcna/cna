@@ -86,6 +86,9 @@ namespace CNA::Graphics {
     float           RenderPipelineSettings::getSSREdgeFade()      const { return ssrEdgeFade_; }
     void            RenderPipelineSettings::setSSREdgeFade(float v)     { ssrEdgeFade_ = std::clamp(v, 0.0f, 0.5f); }
 
+    float           RenderPipelineSettings::getSSRRoughnessBlur() const { return ssrRoughnessBlur_; }
+    void            RenderPipelineSettings::setSSRRoughnessBlur(float v) { ssrRoughnessBlur_ = std::clamp(v, 0.0f, 0.25f); }
+
     float           RenderPipelineSettings::getSSRIntensity()     const { return ssrIntensity_; }
     void            RenderPipelineSettings::setSSRIntensity(float v)    { ssrIntensity_ = AtLeast(v, 0.0f); }
 

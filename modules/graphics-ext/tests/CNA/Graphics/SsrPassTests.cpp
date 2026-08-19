@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "CNA/Graphics/DepthNormalPrepass.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/SsrPass.hpp"
 #include "EngineTestSupport.hpp"
@@ -32,6 +33,7 @@
 
 namespace {
 
+using CNA::Graphics::DepthNormalPrepass;
 using CNA::Graphics::PostProcessContext;
 using CNA::Graphics::SsrPass;
 using Microsoft::Xna::Framework::Color;
@@ -150,10 +152,13 @@ const Color kFacingTheRayNormal{128, 37, 218, 255};
 /// The band cannot share the floor's normal, and the reason is the rejection this scene now
 /// exercises. Two parallel surfaces mean the ray arrives at the *back* of the second one, and
 /// reflecting a back face puts the far side of an object into a mirror that cannot see it.
-std::unique_ptr<RenderTarget2D> MakeSceneNormals(GraphicsDevice& gd)
+/// @param roughnessByte What the prepass would have written into alpha (MOD-2003): 0 is a mirror.
+std::unique_ptr<RenderTarget2D> MakeSceneNormals(GraphicsDevice& gd, const int roughnessByte = 255)
 {
-    return MakeRowImage(gd, [](const int row) {
-        return InBand(row) ? kFacingTheRayNormal : kTiltedNormal;
+    return MakeRowImage(gd, [roughnessByte](const int row) {
+        const Color n = InBand(row) ? kFacingTheRayNormal : kTiltedNormal;
+        return Color(static_cast<int>(n.getRProperty()), static_cast<int>(n.getGProperty()),
+                     static_cast<int>(n.getBProperty()), roughnessByte);
     });
 }
 
@@ -495,6 +500,60 @@ TEST(SsrPassTest, TheRefinementMakesTheAnswerIndependentOfTheStepCount)
     EXPECT_LE(std::abs(coarse - fine), 12)
         << "eight steps answered " << coarse << " and sixty-four answered " << fine
         << ": the reflection still lands where the step count puts it";
+}
+
+TEST(SsrPassTest, RoughnessSpreadsTheReflectionAndSmoothnessDoesNot)
+{
+    // plan_modern.md MOD-2003. The same scene twice, with nothing changed but the roughness the
+    // prepass wrote into the normal target's alpha. The reflection lands on the band's leading
+    // edge, so a spread reflection gathers the black outside the band and comes back darker, while
+    // a mirror takes the band's colour exactly. Measured as brightness because that is what mixing
+    // across a hard edge *is* -- there is no second thing a 32-pixel frame could show.
+    GraphicsDevice gd;
+    SsrPass pass(gd);
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+
+    auto depth  = MakeTiltedPlaneDepth(gd);
+    auto source = MakeSourceWithBrightBand(gd);
+    RenderTarget2D destination(gd, kSize, kSize);
+
+    const auto redAtRoughness = [&](const int roughnessByte) {
+        auto normals = MakeSceneNormals(gd, roughnessByte);
+        pass.setMaxDistance(40.0f);
+        pass.setThickness(30.0f);
+        pass.setEdgeFade(0.0f);          // isolate the roughness from the border fade
+        pass.setRoughnessBlur(0.25f);    // the widest spread the pass accepts
+        PostProcessContext context = MakeContext(SourceRef(source), destination);
+        context.sourceDepth   = depth.get();
+        context.sourceNormals = normals.get();
+        pass.apply(context);
+        return static_cast<int>(ReadTarget(destination)[CentreIndex()].getRProperty());
+    };
+
+    const int mirror = redAtRoughness(0);
+    const int rough  = redAtRoughness(255);
+
+    ASSERT_GT(mirror, 200) << "the mirror found no reflection, so nothing was compared";
+    EXPECT_LT(rough, mirror - 40)
+        << "a fully rough surface reflected as sharply as a mirror: " << rough
+        << " against " << mirror;
+}
+
+TEST(SsrPassTest, ASurfaceWithNoRoughnessSuppliedReflectsSharply)
+{
+    // The default the prepass writes is 0, not glTF's fully-rough 1, and this is why: an app that
+    // never calls `setRoughness` must get the sharp reflection it got before roughness existed
+    // rather than a silently blurred frame it has no way to explain.
+    GraphicsDevice gd;
+    DepthNormalPrepass prepass(gd, 8, 8);
+    EXPECT_FLOAT_EQ(prepass.getRoughness(), 0.0f);
+    prepass.setRoughness(0.6f);
+    EXPECT_FLOAT_EQ(prepass.getRoughness(), 0.6f);
+    prepass.setRoughness(5.0f);
+    EXPECT_FLOAT_EQ(prepass.getRoughness(), 1.0f);
+    prepass.setRoughness(-5.0f);
+    EXPECT_FLOAT_EQ(prepass.getRoughness(), 0.0f);
 }
 
 // ── The rejections (MOD-2002) ────────────────────────────────────────────────

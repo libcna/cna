@@ -160,6 +160,27 @@ namespace CNA::Graphics {
          */
         [[nodiscard]] bool isDepthPacked() const;
 
+        /** @brief Returns the roughness written into the normal target's alpha. */
+        [[nodiscard]] float getRoughness() const;
+
+        /**
+         * @brief Sets the roughness written into the normal target's alpha.
+         *
+         * Screen-space reflections need to know how sharp a surface's reflection should be, and
+         * roughness lives in the material rather than in the geometry, so the prepass has to be
+         * told. It rides in the normal target's alpha, which carried nothing before: a third render
+         * target would make this pass's existing two-pass fallback a three-pass one for the sake of
+         * one scalar.
+         *
+         * Set it between draws inside an open pass, the way a scene with more than one material has
+         * to describe itself. **The default is 0 -- a mirror** rather than glTF's fully-rough
+         * default, so an app that never sets it gets the sharp reflections it got before this
+         * existed rather than a silently blurred frame.
+         *
+         * @param value The roughness, clamped to [0, 1].
+         */
+        void setRoughness(float value);
+
         /**
          * @brief The GLSL a consumer includes to read this prepass's depth.
          *
@@ -205,6 +226,7 @@ namespace CNA::Graphics {
         int  openPass_ = -1;
         bool useMrt_    = false;
         bool packDepth_ = false;
+        float roughness_ = 0.0f;
         bool supported_ = false;
 
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D> depthTarget_;

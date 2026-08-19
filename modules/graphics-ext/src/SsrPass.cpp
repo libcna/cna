@@ -58,6 +58,7 @@ uniform float uDepthBias;
 uniform float uThickness;
 uniform float uIntensity;
 uniform float uEdgeFade;
+uniform float uRoughnessBlur;
 uniform int   uStepCount;
 
 // Point sampling, done here rather than through a sampler state.
@@ -96,7 +97,11 @@ void main() {
         return;
     }
 
-    vec3 rawNormal = texture(uNormalSampler, cnaSnapToTexel(TexCoord, uDepthSize)).xyz * 2.0 - 1.0;
+    vec4 normalTexel = texture(uNormalSampler, cnaSnapToTexel(TexCoord, uDepthSize));
+    // Roughness rides in the normal target's alpha (MOD-2003). A surface the prepass was never told
+    // about reads 0 and reflects sharply, which is what this pass did before roughness existed.
+    float roughness = clamp(normalTexel.a, 0.0, 1.0);
+    vec3 rawNormal = normalTexel.xyz * 2.0 - 1.0;
     // normalize(vec3(0)) is NaN and every comparison against NaN is false, so a degenerate normal
     // would not produce a wrong reflection -- it would produce no reflection anywhere, with nothing
     // to point at. Guarded for the same reason SsaoPass guards its own.
@@ -185,7 +190,18 @@ void main() {
                 ? min(smoothstep(0.0, uEdgeFade, toEdge.x), smoothstep(0.0, uEdgeFade, toEdge.y))
                 : 1.0;
 
-            hitColor = texture(texture1, hitUv).rgb;
+            // A rough surface does not reflect one point, it reflects a cone. Four taps around the
+            // hit, widened by roughness, stand in for that: not the integral a real BRDF asks for,
+            // but the difference between a mirror and a brushed floor, which is what the roughness
+            // is describing. The taps are deliberately *not* snapped to texel centres -- filtering
+            // is the point here, where for the depth comparison it was the bug.
+            vec2 blur = vec2(roughness * uRoughnessBlur);
+            vec3 gathered = texture(texture1, hitUv).rgb
+                          + texture(texture1, hitUv + vec2( blur.x, 0.0)).rgb
+                          + texture(texture1, hitUv + vec2(-blur.x, 0.0)).rgb
+                          + texture(texture1, hitUv + vec2(0.0,  blur.y)).rgb
+                          + texture(texture1, hitUv + vec2(0.0, -blur.y)).rgb;
+            hitColor = gathered * 0.2;
             hit = fade;
             break;
         }
@@ -248,6 +264,8 @@ void main() {
         const float thickness   = settings != nullptr ? settings->getSSRThickness()   : thickness_;
         const float depthBias   = settings != nullptr ? settings->getSSRDepthBias()   : depthBias_;
         const float edgeFade    = settings != nullptr ? settings->getSSREdgeFade()    : edgeFade_;
+        const float roughnessBlur =
+            settings != nullptr ? settings->getSSRRoughnessBlur() : roughnessBlur_;
         const float intensity   = settings != nullptr ? settings->getSSRIntensity()   : intensity_;
         const int   stepCount   = settings != nullptr ? settings->getSSRStepCount()   : stepCount_;
 
@@ -268,6 +286,7 @@ void main() {
         effect_->SetUniformFloat("uThickness", thickness / far);
         effect_->SetUniformFloat("uIntensity", intensity);
         effect_->SetUniformFloat("uEdgeFade", edgeFade);
+        effect_->SetUniformFloat("uRoughnessBlur", roughnessBlur);
         effect_->SetUniformInt("uStepCount",
                                std::clamp(stepCount, kMinStepCount, kMaxStepCount));
 
@@ -305,6 +324,12 @@ void main() {
     void  SsrPass::setDepthBias(const float value)
     {
         if (value > 0.0f) depthBias_ = value;
+    }
+
+    float SsrPass::getRoughnessBlur() const { return roughnessBlur_; }
+    void  SsrPass::setRoughnessBlur(const float value)
+    {
+        roughnessBlur_ = std::clamp(value, 0.0f, 0.25f);
     }
 
     float SsrPass::getEdgeFade() const { return edgeFade_; }

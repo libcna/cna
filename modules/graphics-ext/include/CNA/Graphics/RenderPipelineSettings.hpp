@@ -147,6 +147,11 @@ namespace CNA::Graphics {
         /** @brief Sets how wide the fade at the edge of the screen is, in screen fractions. */
         void setSSREdgeFade(float value);
 
+        /** @brief Returns how far a fully-rough surface spreads its reflection, in screen fractions. */
+        [[nodiscard]] float getSSRRoughnessBlur() const;
+        /** @brief Sets how far a fully-rough surface spreads its reflection, in screen fractions. */
+        void setSSRRoughnessBlur(float value);
+
         /** @brief Returns how strongly the reflection is mixed over the frame. */
         [[nodiscard]] float getSSRIntensity() const;
         /** @brief Sets how strongly the reflection is mixed over the frame. */
@@ -271,6 +276,7 @@ namespace CNA::Graphics {
         float           ssrThickness_    = 0.5f;
         float           ssrDepthBias_    = 0.05f;
         float           ssrEdgeFade_     = 0.1f;
+        float           ssrRoughnessBlur_ = 0.02f;
         float           ssrIntensity_    = 1.0f;
         float           fxaaEdgeThreshold_ = 0.125f;
 

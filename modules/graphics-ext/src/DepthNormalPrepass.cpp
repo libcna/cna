@@ -136,6 +136,7 @@ in vec3 vViewNormal;
 in float vViewDepth;
 uniform int uPackDepth;
 uniform int uOutputMode;   // 0 = both (MRT), 1 = depth only, 2 = normals only
+uniform float uRoughness;  // rides in the normal target's alpha; see setRoughness
 layout(location = 0) out vec4 FragTarget0;
 layout(location = 1) out vec4 FragTarget1;
 )";
@@ -144,7 +145,10 @@ layout(location = 1) out vec4 FragTarget1;
 void main() {
     vec4 depthOut  = (uPackDepth != 0) ? cnaPackDepth(vViewDepth)
                                        : vec4(vViewDepth, vViewDepth, vViewDepth, 1.0);
-    vec4 normalOut = vec4(vViewNormal * 0.5 + 0.5, 1.0);
+    // The alpha of the normal target carried nothing until MOD-2003. Roughness rides there rather
+    // than in a third target: MRT is capped and this pass already falls back to two passes without
+    // it, so a third output would make that fallback three passes for one scalar.
+    vec4 normalOut = vec4(vViewNormal * 0.5 + 0.5, uRoughness);
     if (uOutputMode == 1) {
         FragTarget0 = depthOut;
         FragTarget1 = depthOut;
@@ -309,6 +313,7 @@ void main() {
                     effect->SetUniformFloat("uFarPlane", farPlane);
                     effect->SetUniformInt("uPackDepth", packDepth_ ? 1 : 0);
                     effect->SetUniformInt("uOutputMode", outputMode);
+                    effect->SetUniformFloat("uRoughness", roughness_);
                 }
             }
         }
@@ -331,6 +336,23 @@ void main() {
         passOpen_ = false;
         openPass_ = -1;
         device_.SetRenderTarget(nullptr);
+    }
+
+    float DepthNormalPrepass::getRoughness() const { return roughness_; }
+
+    void DepthNormalPrepass::setRoughness(const float value)
+    {
+        roughness_ = std::clamp(value, 0.0f, 1.0f);
+        // Applied immediately when a pass is open, so a caller can change it between draws inside
+        // one begin()/end() -- which is the only way a scene with more than one material can
+        // describe itself, since the prepass draws whatever the app hands it.
+        if (passOpen_ && supported_)
+            for (ShaderEffect* effect : {effect_.get(), skinnedEffect_.get()})
+                if (effect != nullptr && effect->IsEffectValid())
+                {
+                    effect->Apply();
+                    effect->SetUniformFloat("uRoughness", roughness_);
+                }
     }
 
     ShaderEffect* DepthNormalPrepass::getPrepassEffect() const
