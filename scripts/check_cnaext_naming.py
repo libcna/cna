@@ -62,8 +62,21 @@ def main() -> int:
         # holding a second class had that class's *constructors* reported as UpperCamelCase
         # functions, with a message about renaming them. The rule this script exists to enforce says
         # nothing about file layout, so it should not have been enforcing one by accident.
+        lines = header.read_text(encoding="utf-8").split("\n")
+
+        # Every type the header declares, collected first. Tracking only the *most recent* one was
+        # not enough: a header whose outer class declares a nested struct before its own
+        # constructor had `owner` pointing at the nested struct by then, so the constructor was
+        # reported as an UpperCamelCase function. A constructor is a declaration whose name is one
+        # of the file's own types, wherever in the file it appears.
+        declared = {header.stem}
+        for line in lines:
+            opened = TYPE_DECL.match(line.strip())
+            if opened:
+                declared.add(opened.group("type"))
+
         owner = header.stem
-        for number, line in enumerate(header.read_text(encoding="utf-8").split("\n"), start=1):
+        for number, line in enumerate(lines, start=1):
             text = line.strip()
             if not text or text.startswith(("//", "*", "/*", "#")):
                 continue
@@ -75,7 +88,7 @@ def main() -> int:
             if not match or match.group("ret") in NOT_A_RETURN_TYPE:
                 continue
             name = match.group("name")
-            if name in (owner, "~" + owner) or name.startswith("operator"):
+            if name in declared or name.lstrip("~") in declared or name.startswith("operator"):
                 continue
             qualified = f"{owner}::{name}"
             if qualified in EXEMPT:
