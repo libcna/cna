@@ -752,7 +752,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1602 | Bgfx | 🟨 | **Measured, not implemented — after fixing what stopped it building.** `BgfxRendererDescriptor.cpp` had one closing brace too many after `ResolvedWindowKind()`, so the anonymous namespace closed twice and the identity had never compiled — the **third** file damaged by the same merge, `2f00c201`, after OpenGL1 and LLGL. With it fixed, bgfx runs on its OpenGL backend (`active renderer: OpenGL 2.1` on llvmpipe) and reports `FloatRenderTargets: no`, `HalfFloatRenderTargets: no`; the refusal path runs. |
 | MOD-1603 | WebGPU | 🟨 | **Measured, not implemented.** The native `wgpu-native` build runs here (Vulkan on lavapipe) and reports `FloatRenderTargets: no`, `HalfFloatRenderTargets: no`; the refusal path runs. `rgba16float` is core in WebGPU, so the row's own note still holds — this is the easiest one left, not a boundary. |
 | MOD-1604 | D3D11 | 🟨 | **Measured on a real D3D11 device, under Wine.** The Windows cross-build now works end to end here (see the row's own note for what it took), and `CnaTests.exe` reports the renderer initialising at feature level `0xB100` with the debug layer on. Float render targets: `no`. The refusal path is what runs. |
-| MOD-1605 | D3D12 | ⬜ | Compile-verified on Windows only, per precedent. |
+| MOD-1605 | D3D12 | 🟨 | **Better than the row expected: it runs here, on a real device.** `D3D12 device resources created; feature level 0xB100, tearing supported, swap chain available` under Wine. Float render targets: `no`; the refusal path runs. Two toolchain fixes were needed to get it compiling at all — see `MOD-1625`. |
 | MOD-1606 | D3D9 | 🟨 | **Measured on a real D3D9 device under Wine** (`VertexShaderVersion=0xFFFE0300`, `PixelShaderVersion=0xFFFF0300` — SM3 both ways). Float render targets: `no`, so the refusal path runs. `D3DFMT_A16B16G16R16F` and the no-blending caveat remain the shape of any future implementation. |
 | MOD-1607 | D3D10 | 🟨 | **Measured on a real D3D10 device under Wine.** Float render targets: `no`; the refusal path runs. D3D10 has `DXGI_FORMAT_R16G16B16A16_FLOAT` natively, so this is implementable rather than a boundary. |
 | MOD-1608 | OpenGL4 | 🟨 | **Measured, not implemented.** `cna_test_cnaext_caps` on a real OPENGL4 build reports `FloatRenderTargets: no`, `HalfFloatRenderTargets: no`, so the false-by-default answer stands and `RenderTarget2D` refuses the format rather than substituting `Color`. `GL_RGBA16F` attachments are core in GL 4.x, so this is implementable work rather than a boundary. |
@@ -798,7 +798,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1642 | Bgfx | 🟨 | **Measured:** `SupportsShadowSamplingEXT: no`; the four casters report `isSupported() == false` and the shadow suites skip. |
 | MOD-1643 | WebGPU | 🟨 | **Measured:** `SupportsShadowSamplingEXT: no`; all four casters report `isSupported() == false` and the shadow suites skip rather than fail. |
 | MOD-1644 | D3D11 | 🟨 | **Measured:** the shadow suites skip rather than fail — D3D11 does not report shadow sampling — and nothing in the 488-test run failed. |
-| MOD-1645 | D3D12 | ⬜ | |
+| MOD-1645 | D3D12 | 🟨 | **Measured:** shadow sampling not reported; the shadow suites skip. Its `ShaderEffect` compiles HLSL and this layer writes GLSL, so the compiler says so out loud (`ShaderEffect_vs:1:15: E5000: syntax error`) and `ExecutesShaderEffectSourceEXT()` is correctly `false` — the same situation as Vulkan's SPIR-V. |
 | MOD-1646 | D3D9 | 🟨 | **Measured:** shadow sampling not reported; the shadow suites skip rather than fail. |
 | MOD-1647 | D3D10 | 🟨 | **Measured:** shadow sampling not reported; the shadow suites skip rather than fail. |
 | MOD-1648 | OpenGL4 | 🟨 | **Measured:** `SupportsShadowSamplingEXT: no`, so all four casters report `isSupported() == false` and the shadow suites skip rather than fail. |
@@ -820,7 +820,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 | MOD-1662 | Bgfx | 🟨 | **Measured:** `SupportsImageBasedLightingEXT: no`. |
 | MOD-1663 | WebGPU | 🟨 | **Measured:** `SupportsImageBasedLightingEXT: no`; the CPU-side precompute works, the shading half does not. |
 | MOD-1664 | D3D11 | 🟨 | **Measured:** image-based lighting not reported; the IBL suites skip and the CPU-side precompute is unaffected. |
-| MOD-1665 | D3D12 | ⬜ | |
+| MOD-1665 | D3D12 | 🟨 | **Measured:** image-based lighting not reported. |
 | MOD-1666 | D3D9 | 🟨 | **Measured:** image-based lighting not reported. Cube-mip prefiltering on SM3 stays unassessed for feasibility, because nothing consumes it there yet. |
 | MOD-1667 | D3D10 | 🟨 | **Measured:** image-based lighting not reported; the CPU-side precompute is unaffected. |
 | MOD-1668 | OpenGL4 | 🟨 | **Measured:** `SupportsImageBasedLightingEXT: no`; `EnvironmentProcessor`'s CPU-side precompute works, the shading half does not. |
@@ -837,7 +837,7 @@ web-DOM identities are handled once in §16.6 rather than repeated per subsystem
 |---|---|---|---|
 | MOD-1680 | Vulkan | 🟨 | **Measured.** The Vulkan renderer implements none of `CreateComputeShader`/`CreateStorageBuffer`/`DispatchCompute`, so `SupportsComputeShadersEXT()` is false and both wrappers refuse by name — verified by running `cnaext_compute_particles_test` against the real Vulkan device, which SKIPs. Native compute queues are the open work. |
 | MOD-1681 | D3D11 | 🟨 | **Measured:** compute not reported, so `ComputeShader`/`StorageBuffer` refuse by name and the compute suites skip. CS 5.0 + UAV is what implementing it would use; nothing about the device blocks it. |
-| MOD-1682 | D3D12 | ⬜ | |
+| MOD-1682 | D3D12 | 🟨 | **Measured:** compute not reported, so `ComputeShader`/`StorageBuffer` refuse by name. |
 | MOD-1683 | WebGPU | 🟨 | **Measured:** `SupportsCapability(ComputeShaders): no`, so `ComputeShader`/`StorageBuffer` refuse by name and the compute suites skip. Compute is core in WebGPU, so this remains gated on the backend's maturity rather than on the API. |
 | MOD-1684 | Metal | ⛔ | **macOS only, by a hard configure gate.** `-DCNA_GRAPHICS_RENDERER=METAL` fails immediately on Linux: *"METAL renderer is currently supported only on macOS; iOS and tvOS remain unvalidated."* There is no cross-compilation route — Metal needs the macOS SDK and a Metal device — so this is refused with the reason rather than left open as if untried. |
 | MOD-1685 | Diligent | 🟨 | **Measured:** `SupportsCapability(ComputeShaders): no`, so `ComputeShader`/`StorageBuffer` refuse by name. Its Vulkan device has compute, so this is implementable rather than a boundary. |
