@@ -158,6 +158,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                 --require "vulkan")
     endif()
 
+    # cmake/UnitTests.cmake applies the repository-wide exit-77 skip convention before this
+    # file registers the module link-closure tests. Apply it to this later registration batch as
+    # well, so generators without CMakeFiles/<target>.dir/link.txt (notably Ninja) report the
+    # checker script's documented exit 77 as SKIPPED instead of FAILED.
+    get_property(_cna_link_closure_tests DIRECTORY PROPERTY TESTS)
+    list(FILTER _cna_link_closure_tests INCLUDE REGEX "^ModuleLinkClosure_")
+    if(_cna_link_closure_tests)
+        set_tests_properties(${_cna_link_closure_tests} PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
+
     if(Python3_Interpreter_FOUND)
         add_test(NAME RendererIdentityRegistry
             COMMAND Python3::Interpreter
