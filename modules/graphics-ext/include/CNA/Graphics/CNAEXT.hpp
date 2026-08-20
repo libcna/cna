@@ -103,6 +103,7 @@
 #include "CNA/Graphics/FrustumCullerEXT.hpp"
 #include "CNA/Graphics/InstancedRendererEXT.hpp"
 #include "CNA/Graphics/LightProbeEXT.hpp"
+#include "CNA/Graphics/LightProbeVolumeEXT.hpp"
 #include "CNA/Graphics/LodGroupEXT.hpp"
 
 // ---- Materials -----------------------------------------------------------------------------
