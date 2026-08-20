@@ -57,6 +57,7 @@
 #include "CNA/Graphics/VolumetricFogPass.hpp"
 #include "CNA/Graphics/MotionBlurPass.hpp"
 #include "CNA/Graphics/DepthNormalPrepass.hpp"
+#include "CNA/Graphics/DebugDraw.hpp"
 #include "CNA/Graphics/DecalPass.hpp"
 #include "CNA/Graphics/DepthOfFieldPass.hpp"
 #include "CNA/Graphics/EffectPass.hpp"
