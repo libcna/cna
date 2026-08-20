@@ -60,7 +60,18 @@ are `alpha.N` → `beta.N` → `rc.N`, ordered as SemVer orders them. `0.1.0-alp
 2. **Write the changelog entry.** Move what is under `## [Unreleased]` into a new
    `## [x.y.z] — YYYY-MM-DD` section in `CHANGELOG.md` and add the two link definitions at the
    bottom of the file.
-3. **Build and test** in an existing build directory (see the build rules in `CLAUDE.md` —
+3. **Record the sharp-runtime revision** in that entry. Everything else is pinned by this
+   repository — submodule gitlinks, and the `GIT_TAG` values in `cmake/ThirdParty*.cmake` and
+   `cmake/RendererSelection.cmake` — but sharp-runtime is a sibling checkout consumed with
+   `add_subdirectory`, so the tag alone does not select it:
+
+   ```bash
+   git -C ../sharp-runtime log -1 --format='%H (%D, %ad)' --date=short
+   ```
+
+   This is a stopgap that documents the revision without enforcing it; a configure-time check
+   against a recorded pin, or a submodule, is the intended replacement.
+4. **Build and test** in an existing build directory (see the build rules in `CLAUDE.md` —
    reuse a `cmake-build-<variant>/` tree, cap parallelism):
 
    ```bash
@@ -71,20 +82,20 @@ are `alpha.N` → `beta.N` → `rc.N`, ordered as SemVer orders them. `0.1.0-alp
 
    The configure banner prints `CNA: version <x.y.z>` — check it matches. Run `CnaTests` from
    the repository root: its fixtures are resolved relative to the working directory.
-4. **Commit** the version-bearing files by explicit name (`CMakeLists.txt`, `Doxyfile`,
+5. **Commit** the version-bearing files by explicit name (`CMakeLists.txt`, `Doxyfile`,
    `CHANGELOG.md`), never `git add -A`.
-5. **Tag** with a `v` prefix and an annotated tag:
+6. **Tag** with a `v` prefix and an annotated tag:
 
    ```bash
    git tag -a v0.1.0-alpha.1 -m "CNA 0.1.0-alpha.1"
    ```
 
    The tag string carries the `v`; `CNA_VERSION_STRING` never does.
-6. **Push only when the project owner asks**, and push the tag explicitly:
+7. **Push only when the project owner asks**, and push the tag explicitly:
 
    ```bash
    git push origin develop
    git push origin v0.1.0-alpha.1
    ```
-7. **Open the next cycle** by adding an empty `## [Unreleased]` section back to `CHANGELOG.md`
+8. **Open the next cycle** by adding an empty `## [Unreleased]` section back to `CHANGELOG.md`
    if step 2 consumed it.

@@ -40,6 +40,26 @@ release contains, not what changed since a previous tag.
 - **`CNA/Version.hpp`** — the release identity generated from the build's single source of
   truth, exposing `CNA::getVersionString()` and the `CNA_VERSION_*` macros.
 
+### Dependency pins
+
+Third-party dependencies are pinned by this repository: the submodules
+(`third_party/SDL` `cbe3fbe9f`, `third_party/SDL_image` `fcb9d0b15`, `third_party/SDL_mixer`
+`3075d3eda`, `third_party/draco` `8786740086`, `vendor/googletest` `7e2c425db`) through their
+gitlinks, and the FetchContent dependencies through the `GIT_TAG` values in
+`cmake/ThirdParty*.cmake` and `cmake/RendererSelection.cmake`. Checking out this tag therefore
+selects them.
+
+**`sharp-runtime` is the exception and is not pinned by the build.** It is a sibling checkout
+consumed with `add_subdirectory` from `../sharp-runtime` (overridable with
+`-DCNA_SHARP_RUNTIME_ROOT`), so a build takes whatever revision that checkout happens to be on.
+This release was developed and verified against:
+
+    sharp-runtime  625476d5b5fff5fa89f392c3c9af8638ff237692  (develop, 2026-08-19)
+    https://github.com/openeggbert/sharp-runtime
+
+Recording the revision here is a stopgap — it documents the pin without enforcing it. A real
+mechanism (a configure-time check against a recorded pin, or a submodule) is planned.
+
 ### Known limitations
 
 - Pre-release quality: interfaces are expected to change before 1.0, and renderer coverage is
