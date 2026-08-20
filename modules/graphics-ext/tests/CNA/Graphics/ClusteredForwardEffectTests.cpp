@@ -17,12 +17,15 @@
 #include "CNA/Graphics/ClusteredLightBuffer.hpp"
 #include "CNA/Graphics/ClusteredLightGrid.hpp"
 #include "CNA/Graphics/ClusteredLightSetEXT.hpp"
+#include "CNA/Graphics/LightProbeEXT.hpp"
+#include "CNA/Graphics/LightProbeVolumeEXT.hpp"
 #include "CNA/Graphics/PbrMaterialExtensions.hpp"
 #include "EngineTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/BoundingBox.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AreaLightEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
@@ -50,11 +53,14 @@ using CNA::Graphics::ClusteredLightEXT;
 using CNA::Graphics::ClusteredLightGrid;
 using CNA::Graphics::ClusteredLightSetEXT;
 using CNA::Graphics::ClusteredLightType;
+using CNA::Graphics::LightProbeEXT;
+using CNA::Graphics::LightProbeVolumeEXT;
 using CNA::Graphics::PbrMaterialExtensions;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::BoundingBox;
 using Microsoft::Xna::Framework::Graphics::AreaLightEXT;
 using Microsoft::Xna::Framework::Graphics::AreaLightShapeEXT;
 using Microsoft::Xna::Framework::Graphics::BlendState;
@@ -1006,6 +1012,150 @@ TEST(ClusteredForwardEffectTest, TheSubsurfaceSettingsReachTheShader)
     ASSERT_LT(expected.X, 0.95f) << "the reference saturates, so the comparison proves little";
     EXPECT_NEAR(static_cast<float>(middle.getRProperty()) / 255.0f, expected.X, 0.03f)
         << "the shader and the CPU model disagree about the subsurface term";
+}
+
+// ── Probe lighting (MOD-2082) ────────────────────────────────────────────────
+
+namespace {
+
+/// A probe whose only light is a constant term, so its irradiance is the same in every direction.
+LightProbeEXT AmbientProbe(const float brightness)
+{
+    LightProbeEXT probe;
+    // The constant coefficient a uniform environment of this radiance projects to.
+    const float projected = brightness * std::sqrt(4.0f * 3.14159265359f);
+    probe.setCoefficient(0, Vector3(projected, projected, projected));
+    return probe;
+}
+
+}  // namespace
+
+TEST(ClusteredForwardEffectTest, AProbeReplacesTheFlatAmbientAndNothingElse)
+{
+    GraphicsDevice gd;
+    ClusteredForwardEffect effect(gd);
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+    if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
+
+    const ClusteredLightSetEXT none;
+    effect.setBaseColor(Vector3(0.8f, 0.8f, 0.8f));
+    effect.setAmbient(Vector3(0.0f, 0.0f, 0.0f));
+    EXPECT_FALSE(effect.hasLightProbe());
+    EXPECT_EQ(TotalBrightness(RenderWall(gd, effect, none)), 0)
+        << "with no lights, no ambient and no probe the wall must be black";
+
+    // A probe of radiance L gives a Lambertian surface albedo * L, because the probe carries
+    // irradiance pi * L and the surface reflects albedo/pi of it. That is a number, not a trend.
+    effect.setLightProbe(AmbientProbe(0.25f));
+    EXPECT_TRUE(effect.hasLightProbe());
+
+    const std::vector<Color> pixels = RenderWall(gd, effect, none);
+    const Color middle = pixels[static_cast<std::size_t>(kSize) * (kSize / 2) + kSize / 2];
+    EXPECT_NEAR(static_cast<float>(middle.getRProperty()) / 255.0f, 0.8f * 0.25f, 0.02f)
+        << "the probe's irradiance did not arrive as albedo times radiance";
+
+    effect.clearLightProbe();
+    EXPECT_FALSE(effect.hasLightProbe());
+    EXPECT_EQ(TotalBrightness(RenderWall(gd, effect, none)), 0)
+        << "clearing the probe left it lighting the wall";
+}
+
+TEST(ClusteredForwardEffectTest, AVolumeLightsAnObjectAtItsOwnPosition)
+{
+    // The volume is sampled at the world matrix's translation, so two draws of the same geometry at
+    // two places in the volume are lit differently. That is the whole point of a probe grid, and it
+    // is what a single global environment cannot do.
+    GraphicsDevice gd;
+    ClusteredForwardEffect effect(gd);
+    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+    if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
+
+    // A one-unit volume, not a ten-unit one: the object is moved by translating its world matrix,
+    // and a large translation slides the wall partly out of frame -- the first version of this test
+    // read the centre pixel of a frame the wall no longer covered and called it a lighting result.
+    LightProbeVolumeEXT volume(BoundingBox(Vector3(-1.0f, 0.0f, 0.0f),
+                                           Vector3(1.0f, 0.0f, 0.0f)), 2, 1, 1);
+    volume.setProbe(0, 0, 0, AmbientProbe(0.1f));
+    volume.setProbe(1, 0, 0, AmbientProbe(0.5f));
+
+    effect.setBaseColor(Vector3(0.8f, 0.8f, 0.8f));
+    effect.setAmbient(Vector3(0.0f, 0.0f, 0.0f));
+    effect.setLightProbeVolume(&volume);
+    EXPECT_TRUE(effect.hasLightProbe());
+
+    const ClusteredLightSetEXT none;
+    const auto brightnessAt = [&](const float x) {
+        const ClusteredLightGrid grid = MakeGrid();
+        ClusteredLightAssignment assignment;
+        assignment.assign(grid, View(), none.collectBounds());
+        ClusteredLightBuffer buffer(gd);
+        buffer.upload(none, grid, assignment);
+
+        RenderTarget2D target(gd, kSize, kSize);
+        gd.SetRenderTarget(&target);
+        gd.Clear(Color::Black);
+        gd.setRasterizerStateProperty(RasterizerState::CullNone);
+        gd.setDepthStencilStateProperty(DepthStencilState::Default);
+        gd.setBlendStateProperty(BlendState::Opaque);
+        gd.SetVertexBuffer(nullptr);
+
+        // A world matrix that only translates along x: the geometry stays where it is, and what
+        // moves is which probe the volume answers with.
+        Matrix world = Matrix::getIdentityProperty();
+        world.M41 = x;
+        effect.begin(world, View(), Projection(), Vector3::Zero, buffer);
+        effect.getEffect()->Apply();
+        const auto wall = Wall();
+        gd.DrawUserPrimitives(PrimitiveType::TriangleList, wall.data(), 0, 2);
+        gd.SetRenderTarget(nullptr);
+
+        std::vector<Color> pixels(static_cast<std::size_t>(kSize) * kSize, Color::Black);
+        target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+        // Every pixel of the frame must be on the wall, or the reading is about coverage rather
+        // than about light.
+        for (const Color& p : pixels)
+            EXPECT_GT(static_cast<int>(p.getRProperty()), 0)
+                << "the wall does not cover the whole frame at x = " << x;
+        return static_cast<int>(pixels[static_cast<std::size_t>(kSize) * (kSize / 2) + kSize / 2]
+                                    .getRProperty());
+    };
+
+    const int dim = brightnessAt(-1.0f);
+    const int middle = brightnessAt(0.0f);
+    const int bright = brightnessAt(1.0f);
+
+    EXPECT_LT(dim, middle);
+    EXPECT_LT(middle, bright);
+    EXPECT_NEAR(static_cast<float>(dim) / 255.0f, 0.8f * 0.1f, 0.02f);
+    EXPECT_NEAR(static_cast<float>(bright) / 255.0f, 0.8f * 0.5f, 0.02f);
+    EXPECT_NEAR(static_cast<float>(middle) / 255.0f, 0.8f * 0.3f, 0.02f)
+        << "halfway through the volume is not halfway between its two probes";
+}
+
+TEST(ClusteredForwardEffectTest, AProbeAndAVolumeAreMutuallyExclusive)
+{
+    // Two sources of the same term would leave the answer depending on the order they were set in.
+    GraphicsDevice gd;
+    ClusteredForwardEffect effect(gd);
+
+    LightProbeVolumeEXT volume(BoundingBox(Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 1.0f, 1.0f)),
+                               2, 2, 2);
+    effect.setLightProbe(AmbientProbe(1.0f));
+    effect.setLightProbeVolume(&volume);
+    EXPECT_TRUE(effect.hasLightProbe());
+    effect.setLightProbeVolume(nullptr);
+    EXPECT_FALSE(effect.hasLightProbe())
+        << "the single probe was still there after a volume replaced it";
+
+    effect.setLightProbeVolume(&volume);
+    effect.setLightProbe(AmbientProbe(1.0f));
+    effect.clearLightProbe();
+    EXPECT_FALSE(effect.hasLightProbe())
+        << "the volume was still there after a single probe replaced it";
 }
 
 } // namespace

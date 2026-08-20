@@ -22,6 +22,8 @@ namespace CNA::Graphics {
 
     class AreaLightBrdfTable;
     class ClusteredLightBuffer;
+    class LightProbeEXT;
+    class LightProbeVolumeEXT;
     class PbrMaterialExtensions;
     struct ClusteredLightEXT;
 
@@ -200,6 +202,38 @@ namespace CNA::Graphics {
             const Microsoft::Xna::Framework::Vector3& attenuationColor, float attenuationDistance,
             float thickness);
 
+        /**
+         * @brief Lights the following draws' ambient from one probe instead of the flat term.
+         *
+         * **The ambient becomes per-draw, not per-pixel**, and that bound is the whole design.
+         * Evaluating a probe volume per fragment means fetching eight probes' twenty-seven
+         * coefficients each -- over two hundred texture reads for a term that is, by construction,
+         * the smoothest thing in the frame. One probe per object is what the smoothness buys, and
+         * what it costs is that a large object crossing a lighting boundary does not show the
+         * gradient across itself. Split such an object, or fall back to the flat ambient.
+         *
+         * @param probe The probe; typically `volume.sampleProbe(objectCentre)`.
+         */
+        void setLightProbe(const LightProbeEXT& probe);
+
+        /**
+         * @brief Lights the following draws from a volume, sampled at the object's own position.
+         *
+         * A convenience over @ref setLightProbe: `begin` samples the volume at the world matrix's
+         * translation, which is the object's origin. An object whose origin is not inside its own
+         * geometry -- a level chunk authored around the world origin, say -- wants
+         * @ref setLightProbe with a position it chooses.
+         *
+         * @param volume The volume, borrowed and not owned, or null to stop using one.
+         */
+        void setLightProbeVolume(const LightProbeVolumeEXT* volume);
+
+        /** @brief Returns whether a probe or a volume is supplying the ambient. */
+        [[nodiscard]] bool hasLightProbe() const;
+
+        /** @brief Stops using a probe or a volume, returning to the flat ambient term. */
+        void clearLightProbe();
+
         /** @brief Returns the ambient term added once per fragment. */
         [[nodiscard]] Microsoft::Xna::Framework::Vector3 getAmbient() const;
         /** @brief Sets the ambient term added once per fragment. @param value Linear, non-negative. */
@@ -282,6 +316,9 @@ namespace CNA::Graphics {
         std::unique_ptr<PbrMaterialExtensions> extensions_;
         Microsoft::Xna::Framework::Graphics::Texture2D* opaqueFrame_ = nullptr;
         float ior_ = 1.5f;
+
+        std::unique_ptr<LightProbeEXT> probe_;
+        const LightProbeVolumeEXT* probeVolume_ = nullptr;
     };
 
 /** @} */

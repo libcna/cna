@@ -8,6 +8,8 @@
 #include "CNA/Graphics/AreaLightShading.hpp"
 #include "CNA/Graphics/ClusteredLightBuffer.hpp"
 #include "CNA/Graphics/ClusteredLightEXT.hpp"
+#include "CNA/Graphics/LightProbeEXT.hpp"
+#include "CNA/Graphics/LightProbeVolumeEXT.hpp"
 #include "CNA/Graphics/PbrMaterialExtensions.hpp"
 #include "CNA/Graphics/ThinFilmIridescence.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AreaLightEXT.hpp"
@@ -213,6 +215,8 @@ out vec4 FragColor;
 uniform vec3  uCameraPosition;
 uniform vec3  uBaseColor;
 uniform vec3  uAmbient;
+uniform vec3  uProbeCoefficients[9];
+uniform float uHasProbe;
 uniform float uMetallic;
 uniform float uRoughness;
 
@@ -224,7 +228,14 @@ void main() {
     int cluster = cnaClusterFromNdc(ndc, vViewDistance);
     int count = cnaClusterLightCount(cluster);
 
-    vec3 diffuseSum = uAmbient * uBaseColor;
+    // The ambient: a probe where one was given, the flat term where none was. A probe carries
+    // irradiance, so the Lambertian surface reflects albedo/pi of it -- the flat term is the colour
+    // a surface *shows*, and the two are not interchangeable without that division.
+    vec3 ambient = uAmbient * uBaseColor;
+    if (uHasProbe > 0.5) {
+        ambient = cnaProbeIrradiance(uProbeCoefficients, normal) * uBaseColor / kCnaPi;
+    }
+    vec3 diffuseSum = ambient;
     diffuseSum += cnaAreaContribution(vWorldPosition, normal, viewDirection, uBaseColor, uMetallic,
                                       uRoughness);
     vec3 otherSum = vec3(0.0);
@@ -266,6 +277,7 @@ void main() {
             source += "const int kCnaMaxLightsPerFragment = " +
                       std::to_string(ClusteredForwardEffect::kMaxLightsPerFragment) + ";\n";
             source += ClusteredLightBuffer::getLightLookupGlsl();
+            source += LightProbeEXT::getEvaluationGlsl();
             source += ThinFilmIridescence::getGlsl();
             source += AreaLightBrdfTable::getLookupGlsl();
             source += AreaLightShading::getShadingGlsl();
@@ -316,6 +328,29 @@ void main() {
                                 cameraPosition.Z);
         effect_->SetUniformVec3("uBaseColor", baseColor_.X, baseColor_.Y, baseColor_.Z);
         effect_->SetUniformVec3("uAmbient", ambient_.X, ambient_.Y, ambient_.Z);
+
+        // The volume is sampled at the world matrix's translation, which is the object's origin.
+        const LightProbeEXT* activeProbe = probe_.get();
+        LightProbeEXT sampled;
+        if (probeVolume_ != nullptr)
+        {
+            sampled = probeVolume_->sampleProbe(Vector3(world.M41, world.M42, world.M43));
+            activeProbe = &sampled;
+        }
+        effect_->SetUniformFloat("uHasProbe", activeProbe != nullptr ? 1.0f : 0.0f);
+        if (activeProbe != nullptr)
+        {
+            float coefficients[LightProbeEXT::kCoefficientCount * 3];
+            for (int index = 0; index < LightProbeEXT::kCoefficientCount; ++index)
+            {
+                const Vector3 value = activeProbe->getCoefficient(index);
+                coefficients[index * 3 + 0] = value.X;
+                coefficients[index * 3 + 1] = value.Y;
+                coefficients[index * 3 + 2] = value.Z;
+            }
+            effect_->SetUniformVec3Array("uProbeCoefficients", coefficients,
+                                         LightProbeEXT::kCoefficientCount);
+        }
         effect_->SetUniformFloat("uMetallic", metallic_);
         effect_->SetUniformFloat("uRoughness", roughness_);
         effect_->SetUniformFloat("uClearcoat",
@@ -459,6 +494,29 @@ void main() {
 
     Texture2D* ClusteredForwardEffect::getOpaqueFrame() const { return opaqueFrame_; }
     void       ClusteredForwardEffect::setOpaqueFrame(Texture2D* frame) { opaqueFrame_ = frame; }
+
+    void ClusteredForwardEffect::setLightProbe(const LightProbeEXT& probe)
+    {
+        probe_ = std::make_unique<LightProbeEXT>(probe);
+        probeVolume_ = nullptr;
+    }
+
+    void ClusteredForwardEffect::setLightProbeVolume(const LightProbeVolumeEXT* volume)
+    {
+        probeVolume_ = volume;
+        if (volume != nullptr) probe_.reset();
+    }
+
+    bool ClusteredForwardEffect::hasLightProbe() const
+    {
+        return probe_ != nullptr || probeVolume_ != nullptr;
+    }
+
+    void ClusteredForwardEffect::clearLightProbe()
+    {
+        probe_.reset();
+        probeVolume_ = nullptr;
+    }
 
     Vector3 ClusteredForwardEffect::getAmbient() const { return ambient_; }
     void    ClusteredForwardEffect::setAmbient(const Vector3& value)
