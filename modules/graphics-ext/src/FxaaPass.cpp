@@ -79,6 +79,11 @@ void main() {
 
     } // namespace
 
+    std::string FxaaPass::getFragmentGlsl()
+    {
+        return std::string(kFragmentSource);
+    }
+
     FxaaPass::FxaaPass(GraphicsDevice& device)
         : fullscreen_(std::make_unique<FullscreenPass>(device))
     {

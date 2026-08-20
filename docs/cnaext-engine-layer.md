@@ -464,6 +464,19 @@ every value in the image is positive and the identical comparison evaluates corr
 without the rest of the estimator around it. Removing that one block from the shipped shader's
 emitted source — and nothing else — takes the half-float path from 0 darkened pixels to 669.
 
+**No other pass in the layer is exposed, and that was checked rather than assumed.** Of the sixteen
+early-outs in this layer's shaders, exactly one guards on a value sampled from a *float* target:
+FXAA's `if (lumaMax - lumaMin < uEdgeThreshold) { …; return; }`, which reads the HDR scene image. It
+filters identically with and without that block on `Color`, `HdrBlendable`, `Vector4` and
+`HalfSingle` — 1995 pixels changed in every case. The rest guard on the depth image (packed, by the
+policy above), on uniforms, or on the velocity image (`Color`).
+
+**And the finding does not generalise into a rule.** The obvious one — "do not guard before a
+sampling loop on a float target" — was tested and is false: a shader with exactly that structure,
+over a rendered image, behaves identically with and without the guard on all four formats. The
+trigger is narrower than any structural description of it, which is precisely why the layer's answer
+is a policy about *where depth lives* rather than a convention about how to write a shader.
+
 **So the policy stays and is not negotiable per renderer.** The layer cannot work around a
 mis-compiled branch without deleting a guard every pass needs, and packing costs nothing. Where a
 renderer one day proves it does not have the defect, `DepthEncoding::HalfFloat` is reachable through

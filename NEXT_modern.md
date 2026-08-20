@@ -230,6 +230,22 @@ every screen-space pass here begins with that guard on that read, so they all we
 The packing policy stays, now for a stated reason rather than an unexplained measurement — the layer
 cannot work around this without deleting a guard every pass needs.
 
+**The audit that follows is clean, and the finding refuses to become a rule.**
+`FloatTargetEarlyOutTests` asks the obvious next question — the layer reads `HdrBlendable` targets
+everywhere, so is any *other* pass silently doing nothing? Of the sixteen early-outs in this layer's
+shaders exactly one guards on a value sampled from a float target, FXAA's over the HDR scene image,
+and it filters identically with and without that block on all four formats (1995 pixels changed in
+every case). The rest guard on packed depth, on uniforms, or on the `Color` velocity image.
+
+Then the rule was attempted and failed. *Do not guard before a sampling loop on a float target* is
+the natural generalisation, and a shader built to exactly that shape behaves identically with and
+without the guard on `Color`, `HdrBlendable`, `Vector4` and `HalfSingle`. Two structural
+descriptions have now been tried — FXAA's guard-without-loop and this one's guard-with-loop — and
+neither is the trigger. The only thing that reproduces every time is the shipped estimator over a
+real half-float prepass depth image. That is why the layer's answer is a policy about where depth
+lives rather than a convention about how to write a shader, and the failed generalisation is kept as
+a test so nobody has to try it a second time.
+
 **One more thing worth keeping, because it nearly produced a second wrong closure.** A hand-written
 replica of the estimator reproduced the collapse, and then *stopped* reproducing it when unrelated
 arithmetic was simplified out of the same shader. Had the write-up been done at that moment it would
@@ -610,6 +626,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-20 | **`cmake-build-cnaext-release`** — the same tree at `-DCMAKE_BUILD_TYPE=Release`, at the Phase 21 boundary | Xvfb :99 | 8419 ran · 8351 pass · 68 skip · **0 fail** |
 | 2026-08-20 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`**, at the Phase 21 boundary: the layer compiles out and nothing it touched (`IGraphicsRenderer`, the EasyGL renderer, `TonemapPass`, `ColorGradePass`, `AtmosphericSky`) broke the build without it | Xvfb :99 | 7567 ran · 7505 pass · 62 skip · **0 fail** |
 | 2026-08-20 | `cmake-build-cnaext`, after **`MOD-2035`'s mechanism was found** — `DepthEncoding`, the diagnostic prepass constructor, `SsaoPass::getOcclusionGlsl`, and the four-case bisection | Xvfb :99 | 8423 ran · 8355 pass · 68 skip · **0 fail**; `ctest -R 'CNAEXT_'` **30/30** |
+| 2026-08-20 | same, after the `MOD-2035b` audit — `FxaaPass::getFragmentGlsl`, the format sweep, and the failed generalisation kept as a test | Xvfb :99 | 8425 ran · 8357 pass · 68 skip · **0 fail**; `ctest -R 'CNAEXT_'` **30/30** |
 
 `ctest -R 'CNAEXT_'` through all of §20.10: **24 of 25 pass**, the exception being `CNAEXT_Showcase`,
 which was `MOD-2035` and had been red since long before this section began. It is **25 of 25** after

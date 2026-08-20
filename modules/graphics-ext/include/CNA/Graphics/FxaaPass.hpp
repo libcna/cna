@@ -53,6 +53,18 @@ namespace CNA::Graphics {
          */
         void apply(const PostProcessContext& context) override;
 
+        /**
+         * @brief The pass's complete fragment source.
+         *
+         * plan_modern.md `MOD-2035b`. Emitted rather than duplicated, for the reason `MOD-2141`
+         * settled: a transcribed copy of a shader answers questions about a different shader. The
+         * audit that followed `MOD-2035` needs to run *this* filter with one block removed, and a
+         * replica would prove nothing about what the layer ships.
+         *
+         * @return The fragment shader source, `#version` line and all.
+         */
+        [[nodiscard]] static std::string getFragmentGlsl();
+
         /** @brief Returns `"FXAA"`. */
         [[nodiscard]] const std::string& getName() const override;
 
