@@ -188,6 +188,32 @@ namespace CNA::Internal::Renderers
      * returns 0 (no visible samples) or 1 (at least one visible sample), not an
      * exact pixel count. This matches FNA's behaviour on GLES3.
      */
+    /// plan_modern.md MOD-2163: a GPU-side elapsed-time query around a range of commands.
+    ///
+    /// Deliberately not an occlusion query with a different name. The two look alike and are not:
+    /// an occlusion query counts samples and is answered by the rasteriser, while this measures
+    /// wall-clock time *on the GPU* and needs `GL_EXT_disjoint_timer_query` on ES or GL 3.3 on the
+    /// desktop. A renderer without it must report false rather than substitute a CPU clock, because
+    /// a CPU number wearing a GPU name is worse than no number -- it is a measurement of when the
+    /// driver returned, which is exactly the thing GPU timing exists to see past.
+    class IGpuTimerRenderer
+    {
+    public:
+        virtual ~IGpuTimerRenderer() = default;
+
+        /// Starts the timed range. Only one may be open at a time on most implementations.
+        virtual void Begin() = 0;
+
+        /// Ends the timed range. The result becomes available asynchronously, usually a frame later.
+        virtual void End() = 0;
+
+        /// Whether the GPU has finished and the result can be read without stalling.
+        [[nodiscard]] virtual bool IsResultAvailable() const = 0;
+
+        /// The elapsed GPU time in nanoseconds, or zero when no result is available.
+        [[nodiscard]] virtual std::uint64_t ElapsedNanoseconds() const = 0;
+    };
+
     class IOcclusionQueryRenderer
     {
     public:
@@ -2101,6 +2127,16 @@ namespace CNA::Internal::Renderers
         /// them, which is why this is on the renderer rather than on a program.
         virtual void BindStorageBufferForDrawEXT(int /*binding*/,
                                                  const IStorageBufferRenderer& /*buffer*/) {}
+
+        /// plan_modern.md MOD-2163: whether this renderer can measure GPU time around a range of
+        /// commands. False by default, and false is the honest answer wherever the underlying API
+        /// has no timer query -- see IGpuTimerRenderer for why a CPU fallback is not offered.
+        [[nodiscard]] virtual bool SupportsGpuTimerEXT() const { return false; }
+
+        /// plan_modern.md MOD-2163: creates a GPU timer, or null where SupportsGpuTimerEXT() is
+        /// false. Null rather than a stub that returns zeroes, so a caller cannot mistake "no
+        /// timer here" for "this pass took no time".
+        virtual std::unique_ptr<IGpuTimerRenderer> CreateGpuTimerEXT() { return nullptr; }
 
         /// plan_modern.md MOD-1505: the dispatch limits this context guarantees, per axis
         /// (0 = x, 1 = y, 2 = z). Zero means "unknown or unsupported", which is what every

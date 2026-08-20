@@ -2117,6 +2117,83 @@ if (!ProfileIsEs2ApiGeneration())
 }
     }
 
+    // --- EasyGLGpuTimerRenderer ---
+
+    namespace {
+        // GL_TIME_ELAPSED. Not in metagl's QueryTarget, which is written to the ES 3.0 core set
+        // where the timer query is an extension rather than core. Cast once, here.
+        constexpr ::metagl::QueryTarget kTimeElapsed = static_cast<::metagl::QueryTarget>(0x88BF);
+    }
+
+    EasyGLGpuTimerRenderer::EasyGLGpuTimerRenderer(::easygl::ResourceRegistry* registry)
+        : registry_(registry)
+    {
+        create();
+        if (registry_) registry_->add(this);
+    }
+
+    EasyGLGpuTimerRenderer::~EasyGLGpuTimerRenderer()
+    {
+        if (registry_) registry_->remove(this);
+        if (created_ && !metagl::IsContextLost())
+        {
+            ::metagl::glDeleteQueries(1, &id_);
+        }
+    }
+
+    void EasyGLGpuTimerRenderer::create()
+    {
+        if (metagl::IsContextLost()) return;
+        ::metagl::glGenQueries(1, &id_);
+        created_ = id_.value != 0;
+    }
+
+    void EasyGLGpuTimerRenderer::Begin()
+    {
+        if (metagl::IsContextLost() || !created_ || open_) return;
+        ::metagl::glBeginQuery(kTimeElapsed, id_);
+        open_ = true;
+    }
+
+    void EasyGLGpuTimerRenderer::End()
+    {
+        if (metagl::IsContextLost() || !created_ || !open_) return;
+        ::metagl::glEndQuery(kTimeElapsed);
+        open_ = false;
+    }
+
+    bool EasyGLGpuTimerRenderer::IsResultAvailable() const
+    {
+        if (metagl::IsContextLost() || !created_ || open_) return false;
+        ::metagl::GLuint available = 0;
+        ::metagl::glGetQueryObjectuiv(id_, ::metagl::QueryObjectParameter::ResultAvailable,
+                                      &available);
+        return available != 0;
+    }
+
+    std::uint64_t EasyGLGpuTimerRenderer::ElapsedNanoseconds() const
+    {
+        if (!IsResultAvailable()) return 0;
+        ::metagl::GLuint nanoseconds = 0;
+        // 32-bit, because that is what metagl exposes: it saturates a little over 4.29 seconds.
+        // No pass this layer measures is within three orders of magnitude of that, and a caller
+        // that hits it has a hang rather than a measurement.
+        ::metagl::glGetQueryObjectuiv(id_, ::metagl::QueryObjectParameter::Result, &nanoseconds);
+        return static_cast<std::uint64_t>(nanoseconds);
+    }
+
+    void EasyGLGpuTimerRenderer::release_gl_handle_only()
+    {
+        id_ = ::metagl::QueryId{};
+        created_ = false;
+        open_ = false;
+    }
+
+    void EasyGLGpuTimerRenderer::recreate_gl_resource()
+    {
+        create();
+    }
+
     // --- EasyGLTextureRenderer ---
 
     EasyGLTextureRenderer::EasyGLTextureRenderer(const ImageData& data, ::easygl::ResourceRegistry* registry)
@@ -4299,6 +4376,31 @@ if (!ProfileIsEs2ApiGeneration())
         if (capabilities.is_opengles()) return capabilities.is_at_least(3, 1);
         if (capabilities.is_opengl()) return capabilities.is_at_least(4, 0);
         return false;
+    }
+
+    bool EasyGLRenderer::SupportsGpuTimerEXT() const
+    {
+        // Two different answers for two different APIs. Desktop GL has GL_TIME_ELAPSED in core from
+        // 3.3 (ARB_timer_query); ES has it only through GL_EXT_disjoint_timer_query, which many
+        // drivers -- software rasterisers in particular -- simply do not ship. Where it is absent
+        // the answer is false, and CNA::Graphics::GpuTimer refuses rather than handing back a CPU
+        // clock reading: the whole reason to measure on the GPU is that the CPU number is the time
+        // the driver took to *accept* the work.
+        const auto& capabilities = device.capabilities();
+        if (capabilities.is_webgl()) return false;
+        if (capabilities.is_opengles())
+            return ::metagl::HasExtension("GL_EXT_disjoint_timer_query");
+        if (capabilities.is_opengl())
+            return capabilities.is_at_least(3, 3)
+                || ::metagl::HasExtension("GL_ARB_timer_query")
+                || ::metagl::HasExtension("GL_EXT_timer_query");
+        return false;
+    }
+
+    std::unique_ptr<IGpuTimerRenderer> EasyGLRenderer::CreateGpuTimerEXT()
+    {
+        if (!SupportsGpuTimerEXT()) return nullptr;
+        return std::make_unique<EasyGLGpuTimerRenderer>(RegistryPtr());
     }
 
     bool EasyGLRenderer::SupportsComputeImageBindingEXT() const

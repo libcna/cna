@@ -122,6 +122,7 @@
 
 // ---- Materials -----------------------------------------------------------------------------
 #include "CNA/Graphics/GltfMaterialBridge.hpp"
+#include "CNA/Graphics/GpuTimer.hpp"
 #include "CNA/Graphics/MaterialBinding.hpp"
 #include "CNA/Graphics/PbrMaterial.hpp"
 #include "CNA/Graphics/PbrMaterialExtensions.hpp"

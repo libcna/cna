@@ -553,6 +553,33 @@ namespace CNA::Internal::Renderers::EasyGL
         ::easygl::ResourceRegistry* registry_ = nullptr;
     };
 
+    /// plan_modern.md MOD-2163. A GL_TIME_ELAPSED query, which metagl's QueryTarget does not name
+    /// because that enum is written to the ES 3.0 core set and the timer query is an extension
+    /// there. The target is therefore cast in one place, here, rather than the whole query object
+    /// being written against raw GL.
+    class EasyGLGpuTimerRenderer : public IGpuTimerRenderer, public ::easygl::RecoverableResource
+    {
+    public:
+        explicit EasyGLGpuTimerRenderer(::easygl::ResourceRegistry* registry);
+        ~EasyGLGpuTimerRenderer() override;
+
+        void Begin() override;
+        void End()   override;
+        [[nodiscard]] bool IsResultAvailable() const override;
+        [[nodiscard]] std::uint64_t ElapsedNanoseconds() const override;
+
+        void release_gl_handle_only() override;
+        void recreate_gl_resource()   override;
+
+    private:
+        void create();
+
+        ::metagl::QueryId id_{};
+        bool created_ = false;
+        bool open_    = false;
+        ::easygl::ResourceRegistry* registry_ = nullptr;
+    };
+
     class EasyGLSpriteBatchRenderer : public ISpriteBatchRenderer, public ::easygl::RecoverableResource
     {
     public:
@@ -1154,6 +1181,8 @@ namespace CNA::Internal::Renderers::EasyGL
         /// the same API generation as compute (GL ES 3.1, desktop GL 4.0) -- so the probe is the
         /// same runtime version question, asked separately because the two are separate promises.
         [[nodiscard]] bool SupportsIndirectDrawEXT() const override;
+        [[nodiscard]] bool SupportsGpuTimerEXT() const override;
+        std::unique_ptr<IGpuTimerRenderer> CreateGpuTimerEXT() override;
         [[nodiscard]] bool SupportsComputeImageBindingEXT() const override;
         [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const override;
         [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const override;
