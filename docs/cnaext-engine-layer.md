@@ -209,6 +209,10 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Indirect draws | ✅ GL ES ≥ 3.1 / GL ≥ 4.0, runtime-probed; both routes, including per-instance streams | ⬜ | ⬜ | ⬜ — `SupportsIndirectDrawEXT()` is false by default and `GraphicsDevice` refuses the draw naming the renderer |
 | GPU culling into an indirect draw | ✅ needs compute, indirect draw, executed effect source and a vertex-stage SSBO — all four probed | ⬜ | ⬜ | ⬜ — `GpuInstanceCuller` refuses and names the missing requirement; there is no fallback, because a CPU path would not remove the stall |
 | Particles | ✅ GPU simulation + instanced billboards | 🟨 CPU simulation and the stock-effect draw work anywhere | 🟨 same | 🟨 — `ParticleSystem` falls back to its CPU path and the same particles appear, more slowly |
+| Decals | ✅ needs the prepass and `CustomEffects` | ⬜ | ⬜ | ⬜ — `DecalPass` reports `isSupported()` false and draws nothing rather than washing the frame |
+| Spatial upscaling | ✅ | ⬜ | ⬜ | ⬜ — without executed effect source the pass copies its input through at the target size, which is the hardware stretch it was replacing |
+| Display colour space | 🟨 `Srgb` only — the encoding is complete, the swap chain is not | 🟨 same | 🟨 same | 🟨 — no CNA platform back end offers an HDR swap chain, so every renderer answers `Srgb` and refuses the rest |
+| Per-object velocity | ✅ opt-in; a third target with MRT, a third pass without | ⬜ | ⬜ | ⬜ — off by default everywhere, and motion blur stays camera-only, which is what it was before |
 
 **Asking a renderer what it will actually do.** Three questions, and they are not the same question:
 
