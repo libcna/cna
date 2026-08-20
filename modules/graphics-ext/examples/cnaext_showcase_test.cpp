@@ -68,6 +68,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
@@ -477,6 +478,29 @@ protected:
             }
         };
 
+        // MOD-2035. The prepass is NOT `drawScene()`. `begin()` selects the prepass program and
+        // sets its uniforms, and `drawScene()` immediately calls `Apply()` on the scene's own
+        // effects -- so every draw replaced it, and the "depth" target ended up holding the shaded
+        // frame's red channel. SSAO then compared shading against shading, which produces a weak,
+        // plausible term everywhere instead of occlusion at contacts, and that is what check E was
+        // measuring. The geometry is the same; only the effect differs.
+        //
+        // The instanced field is deliberately absent: the prepass program takes its world matrix
+        // from a uniform and has no per-instance variant, so every cube would land at the origin.
+        // It sits in the back half of the ground and is not what check E measures, and a cube pile
+        // written into the depth image at one point would be worse than its absence.
+        auto drawPrepassGeometry = [&] {
+            ShaderEffect* prepassEffect = prepass.getPrepassEffect();
+            if (prepassEffect == nullptr || !prepassEffect->IsEffectValid()) return;
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::Default);
+            device.setBlendStateProperty(BlendState::Opaque);
+            prepassEffect->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList, ground.data(), 0, 2);
+            prepassEffect->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList, box.data(), 0, 12);
+        };
+
         auto renderVariant = [&](bool wantPipeline) {
             if (!wantPipeline)
             {
@@ -495,7 +519,7 @@ protected:
                     for (int pass = 0; pass < prepass.getPassCount(); ++pass)
                     {
                         prepass.begin(pass, View(), Projection(), 1.0f, 120.0f);
-                        drawScene();
+                        drawPrepassGeometry();
                         prepass.end();
                     }
                     pipeline.setDepthNormalInputs(prepass.getDepthTexture(),
@@ -516,6 +540,14 @@ protected:
             settings.setHDREnabled(true);
             settings.setBloomEnabled(true);
             settings.setSSAOEnabled(true);
+            // MOD-2035's second defect: the example never set a radius, so the 0.5 default applied
+            // half the frame as a UV offset -- and with a correct depth image that darkens 23 994
+            // pixels at all and 2 564 of them strongly, which is a global dimmer wearing AO's name.
+            // 0.25 darkens 3 736 and 1 021, a bounded contact region. Narrower is not better here:
+            // this estimator's radius is a UV offset compared against normalized depths, so at
+            // 0.06 the samples land too near the centre to clear the bias and the term vanishes
+            // entirely. The usable range on this scene is roughly 0.15 to 0.5.
+            settings.setSSAORadius(0.25f);
             settings.setFXAAEnabled(true);
             settings.setShadowsEnabled(true);
             settings.setTonemappingMode(TonemappingMode::Aces);

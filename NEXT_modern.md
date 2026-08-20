@@ -109,10 +109,25 @@ exactly behind a surface, an `isfinite` guard that let cgltf's `FLT_MAX` sentine
 zero-thickness thin film that was not quite the material without it. **None of those produced a
 broken frame.** Every one produced a plausible one.
 
-Two rows stay deliberately
-open rather than closed: `MOD-2033` (per-object velocity — an obligation on the application, not
-something the layer can supply) and `MOD-2035`, which is the one red gate, `CNAEXT_Showcase`, and
-whose cause is bisected to EasyGL's half-float render target rather than to anything in the pass.
+**`MOD-2035` is closed, and the recorded bisection was wrong.** For several sessions the one red
+gate, `CNAEXT_Showcase` check E, was attributed to EasyGL's half-float render target on four
+independent measurements. That hypothesis no longer reproduces — the four targets differing only in
+surface format now occlude within 12% of each other — and the real cause was in the example: it drove
+the depth/normal prepass with `drawScene()`, whose every draw calls `Apply()` on the scene's own
+effects and so replaced the prepass program `begin()` had just selected. The "depth" target held the
+shaded frame's red channel, and SSAO compared shading against shading, which produces a weak
+plausible term everywhere instead of occlusion at contacts. Driving the prepass with the prepass
+effect took check E from **2 strongly-occluded pixels to 1 021**, and the gate from 7/8 to **8/8**.
+The bisection test is kept and rewritten to assert the opposite of what it once documented, which is
+the cheapest guard against the symptom returning. **Every `CNAEXT_` gate is green.**
+
+The lesson is the one this ledger keeps writing down in different words: four measurements agreeing
+is not the same as a cause. The format comparison was real and repeatable, and it was measuring a
+consequence — a depth image that was never depth in the first place makes *every* downstream
+difference look like the variable you happened to vary.
+
+One row stays deliberately open rather than closed: `MOD-2033` (per-object velocity — an obligation
+on the application, not something the layer can supply).
 A third bound is recorded in `MOD-2090`'s row rather than left as a surprise: CNA's only indirect
 argument buffer is a `StorageBuffer`, which is an SSBO and needs ES 3.1 / GL 4.3, while the indirect
 draw itself needs only GL 4.0 — so on a desktop context between 4.0 and 4.2 the capability
@@ -433,10 +448,12 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-20 | same, after `MOD-2091` (GPU culling into an indirect draw) | Xvfb :99 | 8255 ran · 8190 pass · 65 skip · **0 fail** |
 | 2026-08-20 | same, after `MOD-2094` (decals) and `MOD-2095` (particles) | Xvfb :99 | 8275 ran · 8210 pass · 65 skip · **0 fail** |
 | 2026-08-20 | same, after `MOD-2092` (HDR display output) — **§20.10 complete** | Xvfb :99 | 8286 ran · 8221 pass · 65 skip · **0 fail** |
+| 2026-08-20 | `cmake-build-cnaext`, after closing `MOD-2035` — **every `CNAEXT_` gate green for the first time (25/25)** | Xvfb :99 | 8286 ran · 8221 pass · 65 skip · **0 fail** |
 | 2026-08-20 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`**, re-verified after all of §20.10 touched `GraphicsDevice`, `IGraphicsRenderer`, `GraphicsCapability` and the EasyGL renderer | Xvfb :99 | 7567 ran · 7504 pass · 62 skip · **1 fail** — `TwoProcessLoopbackTest.HostMigration…`, which passes on its own in 715 ms and times out at 30 s under full-suite load: the fourth instance of the load-induced failures §3 already describes, and nothing to do with this work (it spawns two processes and speaks UDP) |
 
 `ctest -R 'CNAEXT_'` through all of §20.10: **24 of 25 pass**, the exception being `CNAEXT_Showcase`,
-which is `MOD-2035` and was already red before this section began.
+which was `MOD-2035` and had been red since long before this section began. It is **25 of 25** after
+`MOD-2035` was closed (2026-08-20) — see §1 for what the cause turned out to be.
 
 The `CNA_CNAEXT=OFF` row is the one that answers "can this break what already works". It configures,
 builds and passes with the whole engine layer compiled out. Its lower test count is expected and not

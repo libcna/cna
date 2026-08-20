@@ -283,34 +283,31 @@ TEST(SsaoFromRealPrepassTest, TheSameStepOccludesFromATextureAndFromARenderTarge
         << "the identical values occlude from a texture and not from a render target";
 }
 
-TEST(SsaoFromRealPrepassTest, TheSurfaceFormatOfTheDepthImageIsWhatDecidesWhetherSsaoWorks)
+TEST(SsaoFromRealPrepassTest, EveryDepthImageFormatOccludesTheSame)
 {
-    // plan_modern.md MOD-2035. The bisection, not the fix.
+    // plan_modern.md MOD-2035, rewritten when the answer arrived.
     //
-    // SSAO produces **no occlusion at all** from the prepass's own depth target, at any radius, on
-    // a scene built to produce it -- a slab standing on a floor, which is the depth discontinuity
-    // the estimator reacts to. That is why `CNAEXT_Showcase`'s check E sat at zero and why no unit
-    // test noticed: every other SSAO test feeds images built by hand.
+    // This test was built to pin a bisection: SSAO appeared to produce no occlusion at all from a
+    // half-float depth target while producing plenty from an 8-bit one, and the surface format was
+    // the only variable that separated them. **That no longer reproduces.** The same four targets
+    // now occlude within 12% of each other, and the difference that remains is the 8-bit target's
+    // quantisation, which is the difference one would expect.
     //
-    // The same values, copied through a shader into four targets that differ only in how they were
-    // made, separate the variable completely:
+    //   Color      + no depth attachment -> 2052 darkened
+    //   Color      + Depth24             -> 2052
+    //   HalfSingle + Depth24             -> 2304
+    //   HalfSingle + no depth attachment -> 2304
     //
-    //   Color      + no depth attachment -> occludes
-    //   Color      + Depth24             -> occludes
-    //   HalfSingle + Depth24             -> nothing
-    //   HalfSingle + no depth attachment -> nothing
+    // What check E of `CNAEXT_Showcase` was actually measuring was not a format at all: the example
+    // drove the prepass with `drawScene()`, and that lambda calls `Apply()` on the scene's own
+    // effects -- so every draw replaced the prepass program `begin()` had just selected, and the
+    // "depth" target held the shaded frame's red channel. SSAO then compared shading against
+    // shading, which yields a weak plausible term everywhere instead of occlusion at contacts.
+    // Driving the prepass with the prepass effect takes check E from 2 strongly-occluded pixels to
+    // 1 021, and the gate from 7/8 to 8/8.
     //
-    // So it is the **surface format**, and the depth attachment is irrelevant. Also ruled out, each
-    // by a test or a probe: the depth image's contents; a render target versus a plain texture; the
-    // order the two are measured in; the extra sampler units the pass binds; the prepass normals
-    // versus synthetic ones; `textureLod` versus `texture`; and -- the one that makes this odd --
-    // reading the depth *works*, both at a pixel centre and at an offset, when the shader is made
-    // to output it. Something about a one-channel half-float source defeats the sample loop while
-    // leaving direct reads intact, and that is where this stops: it is renderer-level behaviour,
-    // not a mistake in the estimator.
-    //
-    // Only the working formats are asserted. A test that pinned the broken one would have to be
-    // deleted to fix it.
+    // The test is kept, and now asserts what it once could not: that the format does **not** decide
+    // this. It is the cheapest guard against the original symptom returning.
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -398,7 +395,7 @@ void main() { float d = cnaDecodeLinearDepth(texture(texture1, TexCoord)); FragC
                 fromEightBit, fromPrepass, fromLikeThePrepass, fromFloatNoDepth, fromColorWithDepth);
 
     EXPECT_GT(fromEightBit, 0)
-        << "the scene produces no occlusion even from an 8-bit depth image, so the bisection above "
+        << "the scene produces no occlusion even from an 8-bit depth image, so this test's premise "
         << "no longer holds and MOD-2035 needs re-establishing from the start";
     EXPECT_EQ(eightBitAfter, fromEightBit)
         << "the same 8-bit image gave a different answer depending on when it was measured, so the "
@@ -406,6 +403,20 @@ void main() { float d = cnaDecodeLinearDepth(texture(texture1, TexCoord)); FragC
     EXPECT_GT(fromColorWithDepth, 0)
         << "a depth attachment on an otherwise working target broke it, which would move the "
         << "variable from the format to the attachment";
+    EXPECT_GT(fromPrepass, 0)
+        << "the prepass's own depth target occludes nothing, which is the original MOD-2035 symptom";
+    if (floatTargets)
+    {
+        // The two assertions this test was originally unable to make.
+        EXPECT_GT(fromLikeThePrepass, 0)
+            << "a half-float depth target occludes nothing while an 8-bit one does, which is the "
+            << "format-dependent behaviour MOD-2035 was opened for";
+        EXPECT_GT(fromFloatNoDepth, 0);
+        EXPECT_NEAR(static_cast<double>(fromLikeThePrepass), static_cast<double>(fromEightBit),
+                    static_cast<double>(fromEightBit) * 0.25)
+            << "the two formats no longer agree to within quantisation, so something has started "
+            << "to depend on the depth image's format again";
+    }
 }
 
 } // namespace
