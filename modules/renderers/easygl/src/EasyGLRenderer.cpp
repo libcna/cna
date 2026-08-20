@@ -11,7 +11,8 @@ namespace CNA::Internal::Renderers::EasyGL
         // profile themselves, so a guard converts to a one-line condition with no plumbing through
         // the many free helpers this file is built from.
         //
-        // threeissues.md finding 1, FIXED: ProfileIsEs2ApiGeneration() covers OPENGLES2 AND WEBGL1.
+        // The runtime-renderer audit found that ProfileIsEs2ApiGeneration() must cover OPENGLES2
+        // AND WEBGL1.
         //
         // It used to reproduce `#if defined(CNA_GL_PROFILE_OPENGLES2)` exactly, excluding WEBGL1 --
         // faithful to the compile-time guards, and wrong. Every remaining use guards an ES 2.0
@@ -1121,7 +1122,10 @@ if (ProfileIsDesktopCore())
         // toggle. Not exposed by meta-gl's typed Capability enum (GLES/WebGL have no equivalent
         // constant at all, so meta-gl never needed to expose it), so loaded and called directly
         // via a runtime function pointer, matching this project's own "no static libGL linkage"
-        // convention (meta-gl itself loads every GL entry point the same way).
+        // convention (meta-gl itself loads every GL entry point the same way). Every stock vertex
+        // shader below therefore writes gl_PointSize explicitly: once this state is enabled, its
+        // value is undefined when a shader omits the write, and real desktop drivers may rasterize
+        // no point at all while llvmpipe happens to retain the 1-pixel default.
         void EnableVertexProgramPointSize()
         {
             using GlEnableFn = void (*)(unsigned int);
@@ -6460,10 +6464,28 @@ else
 
     namespace
     {
+        [[nodiscard]] std::string DefineStockPointSize(const char* source)
+        {
+            std::string result(source);
+            if (result.find("gl_PointSize") != std::string::npos)
+                return result;
+
+            const std::size_t position = result.find("gl_Position");
+            if (position == std::string::npos)
+                return result;
+
+            const std::size_t terminator = result.find(';', position);
+            if (terminator != std::string::npos)
+                result.insert(terminator + 1, "\n    gl_PointSize=1.0;");
+            return result;
+        }
+
         void CompileAndLink(::easygl::Program& prog, const char* vsrc, const char* fsrc,
                             const char* label)
         {
-            const std::string adaptedVsrc = AdaptGlslEs300ForActiveProfile(vsrc, GlShaderStageKind::Vertex);
+            const std::string definedVsrc = DefineStockPointSize(vsrc);
+            const std::string adaptedVsrc =
+                AdaptGlslEs300ForActiveProfile(definedVsrc.c_str(), GlShaderStageKind::Vertex);
             const std::string adaptedFsrc = AdaptGlslEs300ForActiveProfile(fsrc, GlShaderStageKind::Fragment);
 
             ::easygl::Shader vs(::easygl::ShaderType::Vertex);

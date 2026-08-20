@@ -31,6 +31,8 @@ using CNA::Internal::Renderers::IGraphicsRenderer;
 using CNA::Internal::Renderers::RendererSurfaceInfo;
 using CNA::Internal::Renderers::EasyGL::EasyGLRenderer;
 using CNA::Internal::Renderers::EasyGL::EasyGLSurfaceState;
+using CNA::Internal::Renderers::EasyGL::UsesEs2ApiGeneration;
+using EasyGlProfile = CNA::Internal::Renderers::EasyGL::GlProfile;
 using namespace CNA::Platform;
 
 class FakeGlContext final : public IPlatformGlContext
@@ -94,6 +96,15 @@ RendererSurfaceInfo Surface(const WindowId id = 42, const int width = 64,
     result.drawableSize = {width, height};
     result.displayScale = scale;
     return result;
+}
+
+TEST(EasyGLProfile, Es2ApiGenerationIncludesWebGl1)
+{
+    EXPECT_TRUE(UsesEs2ApiGeneration(EasyGlProfile::OpenGLES2));
+    EXPECT_TRUE(UsesEs2ApiGeneration(EasyGlProfile::WebGL1));
+    EXPECT_FALSE(UsesEs2ApiGeneration(EasyGlProfile::OpenGLES3));
+    EXPECT_FALSE(UsesEs2ApiGeneration(EasyGlProfile::OpenGL33));
+    EXPECT_FALSE(UsesEs2ApiGeneration(EasyGlProfile::WebGL2));
 }
 
 TEST(EasyGLRendererConstructor, FailedContextCreationLeavesNoDanglingRegistryEntry)

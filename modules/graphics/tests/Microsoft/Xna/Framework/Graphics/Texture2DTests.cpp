@@ -606,10 +606,10 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             || format == SurfaceFormat::NormalizedByte2
             || format == SurfaceFormat::NormalizedByte4
             || format == SurfaceFormat::HdrBlendable
-            // threeissues.md finding 5: the block-compressed formats belong here. This list used to
-            // omit them while SkiaRenderer accepted them, so the two halves of the contract
-            // contradicted each other and this loop failed on SKIA for as long as both had their
-            // current contents.
+            // The renderer-selection audit found that the block-compressed formats belong here.
+            // This list used to omit them while SkiaRenderer accepted them, so the two halves of
+            // the contract contradicted each other and this loop failed on SKIA for as long as both
+            // had their current contents.
             //
             // The implementation is the half that is right, and that was checked rather than
             // assumed: SkiaTextureRenderer.cpp carries IsCompressedTextureFormat, the correct block

@@ -155,39 +155,16 @@ namespace CNA::Internal::Renderers::EasyGL
     }
 
     /**
-     * @brief OpenGLES2 only, EXCLUDING WebGL1 -- retained for callers that genuinely mean that.
+     * @brief Reports whether a profile uses the OpenGL ES 2.0 API generation.
      *
-     * threeissues.md finding 1: every caller in EasyGLRenderer.cpp used to use this, and every one
-     * of them was wrong to. They guard ES 2.0 API-generation limitations -- no GL_READ_FRAMEBUFFER,
-     * no sized RGBA8, no glDrawElementsBaseVertex, no glDrawElementsInstanced -- and WebGL 1 has
-     * every one of those limitations too, so a WEBGL1 build took the ES 3.0 path and called entry
-     * points its context does not have. They now use UsesEs2ApiGeneration().
-     *
-     * This remains only for a caller that means "OpenGLES2 and not WebGL1" for a reason it can
-     * state. If a use appears without such a reason, it is almost certainly the same bug again.
+     * WebGL 1 shares the relevant API limits with OpenGL ES 2.0: neither has separate read
+     * framebuffers, sized RGBA8 texture storage, base-vertex draws, or core instanced draws.
      *
      * @param profile The profile to test.
-     * @return true only for OpenGLES2.
-     */[[nodiscard]] constexpr bool UsesEs2ApiGeneration(GlProfile profile)
+     * @return true for OpenGLES2 and WebGL1.
+     */
+    [[nodiscard]] constexpr bool UsesEs2ApiGeneration(GlProfile profile)
     {
         return profile == GlProfile::OpenGLES2 || profile == GlProfile::WebGL1;
-    }
-
-    /**
-     * @brief The ES 2.0 API-generation test as the compile-time guards actually spelled it.
-     *
-     * Returns true for OpenGLES2 only, NOT for WebGL1 -- reproducing exactly what
-     * `#if defined(CNA_GL_PROFILE_OPENGLES2)` did at 44 sites. See UsesEs2ApiGeneration() for why
-     * that is suspicious and why it is nonetheless preserved here.
-     *
-     * Every use of this predicate is a candidate for switching to UsesEs2ApiGeneration() once
-     * WEBGL1 has been run against those paths in a browser and the difference is understood.
-     *
-     * @param profile The profile.
-     * @return true only for OpenGLES2.
-     */
-    [[nodiscard]] constexpr bool UsesEs2ApiGenerationLegacyEXT(GlProfile profile)
-    {
-        return profile == GlProfile::OpenGLES2;
     }
 }

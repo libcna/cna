@@ -83,7 +83,7 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // plans/plan_runtimerenderer.md RTR-P9-4: evaluated at runtime, so these describe the ACTIVE renderer
 // rather than the build default.
 //
-// FINDING while converting this, preserved rather than fixed here: PORTABLEGL was silently NOT in
+// A follow-up to the conversion fixed this: PORTABLEGL was silently NOT in
 // the list below. The preceding OPENVG explanation was a `//` comment whose last line ended in a
 // backslash, so the preprocessor continued the COMMENT onto the following
 // `defined(CNA_RENDERER_PORTABLEGL)` line and swallowed it -- verified with a minimal preprocessor
