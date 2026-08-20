@@ -209,6 +209,8 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Indirect draws | ✅ GL ES ≥ 3.1 / GL ≥ 4.0, runtime-probed; both routes, including per-instance streams | ⬜ | ⬜ | ⬜ — `SupportsIndirectDrawEXT()` is false by default and `GraphicsDevice` refuses the draw naming the renderer |
 | GPU culling into an indirect draw | ✅ needs compute, indirect draw, executed effect source and a vertex-stage SSBO — all four probed | ⬜ | ⬜ | ⬜ — `GpuInstanceCuller` refuses and names the missing requirement; there is no fallback, because a CPU path would not remove the stall |
 | Particles | ✅ GPU simulation + instanced billboards | 🟨 CPU simulation and the stock-effect draw work anywhere | 🟨 same | 🟨 — `ParticleSystem` falls back to its CPU path and the same particles appear, more slowly |
+| Transparency (sorted) | ✅ ordering is renderer-free; the phase needs only a scene target | ✅ | ✅ | ✅ — `TransparentDrawList` is plain arithmetic and runs everywhere |
+| Transparency (order-independent) | ✅ needs MRT, a half-float target and executed effect source | ⬜ | ⬜ | ⬜ — the pipeline falls back to the sorted phase and names the missing requirement |
 | Decals | ✅ needs the prepass and `CustomEffects` | ⬜ | ⬜ | ⬜ — `DecalPass` reports `isSupported()` false and draws nothing rather than washing the frame |
 | Spatial upscaling | ✅ | ⬜ | ⬜ | ⬜ — without executed effect source the pass copies its input through at the target size, which is the hardware stretch it was replacing |
 | Display colour space | 🟨 `Srgb` only — the encoding is complete, the swap chain is not | 🟨 same | 🟨 same | 🟨 — no CNA platform back end offers an HDR swap chain, so every renderer answers `Srgb` and refuses the rest |
@@ -905,6 +907,60 @@ they are tonemapped and graded with everything else.
 **Cost is one fullscreen pass per decal**, which is what a screen-space projection costs when it is
 not batched. `DecalPass::isInsideDecalBox` is offered as a plain static so a game can decide whether
 a decal is worth drawing at all before spending one.
+
+### Transparency, and choosing between two answers
+
+`plan_modern.md` `MOD-2101`–`MOD-2110`. Until Phase 21 the layer had no transparency story at all,
+and said so: `MaterialBinding.hpp` read *"Draw order still belongs to the application: CNA does not
+sort."* Every subsystem before it assumes opaque geometry, because the depth prepass writes one depth
+per pixel and SSAO, SSR, fog and motion blur all reconstruct from that one depth.
+
+There are now two answers, and they fail in different directions.
+
+```cpp
+pipeline.getSettings().setTransparencyMode(CNA::Graphics::TransparencyMode::Sorted);
+pipeline.setTransparentScene([&] {
+    transparent.clear();
+    for (const auto& pane : windows)
+        transparent.submit(pane.worldBounds, [&pane] { pane.draw(); });
+    transparent.drawSorted(view);
+});
+```
+
+**`Sorted` is exact, and it has one case with no answer at all.** `TransparentDrawList` orders draws
+back to front, which composites correctly for surfaces that do not interpenetrate. Two intersecting
+panes have no correct order — neither is wholly in front of the other — and no per-object sort can
+invent one. It sorts by the **nearest point** of an object's bounds rather than by its centre,
+because a long object crossing a short one has a distant centre and a near end.
+
+**`OrderIndependent` cannot be got wrong by ordering, and is approximate everywhere.** Weighted
+blended transparency accumulates every surface with a depth-derived weight and resolves once;
+submitting in any order gives the same frame, measured at within 1/255 where plain alpha blending on
+the same pair differs by 57. Your transparent shader writes through
+`WeightedBlendedTransparency::getAccumulationGlsl()` instead of writing `FragColor`.
+
+**How to choose, in one line each.** Few large surfaces at very different depths → `Sorted`; the
+approximation is worst exactly there, and against the exact frame it can differ by 142/255
+(`docs/cnaext-perf.md`). Many small overlapping surfaces at similar depths, or anything that
+interpenetrates → `OrderIndependent`, which is where sorting is hardest and the approximation is
+closest. Order independence costs about **1.75× per surface**, which is the price of writing two
+render targets instead of one, plus a fixed full-screen resolve.
+
+**Neither can refract through the other.** `PbrMaterialExtensions`' transmission samples the opaque
+frame, which by definition does not contain the transparent surfaces — so a transparent object seen
+*through* another transparent object is composited, never refracted. That is a boundary of both
+paths, not a gap in one.
+
+**The phase runs inside the frame, not after it.** It draws into the same target the opaque half did,
+so transparent geometry is tonemapped and graded with everything else. Depth is **tested and not
+written**, which is what lets a transparent surface be hidden by opaque geometry in front of it
+without hiding the transparent ones behind it.
+
+**It is off by default.** `TransparencyMode::None` renders exactly the frame this pipeline rendered
+before any of this existed, even with a transparent draw registered. Where `OrderIndependent` is
+asked for and the renderer lacks multiple render targets, a half-float target or executed effect
+source, the pipeline **falls back to `Sorted` and names the missing requirement** through
+`getTransparencyFallbackReasonEXT` rather than quietly drawing a different way.
 
 ### Particles
 

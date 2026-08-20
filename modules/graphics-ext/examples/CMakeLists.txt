@@ -194,6 +194,12 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_register_renderer_test(NAME CNAEXT_GpuDriven COMMAND cna_test_cnaext_gpu_driven
         TIMEOUT 180 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_modern.md MOD-2108: the two transparency paths measured against each other, and the
+    # order-independence claim checked end to end.
+    cna_graphics_ext_test(cna_test_cnaext_transparency cnaext_transparency_test.cpp)
+    cna_register_renderer_test(NAME CNAEXT_Transparency COMMAND cna_test_cnaext_transparency
+        TIMEOUT 180 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_graphics_ext_test(cna_test_cnaext_caps cnaext_caps_probe.cpp)
 
     cna_graphics_ext_test(cna_test_cnaext_ssao cnaext_ssao_test.cpp)

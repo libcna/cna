@@ -390,6 +390,42 @@ should make it the other way from a game with a smoke column.
 which is most of what the upscale and the sRGB display output measure; the numbers worth taking from
 those rows are the *differences* above that floor, not the totals.
 
+## Transparency
+
+`plan_modern.md` `MOD-2108`. Source: `cna_test_cnaext_transparency --benchmark`, at 256×256, each
+surface covering a quarter of the frame. Two runs; the spread between them is under 0.5 ms.
+
+| What | Measurement |
+|---|---|
+| 8 surfaces, sorted alpha blending | 1.48 – 1.67 ms |
+| 8 surfaces, order-independent | 2.86 – 2.93 ms |
+| 64 surfaces, sorted alpha blending | 7.00 – 7.17 ms |
+| 64 surfaces, order-independent | 11.94 – 12.48 ms |
+| The order-independent fixed overhead alone (no surfaces) | 1.30 – 1.83 ms |
+
+**Order independence costs about 1.75× per surface, and the ratio does not improve with count.**
+The marginal cost of one more surface is ≈0.098 ms sorted and ≈0.171 ms order-independent — which is
+what writing two render targets per fragment instead of one costs, and it is a bandwidth ratio rather
+than an overhead that amortises. On top of that sits a fixed ≈1.3–1.8 ms: two full-screen clears and
+one full-screen resolve, paid whether one surface was drawn or a thousand. At eight surfaces that
+fixed part is half the difference; at sixty-four it is a sixth.
+
+**The sort is not the cost.** `TransparentDrawList` sorts 64 entries on the CPU inside the measured
+loop, and the sorted path is still the cheaper of the two by a factor that tracks fill rate exactly.
+
+### How approximate is the approximation
+
+Sorted alpha blending is *exact* for surfaces that do not interpenetrate, so it is a reference the
+other path can be measured against rather than merely described against. On the same eight surfaces
+spread across 2 to 60 units of depth, weighted blending differs from the exact frame by **35/255 on
+average and 142/255 at worst**, over 40 708 covered pixels.
+
+That is a large deviation, and it is the failure mode the technique is known for rather than a
+defect: the weight is a function of depth alone, so a stack of surfaces at *very different* depths
+reads flatter than it should — the near ones do not dominate as strongly as true compositing would make
+them. This scene is close to the worst case for it. Where the surfaces are at similar depths, which
+is where sorting is hardest to get right, the two agree closely.
+
 ## Not measured yet
 
 **Corrected 2026-08-19 (`MOD-1906`).** This section used to say bloom, tonemapping, SSAO and FXAA
