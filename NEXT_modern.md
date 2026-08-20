@@ -40,8 +40,22 @@ that last one **refused as redundant rather than unreachable**, since its diffus
 `LightProbeVolumeEXT` already gives without screen space's failure modes.
 
 **Phase 21 progress.** §21.1 transparency (`MOD-2101`–`MOD-2110`), §21.2 contact shadows
-(`MOD-2120`–`MOD-2123`), §21.3 grading and output (`MOD-2130`–`MOD-2133`) and §21.4 aerial
-perspective (`MOD-2140`–`MOD-2142`) are done; §21.5 debug drawing and GPU timing remains.
+(`MOD-2120`–`MOD-2123`), §21.3 grading and output (`MOD-2130`–`MOD-2133`), §21.4 aerial perspective
+(`MOD-2140`–`MOD-2142`) and §21.5 debug drawing and GPU timing (`MOD-2160`–`MOD-2165`) are all done.
+**Phase 21 is complete**, every row verdicted, §21.6's four refusals included.
+
+**§21.5 is the phase's most useful section and its three lessons are all about measurement.**
+`GL_EXT_disjoint_timer_query` turned out to be *present* on this machine, so GPU timing is real here
+rather than a refusal path with tests around it. Then three things went wrong in a row, each of them
+the measurement rather than the code. Timing ten `Clear` calls against a hundred made the hundred
+come back faster, because a driver may collapse repeated full-target clears — a workload the driver
+can optimise away measures the optimiser. Collecting per-pass results *after* the chain ran reported
+a number for the first pass and zero samples for every pass after it, forever: a query object holds
+one result, and reopening it discards what the last range put there, so the poll must come before the
+frame's ranges open. And the whole point of `MOD-2165` inverted: the GPU total was expected to come
+out *below* the CPU wall clock and it does not — the two agree to within 2–6%, because a software
+rasteriser has no asynchrony for a CPU clock to miss. That validates the existing table **on this
+machine** and says nothing about a real GPU, which is what the doc now says.
 
 **§21.4's test found the physics rather than a bug.** The far-end claim — that a surface distant
 enough is *replaced* by the sky the same model draws — was written as "a black surface and a white
@@ -566,6 +580,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-20 | same, after **Phase 21 §21.2 complete** (contact shadows) | Xvfb :99 | 8340 ran · 8275 pass · 65 skip · **0 fail**; `ctest -R 'CNAEXT_'` **28/28** |
 | 2026-08-20 | same, after **Phase 21 §21.3 complete** (`.cube` grading, the interpolation decision, debanding dither) | Xvfb :99 | 8367 ran · 8301 pass · 66 skip · **0 fail**; `ctest -R 'CNAEXT_'` **29/29** |
 | 2026-08-20 | same, after **Phase 21 §21.4 complete** (aerial perspective) | Xvfb :99 | 8381 ran · 8316 pass · 65 skip · **0 fail**; `ctest -R 'CNAEXT_'` **29/29** |
+| 2026-08-20 | same, after **Phase 21 §21.5 complete** (`DebugDraw`, gizmos, `GpuTimer`, per-pass timings, the GPU-timed perf table) — **Phase 21 complete** | Xvfb :99 | 8419 ran · 8351 pass · 68 skip · **0 fail**; `ctest -R 'CNAEXT_'` **30/30** |
 
 `ctest -R 'CNAEXT_'` through all of §20.10: **24 of 25 pass**, the exception being `CNAEXT_Showcase`,
 which was `MOD-2035` and had been red since long before this section began. It is **25 of 25** after

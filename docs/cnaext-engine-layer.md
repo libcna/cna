@@ -217,6 +217,8 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Tetrahedral LUT interpolation, volume LUTs | ✅ needs executed effect source; the volume layout also needs `GraphicsCapability::Texture3D` | ⬜ | ⬜ | ⬜ — where the shader is not run the grade copies its input through, exactly as it did before |
 | Debanding dither | ✅ needs executed effect source | ⬜ | ⬜ | ⬜ — off by default everywhere, and a renderer that does not run the tonemap shader was not dithering before either |
 | Aerial perspective | ✅ needs the prepass depth and executed effect source | ⬜ | ⬜ | ⬜ — `AerialPerspectivePass::isSupported()` is false and the frame keeps the unaltered geometry it had |
+| Debug drawing and gizmos | ✅ needs only `BasicEffect` and a line draw | ✅ | ✅ | ✅ — `DebugDraw` uses nothing an XNA `BasicEffect` does not already provide |
+| GPU timer queries | ✅ probed: `GL_EXT_disjoint_timer_query` is present on this machine's Mesa ES driver | ⬜ | ⬜ | ⬜ — `GpuTimer::isSupported()` is false and names the missing extension; no CPU fallback is offered |
 | Decals | ✅ needs the prepass and `CustomEffects` | ⬜ | ⬜ | ⬜ — `DecalPass` reports `isSupported()` false and draws nothing rather than washing the frame |
 | Spatial upscaling | ✅ | ⬜ | ⬜ | ⬜ — without executed effect source the pass copies its input through at the target size, which is the hardware stretch it was replacing |
 | Display colour space | 🟨 `Srgb` only — the encoding is complete, the swap chain is not | 🟨 same | 🟨 same | 🟨 — no CNA platform back end offers an HDR swap chain, so every renderer answers `Srgb` and refuses the rest |
@@ -1209,6 +1211,64 @@ worth making if the path it beats can be run beside it.
 before building a low-resolution scene target: on a renderer that accepts an effect and ignores it,
 the frame would come out stretched by the fixed path with no edge awareness at all, and nothing on
 screen would say why.
+
+### Seeing what the layer is doing: debug shapes and GPU time
+
+`plan_modern.md` `MOD-2160`–`MOD-2165`. Two gaps that were felt directly rather than predicted: every
+frustum, probe grid, cluster slice and light bound built in Phase 20 was verified by arithmetic
+because nothing here could draw one, and every number in [`cnaext-perf.md`](cnaext-perf.md) came from
+a CPU wall clock because nothing here could ask the GPU.
+
+**`DebugDraw` batches; that is the whole design.** Lines, boxes, spheres, frusta and crosses submitted
+between `begin` and `end` accumulate into one vertex list and go out in a single draw — two when both
+depth modes are used. A debug helper that costs a draw call per line is one nobody leaves switched
+on, and a helper only used when someone remembers to switch it on is not there when it is needed.
+
+```cpp
+debug.begin(view, projection);
+debug.addBox(bounds, Color::Yellow);
+CNA::Graphics::addPointLightGizmo(debug, light, Color::Orange);
+debug.setDepthTested(false);                 // from here on, drawn through geometry
+CNA::Graphics::addCascadeGizmo(debug, cascades, Color::Magenta);
+debug.end();
+```
+
+The depth mode is chosen **per submission**, because the two answer different questions in the same
+frame: depth-tested tells you where a shape is *relative to the scene*, overlay tells you where it is
+*at all* — which is the only way to find a gizmo that turned out to be inside the floor. Overlay
+shapes draw second, so an overlay line crossing a depth-tested one wins.
+
+`DebugGizmos.hpp` covers the layer's own structures — point-light ranges, spot cones (both angles,
+since the gap between them *is* the falloff), directional arrows, probe grids, cluster depth slices
+and cascade volumes. They are free functions rather than methods: none of this is part of what a
+`PointLightEXT` *is*, and a light that knew how to draw itself would carry a debug helper into every
+build that never asks for one. The cluster gizmo draws **slices, not tiles** — a 16×8 grid over 24
+slices is 3072 boxes, a thicket rather than a picture.
+
+**`GpuTimer` refuses rather than substituting a CPU clock.** On GL ES it needs
+`GL_EXT_disjoint_timer_query`; where that is absent `isSupported()` is false and
+`getUnsupportedReason()` says so. A wall-clock number wearing a GPU name measures when the driver
+*accepted* the work, which is precisely what GPU timing exists to see past.
+
+```cpp
+pipeline.setGpuTimingEnabledEXT(true);       // off by default
+// …frames…
+for (const auto& timing : pipeline.getPassTimingsEXT())
+    log("%s %.3f ms", timing.Name.c_str(), timing.Milliseconds);
+```
+
+Two properties of the per-pass timing are load-bearing:
+
+- **Results are collected before the frame's ranges open, never after.** A query object holds one
+  result, so reopening it discards what the last range put there. Polling after the chain runs reads
+  ranges submitted moments ago, and reports a number for the first pass — whose work the driver has
+  had time to retire — and *nothing at all* for every pass after it. That failure looks exactly like
+  a working measurement of a one-pass chain.
+- **An unavailable timer produces an empty list, not a list of zeroes**, so a caller can tell "not
+  measured here" from "this pass took no time".
+
+The costs, and what they turned out to say about the existing table, are in
+[`cnaext-perf.md`](cnaext-perf.md).
 
 ### Writing your own pass
 

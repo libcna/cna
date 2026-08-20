@@ -103,6 +103,39 @@ Reproduce: `./cmake-build-cnaext/cna_test_cnaext_postprocess_chain --benchmark`.
 | FXAA | 12.99 | ×2.09 |
 | Bloom | 28.61 | ×4.60 |
 
+### The same passes, measured on the GPU
+
+`plan_modern.md` `MOD-2165`. Reproduce:
+`./cmake-build-cnaext/cna_test_cnaext_gpu_timing --benchmark`. **The CPU numbers everywhere else in
+this document stay, and stay labelled as what they are.** A table that silently changed method would
+make its own history meaningless — a number that moved would be indistinguishable from a change in
+the code. These are beside them, not instead of them.
+
+Every pass measured with its own `GL_TIME_ELAPSED` query, means over 23 samples, one chain of four
+passes:
+
+| Pass | GPU at 1280×720 | GPU at 1920×1080 |
+|---|---|---|
+| Tonemap (ACES) | 6.95 ms | 15.64 ms |
+| Bloom | 20.00 ms | 39.22 ms |
+| FXAA | 13.57 ms | 30.50 ms |
+| ColorGrade | 6.45 ms | 13.96 ms |
+| **chain total** | **46.97 ms** | **99.32 ms** |
+| the same chain by CPU wall clock | 46.12 ms | 93.94 ms |
+
+**The two methods agree to within about 2–6%, and that is the finding.** The expectation going in was
+that the GPU number would come out *lower*, the CPU clock being inflated by submission and by the
+read-back that forces completion. It does not, and the reason is the machine: a software rasteriser
+has no asynchrony for a CPU clock to miss. The work happens on the CPU, the read-back's
+synchronisation makes the wall clock capture all of it, and the small excess in the GPU column is the
+cost of the query ranges themselves.
+
+So the honest reading is narrow and worth stating plainly: **this validates the existing CPU-clock
+table on this machine and says nothing about a real GPU.** On hardware the two diverge exactly where
+it matters — the CPU clock measures when the driver accepted the work, and the read-back that makes
+it measure anything at all is a stall a real frame never performs. `GpuTimer` and
+`RenderPipeline::setGpuTimingEnabledEXT` are there for the machine where that difference shows up.
+
 ### FXAA, and why its preset is not a performance dial
 
 `plan_modern.md` `MOD-608`. Reproduce: `./cmake-build-cnaext/cna_test_cnaext_fxaa --benchmark`.

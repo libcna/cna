@@ -212,6 +212,12 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_register_renderer_test(NAME CNAEXT_Grading COMMAND cna_test_cnaext_grading
         TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_modern.md MOD-2165: the post-process table measured on the GPU, beside the CPU wall
+    # clock the existing numbers were produced with.
+    cna_graphics_ext_test(cna_test_cnaext_gpu_timing cnaext_gpu_timing_test.cpp)
+    cna_register_renderer_test(NAME CNAEXT_GpuTiming COMMAND cna_test_cnaext_gpu_timing
+        TIMEOUT 180 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_graphics_ext_test(cna_test_cnaext_caps cnaext_caps_probe.cpp)
 
     cna_graphics_ext_test(cna_test_cnaext_ssao cnaext_ssao_test.cpp)
