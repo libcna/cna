@@ -86,6 +86,49 @@ namespace CNA::Graphics {
         /** @brief Sets the display gamma used when the context carries no settings. */
         void setGamma(float value);
 
+        /** @brief Whether debanding dither is added after the transfer function. */
+        [[nodiscard]] bool isDebandEnabled() const;
+
+        /**
+         * @brief Adds a small triangular noise to the output to break up quantisation banding.
+         *
+         * plan_modern.md `MOD-2132`. **Off by default**, so a frame that never asked for it is
+         * unchanged to the bit.
+         *
+         * An eight-bit frame has 256 values to hold a gradient with. In the shadows, where the
+         * transfer function is steepest, consecutive scene values land on the same output value for
+         * a long stretch and then jump — and the eye reads those stretches as flat *bands* with
+         * hard edges, far more visible than the quantisation error itself. A noise of about one
+         * output unit turns each hard edge into a dithered boundary: the error per pixel is no
+         * smaller, but it is spread rather than aligned, and the eye averages it back to the
+         * gradient that was there.
+         *
+         * Two decisions are load-bearing and both are asserted rather than assumed. The noise is
+         * added **after** the transfer function, never before — the curve's slope varies by more
+         * than seven to one across the range, so a fixed perturbation in linear light arrives at
+         * the display large in the shadows and invisible in the highlights. And it is **triangular
+         * rather than uniform**, which is what makes the residual error independent of the signal;
+         * uniform noise removes the bands and leaves flat areas looking grainier at some
+         * brightnesses than at others.
+         *
+         * @param value True to add the dither.
+         */
+        void setDebandEnabled(bool value);
+
+        /** @brief Returns the dither amplitude, in output units where 1 is one 8-bit step. */
+        [[nodiscard]] float getDebandStrength() const;
+
+        /**
+         * @brief Sets the dither amplitude, in output units where 1 is one 8-bit step.
+         *
+         * The default of 1 is the right answer for an 8-bit target and is not a taste setting:
+         * below one step the bands survive, above it the noise becomes the visible artefact.
+         * Offered because a 10-bit target wants a smaller number.
+         *
+         * @param value The amplitude in 8-bit steps; clamped to 0..4.
+         */
+        void setDebandStrength(float value);
+
         /**
          * @brief Applies one operator to one channel value on the CPU, exactly as the shader does.
          *
@@ -109,6 +152,8 @@ namespace CNA::Graphics {
         TonemappingMode mode_     = TonemappingMode::None;
         float           exposure_ = 1.0f;
         float           gamma_    = 2.2f;
+        bool            deband_   = false;
+        float           debandStrength_ = 1.0f;
     };
 
 /** @} */ // end of cnaext_engine

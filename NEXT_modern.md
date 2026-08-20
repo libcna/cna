@@ -39,9 +39,21 @@ virtual shadow maps (the sparse-texture hardware `MOD-2099` already refused) and
 that last one **refused as redundant rather than unreachable**, since its diffuse answer is what
 `LightProbeVolumeEXT` already gives without screen space's failure modes.
 
-**Phase 21 progress.** §21.1 transparency (`MOD-2101`–`MOD-2110`) and §21.2 contact shadows
-(`MOD-2120`–`MOD-2123`) are done; §21.3 grading and output, §21.4 aerial perspective and §21.5 debug
-drawing and GPU timing remain.
+**Phase 21 progress.** §21.1 transparency (`MOD-2101`–`MOD-2110`), §21.2 contact shadows
+(`MOD-2120`–`MOD-2123`) and §21.3 grading and output (`MOD-2130`–`MOD-2133`) are done; §21.4 aerial
+perspective and §21.5 debug drawing and GPU timing remain.
+
+**§21.3 opened with a wrong premise in its own row and the correction is the useful part.**
+`MOD-2130` said `ColorGradePass` has lift/gamma/gain a lookup table could not express. It does not —
+it has been a 3D-LUT pass since `MOD-1400`. What was actually missing was the **format**: the file a
+colourist delivers had no way in. That is a smaller task than the row described and a more useful
+one. Two measurements in that section also came out against expectation. `MOD-2131` set out to trade
+tetrahedral accuracy against tetrahedral cost and found there is no trade **on this machine** —
+tetrahedral is both more accurate (0/255 neutral tint against 18/255) and *cheaper*, because it reads
+four table entries where trilinear reads eight, and llvmpipe's bilinear filter costs about five point
+fetches. On a GPU that filter is nearly free and the ranking should reverse, so the cost argument for
+keeping `Trilinear` as the default does not hold here; the default stays where it is on
+frame-compatibility grounds alone, and the row says so.
 
 Two things §21.1 settled that were not in the row when it was written. The published weighted-blended
 technique needs a **different blend function per draw buffer** — `glBlendFunci`, GL ES 3.2, above
@@ -542,6 +554,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-20 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`**, re-verified after all of §20.10 touched `GraphicsDevice`, `IGraphicsRenderer`, `GraphicsCapability` and the EasyGL renderer | Xvfb :99 | 7567 ran · 7504 pass · 62 skip · **1 fail** — `TwoProcessLoopbackTest.HostMigration…`, which passes on its own in 715 ms and times out at 30 s under full-suite load: the fourth instance of the load-induced failures §3 already describes, and nothing to do with this work (it spawns two processes and speaks UDP) |
 | 2026-08-20 | `cmake-build-cnaext`, after **Phase 21 §21.1 complete** (transparency: the sorted list, the transparent phase, weighted-blended OIT and soft particles) | Xvfb :99 | 8317 ran · 8252 pass · 65 skip · **0 fail**; `ctest -R 'CNAEXT_'` **27/27** |
 | 2026-08-20 | same, after **Phase 21 §21.2 complete** (contact shadows) | Xvfb :99 | 8340 ran · 8275 pass · 65 skip · **0 fail**; `ctest -R 'CNAEXT_'` **28/28** |
+| 2026-08-20 | same, after **Phase 21 §21.3 complete** (`.cube` grading, the interpolation decision, debanding dither) | Xvfb :99 | 8367 ran · 8301 pass · 66 skip · **0 fail**; `ctest -R 'CNAEXT_'` **29/29** |
 
 `ctest -R 'CNAEXT_'` through all of §20.10: **24 of 25 pass**, the exception being `CNAEXT_Showcase`,
 which was `MOD-2035` and had been red since long before this section began. It is **25 of 25** after

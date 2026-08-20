@@ -213,6 +213,9 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Particles | ✅ GPU simulation + instanced billboards | 🟨 CPU simulation and the stock-effect draw work anywhere | 🟨 same | 🟨 — `ParticleSystem` falls back to its CPU path and the same particles appear, more slowly |
 | Transparency (sorted) | ✅ ordering is renderer-free; the phase needs only a scene target | ✅ | ✅ | ✅ — `TransparentDrawList` is plain arithmetic and runs everywhere |
 | Transparency (order-independent) | ✅ needs MRT, a half-float target and executed effect source | ⬜ | ⬜ | ⬜ — the pipeline falls back to the sorted phase and names the missing requirement |
+| `.cube` grading tables | ✅ parse is renderer-free; the strip needs only a 2D texture | ✅ | ✅ | ✅ — `CubeLut` is plain arithmetic and the strip layout runs everywhere |
+| Tetrahedral LUT interpolation, volume LUTs | ✅ needs executed effect source; the volume layout also needs `GraphicsCapability::Texture3D` | ⬜ | ⬜ | ⬜ — where the shader is not run the grade copies its input through, exactly as it did before |
+| Debanding dither | ✅ needs executed effect source | ⬜ | ⬜ | ⬜ — off by default everywhere, and a renderer that does not run the tonemap shader was not dithering before either |
 | Decals | ✅ needs the prepass and `CustomEffects` | ⬜ | ⬜ | ⬜ — `DecalPass` reports `isSupported()` false and draws nothing rather than washing the frame |
 | Spatial upscaling | ✅ | ⬜ | ⬜ | ⬜ — without executed effect source the pass copies its input through at the target size, which is the hardware stretch it was replacing |
 | Display colour space | 🟨 `Srgb` only — the encoding is complete, the swap chain is not | 🟨 same | 🟨 same | 🟨 — no CNA platform back end offers an HDR swap chain, so every renderer answers `Srgb` and refuses the rest |
@@ -766,6 +769,71 @@ textures can sample. Anything that is not such a strip is **refused by name**: r
 slice count a strip grades the frame into colours nothing in the table names, which is a wrong image
 that looks deliberate. `ColorGradePass::createIdentityLut` gives a starting point that changes
 nothing.
+
+**The file a colourist delivers now loads.** `CubeLut` reads the `.cube` exchange format — Iridas',
+then Adobe's, and now everyone's — and builds either layout the pass samples:
+
+```cpp
+const CNA::Graphics::CubeLut lut = CNA::Graphics::CubeLut::loadFromFile("grade.cube");
+auto strip = lut.createStripTexture(device);
+grade.setLut(strip.get());
+```
+
+The parse is strict about exactly two things and lenient about the rest, because those two are the
+ones that produce a *wrong image* rather than an error. Entry **count** must equal the cube of
+`LUT_3D_SIZE`: a table one entry short, padded, grades every colour past the gap against the wrong
+neighbour, and the frame still looks like a frame. Entry **order** is red-fastest, which is the
+opposite of what a loop written from the axis names produces — a transposed cube reads as a strong
+creative choice. Unknown keywords, comments and either line ending are ignored; a `LUT_1D_SIZE`
+document is refused **by name**, because a per-channel curve loaded as a colour cube is not the grade
+the file describes. A table whose `DOMAIN_MAX` is not the unit cube loads, reports itself through
+`isUnitDomain()`, and is **not** rescaled — this layer's grade samples display-referred colour in
+0..1, and quietly stretching a log-domain table to fit would be inventing a grade.
+
+Where `GraphicsCapability::Texture3D` is available, `createVolumeTexture` and `setVolumeLut` carry
+the same table in the layout the hardware addresses directly. The strip stays the default because it
+needs nothing a 2D texture does not already have; the two are asserted to agree to within 1/255.
+
+**Which interpolation reads the table is a real choice, and the neutral axis decides it.** Both agree
+exactly on every entry the table holds, so a grid point separates nothing — the difference is
+entirely *between* entries, which is where nearly every pixel lands. `LutInterpolation::Trilinear`
+blends all eight surrounding entries; `Tetrahedral` blends the four of the tetrahedron the colour
+falls in. Measured on an 8-entry table built from a known grade:
+
+| | Worst neutral tint | Error against the exact grade (mean / worst) |
+|---|---|---|
+| `Trilinear` | 18/255 | 5.66 / 25 |
+| `Tetrahedral` | **0/255** | 4.03 / 23 |
+
+The zero is exact rather than close: a neutral colour lies on the edge from a cell's black corner to
+its white one, so tetrahedral computes it from two neutral entries and nothing else. Trilinear mixes
+in the six coloured corners around it, and because the resulting tint varies smoothly with
+brightness, it reads as a grading decision rather than as a lookup artefact. The tint falls as 1/N —
+18/255 at a table of 8, 8 at 16, 4 at 32, 2 at 64 — so at the sizes tools export it is small, but it
+never reaches zero. **`Trilinear` remains the default** because it is what every frame graded so far
+looks like and it needs no `texelFetch`; a delivered grade should set `Tetrahedral`.
+
+**Debanding dither goes after the transfer function, and the reason is arithmetic.** `TonemapPass`
+offers `setDebandEnabled` (off by default, so a frame that never asked is unchanged to the bit). An
+eight-bit frame has 256 values for a gradient, and wherever the tonemapper compresses, a long stretch
+of scene values lands on one output value and then jumps — the eye reads those stretches as flat
+bands with hard edges, far more visible than the quantisation error causing them. Adding about one
+output step of noise does not add information; it stops the error aligning, so the eye averages the
+gradient back. Measured on a 256-column ramp deliberately banded onto six output values: **6 distinct
+column means undithered, 171 dithered.**
+
+Two details are load-bearing:
+
+- **After the curve, never before.** The transfer function's slope varies by more than seven to one
+  across the range — measured at 7.2:1 between a 2% and an 80% patch at gamma 2.2 — so a fixed
+  perturbation applied in linear light arrives at the display large in the shadows and nearly
+  invisible in the highlights. That is precisely backwards, the shadows being where the banding is.
+  Applied after, the measured spread is 0.46 steps at the dark patch and 0.50 at the bright one.
+- **Triangular, not uniform.** Uniform noise of one step removes the bands and leaves the residual
+  error correlated with the signal, so flat areas look grainier at some brightnesses than at others.
+  A triangular distribution — the difference of two uniforms — makes the error independent of the
+  signal at the cost of twice the noise power. It is the standard result from audio dithering and it
+  holds here unchanged.
 
 **Aberration is radial, and that is the whole effect.** The offset scales with distance from the
 axis, so the centre of the frame stays sharp however strong the setting is and the corners fringe. A

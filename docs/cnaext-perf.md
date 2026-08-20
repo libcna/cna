@@ -216,6 +216,32 @@ These are software-rasteriser numbers and fill-rate-dominated, so hardware compr
 substantially — but the *ordering* (bloom ≫ FXAA > tonemap ≈ copy) is a property of how many texels
 each pass touches, which no GPU changes.
 
+### Grading and output
+
+`plan_modern.md` `MOD-2133`. Reproduce: `./cmake-build-cnaext/cna_test_cnaext_grading --benchmark`.
+Two runs; square frames, one full-screen pass each.
+
+| What | 720×720 | 1080×1080 |
+|---|---|---|
+| Grade, strip layout, trilinear (hardware filtered) | 4.85 – 5.68 ms | 10.87 – 11.50 ms |
+| Grade, strip layout, tetrahedral | 4.67 – 5.03 ms | 10.70 – 11.61 ms |
+| Grade, volume layout, trilinear | 6.03 – 7.02 ms | 12.80 – 13.55 ms |
+| Grade, volume layout, tetrahedral | 4.48 – 4.67 ms | 11.16 – 11.67 ms |
+| Tonemap (ACES), no dither | 3.40 – 3.41 ms | 7.27 – 9.32 ms |
+| Tonemap (ACES), debanding dither | 3.77 – 3.99 ms | 9.01 – 10.33 ms |
+
+**Tetrahedral is not the expensive one here, and that is a software-rasteriser result rather than a
+general one.** The intuition says tetrahedral costs more because it reads individual entries where
+trilinear rides a filtered fetch; the numbers say otherwise, and the reason is visible in the volume
+rows. Both volume paths use `texelFetch`, so they differ only in fetch count — trilinear reads eight
+corners, tetrahedral four — and the four-fetch path is about 1.2–1.4 ms cheaper at 720². The filtered
+strip path reads only two texels but pays llvmpipe's bilinear filter for each, which on this machine
+costs roughly what five point fetches do. **On a GPU the filter is nearly free and this ordering
+should reverse.** Do not carry the ranking to hardware; carry the fetch counts, which do not change.
+
+**The dither is 0.4–1.7 ms**, or about 11–19% on top of the tonemap it rides inside — a single hash
+and one add, and the cost is that it is per-pixel like everything else in a full-screen pass.
+
 ## Shadows
 
 | What | Measurement | Source |

@@ -45,6 +45,7 @@ uniform sampler2D texture1;
 uniform int   uTonemapMode;
 uniform float uExposure;
 uniform float uInvGamma;
+uniform float uDitherAmplitude;
 
 vec3 reinhard(vec3 c) { return c / (1.0 + c); }
 
@@ -70,6 +71,26 @@ vec3 uncharted2(vec3 c) {
     return uncharted2Curve(c) / uncharted2Curve(vec3(W));
 }
 
+// MOD-2132. A value in [0, 1) from a screen position, with no texture and no state.
+//
+// The constants are Gonzalez-Vallejo's, and what matters about them is not the particular numbers
+// but that the result decorrelates across neighbouring pixels: a hash that varies smoothly is a
+// gradient, and adding a gradient to a gradient moves a band rather than removing it.
+float cnaDitherHash(vec2 position) {
+    return fract(sin(dot(position, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+// A triangular probability distribution, from two independent uniforms.
+//
+// Uniform noise of one quantisation step removes the banding and leaves the *noise level* varying
+// with the signal, which is its own visible artefact -- flat areas look grainier at some
+// brightnesses than at others. A triangular distribution is what makes the error independent of
+// the signal, at the cost of twice the noise power. This is the standard result from audio
+// dithering and it holds unchanged here.
+float cnaTriangularDither(vec2 position) {
+    return cnaDitherHash(position) - cnaDitherHash(position + vec2(17.0, 23.0));
+}
+
 void main() {
     vec4 source = texture(texture1, TexCoord);
     vec3 color = source.rgb * uExposure;
@@ -83,6 +104,14 @@ void main() {
 
     // Filmic already encodes for the display; encoding it again would wash the image out.
     if (uTonemapMode != 2) color = pow(color, vec3(uInvGamma));
+
+    // MOD-2132: **after** the transfer function, never before. The curve's slope varies by more
+    // than seven to one across the range, so a fixed perturbation applied in linear light arrives
+    // at the display as a large one in the shadows and almost nothing in the highlights -- which is
+    // the opposite of what is needed, the shadows being where the banding is. Applied here, one
+    // unit is one unit everywhere.
+    if (uDitherAmplitude > 0.0)
+        color += vec3(cnaTriangularDither(gl_FragCoord.xy) * uDitherAmplitude);
 
     FragColor = vec4(color, source.a);
 }
@@ -171,9 +200,23 @@ void main() {
         effect_->SetUniformInt("uTonemapMode", static_cast<int>(mode));
         effect_->SetUniformFloat("uExposure", exposure);
         effect_->SetUniformFloat("uInvGamma", gamma > 0.0f ? 1.0f / gamma : 1.0f);
+        // In output units of the 8-bit target this pass writes to: one step is 1/255.
+        effect_->SetUniformFloat("uDitherAmplitude",
+                                 deband_ ? debandStrength_ / 255.0f : 0.0f);
 
         fullscreen_->draw(context.source, context.destination, effect_.get(),
                           context.width, context.height);
+    }
+
+    bool TonemapPass::isDebandEnabled() const { return deband_; }
+
+    void TonemapPass::setDebandEnabled(const bool value) { deband_ = value; }
+
+    float TonemapPass::getDebandStrength() const { return debandStrength_; }
+
+    void TonemapPass::setDebandStrength(const float value)
+    {
+        debandStrength_ = std::clamp(value, 0.0f, 4.0f);
     }
 
     const std::string& TonemapPass::getName() const
